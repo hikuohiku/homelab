@@ -2,8 +2,8 @@
 
 resource "proxmox_virtual_environment_vm" "pbs" {
   name        = "pbs"
-  description = "Proxmox Backup Server - Managed by Terraform"
-  node_name   = "pve"
+  description = "Proxmox Backup Server"
+  node_name   = "hikuo-homeserver"
 
   # Use SeaBIOS (default, compatible with PBS)
   bios = "seabios"
@@ -13,7 +13,7 @@ resource "proxmox_virtual_environment_vm" "pbs" {
 
   # Mount PBS ISO for installation
   cdrom {
-    file_id   = "local:iso/proxmox-backup-server_3.2-1.iso"
+    file_id   = "local:iso/proxmox-backup-server_4.1-1.iso"
     interface = "ide2"
   }
 

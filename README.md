@@ -17,31 +17,44 @@ git clone <repository-url>
 cd homelab
 ```
 
-### 2. Terraform設定ファイルの作成
+### 2. Proxmox APIトークンの作成
 
-```bash
-cp terraform.tfvars.example terraform.tfvars
+Proxmox WebUIでAPIトークンを作成します：
+
+1. Proxmox WebUIにログイン
+2. **Datacenter** → **Permissions** → **API Tokens**
+3. **Add** をクリック
+4. 以下を入力：
+   - **User**: `root@pam` (または任意のユーザー)
+   - **Token ID**: `terraform` (任意の識別子)
+   - **Privilege Separation**: チェックを外す（全権限を付与）
+5. **Add** をクリック
+6. 表示されたトークンシークレットをコピー（再表示不可のため必ず保存）
+
+作成されたトークンは以下の形式になります：
+```
+root@pam!terraform=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 ```
 
-`terraform.tfvars`を編集して、Proxmox環境に合わせて設定を変更してください：
+### 3. Terraform設定ファイルの作成
+
+`terraform.tfvars`を作成して、Proxmox環境に合わせて設定してください：
 
 ```hcl
-proxmox_endpoint     = "https://your-proxmox-host:8006"
-proxmox_username     = "root@pam"
-proxmox_password     = "your-password"
-proxmox_insecure     = true  # 自己署名証明書の場合はtrue
+proxmox_endpoint  = "https://your-proxmox-host:8006"
+proxmox_api_token = "root@pam!terraform=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
 ```
 
-### 3. Terraform Cloudの設定
+### 4. Terraform Cloudの設定
 
 Terraform Cloudで状態ファイルを管理します。
 
-#### 3.1. Terraform Cloudアカウント作成
+#### 4.1. Terraform Cloudアカウント作成
 
 1. [Terraform Cloud](https://app.terraform.io/signup/account)でアカウント作成
 2. Organizationを作成（例: `your-org-name`）
 
-#### 3.2. ローカルで認証
+#### 4.2. ローカルで認証
 
 ```bash
 terraform login
@@ -49,7 +62,7 @@ terraform login
 
 ブラウザが開くので、APIトークンを生成して貼り付け。
 
-#### 3.3. Organization名の設定
+#### 4.3. Organization名の設定
 
 `providers.tf`を編集:
 
@@ -63,7 +76,7 @@ cloud {
 }
 ```
 
-### 4. Terraformの初期化
+### 5. Terraformの初期化
 
 ```bash
 terraform init
@@ -71,13 +84,13 @@ terraform init
 
 初回実行時にWorkspaceが自動作成されます。
 
-### 5. プランの確認
+### 6. プランの確認
 
 ```bash
 terraform plan
 ```
 
-### 6. リソースの作成
+### 7. リソースの作成
 
 ```bash
 terraform apply
@@ -87,13 +100,12 @@ terraform apply
 
 ```
 .
-├── README.md                    # このファイル
-├── providers.tf                 # Terraformプロバイダー設定
-├── variables.tf                 # 共通変数定義
-├── terraform.tfvars.example     # 設定テンプレート
-├── main.tf                      # サンプルVM構成ファイル
-├── pbs.tf                       # PBS VM構成ファイル
-└── .gitignore                   # Git除外設定
+├── README.md     # このファイル
+├── providers.tf  # Terraformプロバイダー設定
+├── variables.tf  # 共通変数定義
+├── main.tf       # カスタムVM構成ファイル
+├── pbs.tf        # PBS VM構成ファイル
+└── .gitignore    # Git除外設定
 ```
 
 ## よく使うコマンド
@@ -278,12 +290,20 @@ terraform state show proxmox_virtual_environment_vm.pbs
 
 ### SSL証明書エラー
 
-Tailscaleは自己署名証明書を使用するため、`terraform.tfvars`で`proxmox_insecure = true`を設定してください。
+ProxmoxがデフォルトでHTTPSを使用しています。自己署名証明書を使用している場合、証明書エラーが発生する可能性があります。
+
+**推奨対応**:
+- Proxmoxに有効なSSL証明書をインストール（Let's Encryptなど）
+
+**自己署名証明書を許可する場合**:
+- `providers.tf`の`insecure = false`を`insecure = true`に変更
 
 ### 認証エラー
 
-- Proxmoxのユーザー名は`root@pam`または`root@pve`の形式で指定
-- APIトークンを使用する場合は、プロバイダー設定を変更
+- APIトークンの形式を確認: `username@realm!tokenid=secret`
+- Proxmox WebUIでトークンが有効か確認
+- Privilege Separationが無効化されているか確認（全権限が必要）
+- トークンシークレットが正しいか確認（コピペミスに注意）
 
 ### Tailscale接続エラー
 

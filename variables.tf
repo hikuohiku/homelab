@@ -4,21 +4,10 @@ variable "proxmox_endpoint" {
   type        = string
 }
 
-variable "proxmox_username" {
-  description = "Proxmox VE username (e.g., root@pam)"
-  type        = string
-}
-
-variable "proxmox_password" {
-  description = "Proxmox VE password"
+variable "proxmox_api_token" {
+  description = "Proxmox VE API token (format: username@realm!tokenid=secret)"
   type        = string
   sensitive   = true
-}
-
-variable "proxmox_insecure" {
-  description = "Skip TLS verification (set to true for self-signed certificates)"
-  type        = bool
-  default     = false
 }
 
 variable "proxmox_ssh_username" {
