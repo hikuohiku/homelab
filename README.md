@@ -32,19 +32,52 @@ proxmox_password     = "your-password"
 proxmox_insecure     = true  # 自己署名証明書の場合はtrue
 ```
 
-### 3. Terraformの初期化
+### 3. Terraform Cloudの設定
+
+Terraform Cloudで状態ファイルを管理します。
+
+#### 3.1. Terraform Cloudアカウント作成
+
+1. [Terraform Cloud](https://app.terraform.io/signup/account)でアカウント作成
+2. Organizationを作成（例: `your-org-name`）
+
+#### 3.2. ローカルで認証
+
+```bash
+terraform login
+```
+
+ブラウザが開くので、APIトークンを生成して貼り付け。
+
+#### 3.3. Organization名の設定
+
+`providers.tf`を編集:
+
+```hcl
+cloud {
+  organization = "your-org-name"  # 自分のOrganization名に変更
+
+  workspaces {
+    name = "homelab"
+  }
+}
+```
+
+### 4. Terraformの初期化
 
 ```bash
 terraform init
 ```
 
-### 4. プランの確認
+初回実行時にWorkspaceが自動作成されます。
+
+### 5. プランの確認
 
 ```bash
 terraform plan
 ```
 
-### 5. リソースの作成
+### 6. リソースの作成
 
 ```bash
 terraform apply
@@ -72,7 +105,7 @@ terraform validate
 # フォーマット
 terraform fmt
 
-# 現在の状態確認
+# 現在の状態確認（Terraform Cloud上の状態を表示）
 terraform show
 
 # リソースの削除
@@ -80,6 +113,9 @@ terraform destroy
 
 # 特定のリソースのみ作成
 terraform apply -target=proxmox_virtual_environment_vm.pbs
+
+# Terraform Cloud WebUIで状態確認
+# https://app.terraform.io/app/your-org-name/workspaces/homelab
 ```
 
 ## Proxmox Backup Server構築
@@ -229,6 +265,15 @@ terraform destroy -target=proxmox_virtual_environment_vm.pbs
 terraform state show proxmox_virtual_environment_vm.pbs
 ```
 
+## Terraform Cloud のメリット
+
+- **状態ファイルの安全な管理**: ローカルに保存せず、暗号化して保存
+- **チーム共有**: 複数人で同じインフラを管理可能
+- **ステートロック**: 同時実行を自動で防止
+- **バージョン履歴**: 過去の状態に戻すことが可能
+- **変数管理**: センシティブな変数を安全に保存
+- **実行履歴**: いつ誰が何を変更したか記録
+
 ## トラブルシューティング
 
 ### SSL証明書エラー
@@ -246,8 +291,25 @@ Tailscaleは自己署名証明書を使用するため、`terraform.tfvars`で`p
 - ProxmoxホストがTailscaleネットワークに接続されていることを確認
 - エンドポイントURLが正しいことを確認（例: `https://proxmox:8006`）
 
+### Terraform Cloudエラー
+
+**「No valid credential sources found」**
+```bash
+terraform login
+```
+を実行してAPIトークンを取得
+
+**「organization not found」**
+- `providers.tf`のorganization名が正しいか確認
+- Terraform Cloud WebUIで組織が存在するか確認
+
+**「workspace not found」**
+- 初回`terraform init`時に自動作成されます
+- 手動作成する場合: Terraform Cloud WebUI → New Workspace
+
 ## 参考リンク
 
+- [Terraform Cloud Documentation](https://developer.hashicorp.com/terraform/cloud-docs)
 - [bpg/proxmox Provider Documentation](https://registry.terraform.io/providers/bpg/proxmox/latest/docs)
 - [Terraform Documentation](https://www.terraform.io/docs)
 - [Proxmox VE Documentation](https://pve.proxmox.com/wiki/Main_Page)

@@ -1,6 +1,15 @@
 terraform {
   required_version = "1.14.0"
 
+  # Terraform Cloud backend for state management
+  cloud {
+    organization = "hikuohiku"
+
+    workspaces {
+      name = "homelab"
+    }
+  }
+
   required_providers {
     proxmox = {
       source  = "bpg/proxmox"
