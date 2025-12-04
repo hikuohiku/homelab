@@ -9,7 +9,7 @@ resource "proxmox_virtual_environment_vm" "pbs" {
   bios = "seabios"
 
   # Boot from CDROM first for installation, then from disk
-  boot_order = ["ide2", "scsi0"]
+  boot_order = ["scsi0", "ide2"]
 
   # Mount PBS ISO for installation
   cdrom {
@@ -46,8 +46,7 @@ resource "proxmox_virtual_environment_vm" "pbs" {
     enabled = true
   }
 
-  # Create VM in stopped state for manual installation
-  started = false
+  started = true
 
   tags = ["terraform", "pbs", "backup"]
 }
