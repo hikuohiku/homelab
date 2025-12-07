@@ -1,0 +1,45 @@
+# ArgoCD Helm Values
+# https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd
+
+global:
+  domain: argocd.local  # 必要に応じて変更
+
+server:
+  # ArgoCD Server の設定
+  service:
+    type: LoadBalancer  # k3s の ServiceLB を使用
+
+  # UI へのアクセス設定
+  extraArgs:
+    - --insecure  # HTTPS なしでアクセス（初期セットアップ用）
+
+  # リソース制限
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+# デフォルトでは admin パスワードは自動生成される
+# パスワードは argocd-initial-admin-secret から取得可能
+
+# リソース制限（オプション）
+controller:
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+
+repoServer:
+  resources:
+    limits:
+      cpu: 100m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi

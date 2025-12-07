@@ -40,6 +40,7 @@
   services.k3s.enable = true;
   services.k3s.role = "server";
   services.k3s.extraFlags = toString [
+    "--disable traefik" # Traefik を無効化（ArgoCD の LoadBalancer で使用するため）
     # "--debug" # オプション: デバッグモード有効化
   ];
 
@@ -50,7 +51,14 @@
     wget
     curl
     htop
+    kubectl
+    kubernetes-helm
   ];
+
+  # kubectl 用環境変数
+  environment.sessionVariables = {
+    KUBECONFIG = "/etc/rancher/k3s/k3s.yaml";
+  };
 
   # タイムゾーン
   time.timeZone = "Asia/Tokyo";
