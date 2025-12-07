@@ -1,4 +1,4 @@
-{ config, pkgs, ... }:
+{ pkgs, ... }:
 
 {
   # システムのステートバージョン (変更しないこと)
@@ -10,12 +10,12 @@
   # ネットワーク設定 (DHCP)
   networking = {
     useDHCP = false;
-    interfaces.eth0.useDHCP = true;  # cloud image のデフォルトインターフェース
+    interfaces.eth0.useDHCP = true; # cloud image のデフォルトインターフェース
 
     # ファイアウォール設定
     firewall = {
       enable = true;
-      allowedTCPPorts = [ 22 ];  # SSH
+      allowedTCPPorts = [ 22 ]; # SSH
     };
   };
 
@@ -23,7 +23,7 @@
   services.openssh = {
     enable = true;
     settings = {
-      PermitRootLogin = "prohibit-password";  # パスワード禁止、鍵のみ
+      PermitRootLogin = "prohibit-password"; # パスワード禁止、鍵のみ
       PasswordAuthentication = false;
     };
   };
@@ -49,5 +49,8 @@
   i18n.defaultLocale = "en_US.UTF-8";
 
   # Nix flakes を有効化
-  nix.settings.experimental-features = [ "nix-command" "flakes" ];
+  nix.settings.experimental-features = [
+    "nix-command"
+    "flakes"
+  ];
 }
