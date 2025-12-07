@@ -7,15 +7,18 @@
   # ホスト名
   networking.hostName = "node01";
 
-  # ネットワーク設定 (DHCP)
+  # ネットワーク設定
   networking = {
     useDHCP = false;
-    interfaces.eth0.useDHCP = true; # cloud image のデフォルトインターフェース
+    interfaces.eth0.useDHCP = true;
 
     # ファイアウォール設定
     firewall = {
       enable = true;
-      allowedTCPPorts = [ 22 ]; # SSH
+      allowedTCPPorts = [
+        22   # SSH
+        6443 # k3s: API server (pods からアクセス必須)
+      ];
     };
   };
 
@@ -31,6 +34,13 @@
   # SSH 公開鍵 (デプロイ用)
   users.users.root.openssh.authorizedKeys.keys = [
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL4S2N2p2y0UzkeNl83VOIzvtAnIzvhIatnbnMWy2BOL"
+  ];
+
+  # k3s サービス設定
+  services.k3s.enable = true;
+  services.k3s.role = "server";
+  services.k3s.extraFlags = toString [
+    # "--debug" # オプション: デバッグモード有効化
   ];
 
   # システムパッケージ
