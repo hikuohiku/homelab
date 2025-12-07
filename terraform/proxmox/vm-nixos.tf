@@ -37,7 +37,8 @@ resource "proxmox_virtual_environment_vm" "node01" {
   initialization {
     ip_config {
       ipv4 {
-        address = "dhcp"
+        address = "192.168.0.129/24"
+        gateway = "192.168.0.1"
       }
     }
 
@@ -55,5 +56,5 @@ resource "proxmox_virtual_environment_vm" "node01" {
 }
 
 output "node01_ip" {
-  value = proxmox_virtual_environment_vm.node01.ipv4_addresses[1][0] # Adjust index based on interface
+  value = "192.168.0.129"
 }
