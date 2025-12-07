@@ -3,7 +3,7 @@
 resource "proxmox_virtual_environment_vm" "pbs" {
   name        = "pbs"
   description = "Proxmox Backup Server"
-  node_name   = "hikuo-homeserver"
+  node_name   = var.proxmox_node
 
   # Use SeaBIOS (default, compatible with PBS)
   bios = "seabios"

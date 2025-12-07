@@ -15,3 +15,16 @@ variable "proxmox_ssh_username" {
   type        = string
   default     = "root"
 }
+
+variable "ssh_public_key" {
+  description = "SSH public key for the VM root user"
+  type        = string
+}
+
+variable "proxmox_node" {
+  description = "Proxmox node name"
+  type        = string
+  default     = "hikuo-homeserver"
+}
+
+

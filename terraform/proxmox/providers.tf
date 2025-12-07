@@ -1,5 +1,5 @@
 terraform {
-  required_version = "1.14.0"
+  required_version = "1.14.1"
 
   # Terraform Cloud backend for state management
   cloud {
