@@ -9,3 +9,7 @@ plan:
 # Run terraform apply in proxmox directory
 apply:
     (cd terraform/proxmox && terraform apply)
+
+# Deploy NixOS configuration to node01
+deploy-node01:
+    nix run nixpkgs#nixos-rebuild -- switch --flake ./nix/hosts/node01#default --target-host root@192.168.0.40 --fast
