@@ -8,7 +8,7 @@ plan:
 
 # Run terraform apply in proxmox directory
 apply:
-    (cd terraform/proxmox && terraform apply)
+    (cd terraform/proxmox && terraform apply -auto-approve)
 
 # Deploy NixOS configuration to node01
 deploy-node01:
