@@ -16,7 +16,7 @@
     firewall = {
       enable = true;
       allowedTCPPorts = [
-        22   # SSH
+        22 # SSH
         6443 # k3s: API server (pods からアクセス必須)
       ];
     };
@@ -80,7 +80,7 @@
     ];
     trusted-public-keys = [
       "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
-      "hikuohiku.cachix.org-1:jle9MrU7hoFm0IJrdEFuBCsVnHaZfyLsJ+rpLuMfOLM="
+      "hikuohiku.cachix.org-1:AZwUw2nnqdfm6k5oLyczGRRHMBEQXz0Fo1HzI+RwApg="
     ];
   };
 }
