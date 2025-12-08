@@ -2,20 +2,17 @@
 # https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd
 
 global:
-  domain: argocd.local  # 必要に応じて変更
+  domain: argocd.local
 
 server:
-  # ArgoCD Server の設定
   service:
     type: LoadBalancer
     # Tailscale Operator経由でTailnet内に公開
     loadBalancerClass: tailscale
 
-  # UI へのアクセス設定
   extraArgs:
-    - --insecure  # HTTPS なしでアクセス（初期セットアップ用）
+    - --insecure
 
-  # リソース制限
   resources:
     limits:
       cpu: 100m
@@ -24,10 +21,6 @@ server:
       cpu: 50m
       memory: 64Mi
 
-# デフォルトでは admin パスワードは自動生成される
-# パスワードは argocd-initial-admin-secret から取得可能
-
-# リソース制限（オプション）
 controller:
   resources:
     limits:
