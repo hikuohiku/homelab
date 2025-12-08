@@ -61,14 +61,18 @@ output "node01_ip" {
 
 # NixOS configuration deployment
 # Runs nixos-rebuild on the VM using cached binaries from Cachix
+
+# Get flake narHash to detect any changes (including flake.lock)
+data "external" "flake_hash" {
+  program = ["bash", "-c", "nix flake metadata ${path.module}/../../nix/hosts/node01 --json | jq '{narHash: .locked.narHash}'"]
+}
+
 resource "null_resource" "nixos_deploy_node01" {
   depends_on = [proxmox_virtual_environment_vm.node01]
 
-  # Re-run when NixOS configuration changes
+  # Re-run when flake narHash changes (includes all dependencies)
   triggers = {
-    config_hash  = filesha256("${path.module}/../../nix/hosts/node01/configuration.nix")
-    flake_hash   = filesha256("${path.module}/../../nix/hosts/node01/flake.nix")
-    hardware_hash = filesha256("${path.module}/../../nix/hosts/node01/hardware-configuration.nix")
+    flake_nar_hash = data.external.flake_hash.result.narHash
   }
 
   connection {
