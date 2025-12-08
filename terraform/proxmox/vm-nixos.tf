@@ -97,7 +97,7 @@ resource "null_resource" "nixos_deploy_node01" {
       "echo 'Starting NixOS rebuild from GitHub flake...'",
       <<-EOT
       nixos-rebuild switch \
-        --flake github:${var.github_repo}#default \
+        --flake github:${var.github_repo}?dir=nix/hosts/node01#default \
         --option substituters "https://cache.nixos.org https://hikuohiku.cachix.org" \
         --option trusted-public-keys "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hikuohiku.cachix.org-1:jle9MrU7hoFm0IJrdEFuBCsVnHaZfyLsJ+rpLuMfOLM=" \
         --refresh
