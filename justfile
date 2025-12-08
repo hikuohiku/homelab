@@ -20,14 +20,9 @@ push-cache:
       | jq -r '.[0].outputs.out' \
       | cachix push hikuohiku
 
-# Build and push to cache (combined)
-build-and-push-node01: build-node01 push-cache
+# Build and push to cache (run before terraform apply)
+prepare: build-node01 push-cache
 
 # Deploy NixOS configuration to node01 (legacy: local build & deploy)
 deploy-node01:
     nix run nixpkgs#nixos-rebuild -- switch --flake ./nix/hosts/node01#default --target-host root@192.168.0.129 --fast
-
-# Deploy node01 via Terraform (uses cached binaries)
-deploy:
-    just build-and-push-node01
-    just apply
