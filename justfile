@@ -12,11 +12,11 @@ apply:
 
 # Build NixOS configuration for node01 (local build)
 build-node01:
-    nix build ./nix/hosts/node01#nixosConfigurations.default.config.system.build.toplevel
+    nix build ./nix/hosts/node01#nixosConfigurations.default.config.system.build.toplevel --no-link
 
 # Push built derivations to Cachix
 push-cache:
-    nix build ./nix/hosts/node01#nixosConfigurations.default.config.system.build.toplevel --json \
+    nix build ./nix/hosts/node01#nixosConfigurations.default.config.system.build.toplevel --no-link --json \
       | jq -r '.[0].outputs.out' \
       | cachix push hikuohiku
 
