@@ -4,8 +4,6 @@ resource "proxmox_virtual_environment_vm" "node01" {
 
   bios = "seabios"  # Match template's BIOS mode
 
-  boot_order = ["virtio0"]  # Boot from virtio disk
-
   clone {
     vm_id = 9001  # NixOS template created from Hydra prebuilt image
   }
@@ -33,6 +31,7 @@ resource "proxmox_virtual_environment_vm" "node01" {
     size         = 20
     file_format  = "raw"
   }
+  # To resize, use qm resize after VM creation
 
   initialization {
     ip_config {
