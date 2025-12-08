@@ -58,3 +58,41 @@ resource "proxmox_virtual_environment_vm" "node01" {
 output "node01_ip" {
   value = "192.168.0.129"
 }
+
+# NixOS configuration deployment
+# Runs nixos-rebuild on the VM using cached binaries from Cachix
+resource "null_resource" "nixos_deploy_node01" {
+  depends_on = [proxmox_virtual_environment_vm.node01]
+
+  # Re-run when NixOS configuration changes
+  triggers = {
+    config_hash  = filesha256("${path.module}/../../nix/hosts/node01/configuration.nix")
+    flake_hash   = filesha256("${path.module}/../../nix/hosts/node01/flake.nix")
+    hardware_hash = filesha256("${path.module}/../../nix/hosts/node01/hardware-configuration.nix")
+  }
+
+  connection {
+    type        = "ssh"
+    user        = "root"
+    host        = "192.168.0.129"
+    private_key = var.ssh_private_key
+    timeout     = "5m"
+  }
+
+  # Wait for VM to be ready
+  provisioner "remote-exec" {
+    inline = [
+      "echo 'Waiting for system to be ready...'",
+      "sleep 10"
+    ]
+  }
+
+  # Run nixos-rebuild using cached binaries
+  provisioner "remote-exec" {
+    inline = [
+      "echo 'Starting NixOS rebuild from GitHub flake...'",
+      "nixos-rebuild switch --flake github:${var.github_repo}#default --refresh",
+      "echo 'NixOS rebuild completed successfully'"
+    ]
+  }
+}

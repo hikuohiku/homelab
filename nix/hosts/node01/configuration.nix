@@ -66,9 +66,21 @@
   # ロケール設定
   i18n.defaultLocale = "en_US.UTF-8";
 
-  # Nix flakes を有効化
-  nix.settings.experimental-features = [
-    "nix-command"
-    "flakes"
-  ];
+  # Nix 設定
+  nix.settings = {
+    experimental-features = [
+      "nix-command"
+      "flakes"
+    ];
+
+    # バイナリキャッシュ（Cachix）
+    substituters = [
+      "https://cache.nixos.org"
+      "https://hikuohiku.cachix.org"
+    ];
+    trusted-public-keys = [
+      "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+      "hikuohiku.cachix.org-1:jle9MrU7hoFm0IJrdEFuBCsVnHaZfyLsJ+rpLuMfOLM="
+    ];
+  };
 }
