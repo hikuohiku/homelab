@@ -27,4 +27,14 @@ variable "proxmox_node" {
   default     = "hikuo-homeserver"
 }
 
+variable "ssh_private_key" {
+  description = "SSH private key for connecting to VMs (for nixos-rebuild)"
+  type        = string
+  sensitive   = true
+}
 
+variable "github_repo" {
+  description = "GitHub repository for NixOS flake (format: owner/repo)"
+  type        = string
+  default     = "hikuohiku/homelab"
+}
