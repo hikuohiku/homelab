@@ -10,6 +10,24 @@ plan:
 apply:
     (cd terraform/proxmox && terraform apply -auto-approve)
 
+# Generate Tailscale auth key and run terraform apply
+apply-with-tailscale:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Generating Tailscale auth key..."
+    # Create a preauthorized, single-use auth key that expires in 10 minutes
+    KEY_OUTPUT=$(tailscale key auth create --preauth --expiry 10m 2>&1)
+    TAILSCALE_AUTH_KEY=$(echo "$KEY_OUTPUT" | grep -o 'tskey-auth-[a-zA-Z0-9-]*')
+    if [[ -z "$TAILSCALE_AUTH_KEY" ]]; then
+        echo "Failed to generate Tailscale auth key"
+        echo "Output: $KEY_OUTPUT"
+        exit 1
+    fi
+    echo "Auth key generated successfully (expires in 10 minutes)"
+    cd terraform/proxmox
+    export TF_VAR_tailscale_auth_key="$TAILSCALE_AUTH_KEY"
+    terraform apply -auto-approve
+
 # Build NixOS configuration for node01 (local build)
 build-node01:
     nix build ./nix/hosts/node01#nixosConfigurations.default.config.system.build.toplevel --no-link

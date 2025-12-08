@@ -19,8 +19,13 @@
         22 # SSH
         6443 # k3s: API server (pods からアクセス必須)
       ];
+      # Tailscale インターフェースを信頼
+      trustedInterfaces = [ "tailscale0" ];
     };
   };
+
+  # Tailscale VPN
+  services.tailscale.enable = true;
 
   # SSH 設定 (リモートアクセス必須)
   services.openssh = {

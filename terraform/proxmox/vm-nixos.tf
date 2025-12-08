@@ -52,6 +52,23 @@ resource "proxmox_virtual_environment_vm" "node01" {
   }
 
   started = true
+
+  # Wait for VM to be ready and setup Tailscale
+  provisioner "remote-exec" {
+    inline = [
+      "echo 'Waiting for system to be ready...'",
+      "sleep 10",
+      "tailscale up --authkey=${var.tailscale_auth_key} --hostname=node01 --accept-routes"
+    ]
+
+    connection {
+      type        = "ssh"
+      host        = "192.168.0.129"
+      user        = "root"
+      timeout     = "5m"
+      agent       = true
+    }
+  }
 }
 
 output "node01_ip" {

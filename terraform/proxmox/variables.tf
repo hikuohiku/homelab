@@ -38,3 +38,10 @@ variable "github_repo" {
   type        = string
   default     = "hikuohiku/homelab"
 }
+
+# Tailscale Variables
+variable "tailscale_auth_key" {
+  description = "Tailscale auth key for node registration"
+  type        = string
+  sensitive   = true
+}
