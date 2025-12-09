@@ -26,3 +26,11 @@ prepare: build-node01 push-cache
 # Deploy NixOS configuration to node01 (legacy: local build & deploy)
 deploy-node01:
     nix run nixpkgs#nixos-rebuild -- switch --flake ./nix/hosts/node01#default --target-host root@192.168.0.129 --fast
+
+# Create a GitHub release with the Proxmox image
+release-cloud-image version:
+    nix build ./nix/images/proxmox-tailscale#packages.x86_64-linux.proxmox-image -o ./nix/images/proxmox-tailscale/result
+    gh release create "cloud-image-{{ version }}" \
+        --title "Proxmox Image {{ version }}" \
+        --notes "NixOS Proxmox image with Tailscale pre-installed." \
+        "./nix/images/proxmox-tailscale/result/*.vma.zst"
