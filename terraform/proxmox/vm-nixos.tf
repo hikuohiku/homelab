@@ -52,23 +52,6 @@ resource "proxmox_virtual_environment_vm" "node01" {
   }
 
   started = true
-
-  # Wait for VM to be ready and setup Tailscale
-  provisioner "remote-exec" {
-    inline = [
-      "echo 'Waiting for system to be ready...'",
-      "sleep 10",
-      "tailscale up --authkey=${var.tailscale_auth_key} --hostname=node01 --accept-routes"
-    ]
-
-    connection {
-      type        = "ssh"
-      host        = "192.168.0.129"
-      user        = "root"
-      timeout     = "5m"
-      agent       = true
-    }
-  }
 }
 
 output "node01_ip" {
@@ -79,15 +62,17 @@ output "node01_tailscale_dns" {
   value = "node01.${var.tailnet_name}.ts.net"
 }
 
-# NixOS configuration deployment
-# Runs nixos-rebuild on the VM using cached binaries from Cachix
+# =============================================================================
+# NixOS configuration deployment (Phase 1: via IP address)
+# Runs nixos-rebuild to install Tailscale service
+# =============================================================================
 
 # Get flake narHash to detect any changes (including flake.lock)
 data "external" "flake_hash" {
   program = ["bash", "-c", "nix flake metadata ${path.module}/../../nix/hosts/node01 --json | jq '{narHash: .locked.narHash}'"]
 }
 
-resource "null_resource" "nixos_deploy_node01" {
+resource "null_resource" "nixos_rebuild_node01" {
   depends_on = [proxmox_virtual_environment_vm.node01]
 
   # Re-run when flake narHash changes (includes all dependencies)
@@ -98,20 +83,16 @@ resource "null_resource" "nixos_deploy_node01" {
   connection {
     type        = "ssh"
     user        = "root"
-    host        = "node01.${var.tailnet_name}.ts.net"  # Use Tailscale DNS
+    host        = "192.168.0.129"  # Use IP for initial setup (Tailscale not yet available)
     private_key = var.ssh_private_key
     timeout     = "5m"
-  }
-
-  # Wait for Tailscale DNS to propagate
-  provisioner "local-exec" {
-    command = "echo 'Waiting for Tailscale DNS to propagate...' && sleep 5"
   }
 
   # Wait for VM to be ready
   provisioner "remote-exec" {
     inline = [
-      "echo 'Connected via Tailscale DNS'"
+      "echo 'Waiting for system to be ready...'",
+      "sleep 10"
     ]
   }
 
@@ -128,6 +109,35 @@ resource "null_resource" "nixos_deploy_node01" {
       EOT
       ,
       "echo 'NixOS rebuild completed successfully'"
+    ]
+  }
+}
+
+# =============================================================================
+# Tailscale setup (Phase 2: via IP address, enables Tailscale DNS for future)
+# =============================================================================
+
+resource "null_resource" "tailscale_setup_node01" {
+  depends_on = [null_resource.nixos_rebuild_node01]
+
+  # Only run once when VM is created
+  triggers = {
+    vm_id = proxmox_virtual_environment_vm.node01.id
+  }
+
+  connection {
+    type        = "ssh"
+    user        = "root"
+    host        = "192.168.0.129"  # Use IP (Tailscale DNS not yet available)
+    private_key = var.ssh_private_key
+    timeout     = "2m"
+  }
+
+  provisioner "remote-exec" {
+    inline = [
+      "echo 'Setting up Tailscale...'",
+      "tailscale up --authkey=${var.tailscale_auth_key} --hostname=node01 --accept-routes",
+      "echo 'Tailscale setup completed. Node is now accessible via: node01.${var.tailnet_name}.ts.net'"
     ]
   }
 }
