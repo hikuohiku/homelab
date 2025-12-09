@@ -26,6 +26,6 @@
     ];
   };
 
-  # System state version (match nixpkgs release)
-  system.stateVersion = lib.trivial.release;
+  # System state version
+  system.stateVersion = "25.05";
 }
