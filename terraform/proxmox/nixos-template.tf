@@ -1,4 +1,4 @@
-# NixOS template from Hydra prebuilt image
+# NixOS template from custom GitHub Release image
 resource "null_resource" "nixos_template" {
   # Only run if template doesn't exist
   triggers = {
@@ -16,12 +16,13 @@ resource "null_resource" "nixos_template" {
 
       # Download image if not exists
       cd /var/lib/vz/dump
-      if [ ! -f vzdump-qemu-nixos-26.05pre-git.vma.zst ]; then
-        wget https://hydra.nixos.org/build/315652405/download/1/vzdump-qemu-nixos-26.05pre-git.vma.zst
+      IMAGE_NAME="vzdump-qemu-nixos-26.05.20251208.addf7cf.vma.zst"
+      if [ ! -f "$IMAGE_NAME" ]; then
+        wget https://github.com/hikuohiku/homelab/releases/download/cloud-image-v0.0.0/$IMAGE_NAME
       fi
 
       # Restore VM
-      zstdcat vzdump-qemu-nixos-26.05pre-git.vma.zst | qmrestore - 9001
+      zstdcat "$IMAGE_NAME" | qmrestore - 9001
 
       # Set boot order to virtio disk
       qm set 9001 --boot order=virtio0
