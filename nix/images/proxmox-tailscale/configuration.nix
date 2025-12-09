@@ -5,8 +5,6 @@
 # - Nix settings (Cachix binary cache)
 #
 # All other configuration should be applied via nixos-rebuild after VM creation.
-{ config, pkgs, lib, ... }:
-
 {
   # Tailscale VPN (pre-installed, ready for `tailscale up`)
   services.tailscale.enable = true;
