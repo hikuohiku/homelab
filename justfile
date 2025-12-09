@@ -41,6 +41,9 @@ push-cache:
 # Build and push to cache (run before terraform apply)
 prepare: build-node01 push-cache
 
+# Tailnet name for Tailscale DNS (TODO: replace with actual tailnet name)
+tailnet := "your-tailnet"
+
 # Deploy NixOS configuration to node01 (legacy: local build & deploy)
 deploy-node01:
-    nix run nixpkgs#nixos-rebuild -- switch --flake ./nix/hosts/node01#default --target-host root@192.168.0.129 --fast
+    nix run nixpkgs#nixos-rebuild -- switch --flake ./nix/hosts/node01#default --target-host root@node01.{{tailnet}}.ts.net --fast

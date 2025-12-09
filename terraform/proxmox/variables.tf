@@ -45,3 +45,9 @@ variable "tailscale_auth_key" {
   type        = string
   sensitive   = true
 }
+
+variable "tailnet_name" {
+  description = "Tailscale tailnet name (e.g., 'example' for *.example.ts.net)"
+  type        = string
+  default     = "your-tailnet"  # TODO: Replace with actual tailnet name
+}

@@ -75,6 +75,10 @@ output "node01_ip" {
   value = "192.168.0.129"
 }
 
+output "node01_tailscale_dns" {
+  value = "node01.${var.tailnet_name}.ts.net"
+}
+
 # NixOS configuration deployment
 # Runs nixos-rebuild on the VM using cached binaries from Cachix
 
@@ -94,16 +98,20 @@ resource "null_resource" "nixos_deploy_node01" {
   connection {
     type        = "ssh"
     user        = "root"
-    host        = "192.168.0.129"
+    host        = "node01.${var.tailnet_name}.ts.net"  # Use Tailscale DNS
     private_key = var.ssh_private_key
     timeout     = "5m"
+  }
+
+  # Wait for Tailscale DNS to propagate
+  provisioner "local-exec" {
+    command = "echo 'Waiting for Tailscale DNS to propagate...' && sleep 5"
   }
 
   # Wait for VM to be ready
   provisioner "remote-exec" {
     inline = [
-      "echo 'Waiting for system to be ready...'",
-      "sleep 10"
+      "echo 'Connected via Tailscale DNS'"
     ]
   }
 

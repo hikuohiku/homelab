@@ -13,11 +13,11 @@ GitOps ツール ArgoCD のセットアップ手順
 **ローカル（Mac）で実行:**
 
 ```bash
-# node01 から KUBECONFIG を取得
-scp root@192.168.0.129:/etc/rancher/k3s/k3s.yaml ~/.kube/node01-config
+# node01 から KUBECONFIG を取得 (Tailscale DNS 経由)
+scp root@node01.<your-tailnet>.ts.net:/etc/rancher/k3s/k3s.yaml ~/.kube/node01-config
 
-# サーバーアドレスを node01 の IP に変更
-sed -i '' 's|https://127.0.0.1:6443|https://192.168.0.129:6443|g' ~/.kube/node01-config
+# サーバーアドレスを node01 の Tailscale DNS に変更
+sed -i '' 's|https://127.0.0.1:6443|https://node01.<your-tailnet>.ts.net:6443|g' ~/.kube/node01-config
 
 # KUBECONFIG 環境変数を設定（チルダを展開）
 export KUBECONFIG=$HOME/.kube/node01-config
