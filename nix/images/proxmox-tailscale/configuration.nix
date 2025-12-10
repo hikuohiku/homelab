@@ -6,8 +6,11 @@
 #
 # All other configuration should be applied via nixos-rebuild after VM creation.
 {
-  # Tailscale VPN (pre-installed, ready for `tailscale up`)
-  services.tailscale.enable = true;
+  # Tailscale VPN (auto-authenticate with authkey file)
+  services.tailscale = {
+    enable = true;
+    authKeyFile = "/etc/tailscale/authkey";
+  };
 
   # Firewall: trust Tailscale interface
   networking.firewall.trustedInterfaces = [ "tailscale0" ];

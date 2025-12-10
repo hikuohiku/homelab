@@ -66,8 +66,54 @@ data "external" "flake_hash" {
   program = ["bash", "-c", "nix flake metadata ${path.module}/../../nix/hosts/node01 --json | jq '{narHash: .locked.narHash}'"]
 }
 
-resource "null_resource" "nixos_deploy_node01" {
+# Deploy Tailscale authkey to VM
+resource "null_resource" "tailscale_authkey" {
   depends_on = [proxmox_virtual_environment_vm.node01]
+
+  # Re-run when authkey file changes
+  triggers = {
+    authkey_hash = filesha256("${path.module}/../../secrets/tailscale.key")
+  }
+
+  connection {
+    type        = "ssh"
+    user        = "root"
+    host        = "192.168.0.129"
+    private_key = var.ssh_private_key
+    timeout     = "5m"
+  }
+
+  # Wait for VM to be ready and create directory
+  provisioner "remote-exec" {
+    inline = [
+      "echo 'Waiting for system to be ready...'",
+      "sleep 10",
+      "mkdir -p /etc/tailscale",
+      "chmod 700 /etc/tailscale"
+    ]
+  }
+
+  # Copy authkey file to VM
+  provisioner "file" {
+    source      = "${path.module}/../../secrets/tailscale.key"
+    destination = "/etc/tailscale/authkey"
+  }
+
+  # Set proper permissions and restart tailscale
+  provisioner "remote-exec" {
+    inline = [
+      "chmod 600 /etc/tailscale/authkey",
+      "systemctl restart tailscaled",
+      "echo 'Tailscale authkey deployed successfully'"
+    ]
+  }
+}
+
+resource "null_resource" "nixos_deploy_node01" {
+  depends_on = [
+    proxmox_virtual_environment_vm.node01,
+    null_resource.tailscale_authkey
+  ]
 
   # Re-run when flake narHash changes (includes all dependencies)
   triggers = {
@@ -80,14 +126,6 @@ resource "null_resource" "nixos_deploy_node01" {
     host        = "192.168.0.129"
     private_key = var.ssh_private_key
     timeout     = "5m"
-  }
-
-  # Wait for VM to be ready
-  provisioner "remote-exec" {
-    inline = [
-      "echo 'Waiting for system to be ready...'",
-      "sleep 10"
-    ]
   }
 
   # Run nixos-rebuild using cached binaries
