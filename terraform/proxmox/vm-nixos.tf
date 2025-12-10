@@ -99,12 +99,15 @@ resource "null_resource" "tailscale_authkey" {
     destination = "/run/tailscale/authkey"
   }
 
-  # Set proper permissions and restart tailscale
+  # Set proper permissions and restart tailscaled-autoconnect
+  # Note: Do NOT restart tailscaled - it recreates /run/tailscale/ and deletes the authkey
   provisioner "remote-exec" {
     inline = [
       "chmod 600 /run/tailscale/authkey",
-      "systemctl restart tailscaled",
-      "echo 'Tailscale authkey deployed successfully'"
+      "systemctl restart tailscaled-autoconnect",
+      "sleep 5",
+      "tailscale status | head -1",
+      "echo 'Tailscale authkey deployed and connected successfully'"
     ]
   }
 }
@@ -120,10 +123,11 @@ resource "null_resource" "nixos_deploy_node01" {
     flake_nar_hash = data.external.flake_hash.result.narHash
   }
 
+  # Connect via Tailscale MagicDNS (after tailnet join)
   connection {
     type        = "ssh"
     user        = "root"
-    host        = "192.168.0.129"
+    host        = "node01"
     private_key = var.ssh_private_key
     timeout     = "5m"
   }

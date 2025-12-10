@@ -18,7 +18,7 @@ resource "null_resource" "nixos_template" {
       cd /var/lib/vz/dump
       IMAGE_NAME="vzdump-qemu-nixos-26.05.20251208.addf7cf.vma.zst"
       if [ ! -f "$IMAGE_NAME" ]; then
-        wget https://github.com/hikuohiku/homelab/releases/download/cloud-image-v0.0.0/$IMAGE_NAME
+        wget https://github.com/hikuohiku/homelab/releases/download/cloud-image-v0.0.1/$IMAGE_NAME
       fi
 
       # Restore VM

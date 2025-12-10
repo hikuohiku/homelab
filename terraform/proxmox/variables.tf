@@ -38,3 +38,4 @@ variable "github_repo" {
   type        = string
   default     = "hikuohiku/homelab"
 }
+
