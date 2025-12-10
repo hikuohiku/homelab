@@ -88,21 +88,21 @@ resource "null_resource" "tailscale_authkey" {
     inline = [
       "echo 'Waiting for system to be ready...'",
       "sleep 10",
-      "mkdir -p /etc/tailscale",
-      "chmod 700 /etc/tailscale"
+      "mkdir -p /run/tailscale",
+      "chmod 700 /run/tailscale"
     ]
   }
 
   # Copy authkey file to VM
   provisioner "file" {
     source      = "${path.module}/../../secrets/tailscale.key"
-    destination = "/etc/tailscale/authkey"
+    destination = "/run/tailscale/authkey"
   }
 
   # Set proper permissions and restart tailscale
   provisioner "remote-exec" {
     inline = [
-      "chmod 600 /etc/tailscale/authkey",
+      "chmod 600 /run/tailscale/authkey",
       "systemctl restart tailscaled",
       "echo 'Tailscale authkey deployed successfully'"
     ]

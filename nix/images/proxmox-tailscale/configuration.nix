@@ -9,7 +9,7 @@
   # Tailscale VPN (auto-authenticate with authkey file)
   services.tailscale = {
     enable = true;
-    authKeyFile = "/etc/tailscale/authkey";
+    authKeyFile = "/run/tailscale/authkey";
   };
 
   # Firewall: trust Tailscale interface
