@@ -1,20 +1,11 @@
-# NixOS Proxmox image configuration with Tailscale pre-installed
+# NixOS Proxmox Cloud image configuration
 #
-# Minimal additions to Hydra base image:
-# - Tailscale (for VPN access)
+# Minimal base image for Proxmox VMs:
+# - Cloud-init for SSH key provisioning
 # - Nix settings (Cachix binary cache)
 #
 # All other configuration should be applied via nixos-rebuild after VM creation.
 {
-  # Tailscale VPN (auto-authenticate with authkey file)
-  services.tailscale = {
-    enable = true;
-    authKeyFile = "/run/tailscale/authkey";
-  };
-
-  # Firewall: trust Tailscale interface
-  networking.firewall.trustedInterfaces = [ "tailscale0" ];
-
   # Nix settings: binary cache for faster nixos-rebuild
   nix.settings = {
     substituters = [

@@ -19,14 +19,7 @@
         22 # SSH
         6443 # k3s: API server (pods からアクセス必須)
       ];
-      trustedInterfaces = [ "tailscale0" ];
     };
-  };
-
-  # Tailscale VPN
-  services.tailscale = {
-    enable = true;
-    authKeyFile = "/run/tailscale/authkey";
   };
 
   # SSH 設定 (リモートアクセス必須)
