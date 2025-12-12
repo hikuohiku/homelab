@@ -66,13 +66,12 @@ data "external" "flake_hash" {
   program = ["bash", "-c", "nix flake metadata ${path.module}/../../nix/hosts/node01 --json | jq '{narHash: .locked.narHash}'"]
 }
 
-# Deploy Tailscale authkey to VM
-resource "null_resource" "tailscale_authkey" {
+resource "null_resource" "nixos_deploy_node01" {
   depends_on = [proxmox_virtual_environment_vm.node01]
 
-  # Re-run when authkey file changes
+  # Re-run when flake narHash changes (includes all dependencies)
   triggers = {
-    authkey_hash = filesha256("${path.module}/../../secrets/tailscale.key")
+    flake_nar_hash = data.external.flake_hash.result.narHash
   }
 
   connection {
@@ -83,58 +82,11 @@ resource "null_resource" "tailscale_authkey" {
     timeout     = "5m"
   }
 
-  # Wait for VM to be ready and create directory
+  # Wait for VM to be ready, then run nixos-rebuild using cached binaries
   provisioner "remote-exec" {
     inline = [
       "echo 'Waiting for system to be ready...'",
       "sleep 10",
-      "mkdir -p /run/tailscale",
-      "chmod 700 /run/tailscale"
-    ]
-  }
-
-  # Copy authkey file to VM
-  provisioner "file" {
-    source      = "${path.module}/../../secrets/tailscale.key"
-    destination = "/run/tailscale/authkey"
-  }
-
-  # Set proper permissions and restart tailscaled-autoconnect
-  # Note: Do NOT restart tailscaled - it recreates /run/tailscale/ and deletes the authkey
-  provisioner "remote-exec" {
-    inline = [
-      "chmod 600 /run/tailscale/authkey",
-      "systemctl restart tailscaled-autoconnect",
-      "sleep 5",
-      "tailscale status | head -1",
-      "echo 'Tailscale authkey deployed and connected successfully'"
-    ]
-  }
-}
-
-resource "null_resource" "nixos_deploy_node01" {
-  depends_on = [
-    proxmox_virtual_environment_vm.node01,
-    null_resource.tailscale_authkey
-  ]
-
-  # Re-run when flake narHash changes (includes all dependencies)
-  triggers = {
-    flake_nar_hash = data.external.flake_hash.result.narHash
-  }
-
-  # Connect via Tailscale MagicDNS (after tailnet join)
-  connection {
-    type        = "ssh"
-    user        = "root"
-    host        = "node01"
-    private_key = var.ssh_private_key
-    timeout     = "5m"
-  }
-
-  # Run nixos-rebuild using cached binaries
-  provisioner "remote-exec" {
-    inline = [
       "echo 'Starting NixOS rebuild from GitHub flake...'",
       <<-EOT
       nixos-rebuild switch \

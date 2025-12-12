@@ -29,8 +29,8 @@ deploy-node01:
 
 # Create a GitHub release with the Proxmox image
 release-cloud-image version:
-    nix build ./nix/images/proxmox-tailscale#packages.x86_64-linux.proxmox-image -o ./nix/images/proxmox-tailscale/result
+    nix build ./nix/images/proxmox-cloud#packages.x86_64-linux.proxmox-image -o ./nix/images/proxmox-cloud/result
     gh release create "cloud-image-{{ version }}" \
         --title "Proxmox Image {{ version }}" \
-        --notes "NixOS Proxmox image with Tailscale pre-installed." \
-        "./nix/images/proxmox-tailscale/result/*.vma.zst"
+        --notes "NixOS Proxmox Cloud image (minimal base with Cachix cache)." \
+        "./nix/images/proxmox-cloud/result/*.vma.zst"

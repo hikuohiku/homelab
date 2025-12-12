@@ -1,5 +1,5 @@
 {
-  description = "NixOS Proxmox image with Tailscale pre-installed";
+  description = "NixOS Proxmox Cloud image";
 
   inputs = {
     flake-parts.url = "github:hercules-ci/flake-parts";
@@ -14,7 +14,7 @@
         systems = [ "x86_64-linux" ];
         flake = {
           # NixOS configuration for the image
-          nixosConfigurations.proxmox-tailscale = nixpkgs.lib.nixosSystem {
+          nixosConfigurations.proxmox-cloud = nixpkgs.lib.nixosSystem {
             system = "x86_64-linux";
             modules = [
               "${nixpkgs}/nixos/modules/virtualisation/proxmox-image.nix"
@@ -24,8 +24,8 @@
         };
         perSystem = {
           packages = {
-            proxmox-image = self.nixosConfigurations.proxmox-tailscale.config.system.build.VMA;
-            default = self.nixosConfigurations.proxmox-tailscale.config.system.build.VMA;
+            proxmox-image = self.nixosConfigurations.proxmox-cloud.config.system.build.VMA;
+            default = self.nixosConfigurations.proxmox-cloud.config.system.build.VMA;
           };
         };
       }

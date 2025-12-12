@@ -7,7 +7,9 @@ global:
 server:
   # ArgoCD Server の設定
   service:
-    type: LoadBalancer  # k3s の ServiceLB を使用
+    type: LoadBalancer
+    # Tailscale Operator経由でTailnet内に公開
+    loadBalancerClass: tailscale
 
   # UI へのアクセス設定
   extraArgs:
