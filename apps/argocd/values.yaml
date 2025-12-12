@@ -1,9 +1,6 @@
 # ArgoCD Helm Values
 # https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd
 
-global:
-  domain: argocd.local
-
 server:
   service:
     type: LoadBalancer
