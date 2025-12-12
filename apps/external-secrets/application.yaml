@@ -1,7 +1,7 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: tailscale-operator
+  name: external-secrets
   namespace: argocd
   finalizers:
     - resources-finalizer.argocd.argoproj.io
@@ -11,11 +11,11 @@ spec:
   source:
     repoURL: https://github.com/hikuohiku/homelab.git
     targetRevision: HEAD
-    path: apps/tailscale-operator
+    path: apps/external-secrets
 
   destination:
     server: https://kubernetes.default.svc
-    namespace: tailscale
+    namespace: external-secrets
 
   syncPolicy:
     automated:
