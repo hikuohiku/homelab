@@ -1,6 +1,11 @@
 # ArgoCD Helm Values
 # https://github.com/argoproj/argo-helm/tree/main/charts/argo-cd
 
+# Enable Kustomize Helm Chart Inflation
+configs:
+  params:
+    kustomize.buildOptions: --enable-helm
+
 server:
   service:
     type: LoadBalancer
