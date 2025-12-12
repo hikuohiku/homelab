@@ -8,22 +8,10 @@ metadata:
 spec:
   project: default
 
-  sources:
-    # External Secrets Operator Helm chart
-    - repoURL: https://charts.external-secrets.io
-      chart: external-secrets
-      targetRevision: 1.1.1
-      helm:
-        valuesObject:
-          installCRDs: true
-
-    # ClusterSecretStore and other ESO resources from Git
-    - repoURL: https://github.com/hikuohiku/homelab.git
-      targetRevision: HEAD
-      path: apps/external-secrets
-      # Exclude application.yaml to avoid recursion
-      directory:
-        exclude: 'application.yaml'
+  source:
+    repoURL: https://github.com/hikuohiku/homelab.git
+    targetRevision: HEAD
+    path: apps/external-secrets
 
   destination:
     server: https://kubernetes.default.svc
