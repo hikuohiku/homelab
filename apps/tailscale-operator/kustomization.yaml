@@ -8,10 +8,9 @@ helmCharts:
     releaseName: tailscale-operator
     namespace: tailscale
     valuesInline:
-      # OAuth credentials are managed by ExternalSecret (operator-oauth)
-      # See apps/external-secrets/tailscale-oauth-external-secret.yaml
-      oauth:
-        clientId: ""
-        clientSecret: ""
+      # OAuth credentials are managed by ExternalSecret
+      # ExternalSecret creates 'operator-oauth' Secret in tailscale namespace
+      # When oauth is empty {}, Helm chart uses precreated 'operator-oauth' Secret
+      oauth: {}
       operatorConfig:
         hostname: "k8s-"
