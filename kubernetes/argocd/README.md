@@ -7,6 +7,8 @@ GitOps ツール ArgoCD のセットアップ手順
 - k3s が稼働中
 - kubectl と helm がインストール済み（NixOS configuration で設定済み）
 - KUBECONFIG 環境変数が設定済み（自動設定）
+- Tailscale Operator がインストール済み（Tailnet 公開を使用する場合）
+  - セットアップ手順: [kubernetes/tailscale-operator/README.md](../tailscale-operator/README.md)
 
 ## Phase 1: KUBECONFIG の取得
 
@@ -60,14 +62,32 @@ echo
 
 ## Phase 4: ArgoCD UI アクセス
 
+### Tailscale 経由（推奨）
+
+Tailscale Operator が設定済みの場合、ArgoCD は Tailnet 内に公開されます。
+
+```bash
+# Tailscale が割り当てたホスト名を確認
+kubectl get svc -n argocd argocd-server -o jsonpath='{.status.loadBalancer.ingress[0].hostname}'
+
+# または Tailscale Admin Console で確認
+# https://login.tailscale.com/admin/machines
+```
+
+ブラウザで `http://<tailscale-hostname>` にアクセス
+
+### ローカルネットワーク経由（Tailscale 未設定時）
+
 ```bash
 # LoadBalancer の IP を確認
 kubectl get svc -n argocd argocd-server
 
 # ブラウザで http://<EXTERNAL-IP> にアクセス
-# ユーザー名: admin
-# パスワード: (Phase 3 で取得したパスワード)
 ```
+
+**ログイン情報:**
+- ユーザー名: admin
+- パスワード: (Phase 3 で取得したパスワード)
 
 ## Phase 5: 自己管理への移行
 

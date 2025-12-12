@@ -1,0 +1,13 @@
+# Tailscale Kubernetes Operator Helm Values
+# https://github.com/tailscale/tailscale/tree/main/cmd/k8s-operator
+
+# OAuth credentials (create at https://login.tailscale.com/admin/settings/oauth)
+# Required scopes: devices, auth_keys
+oauth:
+  clientId: ""      # Set via --set or separate secret
+  clientSecret: ""  # Set via --set or separate secret
+
+# Operator settings
+operatorConfig:
+  # Hostname prefix for services exposed via Tailscale
+  hostname: "k8s-"
