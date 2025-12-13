@@ -10,7 +10,20 @@
   # ネットワーク設定
   networking = {
     useDHCP = false;
-    interfaces.eth0.useDHCP = true;
+    defaultGateway = "192.168.0.1";
+    nameservers = [
+      "8.8.8.8"
+      "1.1.1.1"
+    ];
+
+    interfaces.eth0 = {
+      ipv4.addresses = [
+        {
+          address = "192.168.0.129";
+          prefixLength = 24;
+        }
+      ];
+    };
 
     # ファイアウォール設定
     firewall = {
@@ -21,6 +34,12 @@
       ];
     };
   };
+
+  # カーネルパラメータ (インターフェース名を eth0 に固定)
+  boot.kernelParams = [
+    "net.ifnames=0"
+    "biosdevname=0"
+  ];
 
   # SSH 設定 (リモートアクセス必須)
   services.openssh = {
