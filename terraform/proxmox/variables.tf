@@ -13,7 +13,6 @@ variable "proxmox_api_token" {
 variable "proxmox_ssh_username" {
   description = "SSH username for Proxmox host"
   type        = string
-  default     = "root"
 }
 
 variable "ssh_public_key" {
@@ -24,7 +23,6 @@ variable "ssh_public_key" {
 variable "proxmox_node" {
   description = "Proxmox node name"
   type        = string
-  default     = "hikuo-homeserver"
 }
 
 variable "age_private_key" {
@@ -36,7 +34,4 @@ variable "age_private_key" {
 variable "github_repo" {
   description = "GitHub repository for NixOS flake (format: owner/repo)"
   type        = string
-  default     = "hikuohiku/homelab"
 }
-
-
