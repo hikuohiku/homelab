@@ -1,6 +1,8 @@
 { pkgs, ... }:
 
 {
+  imports = [ ./k3s-manifests.nix ];
+
   # システムのステートバージョン (変更しないこと)
   system.stateVersion = "24.11";
 
