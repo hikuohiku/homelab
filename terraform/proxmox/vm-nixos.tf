@@ -22,7 +22,7 @@ resource "proxmox_virtual_environment_vm" "node01" {
   }
 
   memory {
-    dedicated = 4096
+    dedicated = 8192
   }
 
   disk {
@@ -80,6 +80,8 @@ resource "null_resource" "nixos_deploy_node01" {
     host        = "192.168.0.129"
     private_key = var.ssh_private_key
     timeout     = "5m"
+    bastion_host = "hikuo-homeserver"
+    bastion_user = "root"
   }
 
   # Wait for VM to be ready, then run nixos-rebuild using cached binaries

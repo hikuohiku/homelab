@@ -19,7 +19,7 @@
   boot.initrd.availableKernelModules = [
     "virtio_pci"
     "virtio_scsi"
-    "virtio_blk" # 追加: virtio0 ディスク用ドライバ
+    "virtio_blk"
     "ahci"
     "sd_mod"
   ];
