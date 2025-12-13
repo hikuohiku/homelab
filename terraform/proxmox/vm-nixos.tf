@@ -1,3 +1,4 @@
+
 # Cloud-Init configuration for node01
 # Injects Age private key and runs nixos-rebuild
 resource "proxmox_virtual_environment_file" "node01_cloud_init" {
@@ -8,11 +9,17 @@ resource "proxmox_virtual_environment_file" "node01_cloud_init" {
   source_raw {
     data = <<-EOT
       #cloud-config
+      users:
+        - default
+        - name: root
+          ssh_authorized_keys:
+            - ${indent(6, var.ssh_public_key)}
+          shell: /bin/bash
+
       write_files:
         - path: /var/lib/sops-nix/key.txt
           permissions: '0600'
-          content: |
-            ${indent(12, var.age_private_key)}
+          content: ${jsonencode(var.age_private_key)}
       runcmd:
         - |
           nixos-rebuild switch \
@@ -24,6 +31,7 @@ resource "proxmox_virtual_environment_file" "node01_cloud_init" {
     file_name = "node01-cloud-init.yaml"
   }
 }
+
 
 resource "proxmox_virtual_environment_vm" "node01" {
   name      = "node01"
