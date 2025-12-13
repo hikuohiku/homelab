@@ -11,41 +11,33 @@
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│ NixOS (k3s-manifests.nix)                                       │
-│ ┌─────────────┐ ┌─────────────┐ ┌─────────────────────────────┐ │
-│ │ Namespaces  │ │ HelmCharts  │ │ ClusterSecretStore/         │ │
-│ │             │ │ (ArgoCD,    │ │ ExternalSecret/App of Apps  │ │
-│ │             │ │ ESO, TS-OP) │ │                             │ │
-│ └─────────────┘ └─────────────┘ └─────────────────────────────┘ │
+│ NixOS (k3s-manifests.nix) - Bootstrap Layer                     │
+│ ┌─────────────┐ ┌───────────────────┐ ┌───────────────────────┐ │
+│ │ Namespace   │ │ ArgoCD HelmChart  │ │ App of Apps           │ │
+│ │ (argocd)    │ │ (最低限の設定)     │ │ (apps/ を参照)        │ │
+│ └─────────────┘ └───────────────────┘ └───────────────────────┘ │
 └────────────────────────────────┬────────────────────────────────┘
                                  │ 自動適用
                                  ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│ K3s クラスタ                                                     │
+│ ArgoCD App of Apps - GitOps Layer                               │
 │ ┌─────────────┐ ┌─────────────┐ ┌────────────────────┐          │
 │ │ ArgoCD      │ │ ESO         │ │ Tailscale Operator │          │
-│ │             │ │             │ │                    │          │
-│ │ App of Apps ├─┤ Doppler連携 ├─┤ operator-oauth     │          │
+│ │ (values上書)│ │ + Doppler   │ │                    │          │
 │ └─────────────┘ └─────────────┘ └────────────────────┘          │
 └─────────────────────────────────────────────────────────────────┘
                                  │
-                                 ▼ GitOps
-┌─────────────────────────────────────────────────────────────────┐
-│ GitHub (apps/)                                                  │
-│ 以降のアプリ追加・変更は ArgoCD 経由で自動適用                     │
-└─────────────────────────────────────────────────────────────────┘
+                                 ▼ GitHub (apps/)
 ```
 
 ## 初回セットアップ (2ステップ)
 
-NixOS の `k3s-manifests.nix` により、以下のコンポーネントは VM 起動時に自動デプロイされます:
-- Namespace (argocd, external-secrets, tailscale)
-- ArgoCD (Helm Chart)
-- External Secrets Operator (Helm Chart)
-- Tailscale Operator (Helm Chart)
-- ClusterSecretStore (Doppler)
-- ExternalSecret (Tailscale OAuth)
+NixOS の `k3s-manifests.nix` は最低限の Bootstrap のみ:
+- Namespace (argocd)
+- ArgoCD (Helm Chart - 最低限の設定)
 - App of Apps
+
+残りのコンポーネントは **ArgoCD App of Apps** でデプロイされます。
 
 ### Step 1: Doppler トークンの登録
 
@@ -62,10 +54,12 @@ ssh -J root@hikuo-homeserver root@192.168.0.129 \
 
 ### Step 2: Kubeconfig のセットアップ
 
-Tailscale K8s Operator 経由で kubeconfig を取得します:
+Tailscale Operator 起動後、SSH 経由で kubeconfig を取得:
 
 ```bash
-tailscale configure kubeconfig <operator-hostname>
+scp -o ProxyJump=root@hikuo-homeserver root@192.168.0.129:/etc/rancher/k3s/k3s.yaml ~/.kube/node01-config
+sed -i '' 's|https://127.0.0.1:6443|https://192.168.0.129:6443|g' ~/.kube/node01-config
+export KUBECONFIG=~/.kube/node01-config
 kubectl get nodes
 ```
 
