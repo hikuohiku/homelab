@@ -3,10 +3,11 @@
 # K3s Auto-Deploy Manifests (Bootstrap)
 # NixOS layer では最低限の ArgoCD + App of Apps のみデプロイ
 # 残りのコンポーネント (ESO, Tailscale Operator 等) は ArgoCD App of Apps で管理
+# doppler-token Secret は sops.templates で生成
 {
   services.k3s.manifests = {
     # ====================
-    # 1. Namespace 作成 (argocd のみ)
+    # 1. Namespace 作成
     # ====================
     namespaces = {
       content = [
@@ -14,6 +15,11 @@
           apiVersion = "v1";
           kind = "Namespace";
           metadata.name = "argocd";
+        }
+        {
+          apiVersion = "v1";
+          kind = "Namespace";
+          metadata.name = "external-secrets";
         }
       ];
     };

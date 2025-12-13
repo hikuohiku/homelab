@@ -27,8 +27,8 @@ variable "proxmox_node" {
   default     = "hikuo-homeserver"
 }
 
-variable "ssh_private_key" {
-  description = "SSH private key for connecting to VMs (for nixos-rebuild)"
+variable "age_private_key" {
+  description = "Age private key for sops-nix decryption (injected via Cloud-Init)"
   type        = string
   sensitive   = true
 }
@@ -38,4 +38,5 @@ variable "github_repo" {
   type        = string
   default     = "hikuohiku/homelab"
 }
+
 
