@@ -6,7 +6,7 @@ keys:
   - &node01 age1u55u5prakalcplze25mvkr98ura4r4paduqx52xed0c8gh69j5psfp9tek
 
 creation_rules:
-  - path_regex: nix/hosts/node01/secrets\.yaml$
+  - path_regex: nix/images/proxmox-cloud/secrets\.yaml$
     key_groups:
       - age:
           - *node01
