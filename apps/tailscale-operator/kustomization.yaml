@@ -14,3 +14,7 @@ helmCharts:
       oauth: {}
       operatorConfig:
         hostname: "k8s-"
+      # Enable API server proxy with auth mode
+      # Tailscale identity is used for K8s RBAC
+      apiServerProxyConfig:
+        mode: "true"
