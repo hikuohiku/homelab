@@ -9,14 +9,50 @@
 - Tailscale アカウント（Tailnet公開用）
 - Doppler アカウント（Secret管理用）
 
-## Phase 1: KUBECONFIG の取得
+## Phase 1: K3s シークレット設定 (初回のみ)
 
-```bash
-scp root@192.168.0.129:/etc/rancher/k3s/k3s.yaml ~/.kube/node01-config
-sed -i '' 's|https://127.0.0.1:6443|https://192.168.0.129:6443|g' ~/.kube/node01-config
-export KUBECONFIG=$HOME/.kube/node01-config
-kubectl get nodes
-```
+事前に K3s の CA と Token を生成し、Doppler に保存します。これにより、再構築後も同じ Kubeconfig が使用可能になります。
+
+1. **CA と Token の生成・Doppler への保存**:
+   ```bash
+   # 一時ディレクトリで作業
+   mkdir -p /tmp/k3s-scrt && cd /tmp/k3s-scrt
+
+   # CA 生成
+   openssl genrsa -out server-ca.key 2048
+   openssl req -x509 -new -nodes -key server-ca.key -sha256 -days 3650 -out server-ca.crt -subj "/CN=k3s"
+
+   # Token 生成
+   K3S_TOKEN=$(openssl rand -hex 32)
+
+   # Doppler に保存
+   doppler secrets set K3S_TOKEN="$K3S_TOKEN" \
+     K3S_CA_CERT="$(cat server-ca.crt)" \
+     K3S_CA_KEY="$(cat server-ca.key)"
+
+   # クリーンアップ
+   cd - && rm -rf /tmp/k3s-scrt
+   ```
+
+   ※ 既存のサーバーから抽出する場合は、Bastion経由で取得します:
+   ```bash
+   ssh -J root@hikuo-homeserver root@192.168.0.129 "cat /var/lib/rancher/k3s/server/token"
+   ```
+
+2. **シークレットの注入**:
+   VM を再構築した直後に以下を実行します:
+   ```bash
+   just inject-secrets
+   ```
+
+3. **Kubeconfig の取得 (初回のみ)**:
+   ```bash
+   scp root@192.168.0.129:/etc/rancher/k3s/k3s.yaml ~/.kube/node01-config
+   sed -i '' 's|https://127.0.0.1:6443|https://192.168.0.129:6443|g' ~/.kube/node01-config
+   export KUBECONFIG=$HOME/.kube/node01-config
+   kubectl get nodes
+   ```
+   ※ 次回以降は、`just inject-secrets` を実行すれば、既存の `~/.kube/node01-config` がそのまま使えます。
 
 ## Phase 2: Doppler セットアップ
 

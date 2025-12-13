@@ -25,12 +25,16 @@ prepare: build-node01 push-cache
 
 # Deploy NixOS configuration to node01 (legacy: local build & deploy)
 deploy-node01:
-    nix run nixpkgs#nixos-rebuild -- switch --flake ./nix/hosts/node01#default --target-host root@192.168.0.129 --fast
+    NIX_SSHOPTS="-o ProxyJump=root@hikuo-homeserver" nix run nixpkgs#nixos-rebuild -- switch --flake ./nix/hosts/node01#default --target-host root@192.168.0.129 --fast
 
-# Create a GitHub release with the Proxmox image
-release-cloud-image version:
-    nix build ./nix/images/proxmox-cloud#packages.x86_64-linux.proxmox-image -o ./nix/images/proxmox-cloud/result
-    gh release create "cloud-image-{{ version }}" \
-        --title "Proxmox Image {{ version }}" \
-        --notes "NixOS Proxmox Cloud image (minimal base with Cachix cache)." \
-        "./nix/images/proxmox-cloud/result/*.vma.zst"
+# Inject K3s secrets from Doppler to node01
+inject-secrets:
+    @echo "Injecting K3s secrets from Doppler..."
+    @doppler secrets download --project homelab --config prd --no-file --format json | jq -r ' \
+        "mkdir -p /var/lib/rancher/k3s/server/tls\n" + \
+        "echo \"" + .K3S_TOKEN + "\" > /etc/rancher/k3s/token\n" + \
+        "echo \"" + .K3S_CA_CERT + "\" > /var/lib/rancher/k3s/server/tls/server-ca.crt\n" + \
+        "echo \"" + .K3S_CA_KEY + "\" > /var/lib/rancher/k3s/server/tls/server-ca.key\n" + \
+        "chmod 600 /etc/rancher/k3s/token /var/lib/rancher/k3s/server/tls/server-ca.key\n" + \
+        "systemctl restart k3s" \
+        ' | ssh -J root@hikuo-homeserver root@192.168.0.129 "cat | sh"

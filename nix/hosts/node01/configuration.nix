@@ -62,6 +62,7 @@
     "--disable traefik" # Traefik を無効化（ArgoCD の LoadBalancer で使用するため）
     # "--debug" # オプション: デバッグモード有効化
   ];
+  services.k3s.tokenFile = "/etc/rancher/k3s/token";
 
   # システムパッケージ
   environment.systemPackages = with pkgs; [
