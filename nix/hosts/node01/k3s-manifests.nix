@@ -150,6 +150,8 @@
             # ExternalSecret creates 'operator-oauth' Secret in tailscale namespace
             oauth = { };
             operatorConfig.hostname = "k8s-";
+            # Enable API server proxy for Tailnet access to Kubernetes API
+            apiServerProxyConfig.mode = "noauth";
           };
         };
       };
