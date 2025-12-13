@@ -45,11 +45,13 @@ NixOS の `k3s-manifests.nix` がすべてを自動でブートストラップ�
 3. **ArgoCD** (Helm Chart)
 4. **App of Apps**: 残りのコンポーネントを自動デプロイ
 
+
+
 ### 必要な作業（Terraform 実行前）
 
-1. Age キーペアを生成して Bitwarden に保存
+1. Age キーペアを生成して Doppler に保存 (`AGE_PRIVATE_KEY`)
 2. `secrets.yaml` を暗号化して Git にコミット
-3. `terraform.tfvars` に `age_private_key` を追加
+3. Doppler に必要な変数を設定 (`PROXMOX_*`, `GITHUB_REPO` 等)
 
 詳細は [Verification Plan](#verification-plan) を参照。
 
