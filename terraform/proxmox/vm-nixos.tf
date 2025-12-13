@@ -14,19 +14,42 @@ resource "proxmox_virtual_environment_file" "node01_cloud_init" {
         - name: root
           ssh_authorized_keys:
             - ${indent(6, var.ssh_public_key)}
-          shell: /bin/bash
+          shell: /run/current-system/sw/bin/bash
 
       write_files:
         - path: /var/lib/sops-nix/key.txt
           permissions: '0600'
           content: ${jsonencode(var.age_private_key)}
-      runcmd:
-        - |
-          /run/current-system/sw/bin/nixos-rebuild switch \
-            --flake github:${var.github_repo}?dir=nix/hosts/node01#default \
-            --option substituters "https://cache.nixos.org https://hikuohiku.cachix.org" \
-            --option trusted-public-keys "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hikuohiku.cachix.org-1:AZwUw2nnqdfm6k5oLyczGRRHMBEQXz0Fo1HzI+RwApg=" \
-            --refresh
+
+        # nixos-rebuild を実行するスクリプト（bash固定）
+        - path: /run/nixos-rebuild-on-boot.sh
+          permissions: '0755'
+          content: |
+            #!/run/current-system/sw/bin/bash
+            set -euo pipefail
+
+            /run/current-system/sw/bin/nixos-rebuild boot \
+              --flake "github:${var.github_repo}?dir=nix/hosts/node01#default" \
+              --option substituters "https://cache.nixos.org https://hikuohiku.cachix.org" \
+              --option trusted-public-keys "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hikuohiku.cachix.org-1:AZwUw2nnqdfm6k5oLyczGRRHMBEQXz0Fo1HzI+RwApg=" \
+              --refresh
+
+            touch /var/lib/nixos-rebuild-on-boot.done
+            /run/current-system/sw/bin/systemctl reboot
+
+        # cloud-init が「1回だけ」実行するフック
+        - path: /var/lib/cloud/scripts/per-once/99-nixos-rebuild
+          permissions: '0755'
+          content: |
+            #!/run/current-system/sw/bin/bash
+            set -euo pipefail
+
+            # 念のためネットワークが来るまで待つ（保険）
+            /run/current-system/sw/bin/systemctl is-active -q network-online.target \
+              || /run/current-system/sw/bin/systemctl wait network-online.target
+
+            exec /run/nixos-rebuild-on-boot.sh
+
     EOT
     file_name = "node01-cloud-init.yaml"
   }
