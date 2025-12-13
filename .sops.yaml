@@ -1,0 +1,13 @@
+# SOPS configuration for secret encryption
+# See: https://github.com/Mic92/sops-nix
+
+keys:
+  # node01 Age public key
+  - &node01 age1u55u5prakalcplze25mvkr98ura4r4paduqx52xed0c8gh69j5psfp9tek
+
+creation_rules:
+  - path_regex: nix/hosts/node01/secrets\.yaml$
+    key_groups:
+      - age:
+          - *node01
+

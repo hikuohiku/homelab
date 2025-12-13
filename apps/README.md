@@ -6,6 +6,7 @@
 
 - Tailscale アカウント（Tailnet公開用）
 - Doppler アカウント（Secret管理用）
+- sops + Age（Secret暗号化用）
 
 ## アーキテクチャ
 
@@ -14,8 +15,13 @@
 │ NixOS (k3s-manifests.nix) - Bootstrap Layer                     │
 │ ┌─────────────┐ ┌───────────────────┐ ┌───────────────────────┐ │
 │ │ Namespace   │ │ ArgoCD HelmChart  │ │ App of Apps           │ │
-│ │ (argocd)    │ │ (最低限の設定)     │ │ (apps/ を参照)        │ │
+│ │ (argocd,    │ │ (最低限の設定)     │ │ (apps/ を参照)        │ │
+│ │ ext-secrets)│ │                   │ │                       │ │
 │ └─────────────┘ └───────────────────┘ └───────────────────────┘ │
+│                 ┌───────────────────┐                           │
+│                 │ doppler-token     │ ← sops-nix で自動生成    │
+│                 │ Secret            │                           │
+│                 └───────────────────┘                           │
 └────────────────────────────────┬────────────────────────────────┘
                                  │ 自動適用
                                  ▼
@@ -30,46 +36,32 @@
                                  ▼ GitHub (apps/)
 ```
 
-## 初回セットアップ (2ステップ)
+## 初回セットアップ
 
-NixOS の `k3s-manifests.nix` は最低限の Bootstrap のみ:
-- Namespace (argocd)
-- ArgoCD (Helm Chart - 最低限の設定)
-- App of Apps
+NixOS の `k3s-manifests.nix` がすべてを自動でブートストラップします：
 
-残りのコンポーネントは **ArgoCD App of Apps** でデプロイされます。
+1. **Namespace**: argocd, external-secrets
+2. **doppler-token Secret**: sops-nix で暗号化された `secrets.yaml` から自動生成
+3. **ArgoCD** (Helm Chart)
+4. **App of Apps**: 残りのコンポーネントを自動デプロイ
 
-### Step 1: Doppler トークンの登録
 
-SSH 経由で `doppler-token` Secret を作成します:
 
-```bash
-ssh -J root@hikuo-homeserver root@192.168.0.129 \
-  "kubectl create namespace external-secrets --dry-run=client -o yaml | kubectl apply -f - && \
-   kubectl create secret generic doppler-token \
-     --namespace external-secrets \
-     --from-literal=token=dp.st.xxxx \
-     --dry-run=client -o yaml | kubectl apply -f -"
-```
+### 必要な作業（Terraform 実行前）
 
-### Step 2: Kubeconfig のセットアップ
+1. Age キーペアを生成して Doppler に保存 (`AGE_PRIVATE_KEY`)
+2. `secrets.yaml` を暗号化して Git にコミット
+3. Doppler に必要な変数を設定 (`PROXMOX_*`, `GITHUB_REPO` 等)
 
-Tailscale Operator 起動後、SSH 経由で kubeconfig を取得:
-
-```bash
-scp -o ProxyJump=root@hikuo-homeserver root@192.168.0.129:/etc/rancher/k3s/k3s.yaml ~/.kube/node01-config
-sed -i '' 's|https://127.0.0.1:6443|https://192.168.0.129:6443|g' ~/.kube/node01-config
-export KUBECONFIG=~/.kube/node01-config
-kubectl get nodes
-```
-
-※ `<operator-hostname>` は Tailscale Admin Console または `tailscale status` で確認できます。
+詳細は [Verification Plan](#verification-plan) を参照。
 
 ## セットアップ確認
 
+Tailscale API Proxy 経由で kubectl アクセス:
+
 ```bash
-kubectl get pods -A
-kubectl get application -n argocd
+kubectl --context=tailscale-operator-context get pods -A
+kubectl --context=tailscale-operator-context get application -n argocd
 ```
 
 **期待される出力:**
@@ -78,6 +70,7 @@ NAME                 SYNC STATUS   HEALTH STATUS
 apps                 Synced        Healthy
 argocd               Synced        Healthy
 external-secrets     Synced        Healthy
+
 tailscale-operator   Synced        Healthy
 ```
 

@@ -1,11 +1,38 @@
+# Cloud-Init configuration for node01
+# Injects Age private key and runs nixos-rebuild
+resource "proxmox_virtual_environment_file" "node01_cloud_init" {
+  content_type = "snippets"
+  datastore_id = "local"
+  node_name    = var.proxmox_node
+
+  source_raw {
+    data = <<-EOT
+      #cloud-config
+      write_files:
+        - path: /var/lib/sops-nix/key.txt
+          permissions: '0600'
+          content: |
+            ${indent(12, var.age_private_key)}
+      runcmd:
+        - |
+          nixos-rebuild switch \
+            --flake github:${var.github_repo}?dir=nix/hosts/node01#default \
+            --option substituters "https://cache.nixos.org https://hikuohiku.cachix.org" \
+            --option trusted-public-keys "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hikuohiku.cachix.org-1:AZwUw2nnqdfm6k5oLyczGRRHMBEQXz0Fo1HzI+RwApg=" \
+            --refresh
+    EOT
+    file_name = "node01-cloud-init.yaml"
+  }
+}
+
 resource "proxmox_virtual_environment_vm" "node01" {
   name      = "node01"
   node_name = var.proxmox_node
 
-  bios = "seabios"  # Match template's BIOS mode
+  bios = "seabios" # Match template's BIOS mode
 
   clone {
-    vm_id = 9001  # NixOS template created from Hydra prebuilt image
+    vm_id = 9001 # NixOS template created from Hydra prebuilt image
   }
 
   depends_on = [
@@ -34,6 +61,8 @@ resource "proxmox_virtual_environment_vm" "node01" {
   # To resize, use qm resize after VM creation
 
   initialization {
+    user_data_file_id = proxmox_virtual_environment_file.node01_cloud_init.id
+
     ip_config {
       ipv4 {
         address = "192.168.0.129/24"
@@ -58,47 +87,3 @@ output "node01_ip" {
   value = "192.168.0.129"
 }
 
-# NixOS configuration deployment
-# Runs nixos-rebuild on the VM using cached binaries from Cachix
-
-# Get flake narHash to detect any changes (including flake.lock)
-data "external" "flake_hash" {
-  program = ["bash", "-c", "nix flake metadata ${path.module}/../../nix/hosts/node01 --json | jq '{narHash: .locked.narHash}'"]
-}
-
-resource "null_resource" "nixos_deploy_node01" {
-  depends_on = [proxmox_virtual_environment_vm.node01]
-
-  # Re-run when flake narHash changes (includes all dependencies)
-  triggers = {
-    flake_nar_hash = data.external.flake_hash.result.narHash
-  }
-
-  connection {
-    type        = "ssh"
-    user        = "root"
-    host        = "192.168.0.129"
-    private_key = var.ssh_private_key
-    timeout     = "5m"
-    bastion_host = "hikuo-homeserver"
-    bastion_user = "root"
-  }
-
-  # Wait for VM to be ready, then run nixos-rebuild using cached binaries
-  provisioner "remote-exec" {
-    inline = [
-      "echo 'Waiting for system to be ready...'",
-      "sleep 10",
-      "echo 'Starting NixOS rebuild from GitHub flake...'",
-      <<-EOT
-      nixos-rebuild switch \
-        --flake github:${var.github_repo}?dir=nix/hosts/node01#default \
-        --option substituters "https://cache.nixos.org https://hikuohiku.cachix.org" \
-        --option trusted-public-keys "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hikuohiku.cachix.org-1:AZwUw2nnqdfm6k5oLyczGRRHMBEQXz0Fo1HzI+RwApg=" \
-        --refresh
-      EOT
-      ,
-      "echo 'NixOS rebuild completed successfully'"
-    ]
-  }
-}

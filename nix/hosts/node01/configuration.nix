@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, config, ... }:
 
 {
   imports = [ ./k3s-manifests.nix ];
@@ -57,14 +57,35 @@
     "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL4S2N2p2y0UzkeNl83VOIzvtAnIzvhIatnbnMWy2BOL"
   ];
 
+  # sops-nix 設定
+  sops = {
+    defaultSopsFile = ./secrets.yaml;
+    age.keyFile = "/var/lib/sops-nix/key.txt"; # Cloud-Init で注入
+    secrets.doppler-token = { };
+
+    # テンプレート: Kubernetes Secret YAML を生成
+    templates."doppler-token-k8s.yaml" = {
+      content = ''
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: doppler-token
+          namespace: external-secrets
+        stringData:
+          token: ${config.sops.placeholder.doppler-token}
+      '';
+      # k3s manifest ディレクトリに配置
+      path = "/var/lib/rancher/k3s/server/manifests/doppler-token.yaml";
+    };
+  };
+
   # k3s サービス設定
   services.k3s.enable = true;
   services.k3s.role = "server";
   services.k3s.extraFlags = toString [
     "--disable traefik" # Traefik を無効化（ArgoCD の LoadBalancer で使用するため）
-    # "--debug" # オプション: デバッグモード有効化
   ];
-  services.k3s.tokenFile = "/etc/rancher/k3s/token";
+  # k3s token は k3s が自動生成（管理不要）
 
   # システムパッケージ
   environment.systemPackages = with pkgs; [

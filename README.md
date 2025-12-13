@@ -17,83 +17,31 @@ git clone <repository-url>
 cd homelab
 ```
 
-### 2. Proxmox APIトークンの作成
+### 2. シークレットの設定 (Doppler)
 
-Proxmox WebUIでAPIトークンを作成します：
+本プロジェクトでは、Terraformの変数をDopplerで管理しています。
+`homelab` プロジェクトを作成し、`prd` 環境に以下のSecretを登録してください：
 
-1. Proxmox WebUIにログイン
-2. **Datacenter** → **Permissions** → **API Tokens**
-3. **Add** をクリック
-4. 以下を入力：
-   - **User**: `root@pam` (または任意のユーザー)
-   - **Token ID**: `terraform` (任意の識別子)
-   - **Privilege Separation**: チェックを外す（全権限を付与）
-5. **Add** をクリック
-6. 表示されたトークンシークレットをコピー（再表示不可のため必ず保存）
+| Key | Description | Example |
+|-----|-------------|---------|
+| `PROXMOX_ENDPOINT` | Proxmox VE API Endpoint | `https://192.168.0.100:8006` |
+| `PROXMOX_API_TOKEN` | Proxmox API Token | `root@pam!terraform=xxxxxxxx` |
+| `PROXMOX_SSH_USERNAME` | SSH User | `root` |
+| `PROXMOX_NODE` | Proxmox Node Name | `pve` |
+| `SSH_PUBLIC_KEY` | VM SSH Public Key | `ssh-ed25519 ...` |
+| `AGE_PRIVATE_KEY` | sops-nix Age Private Key | `AGE-SECRET-KEY-...` |
+| `GITHUB_REPO` | NixOS Flake Repo | `username/repo` |
 
-作成されたトークンは以下の形式になります：
-```
-root@pam!terraform=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-```
+### 3. Terraformの実行
 
-### 3. Terraform設定ファイルの作成
-
-`terraform.tfvars`を作成して、Proxmox環境に合わせて設定してください：
-
-```hcl
-proxmox_endpoint  = "https://your-proxmox-host:8006"
-proxmox_api_token = "root@pam!terraform=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-```
-
-### 4. Terraform Cloudの設定
-
-Terraform Cloudで状態ファイルを管理します。
-
-#### 4.1. Terraform Cloudアカウント作成
-
-1. [Terraform Cloud](https://app.terraform.io/signup/account)でアカウント作成
-2. Organizationを作成（例: `your-org-name`）
-
-#### 4.2. ローカルで認証
+`just` コマンドを使用します。Dopplerから自動的に変数が注入されます。
 
 ```bash
-terraform login
-```
+# 初期化
+just plan
 
-ブラウザが開くので、APIトークンを生成して貼り付け。
-
-#### 4.3. Organization名の設定
-
-`providers.tf`を編集:
-
-```hcl
-cloud {
-  organization = "your-org-name"  # 自分のOrganization名に変更
-
-  workspaces {
-    name = "homelab"
-  }
-}
-```
-
-### 5. Terraformの初期化
-
-```bash
-terraform init
-```
-
-初回実行時にWorkspaceが自動作成されます。
-
-### 6. プランの確認
-
-```bash
-terraform plan
-```
-
-### 7. リソースの作成
-
-```bash
-terraform apply
+# 適用
+just apply
 ```
 
 ## ファイル構成
