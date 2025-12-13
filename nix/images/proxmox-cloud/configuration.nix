@@ -40,6 +40,12 @@
   # ただし Cloud-Init が設定に失敗した場合のフォールバック
   networking.useDHCP = lib.mkDefault false;
 
+  # DNS サーバー (Cloud-Init からの設定を上書き)
+  networking.nameservers = [
+    "8.8.8.8"
+    "1.1.1.1"
+  ];
+
   # カーネルパラメータ (インターフェース名を eth0 に固定)
   boot.kernelParams = [
     "net.ifnames=0"
