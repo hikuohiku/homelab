@@ -1,25 +1,27 @@
 # NixOS template from custom GitHub Release image
 resource "null_resource" "nixos_template" {
-  # Only run if template doesn't exist
+  # Trigger recreation when image version changes
   triggers = {
-    template_id = "9001"
+    template_id   = "9001"
+    image_version = "v0.2.0"
   }
 
   provisioner "local-exec" {
     command = <<-EOT
       ssh root@hikuo-homeserver.tailae6c2.ts.net bash -s <<'ENDSSH'
-      # Check if template already exists
+      # Stop and remove existing template if exists
       if qm status 9001 &>/dev/null; then
-        echo "Template 9001 already exists, skipping..."
-        exit 0
+        echo "Removing existing template 9001..."
+        qm destroy 9001 --purge || true
       fi
 
-      # Download image if not exists
+      # Clean up old images
       cd /var/lib/vz/dump
-      IMAGE_NAME="vzdump-qemu-nixos-26.05.20251208.addf7cf.vma.zst"
-      if [ ! -f "$IMAGE_NAME" ]; then
-        wget https://github.com/hikuohiku/homelab/releases/download/cloud-image-v0.0.1/$IMAGE_NAME
-      fi
+      rm -f vzdump-qemu-*.vma.zst
+
+      # Download new image
+      IMAGE_NAME="vzdump-qemu-node01.vma.zst"
+      wget -O "$IMAGE_NAME" https://github.com/hikuohiku/homelab/releases/download/v0.2.0/$IMAGE_NAME
 
       # Restore VM
       zstdcat "$IMAGE_NAME" | qmrestore - 9001
@@ -30,7 +32,7 @@ resource "null_resource" "nixos_template" {
       # Convert to template
       qm template 9001
 
-      echo "NixOS template 9001 created successfully"
+      echo "NixOS template 9001 created successfully from v0.2.0"
 ENDSSH
     EOT
   }
