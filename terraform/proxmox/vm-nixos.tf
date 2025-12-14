@@ -1,4 +1,3 @@
-
 # Cloud-Init configuration for node01
 # Injects Age private key for sops-nix decryption at runtime
 resource "proxmox_virtual_environment_file" "node01_cloud_init" {
@@ -25,15 +24,7 @@ resource "proxmox_virtual_environment_vm" "node01" {
   name      = "node01"
   node_name = var.proxmox_node
 
-  bios = "seabios" # Match template's BIOS mode
-
-  clone {
-    vm_id = 9001 # NixOS template created from Hydra prebuilt image
-  }
-
-  depends_on = [
-    null_resource.nixos_template
-  ]
+  bios = "seabios"
 
   agent {
     enabled = true
@@ -48,13 +39,14 @@ resource "proxmox_virtual_environment_vm" "node01" {
     dedicated = 8192
   }
 
+  # Import disk from downloaded qcow2 image (no template/clone needed)
   disk {
     datastore_id = "local-lvm"
     interface    = "virtio0"
     size         = 20
     file_format  = "raw"
+    import_from  = proxmox_virtual_environment_download_file.nixos_image.id
   }
-  # To resize, use qm resize after VM creation
 
   initialization {
     user_data_file_id = proxmox_virtual_environment_file.node01_cloud_init.id
@@ -77,6 +69,13 @@ resource "proxmox_virtual_environment_vm" "node01" {
   }
 
   started = true
+
+  # Recreate VM when the base image changes
+  lifecycle {
+    replace_triggered_by = [
+      proxmox_virtual_environment_download_file.nixos_image.id
+    ]
+  }
 }
 
 output "node01_ip" {
