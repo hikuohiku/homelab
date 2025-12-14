@@ -70,6 +70,11 @@ resource "proxmox_virtual_environment_vm" "node01" {
 
   started = true
 
+  # Ensure image is downloaded before VM creation
+  depends_on = [
+    proxmox_virtual_environment_download_file.nixos_image
+  ]
+
   # Recreate VM when the base image changes
   lifecycle {
     replace_triggered_by = [

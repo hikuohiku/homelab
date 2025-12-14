@@ -29,12 +29,18 @@
               ./configuration.nix
               # qcow2 イメージビルド用モジュール
               (
-                { config, lib, pkgs, modulesPath, ... }:
+                {
+                  config,
+                  lib,
+                  pkgs,
+                  modulesPath,
+                  ...
+                }:
                 {
                   system.build.qcow2 = import "${modulesPath}/../lib/make-disk-image.nix" {
                     inherit lib config pkgs;
                     diskSize = "auto";
-                    format = "qcow2";
+                    format = "qcow2-compressed";
                     partitionTableType = "hybrid";
                     name = "nixos-proxmox-cloud";
                   };
