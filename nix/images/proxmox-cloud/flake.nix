@@ -31,10 +31,12 @@
           };
         };
         perSystem = {
-          # Proxmox VMA イメージ
+          # qcow2 イメージ (Terraform の import_from で使用)
           packages = {
-            proxmox-image = self.nixosConfigurations.proxmox-cloud.config.system.build.VMA;
-            default = self.nixosConfigurations.proxmox-cloud.config.system.build.VMA;
+            qcow2 = self.nixosConfigurations.proxmox-cloud.config.system.build.qcow2;
+            default = self.nixosConfigurations.proxmox-cloud.config.system.build.qcow2;
+            # レガシー: VMA イメージ (手動インポート用)
+            vma = self.nixosConfigurations.proxmox-cloud.config.system.build.VMA;
           };
         };
       }
