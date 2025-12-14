@@ -7,6 +7,20 @@ Proxmox VE環境をTerraformで管理するためのIaCリポジトリです。
 - Terraform 1.14.0
 - Proxmox VE 8.x以上
 - Tailscale経由でProxmoxに接続
+- Proxmox `local` ストレージで `import` コンテンツタイプが有効化されていること
+
+### Proxmox ストレージ設定
+
+TerraformでNixOSイメージをダウンロードしてVMにインポートするため、`local` ストレージで `import` コンテンツタイプを有効にする必要があります。
+
+**Proxmox Web UI:**
+1. Datacenter → Storage → `local` を選択
+2. Edit → Content で `Import` を追加
+
+**または CLI:**
+```bash
+pvesm set local --content images,vztmpl,iso,backup,import,snippets
+```
 
 ## セットアップ
 
