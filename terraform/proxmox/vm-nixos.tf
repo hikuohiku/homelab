@@ -76,6 +76,13 @@ resource "proxmox_virtual_environment_vm" "node01" {
   }
 
   started = true
+
+  # Recreate VM when the base image changes
+  lifecycle {
+    replace_triggered_by = [
+      proxmox_virtual_environment_download_file.nixos_image.id
+    ]
+  }
 }
 
 output "node01_ip" {

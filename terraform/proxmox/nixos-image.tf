@@ -17,4 +17,10 @@ resource "proxmox_virtual_environment_download_file" "nixos_image" {
 
   # Increase timeout for large images
   upload_timeout = 1200
+
+  # Ensure new image is downloaded before old is deleted
+  # This prevents issues if the download fails
+  lifecycle {
+    create_before_destroy = true
+  }
 }
