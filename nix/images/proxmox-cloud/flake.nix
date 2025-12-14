@@ -27,14 +27,27 @@
               "${nixpkgs}/nixos/modules/virtualisation/proxmox-image.nix"
               sops-nix.nixosModules.sops
               ./configuration.nix
+              # qcow2 イメージビルド用モジュール
+              (
+                { config, lib, pkgs, modulesPath, ... }:
+                {
+                  system.build.qcow2 = import "${modulesPath}/../lib/make-disk-image.nix" {
+                    inherit lib config pkgs;
+                    diskSize = "auto";
+                    format = "qcow2";
+                    partitionTableType = "hybrid";
+                    name = "nixos-proxmox-cloud";
+                  };
+                }
+              )
             ];
           };
         };
         perSystem = {
-          # Proxmox VMA イメージ
+          # qcow2 イメージ (Terraform の import_from で使用)
           packages = {
-            proxmox-image = self.nixosConfigurations.proxmox-cloud.config.system.build.VMA;
-            default = self.nixosConfigurations.proxmox-cloud.config.system.build.VMA;
+            qcow2 = self.nixosConfigurations.proxmox-cloud.config.system.build.qcow2;
+            default = self.nixosConfigurations.proxmox-cloud.config.system.build.qcow2;
           };
         };
       }

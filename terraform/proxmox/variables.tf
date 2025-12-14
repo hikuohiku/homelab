@@ -1,4 +1,6 @@
+# ===========================================
 # Proxmox Connection Variables
+# ===========================================
 variable "proxmox_endpoint" {
   description = "Proxmox VE API endpoint (e.g., https://proxmox.example.com:8006)"
   type        = string
@@ -15,13 +17,35 @@ variable "proxmox_ssh_username" {
   type        = string
 }
 
-variable "ssh_public_key" {
-  description = "SSH public key for the VM root user"
+variable "proxmox_node" {
+  description = "Proxmox node name"
   type        = string
 }
 
-variable "proxmox_node" {
-  description = "Proxmox node name"
+# ===========================================
+# NixOS Image Variables
+# ===========================================
+variable "nixos_image_version" {
+  description = "NixOS image version tag (e.g., v0.3.0)"
+  type        = string
+}
+
+variable "nixos_image_checksum" {
+  description = "SHA256 checksum of the NixOS qcow2 image"
+  type        = string
+  default     = null
+}
+
+variable "github_repo" {
+  description = "GitHub repository for NixOS image releases (format: owner/repo)"
+  type        = string
+}
+
+# ===========================================
+# VM Configuration Variables
+# ===========================================
+variable "ssh_public_key" {
+  description = "SSH public key for the VM root user"
   type        = string
 }
 
@@ -29,9 +53,4 @@ variable "age_private_key" {
   description = "Age private key for sops-nix decryption (injected via Cloud-Init)"
   type        = string
   sensitive   = true
-}
-
-variable "github_repo" {
-  description = "GitHub repository for NixOS flake (format: owner/repo)"
-  type        = string
 }
