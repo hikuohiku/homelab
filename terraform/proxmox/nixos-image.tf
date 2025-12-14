@@ -8,7 +8,7 @@ resource "proxmox_virtual_environment_download_file" "nixos_image" {
   node_name    = var.proxmox_node
 
   # Image URL from GitHub Releases (zstd compressed)
-  url                     = "https://github.com/${var.github_repo}/releases/download/${var.nixos_image_version}/nixos-proxmox-cloud.qcow2.zst"
+  url                     = "https://github.com/${var.github_repo}/releases/download/${var.nixos_image_version}/nixos-proxmox-cloud-${var.nixos_image_version}.qcow2.zst"
   file_name               = "nixos-proxmox-cloud-${var.nixos_image_version}.qcow2"
   decompression_algorithm = "zst"
 
