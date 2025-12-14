@@ -20,19 +20,6 @@ jobs:
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
-        with:
-          extra-conf: |
-            substituters = https://cache.nixos.org https://hikuohiku.cachix.org
-            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hikuohiku.cachix.org-1:AZwUw2nnqdfm6k5oLyczGRRHMBEQXz0Fo1HzI+RwApg=
-
-      - name: Setup Nix cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
-
-      - name: Setup Cachix
-        uses: cachix/cachix-action@v15
-        with:
-          name: hikuohiku
-          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
 
       - name: Build qcow2 image
         run: |
@@ -42,7 +29,7 @@ jobs:
 
       - name: Compress with zstd
         run: |
-          zstd -T0 -19 nixos-proxmox-cloud.qcow2 -o nixos-proxmox-cloud.qcow2.zst
+          zstd -T0 nixos-proxmox-cloud.qcow2 -o nixos-proxmox-cloud.qcow2.zst
           ls -lh nixos-proxmox-cloud.qcow2*
 
       - name: Generate checksum
