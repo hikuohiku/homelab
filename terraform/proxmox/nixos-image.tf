@@ -7,11 +7,12 @@ resource "proxmox_virtual_environment_download_file" "nixos_image" {
   datastore_id = "local"
   node_name    = var.proxmox_node
 
-  # Image URL from GitHub Releases
-  url       = "https://github.com/${var.github_repo}/releases/download/${var.nixos_image_version}/nixos-proxmox-cloud.qcow2"
-  file_name = "nixos-proxmox-cloud-${var.nixos_image_version}.qcow2"
+  # Image URL from GitHub Releases (zstd compressed)
+  url                     = "https://github.com/${var.github_repo}/releases/download/${var.nixos_image_version}/nixos-proxmox-cloud.qcow2.zst"
+  file_name               = "nixos-proxmox-cloud-${var.nixos_image_version}.qcow2"
+  decompression_algorithm = "zst"
 
-  # Optional: checksum verification
+  # Optional: checksum verification (of compressed file)
   checksum           = var.nixos_image_checksum
   checksum_algorithm = var.nixos_image_checksum != null ? "sha256" : null
 
