@@ -1,0 +1,70 @@
+name: Release NixOS Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version (e.g., v0.3.0)"
+        required: true
+        type: string
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@main
+        with:
+          extra-conf: |
+            substituters = https://cache.nixos.org https://hikuohiku.cachix.org
+            trusted-public-keys = cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= hikuohiku.cachix.org-1:AZwUw2nnqdfm6k5oLyczGRRHMBEQXz0Fo1HzI+RwApg=
+
+      - name: Setup Nix cache
+        uses: DeterminateSystems/magic-nix-cache-action@main
+
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: hikuohiku
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
+      - name: Build qcow2 image
+        run: |
+          nix build ./nix/images/proxmox-cloud#packages.x86_64-linux.qcow2 --no-link --print-out-paths > result-path.txt
+          RESULT_PATH=$(cat result-path.txt)
+          cp "${RESULT_PATH}/nixos.qcow2" nixos-proxmox-cloud.qcow2
+
+      - name: Generate checksum
+        run: |
+          sha256sum nixos-proxmox-cloud.qcow2 > nixos-proxmox-cloud.qcow2.sha256
+          cat nixos-proxmox-cloud.qcow2.sha256
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.version }}
+          name: ${{ inputs.version }}
+          body: |
+            ## NixOS Proxmox Cloud Image
+
+            ### Files
+            - `nixos-proxmox-cloud.qcow2` - qcow2 disk image for Terraform import_from
+            - `nixos-proxmox-cloud.qcow2.sha256` - SHA256 checksum
+
+            ### Usage with Terraform
+            ```hcl
+            variable "nixos_image_version" {
+              default = "${{ inputs.version }}"
+            }
+            ```
+          files: |
+            nixos-proxmox-cloud.qcow2
+            nixos-proxmox-cloud.qcow2.sha256
+          draft: false
+          prerelease: false
