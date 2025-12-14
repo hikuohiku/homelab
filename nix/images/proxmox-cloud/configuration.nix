@@ -30,6 +30,12 @@
     cloudInit.enable = true;
   };
 
+  # Cloud-Init サービス (SSH キー注入、ネットワーク設定)
+  services.cloud-init = {
+    enable = true;
+    network.enable = true;
+  };
+
   # =========================================
   # ネットワーク設定
   # =========================================

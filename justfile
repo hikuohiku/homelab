@@ -9,13 +9,7 @@ destroy:
     (cd terraform/proxmox && doppler run --project homelab --config prd --name-transformer tf-var -- terraform destroy)
 
 # Proxmox Cloud Image build & cache
-build:
-    nix build ./nix/images/proxmox-cloud#packages.x86_64-linux.qcow2 --no-link
-
-push-cache:
+prepare:
     nix build ./nix/images/proxmox-cloud#packages.x86_64-linux.qcow2 --no-link --json \
       | jq -r '.[0].outputs.out' \
       | cachix push hikuohiku
-
-# Prepare for deployment (build & push)
-prepare: build push-cache
