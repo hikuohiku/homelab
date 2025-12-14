@@ -40,10 +40,15 @@ jobs:
           RESULT_PATH=$(cat result-path.txt)
           cp "${RESULT_PATH}/nixos.qcow2" nixos-proxmox-cloud.qcow2
 
+      - name: Compress with zstd
+        run: |
+          zstd -T0 -19 nixos-proxmox-cloud.qcow2 -o nixos-proxmox-cloud.qcow2.zst
+          ls -lh nixos-proxmox-cloud.qcow2*
+
       - name: Generate checksum
         run: |
-          sha256sum nixos-proxmox-cloud.qcow2 > nixos-proxmox-cloud.qcow2.sha256
-          cat nixos-proxmox-cloud.qcow2.sha256
+          sha256sum nixos-proxmox-cloud.qcow2.zst > nixos-proxmox-cloud.qcow2.zst.sha256
+          cat nixos-proxmox-cloud.qcow2.zst.sha256
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -54,8 +59,8 @@ jobs:
             ## NixOS Proxmox Cloud Image
 
             ### Files
-            - `nixos-proxmox-cloud.qcow2` - qcow2 disk image for Terraform import_from
-            - `nixos-proxmox-cloud.qcow2.sha256` - SHA256 checksum
+            - `nixos-proxmox-cloud.qcow2.zst` - zstd compressed qcow2 disk image
+            - `nixos-proxmox-cloud.qcow2.zst.sha256` - SHA256 checksum
 
             ### Usage with Terraform
             ```hcl
@@ -63,8 +68,10 @@ jobs:
               default = "${{ inputs.version }}"
             }
             ```
+
+            Proxmox will automatically decompress the image when downloading.
           files: |
-            nixos-proxmox-cloud.qcow2
-            nixos-proxmox-cloud.qcow2.sha256
+            nixos-proxmox-cloud.qcow2.zst
+            nixos-proxmox-cloud.qcow2.zst.sha256
           draft: false
           prerelease: false
