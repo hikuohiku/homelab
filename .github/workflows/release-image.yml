@@ -3,10 +3,14 @@ name: Release NixOS Image
 on:
   workflow_dispatch:
     inputs:
-      version:
-        description: "Release version (e.g., v0.3.0)"
+      update_type:
+        description: "Version update type"
         required: true
-        type: string
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
 
 jobs:
   build-and-release:
@@ -17,6 +21,39 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Calculate next version
+        id: version
+        run: |
+          # Get latest tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+
+          # Parse version (remove 'v' prefix)
+          VERSION=${LATEST_TAG#v}
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+
+          # Bump version based on update type
+          case "${{ inputs.update_type }}" in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="v${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version: $NEW_VERSION"
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
@@ -40,8 +77,8 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.version }}
-          name: ${{ inputs.version }}
+          tag_name: ${{ steps.version.outputs.version }}
+          name: ${{ steps.version.outputs.version }}
           body: |
             ## NixOS Proxmox Cloud Image
 
@@ -52,7 +89,7 @@ jobs:
             ### Usage with Terraform
             ```hcl
             variable "nixos_image_version" {
-              default = "${{ inputs.version }}"
+              default = "${{ steps.version.outputs.version }}"
             }
             ```
 
