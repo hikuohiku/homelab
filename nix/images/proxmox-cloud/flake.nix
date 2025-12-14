@@ -27,6 +27,19 @@
               "${nixpkgs}/nixos/modules/virtualisation/proxmox-image.nix"
               sops-nix.nixosModules.sops
               ./configuration.nix
+              # qcow2 イメージビルド用モジュール
+              (
+                { config, lib, pkgs, modulesPath, ... }:
+                {
+                  system.build.qcow2 = import "${modulesPath}/../lib/make-disk-image.nix" {
+                    inherit lib config pkgs;
+                    diskSize = "auto";
+                    format = "qcow2";
+                    partitionTableType = "hybrid";
+                    name = "nixos-proxmox-cloud";
+                  };
+                }
+              )
             ];
           };
         };
