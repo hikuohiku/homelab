@@ -16,19 +16,13 @@
   imports = [ ./k3s-manifests.nix ];
 
   # システムのステートバージョン
-  system.stateVersion = "24.11";
+  system.stateVersion = "25.05";
 
-  # Proxmox Image 固有の設定
-  proxmox = {
-    qemuConf = {
-      virtio0 = "local-lvm:vm-9001-disk-0";
-      boot = "order=virtio0";
-      cores = 2;
-      memory = 8192;
-      name = "node01";
-    };
-    cloudInit.enable = true;
-  };
+  # =========================================
+  # Proxmox / Cloud-Init 設定
+  # =========================================
+  # Proxmox イメージ固有の設定
+  proxmox.cloudInit.enable = true;
 
   # Cloud-Init サービス (SSH キー注入、ネットワーク設定)
   services.cloud-init = {
@@ -43,10 +37,9 @@
   networking.hostName = lib.mkDefault "node01";
 
   # Cloud-Init がネットワークを設定するため DHCP は使用しない
-  # ただし Cloud-Init が設定に失敗した場合のフォールバック
   networking.useDHCP = lib.mkDefault false;
 
-  # DNS サーバー (Cloud-Init からの設定を上書き)
+  # DNS サーバー
   networking.nameservers = [
     "8.8.8.8"
     "1.1.1.1"
@@ -63,7 +56,7 @@
     enable = true;
     allowedTCPPorts = [
       22 # SSH
-      6443 # k3s: API server
+      6443 # k3s API server
     ];
   };
 
@@ -78,15 +71,13 @@
     };
   };
 
-  # SSH 公開鍵は Cloud-Init で注入される
-  # (Terraform の proxmox_virtual_environment_file で設定)
-
   # =========================================
   # sops-nix 設定
   # =========================================
   sops = {
     defaultSopsFile = ./secrets.yaml;
     age.keyFile = "/var/lib/sops-nix/key.txt"; # Cloud-Init で注入
+
     secrets.doppler-token = { };
 
     # テンプレート: Kubernetes Secret YAML を生成
@@ -110,9 +101,7 @@
   services.k3s = {
     enable = true;
     role = "server";
-    extraFlags = toString [
-      "--disable traefik"
-    ];
+    extraFlags = toString [ "--disable traefik" ];
   };
 
   # =========================================
@@ -128,9 +117,7 @@
     kubernetes-helm
   ];
 
-  environment.sessionVariables = {
-    KUBECONFIG = "/etc/rancher/k3s/k3s.yaml";
-  };
+  environment.sessionVariables.KUBECONFIG = "/etc/rancher/k3s/k3s.yaml";
 
   time.timeZone = "Asia/Tokyo";
   i18n.defaultLocale = "en_US.UTF-8";
