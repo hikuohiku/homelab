@@ -9,13 +9,6 @@ resource "proxmox_virtual_environment_file" "node01_cloud_init" {
   source_raw {
     data = <<-EOT
       #cloud-config
-      users:
-        - default
-        - name: root
-          ssh_authorized_keys:
-            - ${indent(6, var.ssh_public_key)}
-          shell: /run/current-system/sw/bin/bash
-
       write_files:
         # Age private key for sops-nix runtime decryption
         - path: /var/lib/sops-nix/key.txt
