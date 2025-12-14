@@ -1,5 +1,6 @@
 # Cloud-Init configuration for node01
-# Injects Age private key for sops-nix decryption at runtime
+# Injects Age private key and SSH keys for sops-nix decryption at runtime
+# NOTE: Using cicustom overrides Proxmox's sshkeys, so we must include SSH keys here
 resource "proxmox_virtual_environment_file" "node01_cloud_init" {
   content_type = "snippets"
   datastore_id = "local"
@@ -8,8 +9,12 @@ resource "proxmox_virtual_environment_file" "node01_cloud_init" {
   source_raw {
     data = <<-EOT
       #cloud-config
+      users:
+        - name: root
+          ssh_authorized_keys:
+            - ${var.ssh_public_key}
+
       write_files:
-        # Age private key for sops-nix runtime decryption
         - path: /var/lib/sops-nix/key.txt
           permissions: '0600'
           content: ${jsonencode(var.age_private_key)}
@@ -57,11 +62,8 @@ resource "proxmox_virtual_environment_vm" "node01" {
         gateway = "192.168.0.1"
       }
     }
-
-    user_account {
-      username = "root"
-      keys     = [var.ssh_public_key]
-    }
+    # NOTE: user_account は cicustom で上書きされるため削除
+    # SSH キーは cicustom YAML 内の users セクションで設定
   }
 
   network_device {

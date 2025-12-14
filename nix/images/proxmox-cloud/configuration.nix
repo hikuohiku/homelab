@@ -95,6 +95,40 @@
     };
   };
 
+  # Cloud-Init 完了後に sops シークレットを再セットアップ
+  # (activation スクリプトは cloud-init より前に実行されるため)
+  systemd.services.sops-install-secrets-after-cloud-init = {
+    description = "Re-run sops-install-secrets after cloud-init";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "cloud-final.service" ];
+    wants = [ "cloud-final.service" ];
+    before = [ "k3s.service" ]; # k3s より前に実行してシークレットを準備
+    path = [ pkgs.gnupg ];
+    environment.SOPS_GPG_EXEC = "${pkgs.gnupg}/bin/gpg";
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+    };
+    script = ''
+      # Age キーが存在する場合のみ実行
+      if [ -f /var/lib/sops-nix/key.txt ]; then
+        echo "Re-running sops-install-secrets..."
+        # manifest.json のパスを取得して直接実行
+        MANIFEST=$(find /nix/store -maxdepth 1 -name '*-manifest.json' -newer /run/current-system 2>/dev/null | head -1)
+        if [ -z "$MANIFEST" ]; then
+          MANIFEST=$(cat /run/current-system/activate | grep -o '/nix/store/[a-z0-9]*-manifest.json' | head -1)
+        fi
+        if [ -n "$MANIFEST" ] && [ -f "$MANIFEST" ]; then
+          /nix/store/*-sops-install-secrets-*/bin/sops-install-secrets "$MANIFEST" || true
+        else
+          echo "Could not find sops manifest"
+        fi
+      else
+        echo "Age key not found at /var/lib/sops-nix/key.txt, skipping"
+      fi
+    '';
+  };
+
   # =========================================
   # k3s サービス設定
   # =========================================
