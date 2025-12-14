@@ -11,6 +11,8 @@ server:
     type: LoadBalancer
     # Tailscale Operator経由でTailnet内に公開
     loadBalancerClass: tailscale
+    annotations:
+      tailscale.com/hostname: "argocd"
 
   extraArgs:
     - --insecure
