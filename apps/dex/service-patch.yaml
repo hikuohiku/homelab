@@ -1,0 +1,8 @@
+# Kustomize patch to add loadBalancerClass for Tailscale
+apiVersion: v1
+kind: Service
+metadata:
+  name: dex
+  namespace: dex
+spec:
+  loadBalancerClass: tailscale
