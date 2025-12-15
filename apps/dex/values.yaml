@@ -1,0 +1,51 @@
+# Dex Helm Values
+# https://github.com/dexidp/helm-charts/tree/master/charts/dex
+
+# Tailscale 経由で公開
+service:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+  annotations:
+    tailscale.com/hostname: "dex"
+
+config:
+  # Dex issuer URL
+  issuer: https://dex.tailae6c2.ts.net
+
+  # Storage backend
+  storage:
+    type: kubernetes
+    config:
+      inCluster: true
+
+  # Web frontend
+  web:
+    http: 0.0.0.0:5556
+
+  # OAuth2 configuration
+  oauth2:
+    skipApprovalScreen: true
+
+  # Google OIDC connector
+  connectors:
+    - type: oidc
+      id: google
+      name: Google
+      config:
+        issuer: https://accounts.google.com
+        clientID: $GOOGLE_CLIENT_ID
+        clientSecret: $GOOGLE_CLIENT_SECRET
+        redirectURI: https://dex.tailae6c2.ts.net/callback
+
+  # Static clients (ArgoCD)
+  staticClients:
+    - id: argocd
+      name: ArgoCD
+      secret: argocd-dex-client-secret
+      redirectURIs:
+        - https://argocd.tailae6c2.ts.net/auth/callback
+
+# Environment variables from secret
+envFrom:
+  - secretRef:
+      name: dex-google-oauth

@@ -5,6 +5,29 @@
 configs:
   cm:
     kustomize.buildOptions: --enable-helm
+    # ArgoCD URL
+    url: https://argocd.tailae6c2.ts.net
+    # 外部 Dex を OIDC プロバイダーとして使用
+    oidc.config: |
+      name: Dex
+      issuer: https://dex.tailae6c2.ts.net
+      clientID: argocd
+      clientSecret: argocd-dex-client-secret
+      requestedScopes:
+        - openid
+        - profile
+        - email
+
+  # RBAC 設定
+  rbac:
+    policy.csv: |
+      g, hikuohiku@gmail.com, role:admin
+    policy.default: ""
+
+# 組み込み Dex を無効化
+dex:
+  enabled: false
+
 
 server:
   service:
