@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+helmCharts:
+  - name: dex
+    repo: https://charts.dexidp.io
+    version: 0.24.0
+    releaseName: dex
+    namespace: dex
+    valuesFile: values.yaml
+
+resources:
+  - dex-google-oauth-external-secret.yaml
