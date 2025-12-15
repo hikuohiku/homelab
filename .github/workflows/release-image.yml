@@ -58,6 +58,11 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@main
 
+      - name: Setup Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: hikuohiku
+
       - name: Build qcow2 image
         run: |
           VERSION=${{ steps.version.outputs.version }}
