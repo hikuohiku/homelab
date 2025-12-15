@@ -1,0 +1,15 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: dex
+  namespace: dex
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: dex
+      port:
+        number: 5556
+  tls:
+    - hosts:
+        - dex

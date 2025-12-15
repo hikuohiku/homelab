@@ -1,12 +1,9 @@
 # Dex Helm Values
 # https://github.com/dexidp/helm-charts/tree/master/charts/dex
 
-# Tailscale 経由で公開
+# ClusterIP Service (Ingress 経由でアクセス)
 service:
-  type: LoadBalancer
-  loadBalancerClass: tailscale
-  annotations:
-    tailscale.com/hostname: "dex"
+  type: ClusterIP
 
 config:
   # Dex issuer URL

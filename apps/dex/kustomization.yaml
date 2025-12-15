@@ -11,7 +11,6 @@ helmCharts:
 
 resources:
   - dex-google-oauth-external-secret.yaml
+  - ingress.yaml
 
-patches:
-  - path: service-patch.yaml
 
