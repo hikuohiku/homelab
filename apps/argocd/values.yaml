@@ -30,6 +30,8 @@ dex:
 
 
 server:
+  # Ingress 配下で TLS 終端されるため、内部は HTTP を使用
+  insecure: true
   service:
     type: ClusterIP
 
