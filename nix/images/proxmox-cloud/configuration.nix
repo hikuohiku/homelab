@@ -153,7 +153,7 @@
       preauthorized = true;
     };
     extraUpFlags = [
-      "--advertise-tags=tag:k3s"
+      "--advertise-tags=tag:k8s-node"
     ];
     # ファイアウォールでポートを開く
     openFirewall = true;

@@ -4,7 +4,7 @@ resource "tailscale_tailnet_key" "node01" {
   reusable      = false
   ephemeral     = true
   preauthorized = true
-  tags          = ["tag:k3s"]
+  tags          = ["tag:k8s-node"]
   description   = "Terraform: node01 VM"
 }
 
