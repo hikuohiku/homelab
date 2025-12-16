@@ -11,7 +11,7 @@ resource "tailscale_tailnet_key" "node01" {
 }
 
 # Cloud-Init configuration for node01
-# Injects Age private key, SSH keys, and Tailscale auth key
+# Injects Age private key, SSH keys, Tailscale auth key, and hostname
 # NOTE: Using cicustom overrides Proxmox's sshkeys, so we must include SSH keys here
 resource "proxmox_virtual_environment_file" "node01_cloud_init" {
   content_type = "snippets"
@@ -21,6 +21,8 @@ resource "proxmox_virtual_environment_file" "node01_cloud_init" {
   source_raw {
     data = <<-EOT
       #cloud-config
+      hostname: node01
+
       users:
         - name: root
           ssh_authorized_keys:
