@@ -146,15 +146,10 @@
   services.tailscale = {
     enable = true;
     # Cloud-Init で注入される auth key file
+    # Terraform の tailscale_tailnet_key で ephemeral/preauthorized/tags は設定済み
     authKeyFile = "/var/lib/tailscale/auth-key";
-    # OAuth Client 経由の ephemeral key パラメータ
-    authKeyParameters = {
-      ephemeral = true;
-      preauthorized = true;
-    };
-    extraUpFlags = [
-      "--advertise-tags=tag:k8s-node"
-    ];
+    # Note: authKeyParameters は使用しない（Terraform 側で設定済み）
+    # Tailscale hostname は networking.hostName を自動使用
     # ファイアウォールでポートを開く
     openFirewall = true;
   };

@@ -1,11 +1,13 @@
 # Tailscale ephemeral auth key for node01
 # Generated dynamically via OAuth Client
+# recreate_if_invalid ensures a new key is generated when the old one expires or is used
 resource "tailscale_tailnet_key" "node01" {
-  reusable      = false
-  ephemeral     = true
-  preauthorized = true
-  tags          = ["tag:k8s-node"]
-  description   = "Terraform node01 VM"
+  reusable             = false
+  ephemeral            = true
+  preauthorized        = true
+  recreate_if_invalid  = "always"
+  tags                 = ["tag:k8s-node"]
+  description          = "Terraform node01 VM"
 }
 
 # Cloud-Init configuration for node01
