@@ -35,21 +35,21 @@ redis:
   master:
     persistence:
       enabled: true
-      storageClass: local-storage
+      storageClass: local-path
       size: 1Gi
   replica:
     replicaCount: 0
 
-# Persistence with local-storage
+# Persistence with local-path
 persistence:
   enabled: true
-  storageClass: local-storage
+  storageClass: local-path
   accessMode: ReadWriteOnce
   size: 8Gi
 
   nextcloudData:
     enabled: true
-    storageClass: local-storage
+    storageClass: local-path
     accessMode: ReadWriteOnce
     size: 50Gi
 
