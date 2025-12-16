@@ -8,9 +8,10 @@ configs:
     # ArgoCD URL
     url: https://argocd.tailae6c2.ts.net
     # 外部 Dex を OIDC プロバイダーとして使用
+    # issuer は内部サービス URL を使用（CoreDNS rewrite 不要）
     oidc.config: |
       name: Dex
-      issuer: https://dex.tailae6c2.ts.net
+      issuer: http://dex.dex.svc.cluster.local:5556
       clientID: argocd
       clientSecret: argocd-dex-client-secret
       requestedScopes:
