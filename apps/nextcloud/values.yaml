@@ -1,0 +1,94 @@
+image:
+  flavor: apache
+
+replicaCount: 1
+
+nextcloud:
+  host: nextcloud.tailae6c2.ts.net
+  existingSecret:
+    enabled: true
+    secretName: nextcloud-admin
+    usernameKey: username
+    passwordKey: password
+  datadir: /var/www/html/data
+
+  # Mail disabled
+  mail:
+    enabled: false
+
+# SQLite (internal database)
+internalDatabase:
+  enabled: true
+
+# External database disabled
+postgresql:
+  enabled: false
+
+mariadb:
+  enabled: false
+
+# Redis enabled
+redis:
+  enabled: true
+  auth:
+    enabled: true
+  master:
+    persistence:
+      enabled: true
+      storageClass: local-storage
+      size: 1Gi
+  replica:
+    replicaCount: 0
+
+# Persistence with local-storage
+persistence:
+  enabled: true
+  storageClass: local-storage
+  accessMode: ReadWriteOnce
+  size: 8Gi
+
+  nextcloudData:
+    enabled: true
+    storageClass: local-storage
+    accessMode: ReadWriteOnce
+    size: 50Gi
+
+# Ingress disabled (using separate Tailscale Ingress)
+ingress:
+  enabled: false
+
+# Metrics disabled
+metrics:
+  enabled: false
+
+# Cronjob for background tasks
+cronjob:
+  enabled: true
+
+# Resources
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Liveness and readiness probes
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Update strategy
+strategy:
+  type: Recreate
