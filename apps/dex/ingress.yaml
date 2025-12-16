@@ -3,6 +3,8 @@ kind: Ingress
 metadata:
   name: dex
   namespace: dex
+  annotations:
+    tailscale.com/experimental-forward-cluster-traffic-via-ingress: "true"
 spec:
   ingressClassName: tailscale
   defaultBackend:
