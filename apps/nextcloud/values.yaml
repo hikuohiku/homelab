@@ -16,6 +16,64 @@ nextcloud:
   mail:
     enabled: false
 
+  # OIDC configuration for user_oidc app
+  configs:
+    oidc.config.php: |-
+      <?php
+      $CONFIG = array (
+        'user_oidc' => array (
+          'single_logout' => false,
+          'auto_provision' => true,
+          'soft_auto_provision' => true,
+        ),
+        'allow_user_to_change_display_name' => false,
+      );
+
+  # Post-installation hook to configure OIDC provider
+  hooks:
+    post-installation: |-
+      #!/bin/bash
+      echo "Installing and configuring user_oidc app..."
+
+      # Install user_oidc app
+      php occ app:install user_oidc || true
+      php occ app:enable user_oidc || true
+
+      # Check if provider already exists
+      if ! php occ user_oidc:provider Dex 2>/dev/null | grep -q "Dex"; then
+        echo "Creating OIDC provider..."
+        php occ user_oidc:provider Dex \
+          --clientid="nextcloud" \
+          --clientsecret="${NEXTCLOUD_OIDC_CLIENT_SECRET}" \
+          --discoveryuri="https://dex.tailae6c2.ts.net/.well-known/openid-configuration" \
+          --scope="openid email profile" \
+          --unique-uid="0" \
+          --mapping-uid="preferred_username" \
+          --mapping-email="email" \
+          --mapping-displayname="name"
+      else
+        echo "OIDC provider already exists, updating..."
+        php occ user_oidc:provider Dex \
+          --clientid="nextcloud" \
+          --clientsecret="${NEXTCLOUD_OIDC_CLIENT_SECRET}" \
+          --discoveryuri="https://dex.tailae6c2.ts.net/.well-known/openid-configuration" \
+          --scope="openid email profile" \
+          --unique-uid="0" \
+          --mapping-uid="preferred_username" \
+          --mapping-email="email" \
+          --mapping-displayname="name"
+      fi
+
+      echo "OIDC configuration complete"
+
+  # Environment variables for OIDC
+  extraEnv:
+    - name: NEXTCLOUD_OIDC_CLIENT_SECRET
+      valueFrom:
+        secretKeyRef:
+          name: nextcloud-oidc
+          key: client-secret
+
 # SQLite (internal database)
 internalDatabase:
   enabled: true

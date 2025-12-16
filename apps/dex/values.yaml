@@ -34,13 +34,18 @@ config:
         clientSecret: $GOOGLE_CLIENT_SECRET
         redirectURI: https://dex.tailae6c2.ts.net/callback
 
-  # Static clients (ArgoCD)
+  # Static clients
   staticClients:
     - id: argocd
       name: ArgoCD
       secret: argocd-dex-client-secret
       redirectURIs:
         - https://argocd.tailae6c2.ts.net/auth/callback
+    - id: nextcloud
+      name: Nextcloud
+      secret: $NEXTCLOUD_OIDC_CLIENT_SECRET
+      redirectURIs:
+        - https://nextcloud.tailae6c2.ts.net/apps/user_oidc/code
 
 # Environment variables from secret
 envFrom:
