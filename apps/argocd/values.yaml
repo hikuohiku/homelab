@@ -23,6 +23,7 @@ configs:
     policy.csv: |
       g, hikuohiku@gmail.com, role:admin
     policy.default: ""
+    scopes: "[email]"
 
   # Ingress 配下で TLS 終端されるため、内部は HTTP を使用
   params:
