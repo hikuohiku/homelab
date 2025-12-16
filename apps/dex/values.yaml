@@ -7,7 +7,8 @@ service:
 
 config:
   # Dex issuer URL (ArgoCD と一致させる必要がある)
-  issuer: http://dex.dex.svc.cluster.local:5556
+  # ブラウザからは Tailscale Ingress 経由でアクセス
+  issuer: https://dex.tailae6c2.ts.net
 
   # Storage backend
   storage:

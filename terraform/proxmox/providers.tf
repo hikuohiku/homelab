@@ -15,6 +15,10 @@ terraform {
       source  = "bpg/proxmox"
       version = "= 0.89.1"
     }
+    tailscale = {
+      source  = "tailscale/tailscale"
+      version = "~> 0.18"
+    }
   }
 }
 
@@ -26,4 +30,10 @@ provider "proxmox" {
     agent    = true
     username = var.proxmox_ssh_username
   }
+}
+
+# Tailscale provider for generating ephemeral auth keys
+provider "tailscale" {
+  oauth_client_id     = var.tailscale_oauth_client_id
+  oauth_client_secret = var.tailscale_oauth_client_secret
 }

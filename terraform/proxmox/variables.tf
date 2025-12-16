@@ -54,3 +54,17 @@ variable "age_private_key" {
   type        = string
   sensitive   = true
 }
+
+# ===========================================
+# Tailscale Variables
+# ===========================================
+variable "tailscale_oauth_client_id" {
+  description = "Tailscale OAuth Client ID for generating auth keys"
+  type        = string
+}
+
+variable "tailscale_oauth_client_secret" {
+  description = "Tailscale OAuth Client Secret"
+  type        = string
+  sensitive   = true
+}

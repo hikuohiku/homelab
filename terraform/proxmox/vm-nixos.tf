@@ -1,5 +1,15 @@
+# Tailscale ephemeral auth key for node01
+# Generated dynamically via OAuth Client
+resource "tailscale_tailnet_key" "node01" {
+  reusable      = false
+  ephemeral     = true
+  preauthorized = true
+  tags          = ["tag:k3s"]
+  description   = "Terraform: node01 VM"
+}
+
 # Cloud-Init configuration for node01
-# Injects Age private key and SSH keys for sops-nix decryption at runtime
+# Injects Age private key, SSH keys, and Tailscale auth key
 # NOTE: Using cicustom overrides Proxmox's sshkeys, so we must include SSH keys here
 resource "proxmox_virtual_environment_file" "node01_cloud_init" {
   content_type = "snippets"
@@ -18,6 +28,9 @@ resource "proxmox_virtual_environment_file" "node01_cloud_init" {
         - path: /var/lib/sops-nix/key.txt
           permissions: '0600'
           content: ${jsonencode(var.age_private_key)}
+        - path: /var/lib/tailscale/auth-key
+          permissions: '0600'
+          content: ${tailscale_tailnet_key.node01.key}
 
     EOT
     file_name = "node01-cloud-init.yaml"

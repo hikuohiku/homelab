@@ -139,6 +139,27 @@
   };
 
   # =========================================
+  # Tailscale 設定
+  # =========================================
+  # VM に Tailscale をインストールし、Pod から Tailscale ネットワークにアクセス可能に
+  # これにより Pod 内から Tailscale ホスト名 (*.ts.net) の DNS 解決が可能
+  services.tailscale = {
+    enable = true;
+    # Cloud-Init で注入される auth key file
+    authKeyFile = "/var/lib/tailscale/auth-key";
+    # OAuth Client 経由の ephemeral key パラメータ
+    authKeyParameters = {
+      ephemeral = true;
+      preauthorized = true;
+    };
+    extraUpFlags = [
+      "--advertise-tags=tag:k3s"
+    ];
+    # ファイアウォールでポートを開く
+    openFirewall = true;
+  };
+
+  # =========================================
   # システム設定
   # =========================================
   environment.systemPackages = with pkgs; [
