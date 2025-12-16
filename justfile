@@ -10,6 +10,4 @@ destroy:
 
 # Proxmox Cloud Image build & cache
 prepare:
-    nix build ./nix/images/proxmox-cloud#packages.x86_64-linux.qcow2 --no-link --json \
-      | jq -r '.[0].outputs.out' \
-      | cachix push hikuohiku
+    cachix watch-exec hikuohiku -- nix build ./nix/images/proxmox-cloud#packages.x86_64-linux.qcow2 --no-link
