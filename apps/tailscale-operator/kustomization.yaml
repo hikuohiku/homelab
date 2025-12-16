@@ -5,6 +5,7 @@ resources:
   - tailscale-admin-rbac.yaml
   - dns-config.yaml
   - coredns-custom.yaml
+  - ts-nameserver-fixed.yaml
 
 helmCharts:
   - name: tailscale-operator

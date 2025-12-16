@@ -1,0 +1,21 @@
+# Fixed ClusterIP Service for Tailscale nameserver
+# This allows coredns-custom.yaml to use a predictable IP address
+# that won't change when the cluster is rebuilt
+apiVersion: v1
+kind: Service
+metadata:
+  name: ts-nameserver-fixed
+  namespace: tailscale
+spec:
+  clusterIP: 10.43.0.53
+  ports:
+    - name: udp
+      port: 53
+      protocol: UDP
+      targetPort: 1053
+    - name: tcp
+      port: 53
+      protocol: TCP
+      targetPort: 1053
+  selector:
+    app: nameserver
