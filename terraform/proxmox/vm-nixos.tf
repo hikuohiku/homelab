@@ -5,7 +5,7 @@ resource "tailscale_tailnet_key" "node01" {
   ephemeral     = true
   preauthorized = true
   tags          = ["tag:k8s-node"]
-  description   = "Terraform: node01 VM"
+  description   = "Terraform node01 VM"
 }
 
 # Cloud-Init configuration for node01
