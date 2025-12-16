@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - tailscale-admin-rbac.yaml
+  - dnsconfig.yaml
 
 helmCharts:
   - name: tailscale-operator

@@ -1,0 +1,13 @@
+# Egress Service for Dex
+# Allows cluster workloads to access dex.tailae6c2.ts.net
+# Tailscale Operator creates a proxy pod and populates DNSConfig nameserver
+apiVersion: v1
+kind: Service
+metadata:
+  name: dex-egress
+  namespace: argocd  # Deploy in argocd namespace where it's needed
+  annotations:
+    tailscale.com/tailnet-fqdn: "dex.tailae6c2.ts.net"
+spec:
+  type: ExternalName
+  externalName: placeholder  # Will be overwritten by operator
