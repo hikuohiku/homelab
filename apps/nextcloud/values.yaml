@@ -23,6 +23,8 @@ nextcloud:
       $CONFIG = array (
         'allow_user_to_change_display_name' => false,
         'overwriteprotocol' => 'https',
+        // Allow OIDC requests to local IPs (for cluster-internal Dex access)
+        'allow_local_remote_servers' => true,
       );
 
   # Post-installation hook to setup OIDC provider
