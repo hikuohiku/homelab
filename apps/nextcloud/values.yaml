@@ -22,6 +22,7 @@ nextcloud:
       <?php
       $CONFIG = array (
         'allow_user_to_change_display_name' => false,
+        'overwriteprotocol' => 'https',
       );
 
   # Post-installation hook to setup OIDC provider
