@@ -159,6 +159,13 @@
     openFirewall = true;
   };
 
+  # tailscaled-autoconnect を cloud-init 完了後に実行
+  # (auth-key は cloud-init で注入されるため)
+  systemd.services.tailscaled-autoconnect = {
+    after = [ "cloud-final.service" ];
+    wants = [ "cloud-final.service" ];
+  };
+
   # =========================================
   # システム設定
   # =========================================
