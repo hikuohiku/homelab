@@ -1,0 +1,16 @@
+# K3s CoreDNS customization
+# https://docs.k3s.io/networking/networking-services#coredns
+# This ConfigMap adds a stub resolver for ts.net domain
+# to forward queries to Tailscale's k8s-nameserver
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: coredns-custom
+  namespace: kube-system
+data:
+  tailscale.server: |
+    ts.net {
+      errors
+      cache 30
+      forward . nameserver.tailscale.svc.cluster.local
+    }
