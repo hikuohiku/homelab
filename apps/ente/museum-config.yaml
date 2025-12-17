@@ -42,6 +42,12 @@ data:
     jwt:
       secret: # Injected via environment
 
+    # WebAuthn / Passkey configuration
+    webauthn:
+      rpid: ente.tailae6c2.ts.net
+      rporigins:
+        - https://ente.tailae6c2.ts.net
+
     # Email configuration (disabled by default, configure if needed)
     # smtp:
     #   host: smtp.example.com
