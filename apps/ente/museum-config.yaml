@@ -1,0 +1,73 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: museum-config
+  namespace: ente
+data:
+  local.yaml: |
+    # Ente Museum Server Configuration
+    # Reference: https://github.com/ente-io/ente/blob/main/server/configurations/local.yaml
+
+    http:
+      # API server port
+      port: 8080
+
+    db:
+      host: ente-postgres
+      port: 5432
+      name: ente_db
+      # user and password are injected via environment variables
+
+    s3:
+      # Primary storage bucket
+      b2-eu-cen:
+        key: # Injected via environment
+        secret: # Injected via environment
+        endpoint: http://ente-minio:9000
+        region: eu-central-2
+        bucket: b2-eu-cen
+      # Replication buckets (using same MinIO for self-hosted)
+      wasabi-eu-central-2-v3:
+        key: # Injected via environment
+        secret: # Injected via environment
+        endpoint: http://ente-minio:9000
+        region: eu-central-2
+        bucket: wasabi-eu-central-2-v3
+        compliance: false
+      scw-eu-fr-v3:
+        key: # Injected via environment
+        secret: # Injected via environment
+        endpoint: http://ente-minio:9000
+        region: eu-central-2
+        bucket: scw-eu-fr-v3
+
+    # Internal services for local deployment
+    internal:
+      # Disable silent logout token for self-hosted
+      silent-logout-secret:
+      # Hardcoded accounts for admin access
+      hardcoded-ott:
+        local-test-user: "123456"
+
+    # JWT token validity (optional customization)
+    jwt:
+      secret: # Injected via environment
+
+    # Email configuration (disabled by default, configure if needed)
+    # smtp:
+    #   host: smtp.example.com
+    #   port: 587
+    #   username: user
+    #   password: password
+
+    # Apple In-App Purchase (disabled for self-hosted)
+    # apple:
+    #   shared-secret:
+
+    # Stripe integration (disabled for self-hosted)
+    # stripe:
+    #   key:
+    #   webhook-secret:
+
+    # Logging
+    log-file: ""

@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ente
+  namespace: ente
+  annotations:
+    tailscale.com/experimental-forward-cluster-traffic-via-ingress: "true"
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: ente-museum
+      port:
+        number: 8080
+  tls:
+    - hosts:
+        - ente

@@ -1,0 +1,175 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ente-museum
+  namespace: ente
+  labels:
+    app: ente-museum
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ente-museum
+  template:
+    metadata:
+      labels:
+        app: ente-museum
+    spec:
+      initContainers:
+        # Wait for PostgreSQL to be ready
+        - name: wait-for-postgres
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - |
+              until nc -z ente-postgres 5432; do
+                echo "Waiting for PostgreSQL..."
+                sleep 2
+              done
+              echo "PostgreSQL is ready"
+        # Wait for MinIO to be ready and create buckets
+        - name: wait-for-minio
+          image: minio/mc:latest
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: minio-root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: minio-root-password
+          command:
+            - sh
+            - -c
+            - |
+              until mc alias set minio http://ente-minio:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD; do
+                echo "Waiting for MinIO..."
+                sleep 2
+              done
+              echo "MinIO is ready, creating buckets..."
+              mc mb minio/b2-eu-cen --ignore-existing
+              mc mb minio/wasabi-eu-central-2-v3 --ignore-existing
+              mc mb minio/scw-eu-fr-v3 --ignore-existing
+              echo "Buckets created successfully"
+      containers:
+        - name: museum
+          image: ghcr.io/ente-io/server:latest
+          ports:
+            - containerPort: 8080
+          env:
+            # Database configuration
+            - name: ENTE_DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: postgres-user
+            - name: ENTE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: postgres-password
+            - name: ENTE_DB_HOST
+              value: ente-postgres
+            - name: ENTE_DB_PORT
+              value: "5432"
+            - name: ENTE_DB_NAME
+              value: ente_db
+            # S3/MinIO configuration
+            - name: ENTE_S3_B2_EU_CEN_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: minio-root-user
+            - name: ENTE_S3_B2_EU_CEN_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: minio-root-password
+            - name: ENTE_S3_B2_EU_CEN_ENDPOINT
+              value: http://ente-minio:9000
+            - name: ENTE_S3_B2_EU_CEN_REGION
+              value: eu-central-2
+            - name: ENTE_S3_B2_EU_CEN_BUCKET
+              value: b2-eu-cen
+            # Wasabi bucket (using same MinIO)
+            - name: ENTE_S3_WASABI_EU_CENTRAL_2_V3_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: minio-root-user
+            - name: ENTE_S3_WASABI_EU_CENTRAL_2_V3_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: minio-root-password
+            - name: ENTE_S3_WASABI_EU_CENTRAL_2_V3_ENDPOINT
+              value: http://ente-minio:9000
+            - name: ENTE_S3_WASABI_EU_CENTRAL_2_V3_REGION
+              value: eu-central-2
+            - name: ENTE_S3_WASABI_EU_CENTRAL_2_V3_BUCKET
+              value: wasabi-eu-central-2-v3
+            # SCW bucket (using same MinIO)
+            - name: ENTE_S3_SCW_EU_FR_V3_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: minio-root-user
+            - name: ENTE_S3_SCW_EU_FR_V3_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: minio-root-password
+            - name: ENTE_S3_SCW_EU_FR_V3_ENDPOINT
+              value: http://ente-minio:9000
+            - name: ENTE_S3_SCW_EU_FR_V3_REGION
+              value: eu-central-2
+            - name: ENTE_S3_SCW_EU_FR_V3_BUCKET
+              value: scw-eu-fr-v3
+            # Security keys
+            - name: ENTE_KEY_ENCRYPTION
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: encryption-key
+            - name: ENTE_JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: jwt-secret
+          volumeMounts:
+            - name: config
+              mountPath: /configurations
+              readOnly: true
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+      volumes:
+        - name: config
+          configMap:
+            name: museum-config
