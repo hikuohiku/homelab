@@ -4,6 +4,7 @@ metadata:
   name: ente
   namespace: ente
   annotations:
+    argocd.argoproj.io/sync-wave: "3"
     tailscale.com/experimental-forward-cluster-traffic-via-ingress: "true"
 spec:
   ingressClassName: tailscale

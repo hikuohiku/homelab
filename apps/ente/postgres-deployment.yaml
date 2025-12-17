@@ -5,6 +5,8 @@ metadata:
   namespace: ente
   labels:
     app: ente-postgres
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   replicas: 1
   strategy:

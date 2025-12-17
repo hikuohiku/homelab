@@ -3,6 +3,8 @@ kind: Service
 metadata:
   name: ente-postgres
   namespace: ente
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
 spec:
   selector:
     app: ente-postgres

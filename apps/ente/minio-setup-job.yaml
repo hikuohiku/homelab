@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: minio-create-buckets
+  namespace: ente
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+    argocd.argoproj.io/hook: Sync
+    argocd.argoproj.io/hook-delete-policy: HookSucceeded
+spec:
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mc
+          image: minio/mc:latest
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: minio-root-user
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ente-secrets
+                  key: minio-root-password
+          command:
+            - /bin/sh
+            - -c
+            - |
+              mc alias set minio http://ente-minio:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
+              mc mb minio/b2-eu-cen --ignore-existing
+              mc mb minio/wasabi-eu-central-2-v3 --ignore-existing
+              mc mb minio/scw-eu-fr-v3 --ignore-existing
+  backoffLimit: 4

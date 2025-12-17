@@ -3,6 +3,8 @@ kind: ConfigMap
 metadata:
   name: museum-config
   namespace: ente
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
 data:
   local.yaml: |
     # Ente Museum Server Configuration

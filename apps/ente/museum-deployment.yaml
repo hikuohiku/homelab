@@ -5,6 +5,8 @@ metadata:
   namespace: ente
   labels:
     app: ente-museum
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
 spec:
   replicas: 1
   strategy:
@@ -17,46 +19,6 @@ spec:
       labels:
         app: ente-museum
     spec:
-      initContainers:
-        # Wait for PostgreSQL to be ready
-        - name: wait-for-postgres
-          image: busybox:1.36
-          command:
-            - sh
-            - -c
-            - |
-              until nc -z ente-postgres 5432; do
-                echo "Waiting for PostgreSQL..."
-                sleep 2
-              done
-              echo "PostgreSQL is ready"
-        # Wait for MinIO to be ready and create buckets
-        - name: wait-for-minio
-          image: minio/mc:latest
-          env:
-            - name: MINIO_ROOT_USER
-              valueFrom:
-                secretKeyRef:
-                  name: ente-secrets
-                  key: minio-root-user
-            - name: MINIO_ROOT_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: ente-secrets
-                  key: minio-root-password
-          command:
-            - sh
-            - -c
-            - |
-              until mc alias set minio http://ente-minio:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD; do
-                echo "Waiting for MinIO..."
-                sleep 2
-              done
-              echo "MinIO is ready, creating buckets..."
-              mc mb minio/b2-eu-cen --ignore-existing
-              mc mb minio/wasabi-eu-central-2-v3 --ignore-existing
-              mc mb minio/scw-eu-fr-v3 --ignore-existing
-              echo "Buckets created successfully"
       containers:
         - name: museum
           image: ghcr.io/ente-io/server:latest
