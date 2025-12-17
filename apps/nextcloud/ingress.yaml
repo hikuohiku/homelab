@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: nextcloud
+  namespace: nextcloud
+  annotations:
+    tailscale.com/experimental-forward-cluster-traffic-via-ingress: "true"
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: nextcloud
+      port:
+        number: 8080
+  tls:
+    - hosts:
+        - nextcloud

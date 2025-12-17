@@ -1,0 +1,122 @@
+image:
+  flavor: apache
+
+replicaCount: 1
+
+nextcloud:
+  host: nextcloud.tailae6c2.ts.net
+  existingSecret:
+    enabled: true
+    secretName: nextcloud-admin
+    usernameKey: username
+    passwordKey: password
+  datadir: /var/www/html/data
+
+  # Mail disabled
+  mail:
+    enabled: false
+
+  # OIDC configuration
+  configs:
+    oidc.config.php: |-
+      <?php
+      $CONFIG = array (
+        'allow_user_to_change_display_name' => false,
+        'overwriteprotocol' => 'https',
+        // Allow OIDC requests to local IPs (for cluster-internal Dex access)
+        'allow_local_remote_servers' => true,
+      );
+
+  # Post-installation hook to setup OIDC provider
+  hooks:
+    post-installation: |-
+      #!/bin/bash
+      echo "Installing user_oidc app..."
+      php occ app:install user_oidc || true
+      php occ app:enable user_oidc || true
+
+      echo "Configuring Dex OIDC provider..."
+      php occ user_oidc:provider Dex \
+        --clientid="nextcloud" \
+        --clientsecret="nextcloud-dex-client-secret" \
+        --discoveryuri="https://dex.tailae6c2.ts.net/.well-known/openid-configuration" \
+        --scope="openid email profile"
+
+      echo "OIDC setup complete"
+
+# SQLite (internal database)
+internalDatabase:
+  enabled: true
+
+# External database disabled
+postgresql:
+  enabled: false
+
+mariadb:
+  enabled: false
+
+# Redis enabled
+redis:
+  enabled: true
+  auth:
+    enabled: true
+  master:
+    persistence:
+      enabled: true
+      storageClass: local-path
+      size: 1Gi
+  replica:
+    replicaCount: 0
+
+# Persistence with local-path
+persistence:
+  enabled: true
+  storageClass: local-path
+  accessMode: ReadWriteOnce
+  size: 8Gi
+
+  nextcloudData:
+    enabled: true
+    storageClass: local-path
+    accessMode: ReadWriteOnce
+    size: 50Gi
+
+# Ingress disabled (using separate Tailscale Ingress)
+ingress:
+  enabled: false
+
+# Metrics disabled
+metrics:
+  enabled: false
+
+# Cronjob for background tasks
+cronjob:
+  enabled: true
+
+# Resources
+resources:
+  limits:
+    cpu: 500m
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# Liveness and readiness probes
+livenessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  enabled: true
+  initialDelaySeconds: 30
+  periodSeconds: 15
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+# Update strategy
+strategy:
+  type: Recreate
