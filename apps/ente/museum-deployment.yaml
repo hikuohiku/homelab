@@ -42,7 +42,7 @@ spec:
               value: "5432"
             - name: ENTE_DB_NAME
               value: ente_db
-            # S3/MinIO configuration
+            # S3/MinIO configuration (single bucket)
             - name: ENTE_S3_B2_EU_CEN_KEY
               valueFrom:
                 secretKeyRef:
@@ -58,41 +58,7 @@ spec:
             - name: ENTE_S3_B2_EU_CEN_REGION
               value: eu-central-2
             - name: ENTE_S3_B2_EU_CEN_BUCKET
-              value: b2-eu-cen
-            # Wasabi bucket (using same MinIO)
-            - name: ENTE_S3_WASABI_EU_CENTRAL_2_V3_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: ente-secrets
-                  key: minio-root-user
-            - name: ENTE_S3_WASABI_EU_CENTRAL_2_V3_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: ente-secrets
-                  key: minio-root-password
-            - name: ENTE_S3_WASABI_EU_CENTRAL_2_V3_ENDPOINT
-              value: http://ente-minio:9000
-            - name: ENTE_S3_WASABI_EU_CENTRAL_2_V3_REGION
-              value: eu-central-2
-            - name: ENTE_S3_WASABI_EU_CENTRAL_2_V3_BUCKET
-              value: wasabi-eu-central-2-v3
-            # SCW bucket (using same MinIO)
-            - name: ENTE_S3_SCW_EU_FR_V3_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: ente-secrets
-                  key: minio-root-user
-            - name: ENTE_S3_SCW_EU_FR_V3_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: ente-secrets
-                  key: minio-root-password
-            - name: ENTE_S3_SCW_EU_FR_V3_ENDPOINT
-              value: http://ente-minio:9000
-            - name: ENTE_S3_SCW_EU_FR_V3_REGION
-              value: eu-central-2
-            - name: ENTE_S3_SCW_EU_FR_V3_BUCKET
-              value: scw-eu-fr-v3
+              value: ente-data
             # Security keys
             - name: ENTE_KEY_ENCRYPTION
               valueFrom:

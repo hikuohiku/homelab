@@ -30,7 +30,5 @@ spec:
             - -c
             - |
               mc alias set minio http://ente-minio:9000 $MINIO_ROOT_USER $MINIO_ROOT_PASSWORD
-              mc mb minio/b2-eu-cen --ignore-existing
-              mc mb minio/wasabi-eu-central-2-v3 --ignore-existing
-              mc mb minio/scw-eu-fr-v3 --ignore-existing
+              mc mb minio/ente-data --ignore-existing
   backoffLimit: 4

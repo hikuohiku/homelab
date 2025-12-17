@@ -21,27 +21,13 @@ data:
       # user and password are injected via environment variables
 
     s3:
-      # Primary storage bucket
+      # Single bucket for self-hosted deployment
       b2-eu-cen:
         key: # Injected via environment
         secret: # Injected via environment
         endpoint: http://ente-minio:9000
         region: eu-central-2
-        bucket: b2-eu-cen
-      # Replication buckets (using same MinIO for self-hosted)
-      wasabi-eu-central-2-v3:
-        key: # Injected via environment
-        secret: # Injected via environment
-        endpoint: http://ente-minio:9000
-        region: eu-central-2
-        bucket: wasabi-eu-central-2-v3
-        compliance: false
-      scw-eu-fr-v3:
-        key: # Injected via environment
-        secret: # Injected via environment
-        endpoint: http://ente-minio:9000
-        region: eu-central-2
-        bucket: scw-eu-fr-v3
+        bucket: ente-data
 
     # Internal services for local deployment
     internal:
