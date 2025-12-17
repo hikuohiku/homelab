@@ -18,6 +18,7 @@ data:
       host: ente-postgres
       port: 5432
       name: ente_db
+      sslmode: disable
       # user and password are injected via environment variables
 
     s3:
