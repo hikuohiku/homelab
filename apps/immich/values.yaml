@@ -1,0 +1,67 @@
+# Immich Helm Chart Values
+# Chart: oci://ghcr.io/immich-app/immich-charts/immich
+# Docs: https://github.com/immich-app/immich-charts
+
+# Image version (must be explicitly set)
+controllers:
+  main:
+    containers:
+      main:
+        image:
+          tag: v2.4.0
+        env:
+          # Database connection
+          DB_HOSTNAME: immich-postgres
+          DB_USERNAME: immich
+          DB_PASSWORD: immich
+          DB_DATABASE_NAME: immich
+          # Redis connection (internal Valkey)
+          REDIS_HOSTNAME: immich-valkey
+
+# Immich configuration
+immich:
+  persistence:
+    library:
+      existingClaim: immich-library
+
+# Valkey (Redis-compatible) - enabled
+valkey:
+  enabled: true
+  controllers:
+    main:
+      containers:
+        main:
+          image:
+            repository: docker.io/valkey/valkey
+            tag: 9.0-alpine
+  persistence:
+    data:
+      enabled: true
+      size: 1Gi
+      type: persistentVolumeClaim
+      accessMode: ReadWriteOnce
+      storageClass: local-path
+
+# Server component
+server:
+  enabled: true
+  ingress:
+    main:
+      enabled: false  # Using separate Tailscale Ingress
+
+# Machine Learning component (CPU only)
+machine-learning:
+  enabled: true
+  controllers:
+    main:
+      containers:
+        main:
+          image:
+            tag: v2.4.0
+  persistence:
+    cache:
+      enabled: true
+      size: 10Gi
+      type: persistentVolumeClaim
+      accessMode: ReadWriteOnce
+      storageClass: local-path
