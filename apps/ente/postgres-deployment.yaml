@@ -43,11 +43,9 @@ spec:
           livenessProbe:
             exec:
               command:
-                - pg_isready
-                - -U
-                - $(POSTGRES_USER)
-                - -d
-                - ente_db
+                - /bin/sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d ente_db
             initialDelaySeconds: 30
             periodSeconds: 10
             timeoutSeconds: 5
@@ -55,11 +53,9 @@ spec:
           readinessProbe:
             exec:
               command:
-                - pg_isready
-                - -U
-                - $(POSTGRES_USER)
-                - -d
-                - ente_db
+                - /bin/sh
+                - -c
+                - pg_isready -U "$POSTGRES_USER" -d ente_db
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
