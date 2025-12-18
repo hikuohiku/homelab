@@ -22,6 +22,9 @@ data:
       # user and password are injected via environment variables
 
     s3:
+      # Use local MinIO instance
+      are_local_buckets: true
+      use_path_style_urls: true
       # Single bucket for self-hosted deployment
       b2-eu-cen:
         key: # Injected via environment
