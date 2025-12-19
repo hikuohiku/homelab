@@ -12,16 +12,8 @@ spec:
     requests:
       storage: 10Gi
 ---
-apiVersion: v1
-kind: Secret
-metadata:
-  name: immich-postgres-credentials
-  namespace: immich
-type: Opaque
-stringData:
-  POSTGRES_USER: immich
-  POSTGRES_PASSWORD: immich
-  POSTGRES_DB: immich
+# Secret 'immich-postgres-credentials' is created by ExternalSecret
+# See: postgres-external-secret.yaml
 ---
 apiVersion: apps/v1
 kind: Deployment
