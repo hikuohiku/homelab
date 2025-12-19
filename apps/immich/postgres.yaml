@@ -32,6 +32,17 @@ spec:
       labels:
         app: immich-postgres
     spec:
+      securityContext:
+        fsGroup: 70  # postgres group
+      initContainers:
+        - name: init-permissions
+          image: busybox:1.36
+          command: ["sh", "-c", "chown -R 70:70 /var/lib/postgresql/data"]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
       containers:
         - name: postgres
           image: ghcr.io/tensorchord/cloudnative-vectorchord:16.9-0.4.3
@@ -41,6 +52,8 @@ spec:
           env:
             - name: POSTGRES_INITDB_ARGS
               value: "--data-checksums"
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           ports:
             - containerPort: 5432
           volumeMounts:
