@@ -46,6 +46,9 @@ spec:
       containers:
         - name: postgres
           image: ghcr.io/tensorchord/cloudnative-vectorchord:16.9-0.4.3
+          args:
+            - -c
+            - shared_preload_libraries=vchord.so
           envFrom:
             - secretRef:
                 name: immich-postgres-credentials
