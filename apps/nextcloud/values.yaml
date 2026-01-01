@@ -44,13 +44,24 @@ nextcloud:
 
       echo "OIDC setup complete"
 
-# SQLite (internal database)
+# SQLite (internal database) - disabled in favor of PostgreSQL
 internalDatabase:
-  enabled: true
-
-# External database disabled
-postgresql:
   enabled: false
+
+# PostgreSQL database
+postgresql:
+  enabled: true
+  auth:
+    username: nextcloud
+    database: nextcloud
+  primary:
+    persistence:
+      enabled: true
+      storageClass: local-path
+      size: 2Gi
+  # Fix permissions on every pod restart (critical for non-root PostgreSQL)
+  volumePermissions:
+    enabled: true
 
 mariadb:
   enabled: false
