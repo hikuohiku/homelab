@@ -1,0 +1,44 @@
+# Domain設定（Tailscale経由）
+domain: "https://vaultwarden.tailae6c2.ts.net"
+
+# 管理者トークン（ExternalSecretから取得）
+adminToken:
+  existingSecret: vaultwarden-admin
+  existingSecretKey: admin-token
+
+# サインアップ設定
+signupsAllowed: false
+invitationsAllowed: true
+
+# データベース（SQLite）
+database:
+  type: default
+
+# 永続化ストレージ
+storage:
+  data:
+    enabled: true
+    size: 1Gi
+    class: local-path
+    accessMode: ReadWriteOnce
+
+# Ingressは別途Tailscale Ingressを使用
+ingress:
+  enabled: false
+
+# リソース制限
+resources:
+  limits:
+    cpu: 300m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 64Mi
+
+# ログ設定
+logging:
+  level: info
+
+# WebSocket有効化（リアルタイム同期）
+websocket:
+  enabled: true
