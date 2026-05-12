@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "tailscale": {
+      "command": "npx",
+      "args": ["-y", "@yawlabs/tailscale-mcp"],
+      "env": {
+        "TAILSCALE_READONLY": "1",
+        "TAILSCALE_PROFILE": "minimal"
+      }
+    },
+    "kubectl": {
+      "command": "npx",
+      "args": ["-y", "kubectl-mcp-server", "--read-only"]
+    },
+    "proxmox": {
+      "command": "npx",
+      "args": ["-y", "@itunified.io/mcp-proxmox"],
+      "env": {
+        "PROXMOX_VERIFY_SSL": "false"
+      }
+    }
+  }
+}

@@ -18,10 +18,17 @@ configs:
         - profile
         - email
 
+  # ローカルアカウント (MCP read-only 用)
+  accounts:
+    agent: apiKey
+
   # RBAC 設定
   rbac:
     policy.csv: |
       g, hikuohiku@gmail.com, role:admin
+      p, agent, applications, get, */*, allow
+      p, agent, projects, get, *, allow
+      p, agent, clusters, get, *, allow
     policy.default: ""
     scopes: "[email]"
 
