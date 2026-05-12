@@ -17,10 +17,8 @@ configs:
         - openid
         - profile
         - email
-
-  # ローカルアカウント (MCP read-only 用)
-  accounts:
-    agent: apiKey
+    # ローカルアカウント (MCP read-only 用)
+    accounts.agent: apiKey
 
   # RBAC 設定
   rbac:
