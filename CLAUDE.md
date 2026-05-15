@@ -42,6 +42,35 @@ cd terraform/proxmox && terraform apply
 nix build .#nixosConfigurations.<name>.config.system.build.image
 ```
 
+## Agent Operations
+
+エージェントが homelab 環境を読み取り専用で参照するための MCP サーバー構成。
+
+### 接続手順
+
+1. `tailscale up` — Tailscale ネットワークに接続（`just ts-up`）
+2. Claude Code 起動時に `.mcp.json` から 4 つの MCP サーバーが自動接続
+
+### MCP サーバー一覧
+
+| サーバー | ツール例 | 用途 |
+|---------|---------|------|
+| `kubectl` | `get_nodes`, `get_pods`, `get_deployments` | K8s リソース参照 |
+| `argocd` | `list_applications`, `get_application` | ArgoCD アプリ状態確認 |
+| `proxmox` | `proxmox_node_list`, `proxmox_vm_list` | VM/ノード状態確認 |
+| `tailscale` | `tailscale_list_devices`, `tailscale_status` | ネットワークデバイス参照 |
+
+### クレデンシャル
+
+- `.envrc` (direnv) 経由で Doppler (`homelab/prd`) からシークレットを自動ロード
+- `.mcp.json` の `env` フィールドで read-only フラグを設定
+
+### トラブルシューティング
+
+- `just preflight` で全レイヤーの接続性を一括確認
+- MCP サーバーが接続しない場合: `tailscale status` でネットワーク確認 → `direnv allow .` で環境変数確認
+- Tailscale MCP の `fetch failed`: OAuth クライアントに `devices:read` スコープが必要（Tailscale Admin Console）
+
 ## Conventions
 
 - Kubernetes manifests は Kustomize で管理

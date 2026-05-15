@@ -5,18 +5,27 @@
       "args": ["-y", "@yawlabs/tailscale-mcp"],
       "env": {
         "TAILSCALE_READONLY": "1",
-        "TAILSCALE_PROFILE": "minimal"
+        "TAILSCALE_PROFILE": "minimal",
+        "TAILSCALE_TAILNET": "hikuohiku@gmail.com"
       }
     },
     "kubectl": {
-      "command": "npx",
-      "args": ["-y", "kubectl-mcp-server", "--read-only"]
+      "command": "uv",
+      "args": ["run", "--with", "kubectl-mcp-tool", "python", "-m", "kubectl_mcp_tool.mcp_server", "--read-only"]
     },
     "proxmox": {
       "command": "npx",
       "args": ["-y", "@itunified.io/mcp-proxmox"],
       "env": {
         "PROXMOX_VERIFY_SSL": "false"
+      }
+    },
+    "argocd": {
+      "command": "npx",
+      "args": ["-y", "argocd-mcp", "stdio"],
+      "env": {
+        "MCP_READ_ONLY": "true",
+        "ARGOCD_BASE_URL": "https://argocd.tailae6c2.ts.net"
       }
     }
   }
