@@ -56,3 +56,10 @@
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
 | 5.1 | CLAUDE.md にエージェントアクセスフローセクション追加: credential の流れ (Doppler → .envrc → MCP サーバー)、各レイヤーの権限範囲、トラブルシューティングを更新 | CLAUDE.md に credential 分離後のアクセスフローが記載され、新規セッションから参照可能 | Phase 4 | cc:完了 |
+
+## Phase 6: エージェント操作制御
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 6.1 | CLAUDE.md にエージェント操作ルール追加: MCP ツール経由での参照を必須化し、kubectl/curl 等の CLI 直接使用を禁止するルールを記載 | CLAUDE.md に「エージェント操作ルール」セクションがあり、MCP 優先・CLI 禁止・例外（tailscale/just）が明記されている | 5.1 | cc:完了 |
+| 6.2 | `.claude/settings.json` に MCP ツール自動許可設定追加: `mcp__kubectl__*`, `mcp__argocd__*`, `mcp__proxmox__*`, `mcp__tailscale__*` を permissions.allow に追加 | MCP ツール呼び出し時に承認プロンプトが表示されない | 6.1 | cc:完了 |

@@ -83,6 +83,12 @@ Doppler (homelab/prd)
 
 > **注意**: K8s は Tailscale API プロキシが Bearer トークンを無視するため、ServiceAccount ベースの分離ができない（#36）。MCP の `--read-only` フラグが実効的なセキュリティ境界。
 
+### エージェント操作ルール
+
+- **インフラ参照は MCP ツール経由で行う**: `mcp__kubectl__*`, `mcp__argocd__*`, `mcp__proxmox__*`, `mcp__tailscale__*` を使う
+- **kubectl / curl 等の CLI を直接使わない**: CLI は管理者権限の kubeconfig を使うため credential 分離が無効になる。MCP サーバーが read-only 制約を担保している
+- **例外**: `tailscale up` / `tailscale status` / `just *` は CLI 許可済み（MCP 非対応の操作）
+
 ### トラブルシューティング
 
 - `just preflight` で全レイヤーの接続性を一括確認
