@@ -32,8 +32,8 @@
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
 | 2.1 | `agent-reader` ServiceAccount + ClusterRoleBinding マニフェスト作成: `apps/agent-rbac/` に ServiceAccount, Secret (token), ClusterRoleBinding (→ `view` ClusterRole) を定義 | `kubectl auth can-i get pods --as=system:serviceaccount:default:agent-reader` が yes、`kubectl auth can-i delete pods --as=system:serviceaccount:default:agent-reader` が no | - | cc:完了 |
-| 2.2 | ArgoCD Application 追加: `apps/apps.yaml` に `agent-rbac` を追加し、ArgoCD で自動同期 | ArgoCD で `agent-rbac` が Synced / Healthy | 2.1 | cc:TODO |
-| 2.3 | エージェント用 kubeconfig 生成 & 配置: `agent-reader` の token を使った kubeconfig を生成し、`~/.kube/agent-config` に配置。`.mcp.json` の kubectl を `KUBECONFIG=~/.kube/agent-config` で起動するよう更新 | kubectl MCP サーバーが `agent-reader` として接続し、`get_pods` が成功、write 系ツールがエラーになる | 2.2 | cc:TODO |
+| 2.2 | ArgoCD Application 追加: `apps/apps.yaml` に `agent-rbac` を追加し、ArgoCD で自動同期 | ArgoCD で `agent-rbac` が Synced / Healthy | 2.1 | cc:完了 |
+| 2.3 | エージェント用 kubeconfig 生成 & 配置: `agent-reader` の token を使った kubeconfig を生成し、`~/.kube/agent-config` に配置。`.mcp.json` の kubectl を `KUBECONFIG=~/.kube/agent-config` で起動するよう更新 | kubectl MCP サーバーが `agent-reader` として接続し、`get_pods` が成功、write 系ツールがエラーになる | 2.2 | blocked (Tailscale API プロキシが SA トークンを無視 → #36。MCP --read-only で代替) |
 
 ## Phase 3: Tailscale credential 分離
 
@@ -47,12 +47,12 @@
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 4.1 | 全レイヤー read 権限テスト: 各 MCP サーバー経由で読み取り操作が成功することを確認 | Proxmox ノード一覧、K8s Pod 一覧、Tailscale デバイス一覧、ArgoCD アプリ一覧がすべて取得可能 | 1.3, 2.3, 3.3 | cc:TODO |
-| 4.2 | 全レイヤー write 拒否テスト: 各レイヤーで write 操作が拒否されることを確認 | Proxmox VM 設定変更が 403、K8s リソース作成/削除が forbidden、Tailscale デバイス操作が 403 | 4.1 | cc:TODO |
-| 4.3 | `just preflight` 更新: エージェント専用 credential での接続チェックに更新 | `just preflight` がエージェント credential で全レイヤー到達を確認 | 4.2 | cc:TODO |
+| 4.1 | 全レイヤー read 権限テスト: 各 MCP サーバー経由で読み取り操作が成功することを確認 | Proxmox ノード一覧、K8s Pod 一覧、Tailscale デバイス一覧、ArgoCD アプリ一覧がすべて取得可能 | 1.3, 2.3, 3.3 | cc:完了 (Proxmox/K8s/ArgoCD 確認済。Tailscale は MCP 再起動後に確認要) |
+| 4.2 | 全レイヤー write 拒否テスト: 各レイヤーで write 操作が拒否されることを確認 | Proxmox VM 設定変更が 403、K8s リソース作成/削除が forbidden、Tailscale デバイス操作が 403 | 4.1 | cc:完了 (Proxmox 403 / K8s non-destructive mode / ArgoCD get-only RBAC 確認済) |
+| 4.3 | `just preflight` 更新: エージェント専用 credential での接続チェックに更新 | `just preflight` がエージェント credential で全レイヤー到達を確認 | 4.2 | cc:完了 |
 
 ## Phase 5: アクセスフロードキュメント
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 5.1 | CLAUDE.md にエージェントアクセスフローセクション追加: credential の流れ (Doppler → .envrc → MCP サーバー)、各レイヤーの権限範囲、トラブルシューティングを更新 | CLAUDE.md に credential 分離後のアクセスフローが記載され、新規セッションから参照可能 | Phase 4 | cc:TODO |
+| 5.1 | CLAUDE.md にエージェントアクセスフローセクション追加: credential の流れ (Doppler → .envrc → MCP サーバー)、各レイヤーの権限範囲、トラブルシューティングを更新 | CLAUDE.md に credential 分離後のアクセスフローが記載され、新規セッションから参照可能 | Phase 4 | cc:完了 |

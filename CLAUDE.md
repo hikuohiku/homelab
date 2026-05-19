@@ -60,16 +60,36 @@ nix build .#nixosConfigurations.<name>.config.system.build.image
 | `proxmox` | `proxmox_node_list`, `proxmox_vm_list` | VM/ノード状態確認 |
 | `tailscale` | `tailscale_list_devices`, `tailscale_status` | ネットワークデバイス参照 |
 
-### クレデンシャル
+### Credential 分離
 
-- `.envrc` (direnv) 経由で Doppler (`homelab/prd`) からシークレットを自動ロード
-- `.mcp.json` の `env` フィールドで read-only フラグを設定
+エージェント用 read-only credential とデプロイ用 write credential は分離されている。
+
+```
+Doppler (homelab/prd)
+  ├── PROXMOX_AGENT_TOKEN (PVEAuditor) → .envrc → PROXMOX_TOKEN_ID/SECRET → Proxmox MCP
+  ├── TAILSCALE_AGENT_CLIENT_ID/SECRET (devices:core:read) → .envrc → TAILSCALE_OAUTH_CLIENT_ID/SECRET → Tailscale MCP
+  ├── ARGOCD_API_TOKEN (agent account, get-only RBAC) → .envrc → ArgoCD MCP
+  └── KUBECONFIG (既存, --read-only フラグで制限) → kubectl MCP
+```
+
+各レイヤーの権限範囲:
+
+| レイヤー | credential | 権限 | 制限方式 |
+|---------|-----------|------|---------|
+| Proxmox | `PROXMOX_AGENT_TOKEN` | PVEAuditor (Audit系のみ) | API トークン権限分離 |
+| K8s | 既存 kubeconfig | 全権限（Tailscaleプロキシ制約） | MCP `--read-only` フラグ |
+| ArgoCD | `ARGOCD_API_TOKEN` | applications/projects/clusters の get のみ | RBAC policy |
+| Tailscale | `TAILSCALE_AGENT_CLIENT_ID/SECRET` | devices:core:read | OAuth スコープ |
+
+> **注意**: K8s は Tailscale API プロキシが Bearer トークンを無視するため、ServiceAccount ベースの分離ができない（#36）。MCP の `--read-only` フラグが実効的なセキュリティ境界。
 
 ### トラブルシューティング
 
 - `just preflight` で全レイヤーの接続性を一括確認
 - MCP サーバーが接続しない場合: `tailscale status` でネットワーク確認 → `direnv allow .` で環境変数確認
-- Tailscale MCP の `fetch failed`: OAuth クライアントに `devices:read` スコープが必要（Tailscale Admin Console）
+- Proxmox MCP がエラー → `PROXMOX_AGENT_TOKEN` が Doppler に登録されているか確認
+- Tailscale MCP の `fetch failed`: OAuth クライアントに `devices:core:read` スコープが必要（Tailscale Admin Console）
+- credential 変更後は Claude Code 再起動が必要（MCP サーバーが起動時に env を読み込むため）
 
 ## Conventions
 

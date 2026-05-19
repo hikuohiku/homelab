@@ -26,7 +26,7 @@ preflight:
     curl -sk --max-time 10 https://argocd.tailae6c2.ts.net/api/version | python3 -c "import sys,json; print('ArgoCD', json.load(sys.stdin)['Version'])"
     echo ""
     echo "=== Proxmox ==="
-    eval "$(direnv export bash 2>/dev/null)" && curl -sk --max-time 10 -H "Authorization: PVEAPIToken=${PROXMOX_API_TOKEN}" "${PROXMOX_HOST}:8006/api2/json/version" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Proxmox VE', d['data']['version'])"
+    eval "$(direnv export bash 2>/dev/null)" && curl -sk --max-time 10 -H "Authorization: PVEAPIToken=${PROXMOX_AGENT_TOKEN}" "${PROXMOX_ENDPOINT}:8006/api2/json/version" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Proxmox VE', d['data']['version'])"
     echo ""
     echo "✓ All layers reachable"
 
