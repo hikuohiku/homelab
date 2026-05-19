@@ -1,75 +1,58 @@
-# Agent Infrastructure Access Plans.md
+# Credential Separation Plans.md
 
-作成日: 2026-05-11
+作成日: 2026-05-16
 
 ---
 
 ## 概要
 
-Claude Code エージェントが homelab の各レイヤー（Kubernetes, ArgoCD, Proxmox, Tailscale）を
-読み取り専用で確認・検証できるようにする。IaC リポジトリなので変更はコードで行い、
-エージェントは環境の現状把握と検証のみを行う。
+エージェント用の read-only credential とデプロイ用の write credential を分離する。
+現在は Doppler (`homelab/prd`) の既存トークンを共用しているが、
+エージェントには最小権限の専用 credential を発行し、誤操作リスクを排除する。
 
 ### 設計方針
 
-- **MCP ファースト**: 各レイヤーに専用 MCP サーバーを導入し、構造化されたツールで操作する
-- **読み取り専用**: 全 MCP サーバーを read-only モードで起動
-- **Doppler 一元管理**: 既存の Doppler (`homelab/prd`) をクレデンシャルの単一ソースとする
-- **Git 健全性**: MCP 設定ファイルは Git 管理、クレデンシャルは Doppler 経由で環境変数注入
-
-### MCP サーバー構成
-
-| レイヤー | MCP サーバー | 読み取り専用モード | 認証方式 |
-|---------|-------------|-------------------|---------|
-| Kubernetes | `kubectl-mcp-server` (npm, CNCF) | `--read-only` | KUBECONFIG (既存) |
-| ArgoCD | `argocd-mcp` (argoproj-labs 公式, npm) | `MCP_READ_ONLY=true` | API トークン → Doppler |
-| Proxmox | `mcp-proxmox` (gilby125, npm) | basic モード (デフォルト) | API トークン (Doppler 既存) |
-| Tailscale | `@yawlabs/tailscale-mcp` (npm) | `TAILSCALE_READONLY=1` + `TAILSCALE_PROFILE=minimal` | API キー → Doppler |
-
-※ Tailscale ローカル接続 (`tailscale up`) は MCP ではなくローカル CLI で行う
+- **最小権限**: 各レイヤーでエージェント専用の read-only credential を発行
+- **Doppler 命名規約**: エージェント用は `*_AGENT_*` プレフィックスで区別
+- **既存トークン温存**: デプロイ用の既存 credential は変更しない
+- **.envrc 分岐**: エージェント用 credential を優先的に MCP サーバーへ注入
 
 ---
 
-## Phase 1: ネットワーク接続基盤 & Tailscale MCP
+## Phase 1: Proxmox credential 分離
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 1.1 | Tailscale ローカル接続: settings.json に `tailscale up` / `tailscale status` を許可追加 | `tailscale status` が正常値を返し、`k8s.tailae6c2.ts.net` に到達可能 | - | cc:完了 |
-| 1.2 | Tailscale API キー作成 & Doppler 登録: Tailscale Admin Console で read-only API キーを発行し、Doppler に `TAILSCALE_API_KEY` として格納 | `doppler secrets get TAILSCALE_API_KEY --project homelab --config prd` で値が取得可能 | - | cc:完了 (OAuth credentials で代替: TAILSCALE_OAUTH_CLIENT_ID/SECRET が Doppler に既存) |
-| 1.3 | `@yawlabs/tailscale-mcp` MCP サーバー設定: `.mcp.json` に追加、`TAILSCALE_READONLY=1` + `TAILSCALE_PROFILE=minimal` で起動 | MCP ツール `tailscale_status` / `tailscale_list_devices` が正常に値を返す | 1.2 | cc:完了 (接続済・OAuth スコープ `devices:read` 追加で完全動作。Admin Console で対応要) |
+| 1.1 | Proxmox で PVEAuditor ロールの専用ユーザー・トークン作成: `agent@pve` ユーザーを作成し、PVEAuditor ロールを `/` パスに割り当て、privilege separated な API トークンを発行 | Proxmox API で `agent@pve!readonly` トークンを使い `/api2/json/nodes` が取得でき、`/api2/json/nodes/{node}/qemu/{vmid}/config` への PUT が 403 になる | - | cc:完了 |
+| 1.2 | Doppler にエージェント用 Proxmox トークン登録: `PROXMOX_AGENT_TOKEN` として格納 | `doppler secrets get PROXMOX_AGENT_TOKEN --project homelab --config prd` で値が取得可能 | 1.1 | cc:完了 |
+| 1.3 | `.envrc` 更新: MCP サーバー向けに `PROXMOX_AGENT_TOKEN` を `PROXMOX_TOKEN_ID` / `PROXMOX_TOKEN_SECRET` に分離して注入 | `direnv allow .` 後に `PROXMOX_TOKEN_ID` が `agent@pve!readonly` の形式になっている | 1.2 | cc:完了 |
 
-## Phase 2: Kubernetes MCP
-
-| Task | 内容 | DoD | Depends | Status |
-|------|------|-----|---------|--------|
-| 2.1 | `kubectl-mcp-server` MCP サーバー設定: `.mcp.json` に追加、`--read-only` モードで起動。KUBECONFIG は既存の `~/.kube/config` を利用 | MCP ツール `get_pods` / `get_nodes` / `get_deployments` が正常に値を返す | 1.1 | cc:完了 |
-
-## Phase 3: ArgoCD MCP
+## Phase 2: Kubernetes credential 分離
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 3.1 | ArgoCD API トークン作成 & Doppler 登録: ArgoCD で read-only 用 API トークンを発行し、Doppler に `ARGOCD_API_TOKEN` として格納 | `doppler secrets get ARGOCD_API_TOKEN --project homelab --config prd` で値が取得可能 | 1.1 | cc:完了 |
-| 3.2 | `argocd-mcp` MCP サーバー設定: `.mcp.json` に追加、`MCP_READ_ONLY=true` で起動。`ARGOCD_BASE_URL=https://argocd.tailae6c2.ts.net` | MCP ツール `list_applications` / `get_application` が正常に値を返す | 3.1 | cc:完了 |
+| 2.1 | `agent-reader` ServiceAccount + ClusterRoleBinding マニフェスト作成: `apps/agent-rbac/` に ServiceAccount, Secret (token), ClusterRoleBinding (→ `view` ClusterRole) を定義 | `kubectl auth can-i get pods --as=system:serviceaccount:default:agent-reader` が yes、`kubectl auth can-i delete pods --as=system:serviceaccount:default:agent-reader` が no | - | cc:完了 |
+| 2.2 | ArgoCD Application 追加: `apps/apps.yaml` に `agent-rbac` を追加し、ArgoCD で自動同期 | ArgoCD で `agent-rbac` が Synced / Healthy | 2.1 | cc:TODO |
+| 2.3 | エージェント用 kubeconfig 生成 & 配置: `agent-reader` の token を使った kubeconfig を生成し、`~/.kube/agent-config` に配置。`.mcp.json` の kubectl を `KUBECONFIG=~/.kube/agent-config` で起動するよう更新 | kubectl MCP サーバーが `agent-reader` として接続し、`get_pods` が成功、write 系ツールがエラーになる | 2.2 | cc:TODO |
 
-## Phase 4: Proxmox MCP
-
-| Task | 内容 | DoD | Depends | Status |
-|------|------|-----|---------|--------|
-| 4.1 | Proxmox API トークン権限確認: Doppler 既存の `PROXMOX_API_TOKEN` の権限を確認。必要なら PVEAuditor ロールの読み取り専用トークンを別途作成 | Proxmox API から読み取り操作が可能であることを確認 | 1.1 | cc:完了 |
-| 4.2 | `mcp-proxmox` MCP サーバー設定: `.mcp.json` に追加、basic モード（デフォルト = 読み取り専用）で起動。Doppler から `PROXMOX_HOST` / `PROXMOX_TOKEN_ID` / `PROXMOX_TOKEN_SECRET` を注入 | MCP ツールでノード一覧・VM ステータスが取得できる | 4.1 | cc:完了 |
-
-## Phase 5: クレデンシャル管理 & 統合設定
+## Phase 3: Tailscale credential 分離
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 5.1 | `.envrc` 作成 (direnv): `doppler run` 経由で MCP サーバーに必要な環境変数を自動ロード。`.gitignore` に `.envrc` 追加 | `cd` でプロジェクトに入ると `TAILSCALE_API_KEY`, `ARGOCD_API_TOKEN`, `PROXMOX_HOST` 等がセットされる | - | cc:完了 |
-| 5.2 | `.mcp.json` 統合: 全 MCP サーバーの設定を `.mcp.json` にまとめる。`doppler run` ラッパーで環境変数を注入して各サーバーを起動 | Claude Code 起動時に 4 つの MCP サーバーが自動接続し、read-only ツールが利用可能 | 1.3, 2.1, 3.2, 4.2 | cc:完了 |
-| 5.3 | settings.json 更新: `tailscale up/status` と `just *` コマンドの permission allowlist 追加 | Tailscale 接続と justfile レシピが許可プロンプトなしで実行可能 | 5.2 | cc:完了 |
-| 5.4 | CLAUDE.md にエージェント向け運用セクション追加: MCP ツール一覧、接続手順 (`tailscale up` → MCP 自動接続)、トラブルシューティング | CLAUDE.md に「Agent Operations」セクションが記載 | 5.3 | cc:完了 |
+| 3.1 | Tailscale Admin Console で専用 OAuth クライアント作成: `devices:core:read` スコープのみで発行 | Tailscale Admin Console でクライアント ID/Secret が表示される | - | cc:完了 |
+| 3.2 | Doppler にエージェント用 Tailscale credential 登録: `TAILSCALE_AGENT_CLIENT_ID` / `TAILSCALE_AGENT_CLIENT_SECRET` として格納 | `doppler secrets get TAILSCALE_AGENT_CLIENT_ID --project homelab --config prd` で値が取得可能 | 3.1 | cc:完了 |
+| 3.3 | `.envrc` / `.mcp.json` 更新: Tailscale MCP サーバーがエージェント専用 OAuth credential を使うよう変更 | Tailscale MCP ツール `tailscale_list_devices` が正常に値を返す | 3.2 | cc:完了 |
 
-## Phase 6: 便利コマンド & End-to-End 検証
+## Phase 4: 統合テスト
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 6.1 | justfile にステータス確認レシピ追加: `just ts-up`, `just preflight` (全レイヤー接続チェック) | `just preflight` で Tailscale → k8s → ArgoCD → Proxmox の接続性が一括確認できる | Phase 5 | cc:完了 |
-| 6.2 | 新規エージェントセッションから全 MCP ツールの動作確認 | 新規セッションで全 MCP サーバーが正常接続し、各レイヤーの読み取り操作が成功 | 6.1 | cc:完了 (kubectl/ArgoCD/Proxmox 動作確認済。Tailscale は OAuth スコープ追加待ち) |
+| 4.1 | 全レイヤー read 権限テスト: 各 MCP サーバー経由で読み取り操作が成功することを確認 | Proxmox ノード一覧、K8s Pod 一覧、Tailscale デバイス一覧、ArgoCD アプリ一覧がすべて取得可能 | 1.3, 2.3, 3.3 | cc:TODO |
+| 4.2 | 全レイヤー write 拒否テスト: 各レイヤーで write 操作が拒否されることを確認 | Proxmox VM 設定変更が 403、K8s リソース作成/削除が forbidden、Tailscale デバイス操作が 403 | 4.1 | cc:TODO |
+| 4.3 | `just preflight` 更新: エージェント専用 credential での接続チェックに更新 | `just preflight` がエージェント credential で全レイヤー到達を確認 | 4.2 | cc:TODO |
+
+## Phase 5: アクセスフロードキュメント
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 5.1 | CLAUDE.md にエージェントアクセスフローセクション追加: credential の流れ (Doppler → .envrc → MCP サーバー)、各レイヤーの権限範囲、トラブルシューティングを更新 | CLAUDE.md に credential 分離後のアクセスフローが記載され、新規セッションから参照可能 | Phase 4 | cc:TODO |
