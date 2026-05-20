@@ -49,6 +49,6 @@
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 4.1 | PR 作成・レビュー・main マージ | PR がマージされている | Phase 1-3 | cc:TODO |
-| 4.2 | `just argocd-bootstrap` 実行で AutoSync 有効化 (手動) | ArgoCD MCP で全アプリが Synced/Healthy かつ AutoSync enabled | 4.1 | cc:TODO |
-| 4.3 | PVC アノテーションが適用されていることを ArgoCD MCP で確認 | immich-postgres-data, immich-library に resource-policy: keep が付与 | 4.2 | cc:TODO |
+| 4.1 | PR 作成・レビュー・main マージ | PR がマージされている | Phase 1-3 | cc:完了 [PR #41] |
+| 4.2 | AutoSync 有効化 (手動) | ArgoCD MCP で全アプリが Synced/Healthy かつ AutoSync enabled | 4.1 | cc:完了 |
+| 4.3 | PVC アノテーションが適用されていることを ArgoCD MCP で確認 | immich-postgres-data, immich-library に Prune=false が付与 | 4.2 | cc:完了 |
