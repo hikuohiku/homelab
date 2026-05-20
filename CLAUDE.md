@@ -40,6 +40,11 @@ cd terraform/proxmox && terraform apply
 
 # NixOS image build
 nix build .#nixosConfigurations.<name>.config.system.build.image
+
+# ArgoCD preview deploy (フィーチャーブランチのテスト)
+just preview <app> <branch>     # アプリをブランチに切り替え
+just preview-reset <app>        # HEAD に戻す
+just preview-status             # preview 中のアプリ一覧
 ```
 
 ## Agent Operations

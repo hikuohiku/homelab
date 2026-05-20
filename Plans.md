@@ -1,65 +1,54 @@
-# Credential Separation Plans.md
+# K8s デプロイ検証フロー改善 Plans.md
 
-作成日: 2026-05-16
+作成日: 2026-05-20
+
+関連: #40 (K8s デプロイ検証フロー改善)
 
 ---
 
 ## 概要
 
-エージェント用の read-only credential とデプロイ用の write credential を分離する。
-現在は Doppler (`homelab/prd`) の既存トークンを共用しているが、
-エージェントには最小権限の専用 credential を発行し、誤操作リスクを排除する。
+フィーチャーブランチのマニフェストを ArgoCD でテストデプロイするための `just` コマンドを追加する。
+併せて PVC データ保護と ArgoCD AutoSync 有効化を行う。
 
 ### 設計方針
 
-- **最小権限**: 各レイヤーでエージェント専用の read-only credential を発行
-- **Doppler 命名規約**: エージェント用は `*_AGENT_*` プレフィックスで区別
-- **既存トークン温存**: デプロイ用の既存 credential は変更しない
-- **.envrc 分岐**: エージェント用 credential を優先的に MCP サーバーへ注入
+- **シンプルさ優先**: just コマンドのみ。GitHub Actions や ApplicationSet は使わない
+- **データ安全**: 重要 PVC に resource-policy: keep を付与し、prune からの誤削除を防止
+- **AutoSync 有効化**: ルート Application の AutoSync を有効にし、GUI 手動操作を不要にする
+- **スキル化**: Claude Code のプロジェクトスキルとして再利用可能にする
 
 ---
 
-## Phase 1: Proxmox credential 分離
+## Phase 1: PVC データ保護
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 1.1 | Proxmox で PVEAuditor ロールの専用ユーザー・トークン作成: `agent@pve` ユーザーを作成し、PVEAuditor ロールを `/` パスに割り当て、privilege separated な API トークンを発行 | Proxmox API で `agent@pve!readonly` トークンを使い `/api2/json/nodes` が取得でき、`/api2/json/nodes/{node}/qemu/{vmid}/config` への PUT が 403 になる | - | cc:完了 |
-| 1.2 | Doppler にエージェント用 Proxmox トークン登録: `PROXMOX_AGENT_TOKEN` として格納 | `doppler secrets get PROXMOX_AGENT_TOKEN --project homelab --config prd` で値が取得可能 | 1.1 | cc:完了 |
-| 1.3 | `.envrc` 更新: MCP サーバー向けに `PROXMOX_AGENT_TOKEN` を `PROXMOX_TOKEN_ID` / `PROXMOX_TOKEN_SECRET` に分離して注入 | `direnv allow .` 後に `PROXMOX_TOKEN_ID` が `agent@pve!readonly` の形式になっている | 1.2 | cc:完了 |
+| 1.1 | `apps/immich/postgres.yaml` の PVC に `helm.sh/resource-policy: keep` アノテーション追加 | PVC 定義にアノテーションが存在する | - | cc:完了 |
+| 1.2 | `apps/immich/library-pvc.yaml` に `helm.sh/resource-policy: keep` アノテーション追加 | PVC 定義にアノテーションが存在する | - | cc:完了 |
 
-## Phase 2: Kubernetes credential 分離
-
-| Task | 内容 | DoD | Depends | Status |
-|------|------|-----|---------|--------|
-| 2.1 | `agent-reader` ServiceAccount + ClusterRoleBinding マニフェスト作成: `apps/agent-rbac/` に ServiceAccount, Secret (token), ClusterRoleBinding (→ `view` ClusterRole) を定義 | `kubectl auth can-i get pods --as=system:serviceaccount:default:agent-reader` が yes、`kubectl auth can-i delete pods --as=system:serviceaccount:default:agent-reader` が no | - | cc:完了 |
-| 2.2 | ArgoCD Application 追加: `apps/apps.yaml` に `agent-rbac` を追加し、ArgoCD で自動同期 | ArgoCD で `agent-rbac` が Synced / Healthy | 2.1 | cc:完了 |
-| 2.3 | エージェント用 kubeconfig 生成 & 配置: `agent-reader` の token を使った kubeconfig を生成し、`~/.kube/agent-config` に配置。`.mcp.json` の kubectl を `KUBECONFIG=~/.kube/agent-config` で起動するよう更新 | kubectl MCP サーバーが `agent-reader` として接続し、`get_pods` が成功、write 系ツールがエラーになる | 2.2 | blocked (Tailscale API プロキシが SA トークンを無視 → #36。MCP --read-only で代替) |
-
-## Phase 3: Tailscale credential 分離
+## Phase 2: preview コマンド
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 3.1 | Tailscale Admin Console で専用 OAuth クライアント作成: `devices:core:read` スコープのみで発行 | Tailscale Admin Console でクライアント ID/Secret が表示される | - | cc:完了 |
-| 3.2 | Doppler にエージェント用 Tailscale credential 登録: `TAILSCALE_AGENT_CLIENT_ID` / `TAILSCALE_AGENT_CLIENT_SECRET` として格納 | `doppler secrets get TAILSCALE_AGENT_CLIENT_ID --project homelab --config prd` で値が取得可能 | 3.1 | cc:完了 |
-| 3.3 | `.envrc` / `.mcp.json` 更新: Tailscale MCP サーバーがエージェント専用 OAuth credential を使うよう変更 | Tailscale MCP ツール `tailscale_list_devices` が正常に値を返す | 3.2 | cc:完了 |
+| 2.1 | `just preview <app> <branch>` レシピ追加: ルート automated sync 一時停止 + targetRevision patch | `just preview immich main` が正常終了する | - | cc:完了 |
+| 2.2 | `just preview-reset <app>` レシピ追加: HEAD に戻し automated sync 復元 | `just preview-reset immich` が正常終了する | 2.1 | cc:完了 |
+| 2.3 | `just preview-status` レシピ追加: HEAD 以外のアプリ一覧表示 | `just preview-status` が正常終了し一覧表示される | 2.1 | cc:完了 |
+| 2.4 | `just preflight` 拡張: preview 状態の警告を末尾に追加 | `just preflight` 実行時に preview 中のアプリがあれば警告表示 | 2.3 | cc:完了 |
+| 2.5 | `just argocd-bootstrap` レシピ追加: `kubectl apply -f apps/apps.yaml` | コマンドが正常終了する | - | cc:完了 |
 
-## Phase 4: 統合テスト
-
-| Task | 内容 | DoD | Depends | Status |
-|------|------|-----|---------|--------|
-| 4.1 | 全レイヤー read 権限テスト: 各 MCP サーバー経由で読み取り操作が成功することを確認 | Proxmox ノード一覧、K8s Pod 一覧、Tailscale デバイス一覧、ArgoCD アプリ一覧がすべて取得可能 | 1.3, 2.3, 3.3 | cc:完了 (Proxmox/K8s/ArgoCD 確認済。Tailscale は MCP 再起動後に確認要) |
-| 4.2 | 全レイヤー write 拒否テスト: 各レイヤーで write 操作が拒否されることを確認 | Proxmox VM 設定変更が 403、K8s リソース作成/削除が forbidden、Tailscale デバイス操作が 403 | 4.1 | cc:完了 (Proxmox 403 / K8s non-destructive mode / ArgoCD get-only RBAC 確認済) |
-| 4.3 | `just preflight` 更新: エージェント専用 credential での接続チェックに更新 | `just preflight` がエージェント credential で全レイヤー到達を確認 | 4.2 | cc:完了 |
-
-## Phase 5: アクセスフロードキュメント
+## Phase 3: スキル・ドキュメント
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 5.1 | CLAUDE.md にエージェントアクセスフローセクション追加: credential の流れ (Doppler → .envrc → MCP サーバー)、各レイヤーの権限範囲、トラブルシューティングを更新 | CLAUDE.md に credential 分離後のアクセスフローが記載され、新規セッションから参照可能 | Phase 4 | cc:完了 |
+| 3.1 | `.claude/commands/preview.md` 作成: preview ワークフロースキル | `/preview` で呼び出し可能 | Phase 2 | cc:完了 |
+| 3.2 | `.claude/commands/preview-reset.md` 作成: reset スキル | `/preview-reset` で呼び出し可能 | Phase 2 | cc:完了 |
+| 3.3 | `CLAUDE.md` 更新: preview ワークフローと argocd-bootstrap を記載 | Development Commands セクションに記載がある | Phase 2 | cc:完了 |
 
-## Phase 6: エージェント操作制御
+## Phase 4: PR・デプロイ
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 6.1 | CLAUDE.md にエージェント操作ルール追加: MCP ツール経由での参照を必須化し、kubectl/curl 等の CLI 直接使用を禁止するルールを記載 | CLAUDE.md に「エージェント操作ルール」セクションがあり、MCP 優先・CLI 禁止・例外（tailscale/just）が明記されている | 5.1 | cc:完了 |
-| 6.2 | `.claude/settings.json` に MCP ツール自動許可設定追加: `mcp__kubectl__*`, `mcp__argocd__*`, `mcp__proxmox__*`, `mcp__tailscale__*` を permissions.allow に追加 | MCP ツール呼び出し時に承認プロンプトが表示されない | 6.1 | cc:完了 |
+| 4.1 | PR 作成・レビュー・main マージ | PR がマージされている | Phase 1-3 | cc:TODO |
+| 4.2 | `just argocd-bootstrap` 実行で AutoSync 有効化 (手動) | ArgoCD MCP で全アプリが Synced/Healthy かつ AutoSync enabled | 4.1 | cc:TODO |
+| 4.3 | PVC アノテーションが適用されていることを ArgoCD MCP で確認 | immich-postgres-data, immich-library に resource-policy: keep が付与 | 4.2 | cc:TODO |

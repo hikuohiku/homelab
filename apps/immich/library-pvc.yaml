@@ -3,6 +3,8 @@ kind: PersistentVolumeClaim
 metadata:
   name: immich-library
   namespace: immich
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
 spec:
   accessModes:
     - ReadWriteOnce
