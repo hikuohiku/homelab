@@ -28,7 +28,64 @@ preflight:
     echo "=== Proxmox ==="
     eval "$(direnv export bash 2>/dev/null)" && curl -sk --max-time 10 -H "Authorization: PVEAPIToken=${PROXMOX_AGENT_TOKEN}" "${PROXMOX_ENDPOINT}:8006/api2/json/version" | python3 -c "import sys,json; d=json.load(sys.stdin); print('Proxmox VE', d['data']['version'])"
     echo ""
+    echo "=== Preview Status ==="
+    kubectl get applications -n argocd -o json | \
+      python3 -c "
+    import sys, json
+    apps = json.load(sys.stdin)['items']
+    non_head = [a for a in apps if a['spec']['source'].get('targetRevision', 'HEAD') != 'HEAD']
+    if non_head:
+        for a in non_head:
+            print(f'  ⚠ {a[\"metadata\"][\"name\"]}: {a[\"spec\"][\"source\"][\"targetRevision\"]}')
+    else:
+        print('  ✓ All apps on HEAD')
+    "
+    echo ""
     echo "✓ All layers reachable"
+
+# Preview: フィーチャーブランチを ArgoCD でテストデプロイ
+preview app branch:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Disabling auto-sync on root 'apps' to prevent selfHeal revert..."
+    kubectl patch application apps -n argocd --type json \
+      -p '[{"op":"remove","path":"/spec/syncPolicy/automated"}]' 2>/dev/null || true
+    kubectl patch application "{{app}}" -n argocd --type merge \
+      -p "{\"spec\":{\"source\":{\"targetRevision\":\"{{branch}}\"}}}"
+    echo "✓ {{app}} now tracking '{{branch}}'"
+    echo "  Run 'just preview-status' to check, 'just preview-reset {{app}}' to revert."
+
+# Preview: アプリを HEAD に戻して auto-sync を復元
+preview-reset app:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    kubectl patch application "{{app}}" -n argocd --type merge \
+      -p '{"spec":{"source":{"targetRevision":"HEAD"}}}'
+    echo "Restoring auto-sync on root 'apps'..."
+    kubectl patch application apps -n argocd --type merge \
+      -p '{"spec":{"syncPolicy":{"automated":{"prune":true,"selfHeal":true}}}}'
+    echo "✓ {{app}} reset to HEAD, root auto-sync restored"
+
+# Preview: HEAD 以外を追跡中のアプリ一覧
+preview-status:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "=== Preview Status ==="
+    kubectl get applications -n argocd -o json | \
+      python3 -c "
+    import sys, json
+    apps = json.load(sys.stdin)['items']
+    non_head = [a for a in apps if a['spec']['source'].get('targetRevision', 'HEAD') != 'HEAD']
+    if non_head:
+        for a in non_head:
+            print(f\"  ⚠ {a['metadata']['name']}: {a['spec']['source']['targetRevision']}\")
+    else:
+        print('  ✓ All apps on HEAD')
+    "
+
+# ArgoCD: ルート Application を再適用 (AutoSync 有効化)
+argocd-bootstrap:
+    kubectl apply -f apps/apps.yaml
 
 # Proxmox Cloud Image build & cache
 prepare:
