@@ -45,9 +45,6 @@ nix build .#nixosConfigurations.<name>.config.system.build.image
 just preview <app> <branch>     # アプリをブランチに切り替え
 just preview-reset <app>        # HEAD に戻す
 just preview-status             # preview 中のアプリ一覧
-
-# ArgoCD bootstrap (ルート Application 再適用)
-just argocd-bootstrap
 ```
 
 ## Agent Operations

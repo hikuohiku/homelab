@@ -93,10 +93,6 @@ preview-status:
         print("  ✓ All apps on HEAD")
     PY
 
-# ArgoCD: ルート Application を再適用 (AutoSync 有効化)
-argocd-bootstrap:
-    git show main:apps/apps.yaml | kubectl apply -f -
-
 # Proxmox Cloud Image build & cache
 prepare:
     cachix watch-exec hikuohiku -- nix build ./nix/images/proxmox-cloud#packages.x86_64-linux.qcow2 --no-link
