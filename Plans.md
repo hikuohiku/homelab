@@ -1,65 +1,91 @@
-# Credential Separation Plans.md
+# Immich LXC → K8s 移行 Plans.md
 
-作成日: 2026-05-16
+作成日: 2026-05-20
+
+関連: #38 (LXC → K8s サービス移行)
 
 ---
 
 ## 概要
 
-エージェント用の read-only credential とデプロイ用の write credential を分離する。
-現在は Doppler (`homelab/prd`) の既存トークンを共用しているが、
-エージェントには最小権限の専用 credential を発行し、誤操作リスクを排除する。
+Proxmox LXC コンテナ (vmid 111) で運用中の Immich を Kubernetes クラスタへ移行する。
+既存ブランチ `claude/create-immich-manifest-FpCGe` の途中実装をベースに、
+最新チャート (v0.12.0 / app v2.6.3) へ更新・品質改善した上でデプロイする。
 
 ### 設計方針
 
-- **最小権限**: 各レイヤーでエージェント専用の read-only credential を発行
-- **Doppler 命名規約**: エージェント用は `*_AGENT_*` プレフィックスで区別
-- **既存トークン温存**: デプロイ用の既存 credential は変更しない
-- **.envrc 分岐**: エージェント用 credential を優先的に MCP サーバーへ注入
+- **途中実装活用**: 新ブランチを main から作成し、途中実装の内容をレビュー・修正して取り込む
+- **バージョン更新**: Helm chart v0.10.3 → v0.12.0, Immich v2.4.0 → v2.6.3
+- **既存パターン準拠**: Nextcloud/Dex 等の既存アプリと同じ構成パターンに合わせる
+- **データ安全**: LXC からのデータ移行は段階的に行い、旧環境は検証完了まで保持
+
+### アーキテクチャ
+
+```
+apps/immich/
+├── application.yaml              # ArgoCD Application
+├── kustomization.yaml            # Kustomize + Helm chart v0.12.0
+├── values.yaml                   # Helm values override
+├── ingress.yaml                  # Tailscale Ingress
+├── library-pvc.yaml              # 写真ライブラリ用 PVC (50Gi)
+├── postgres.yaml                 # PostgreSQL + vectorchord (Deployment, PVC, Service)
+└── postgres-external-secret.yaml # Doppler → DB credentials
+```
 
 ---
 
-## Phase 1: Proxmox credential 分離
+## Phase 1: マニフェスト作成・更新
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 1.1 | Proxmox で PVEAuditor ロールの専用ユーザー・トークン作成: `agent@pve` ユーザーを作成し、PVEAuditor ロールを `/` パスに割り当て、privilege separated な API トークンを発行 | Proxmox API で `agent@pve!readonly` トークンを使い `/api2/json/nodes` が取得でき、`/api2/json/nodes/{node}/qemu/{vmid}/config` への PUT が 403 になる | - | cc:完了 |
-| 1.2 | Doppler にエージェント用 Proxmox トークン登録: `PROXMOX_AGENT_TOKEN` として格納 | `doppler secrets get PROXMOX_AGENT_TOKEN --project homelab --config prd` で値が取得可能 | 1.1 | cc:完了 |
-| 1.3 | `.envrc` 更新: MCP サーバー向けに `PROXMOX_AGENT_TOKEN` を `PROXMOX_TOKEN_ID` / `PROXMOX_TOKEN_SECRET` に分離して注入 | `direnv allow .` 後に `PROXMOX_TOKEN_ID` が `agent@pve!readonly` の形式になっている | 1.2 | cc:完了 |
+| 1.1 | ブランチ作成: main から `feat/immich-k8s-migration` を作成 | ブランチが存在し、main と同期している | - | cc:完了 |
+| 1.2 | `apps/immich/kustomization.yaml` 作成: Helm chart v0.12.0 への更新、リソース一覧の定義 | chart version が 0.12.0、リソース一覧が正確 | 1.1 | cc:完了 [1950fdf] |
+| 1.3 | `apps/immich/values.yaml` 作成: v0.12.0 の構造に合わせた values（DB接続、Valkey、ML、永続化） | `helm template` 相当で有効な YAML が生成される構造 | 1.2 | cc:完了 [1950fdf, 7f495a6] |
+| 1.4 | `apps/immich/postgres.yaml` 作成: PostgreSQL + vectorchord Deployment/PVC/Service | vectorchord 16 系イメージ、PVC 10Gi、liveness/readiness probe 設定済み | 1.2 | cc:完了 [1950fdf] |
+| 1.5 | `apps/immich/postgres-external-secret.yaml` 作成: Doppler 連携の ExternalSecret | ClusterSecretStore `doppler` 参照、`IMMICH_DB_PASSWORD` キー | 1.2 | cc:完了 [1950fdf] |
+| 1.6 | `apps/immich/library-pvc.yaml` 作成: 写真ライブラリ用 PVC | 50Gi, local-path, ReadWriteOnce | 1.2 | cc:完了 [1950fdf] |
+| 1.7 | `apps/immich/ingress.yaml` 作成: Tailscale Ingress | ingressClassName: tailscale, host: immich | 1.2 | cc:完了 [1950fdf] |
+| 1.8 | `apps/immich/application.yaml` 作成: ArgoCD Application | automated sync, CreateNamespace=true, namespace: immich | 1.2 | cc:完了 [1950fdf] |
+| 1.9 | `apps/kustomization.yaml` 更新: immich/application.yaml を追加 | immich が App of Apps に含まれる | 1.8 | cc:完了 [1950fdf] |
+| 1.10 | マニフェスト全体レビュー: セキュリティ・可読性・既存スタイルとの整合性を最終確認 | コメント過剰なし、namespace 一貫、secret 参照正確 | 1.2-1.9 | cc:完了 |
 
-## Phase 2: Kubernetes credential 分離
-
-| Task | 内容 | DoD | Depends | Status |
-|------|------|-----|---------|--------|
-| 2.1 | `agent-reader` ServiceAccount + ClusterRoleBinding マニフェスト作成: `apps/agent-rbac/` に ServiceAccount, Secret (token), ClusterRoleBinding (→ `view` ClusterRole) を定義 | `kubectl auth can-i get pods --as=system:serviceaccount:default:agent-reader` が yes、`kubectl auth can-i delete pods --as=system:serviceaccount:default:agent-reader` が no | - | cc:完了 |
-| 2.2 | ArgoCD Application 追加: `apps/apps.yaml` に `agent-rbac` を追加し、ArgoCD で自動同期 | ArgoCD で `agent-rbac` が Synced / Healthy | 2.1 | cc:完了 |
-| 2.3 | エージェント用 kubeconfig 生成 & 配置: `agent-reader` の token を使った kubeconfig を生成し、`~/.kube/agent-config` に配置。`.mcp.json` の kubectl を `KUBECONFIG=~/.kube/agent-config` で起動するよう更新 | kubectl MCP サーバーが `agent-reader` として接続し、`get_pods` が成功、write 系ツールがエラーになる | 2.2 | blocked (Tailscale API プロキシが SA トークンを無視 → #36。MCP --read-only で代替) |
-
-## Phase 3: Tailscale credential 分離
-
-| Task | 内容 | DoD | Depends | Status |
-|------|------|-----|---------|--------|
-| 3.1 | Tailscale Admin Console で専用 OAuth クライアント作成: `devices:core:read` スコープのみで発行 | Tailscale Admin Console でクライアント ID/Secret が表示される | - | cc:完了 |
-| 3.2 | Doppler にエージェント用 Tailscale credential 登録: `TAILSCALE_AGENT_CLIENT_ID` / `TAILSCALE_AGENT_CLIENT_SECRET` として格納 | `doppler secrets get TAILSCALE_AGENT_CLIENT_ID --project homelab --config prd` で値が取得可能 | 3.1 | cc:完了 |
-| 3.3 | `.envrc` / `.mcp.json` 更新: Tailscale MCP サーバーがエージェント専用 OAuth credential を使うよう変更 | Tailscale MCP ツール `tailscale_list_devices` が正常に値を返す | 3.2 | cc:完了 |
-
-## Phase 4: 統合テスト
+## Phase 2: Doppler シークレット設定 (手動)
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 4.1 | 全レイヤー read 権限テスト: 各 MCP サーバー経由で読み取り操作が成功することを確認 | Proxmox ノード一覧、K8s Pod 一覧、Tailscale デバイス一覧、ArgoCD アプリ一覧がすべて取得可能 | 1.3, 2.3, 3.3 | cc:完了 (Proxmox/K8s/ArgoCD 確認済。Tailscale は MCP 再起動後に確認要) |
-| 4.2 | 全レイヤー write 拒否テスト: 各レイヤーで write 操作が拒否されることを確認 | Proxmox VM 設定変更が 403、K8s リソース作成/削除が forbidden、Tailscale デバイス操作が 403 | 4.1 | cc:完了 (Proxmox 403 / K8s non-destructive mode / ArgoCD get-only RBAC 確認済) |
-| 4.3 | `just preflight` 更新: エージェント専用 credential での接続チェックに更新 | `just preflight` がエージェント credential で全レイヤー到達を確認 | 4.2 | cc:完了 |
+| 2.1 | Doppler に `IMMICH_DB_PASSWORD` を登録 (homelab/prd) | `doppler secrets get IMMICH_DB_PASSWORD --project homelab --config prd` で値が取得可能 | - | cc:完了 |
 
-## Phase 5: アクセスフロードキュメント
+## Phase 3: デプロイ・新規動作確認
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 5.1 | CLAUDE.md にエージェントアクセスフローセクション追加: credential の流れ (Doppler → .envrc → MCP サーバー)、各レイヤーの権限範囲、トラブルシューティングを更新 | CLAUDE.md に credential 分離後のアクセスフローが記載され、新規セッションから参照可能 | Phase 4 | cc:完了 |
+| 3.1 | ブランチを push し、ArgoCD で Immich アプリが Synced/Healthy になることを確認 | ArgoCD で immich が Synced かつ全 Pod が Running | Phase 1, 2.1 | cc:完了 |
+| 3.2 | Tailscale 経由で Immich Web UI にアクセス可能か確認 (新規 DB で初期セットアップ画面) | `https://immich.<tailnet>` で初期セットアップ画面が表示される | 3.1 | cc:完了 |
 
-## Phase 6: エージェント操作制御
+## Phase 4: データ移行 (手動)
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| 6.1 | CLAUDE.md にエージェント操作ルール追加: MCP ツール経由での参照を必須化し、kubectl/curl 等の CLI 直接使用を禁止するルールを記載 | CLAUDE.md に「エージェント操作ルール」セクションがあり、MCP 優先・CLI 禁止・例外（tailscale/just）が明記されている | 5.1 | cc:完了 |
-| 6.2 | `.claude/settings.json` に MCP ツール自動許可設定追加: `mcp__kubectl__*`, `mcp__argocd__*`, `mcp__proxmox__*`, `mcp__tailscale__*` を permissions.allow に追加 | MCP ツール呼び出し時に承認プロンプトが表示されない | 6.1 | cc:完了 |
+| 4.1 | K8s Immich の新規動作確認後、LXC の Immich を停止し PostgreSQL ダンプを取得 | `pg_dump` で完全なダンプファイルが生成される。LXC 停止前に K8s 側の正常動作を確認済み | 3.2 | cc:完了 |
+| 4.2 | K8s の PostgreSQL を初期化し直し、ダンプをリストア | `psql` でリストア完了、`immich-admin schema-check` がパスする | 4.1 | cc:完了 |
+| 4.3 | LXC の写真ライブラリを K8s の PVC にコピー | ファイル数・サイズが一致、Immich UI で写真が表示される | 4.1 | cc:完了 |
+| 4.4 | 移行後の動作検証: 写真閲覧・アップロード・ML処理が正常動作 | 既存写真の表示、新規アップロード、顔認識が動作する | 4.2, 4.3 | cc:完了 |
+
+## Phase 5: PR・マージ
+
+| Task | 内容 | DoD | Depends | Status |
+|------|------|-----|---------|--------|
+| 5.1 | PR 作成・レビュー・main マージ | PR がマージされ、ArgoCD が main から Immich をデプロイ | Phase 3 | cc:完了 [PR #39] |
+
+---
+
+## 備考
+
+- **LXC 保持**: データ移行完了・検証完了まで LXC コンテナ (vmid 111) は停止状態で保持する
+- **ロールバック**: 問題発生時は ArgoCD で Immich Application を削除し、LXC を再起動して復旧
+- **途中実装からの変更点**:
+  - Helm chart v0.10.3 → v0.12.0
+  - Immich v2.4.0 → v2.6.3
+  - Valkey 9.0-alpine → 9.1-alpine (digest pin)
+  - values.yaml を v0.12.0 の構造に合わせて再構成
+  - 冗長なコメントを削除し、既存アプリのスタイルに統一
