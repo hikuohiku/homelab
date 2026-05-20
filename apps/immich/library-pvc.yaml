@@ -4,7 +4,7 @@ metadata:
   name: immich-library
   namespace: immich
   annotations:
-    helm.sh/resource-policy: keep
+    argocd.argoproj.io/sync-options: Prune=false
 spec:
   accessModes:
     - ReadWriteOnce
