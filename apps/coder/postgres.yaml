@@ -1,31 +1,27 @@
 apiVersion: v1
-kind: Secret
+kind: PersistentVolumeClaim
 metadata:
-  name: coder-db-url
+  name: coder-postgres-data
   namespace: coder
-type: Opaque
-stringData:
-  url: postgres://coder:coder@coder-postgres.coder.svc.cluster.local:5432/coder?sslmode=disable
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: coder-postgres-credentials
-  namespace: coder
-type: Opaque
-stringData:
-  POSTGRES_USER: coder
-  POSTGRES_PASSWORD: coder
-  POSTGRES_DB: coder
+  annotations:
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
 ---
 apiVersion: apps/v1
-kind: StatefulSet
+kind: Deployment
 metadata:
   name: coder-postgres
   namespace: coder
 spec:
-  serviceName: coder-postgres
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app: coder-postgres
@@ -34,18 +30,37 @@ spec:
       labels:
         app: coder-postgres
     spec:
-      containers:
-        - name: postgres
-          image: postgres:17
-          ports:
-            - containerPort: 5432
-          envFrom:
-            - secretRef:
-                name: coder-postgres-credentials
+      securityContext:
+        fsGroup: 70
+      initContainers:
+        - name: init-permissions
+          image: busybox:1.37
+          command: ["sh", "-c", "chown -R 70:70 /var/lib/postgresql/data"]
+          securityContext:
+            runAsUser: 0
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
-              subPath: pgdata
+      containers:
+        - name: postgres
+          image: postgres:17.5
+          env:
+            - name: POSTGRES_USER
+              value: coder
+            - name: POSTGRES_DB
+              value: coder
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: coder-postgres-credentials
+                  key: password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          ports:
+            - containerPort: 5432
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
           resources:
             requests:
               cpu: 50m
@@ -53,14 +68,26 @@ spec:
             limits:
               cpu: 500m
               memory: 256Mi
-  volumeClaimTemplates:
-    - metadata:
-        name: data
-      spec:
-        accessModes: ["ReadWriteOnce"]
-        resources:
-          requests:
-            storage: 1Gi
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - coder
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - coder
+            initialDelaySeconds: 5
+            periodSeconds: 5
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: coder-postgres-data
 ---
 apiVersion: v1
 kind: Service

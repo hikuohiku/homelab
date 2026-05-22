@@ -10,5 +10,6 @@ helmCharts:
     valuesFile: values.yaml
 
 resources:
+  - postgres-external-secret.yaml
   - postgres.yaml
   - ingress.yaml
