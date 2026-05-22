@@ -1,0 +1,75 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: coder-db-url
+  namespace: coder
+type: Opaque
+stringData:
+  url: postgres://coder:coder@coder-postgres.coder.svc.cluster.local:5432/coder?sslmode=disable
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: coder-postgres-credentials
+  namespace: coder
+type: Opaque
+stringData:
+  POSTGRES_USER: coder
+  POSTGRES_PASSWORD: coder
+  POSTGRES_DB: coder
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: coder-postgres
+  namespace: coder
+spec:
+  serviceName: coder-postgres
+  replicas: 1
+  selector:
+    matchLabels:
+      app: coder-postgres
+  template:
+    metadata:
+      labels:
+        app: coder-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:17
+          ports:
+            - containerPort: 5432
+          envFrom:
+            - secretRef:
+                name: coder-postgres-credentials
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+              subPath: pgdata
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+              memory: 256Mi
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: coder-postgres
+  namespace: coder
+spec:
+  selector:
+    app: coder-postgres
+  ports:
+    - port: 5432
+      targetPort: 5432
