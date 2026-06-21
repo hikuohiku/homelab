@@ -41,11 +41,6 @@ config:
       secret: argocd-dex-client-secret
       redirectURIs:
         - https://argocd.tailae6c2.ts.net/auth/callback
-    - id: nextcloud
-      name: Nextcloud
-      secret: nextcloud-dex-client-secret
-      redirectURIs:
-        - https://nextcloud.tailae6c2.ts.net/apps/user_oidc/code
 
 # Environment variables from secret
 envFrom:

@@ -34,5 +34,6 @@ pbs (qemu/112) の扱いを決定する。
 
 | Task | 内容 | DoD | Depends | Status |
 |------|------|-----|---------|--------|
-| A | 停止中 VM/LXC の棚卸し・削除（9台） | 現存は vaultwarden(100)/syncthing(101)/docker(106)/pbs(112)/node01(113) のみ | - | 完了 |
-| B | pbs を手動管理（Terraform 管理対象外）として明示 | pbs.tf.ignore に注記追記 / README・CLAUDE.md に明記 / Proxmox の `terraform` タグ削除 | A | cc:完了（タグ削除はユーザー手動実施待ち） |
+| A | 停止中 VM/LXC の棚卸し・削除（9台） | 現存は vaultwarden(100)/syncthing(101)/docker(106)/pbs(112)/node01(113) のみ | - | 完了 [PR #45] |
+| B | pbs を手動管理（Terraform 管理対象外）として明示 | pbs.tf.ignore に注記追記 / README・CLAUDE.md に明記 / Proxmox の `terraform` タグ削除 | A | 完了 [PR #45] |
+| C | IaC 管理外の空 namespace 削除（ente / nextcloud / vaultwarden） | 3 namespace を削除（nextcloud は 50Gi データ含め破棄合意済み）/ repo の nextcloud 定義（kustomization 行・apps/nextcloud/・dex OIDC client）を整理 | - | cc:完了 |
