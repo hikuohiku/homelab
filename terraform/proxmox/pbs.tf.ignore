@@ -1,4 +1,16 @@
 # Proxmox Backup Server VM Configuration
+#
+# ⚠️ このファイルは手動管理されている pbs VM (qemu/112) の構成「記録」であり、
+#    Terraform 管理対象外です（拡張子 .ignore のため Terraform は読み込みません）。
+#
+# - 誤って .tf に戻して `terraform import` / `terraform apply` しないこと。
+#   稼働中のバックアップサーバーを破壊するリスクがあります。
+# - pbs の構成変更は Proxmox 側で手動実施し、必要なら本ファイルに追記して記録する。
+#
+# 経緯: 2025-12-07 のコミット (26f8b66「ノード作成」) で node01 を Terraform 化した際、
+#       既に稼働中だった pbs を Terraform に巻き込んで誤って再作成/破壊しないよう
+#       pbs.tf → pbs.tf.ignore にリネームして無効化した。
+#       2026-06-21 に「pbs は手動管理（Terraform 管理対象外）」として方針を確定。
 
 resource "proxmox_virtual_environment_vm" "pbs" {
   name        = "pbs"

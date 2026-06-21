@@ -18,7 +18,7 @@ Terraform で VM プロビジョニング、NixOS でOS構成、Kubernetes (Argo
 ## Directory Structure
 
 ```
-terraform/proxmox/   — VM provisioning (Proxmox VE)
+terraform/proxmox/   — VM provisioning (Proxmox VE)。node01 のみ管理。pbs(qemu/112) は手動管理（Terraform 管理対象外、記録は pbs.tf.ignore）
 nix/images/          — NixOS image definitions
 apps/                — Kubernetes manifests (ArgoCD applications)
   apps.yaml          — App of Apps root

@@ -66,7 +66,7 @@ just apply
 ├── providers.tf  # Terraformプロバイダー設定
 ├── variables.tf  # 共通変数定義
 ├── main.tf       # カスタムVM構成ファイル
-├── pbs.tf        # PBS VM構成ファイル
+├── pbs.tf.ignore # PBS VM構成の記録（手動管理・Terraform管理対象外）
 └── .gitignore    # Git除外設定
 ```
 
@@ -93,6 +93,12 @@ terraform apply -target=proxmox_virtual_environment_vm.pbs
 ```
 
 ## Proxmox Backup Server構築
+
+> ⚠️ **PBS は手動管理（Terraform 管理対象外）です。**
+> pbs VM (qemu/112) は稼働中のバックアップサーバーであり、Terraform では管理しません。
+> 構成定義は `terraform/proxmox/pbs.tf.ignore` に記録として残していますが、`.ignore` 拡張子により Terraform は読み込みません。
+> 以下の `terraform apply -target=...` 等の手順は **過去の経緯の記録** であり、現在は実行しないでください。
+> PBS の構成変更は Proxmox 側で手動実施してください。
 
 Proxmox Backup Server (PBS)をISOイメージからインストールする手順です。
 
