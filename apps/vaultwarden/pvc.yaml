@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: vaultwarden-data
+  namespace: vaultwarden
+  annotations:
+    # データ消失防止: ArgoCD prune / app 削除時も PVC を残す
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      # 現 LXC 100 の割当は 6Gi (実使用 ~4.5Gi)。
+      # SQLite + attachments/sends 程度なので控えめに 5Gi とする。
+      storage: 5Gi

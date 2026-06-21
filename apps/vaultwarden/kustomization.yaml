@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# helm chart は使わず全リソースを手書き管理 (隠れリソースを作らない方針)
+resources:
+  - pvc.yaml
+  - admin-token-external-secret.yaml
+  - deployment.yaml
+  - service.yaml
+  - ingress.yaml
