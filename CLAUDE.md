@@ -55,7 +55,9 @@ pin したバージョンは誰も上げなければ据え置かれる。2026-08
 週次点検の手順は `/weekly-maintenance`（`.claude/commands/weekly-maintenance.md`）、
 実行記録は `Maintenance.md`。対象は vaultwarden のみで、手順は毎回の振り返りで更新する。
 
-node01 のディスクは 20GB しかなく逼迫している（要監視）。
+node01 の root disk は 256 GiB（2026-08-04 にオンライン拡張）。`local-path` PVC の容量は
+実ディスクを予約しないため、実使用量は引き続き監視する。拡張手順は
+[`docs/node01-storage.md`](docs/node01-storage.md)。
 
 ## Agent Operations
 

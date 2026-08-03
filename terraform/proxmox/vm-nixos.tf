@@ -7,7 +7,7 @@ resource "proxmox_virtual_environment_file" "node01_cloud_init" {
   node_name    = var.proxmox_node
 
   source_raw {
-    data = <<-EOT
+    data      = <<-EOT
       #cloud-config
       users:
         - name: root
@@ -48,7 +48,7 @@ resource "proxmox_virtual_environment_vm" "node01" {
   disk {
     datastore_id = "local-lvm"
     interface    = "virtio0"
-    size         = 50
+    size         = 256
     file_format  = "raw"
     import_from  = proxmox_virtual_environment_download_file.nixos_image.id
   }
@@ -88,4 +88,3 @@ resource "proxmox_virtual_environment_vm" "node01" {
 output "node01_ip" {
   value = "192.168.0.129"
 }
-

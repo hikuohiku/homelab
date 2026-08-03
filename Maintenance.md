@@ -5,6 +5,15 @@
 
 ---
 
+## 2026-08-04 — node01 ディスクをオンライン拡張
+
+Coder 導入に伴い、node01 (qemu/113) の `virtio0` を 50 GiB から 256 GiB へ拡張した。
+Terraform は in-place update のみで適用され、`/dev/vda3`（ext4）もオンライン拡張済み。
+再起動なしで完了し、root filesystem は 252 GiB（空き 223 GiB）、全 Pod は Ready。
+再実行可能な手順は [node01 storage](docs/node01-storage.md) を参照。
+
+---
+
 ## 2026-08-03 — 初回（障害対応）
 
 vaultwarden 1.36.0 の据え置きにより、web 以外の全クライアントが同期不能になった。
