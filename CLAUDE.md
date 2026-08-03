@@ -49,28 +49,13 @@ just preview-status             # preview 中のアプリ一覧
 
 ## Maintenance
 
-バージョン pin は再現性のために必要だが、誰も上げなければ永久に据え置かれる。実際に
-vaultwarden が 1.36.0 のまま放置され、クライアント側の自動更新との API 不整合で全
-クライアントの同期が停止する障害が起きた（PR #49。同時にセキュリティ修正 8 件を
-取り込み損ねていた）。
+pin したバージョンは誰も上げなければ据え置かれる。2026-08-03、vaultwarden 1.36.0 の
+放置でクライアント同期が全停止した（#49）。
 
-その再発防止として、週次メンテナンスの手順を `/weekly-maintenance` コマンドに定義して
-いる（`.claude/commands/weekly-maintenance.md`）。実行記録は `Maintenance.md`。
+週次点検の手順は `/weekly-maintenance`（`.claude/commands/weekly-maintenance.md`）、
+実行記録は `Maintenance.md`。対象は vaultwarden のみで、手順は毎回の振り返りで更新する。
 
-**対象は vaultwarden のみ**（immich / argocd / dex / external-secrets /
-tailscale-operator は対象外）。手順が実用に耐えるか検証する前に対象を広げない。
-拡張の基準は手順書の「対象の拡張」を参照。
-
-点検内容:
-
-- vaultwarden の pin バージョンと上流最新の差分、リリースのセキュリティ修正・breaking change
-- vaultwarden の ArgoCD Sync/Health、Pod、起動ログ
-- **node01 のディスク空き** — ディスクは 20 GB しかなく逼迫している（3 GB 未満で警告）
-
-更新が必要な場合は PR を作成する。**マージは人間が判断する。**
-
-手順は固定ではなく、毎回の振り返り（手順書の手順 8）で更新して育てる。実行のたびに
-`Maintenance.md` へ追記し、次回はその記録を読んでから始める。
+node01 のディスクは 20GB しかなく逼迫している（要監視）。
 
 ## Agent Operations
 
