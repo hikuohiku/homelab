@@ -47,6 +47,16 @@ just preview-reset <app>        # HEAD に戻す
 just preview-status             # preview 中のアプリ一覧
 ```
 
+## Maintenance
+
+pin したバージョンは誰も上げなければ据え置かれる。2026-08-03、vaultwarden 1.36.0 の
+放置でクライアント同期が全停止した（#49）。
+
+週次点検の手順は `/weekly-maintenance`（`.claude/commands/weekly-maintenance.md`）、
+実行記録は `Maintenance.md`。対象は vaultwarden のみで、手順は毎回の振り返りで更新する。
+
+node01 のディスクは 20GB しかなく逼迫している（要監視）。
+
 ## Agent Operations
 
 エージェントが homelab 環境を読み取り専用で参照するための MCP サーバー構成。
