@@ -47,6 +47,24 @@ just preview-reset <app>        # HEAD に戻す
 just preview-status             # preview 中のアプリ一覧
 ```
 
+## Maintenance
+
+バージョン pin は再現性のために必要だが、誰も上げなければ永久に据え置かれる。実際に
+vaultwarden が 1.36.0 のまま放置され、クライアント側の自動更新との API 不整合で全
+クライアントの同期が停止する障害が起きた（PR #49。同時にセキュリティ修正 8 件を
+取り込み損ねていた）。
+
+その再発防止として、週次メンテナンスの手順を `/weekly-maintenance` コマンドに定義して
+いる（`.claude/commands/weekly-maintenance.md`）。点検対象は以下:
+
+- 全アプリの pin バージョン（イメージタグ / helm chart）と上流最新の差分
+- 上流リリースのセキュリティ修正・breaking change
+- ArgoCD の Sync/Health、Pod 状態
+- **node01 のディスク空き** — ディスクは 20 GB しかなく逼迫している（要監視）
+- preview の消し忘れ（`HEAD` 以外を追跡中のアプリ）
+
+更新が必要な場合は 1 アプリ 1 PR で作成する。マージは人間が判断する。
+
 ## Agent Operations
 
 エージェントが homelab 環境を読み取り専用で参照するための MCP サーバー構成。
