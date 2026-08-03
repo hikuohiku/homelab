@@ -55,15 +55,22 @@ vaultwarden が 1.36.0 のまま放置され、クライアント側の自動更
 取り込み損ねていた）。
 
 その再発防止として、週次メンテナンスの手順を `/weekly-maintenance` コマンドに定義して
-いる（`.claude/commands/weekly-maintenance.md`）。点検対象は以下:
+いる（`.claude/commands/weekly-maintenance.md`）。実行記録は `Maintenance.md`。
 
-- 全アプリの pin バージョン（イメージタグ / helm chart）と上流最新の差分
-- 上流リリースのセキュリティ修正・breaking change
-- ArgoCD の Sync/Health、Pod 状態
-- **node01 のディスク空き** — ディスクは 20 GB しかなく逼迫している（要監視）
-- preview の消し忘れ（`HEAD` 以外を追跡中のアプリ）
+**対象は vaultwarden のみ**（immich / argocd / dex / external-secrets /
+tailscale-operator は対象外）。手順が実用に耐えるか検証する前に対象を広げない。
+拡張の基準は手順書の「対象の拡張」を参照。
 
-更新が必要な場合は 1 アプリ 1 PR で作成する。マージは人間が判断する。
+点検内容:
+
+- vaultwarden の pin バージョンと上流最新の差分、リリースのセキュリティ修正・breaking change
+- vaultwarden の ArgoCD Sync/Health、Pod、起動ログ
+- **node01 のディスク空き** — ディスクは 20 GB しかなく逼迫している（3 GB 未満で警告）
+
+更新が必要な場合は PR を作成する。**マージは人間が判断する。**
+
+手順は固定ではなく、毎回の振り返り（手順書の手順 8）で更新して育てる。実行のたびに
+`Maintenance.md` へ追記し、次回はその記録を読んでから始める。
 
 ## Agent Operations
 

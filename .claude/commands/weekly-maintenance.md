@@ -1,4 +1,4 @@
-homelab の週次メンテナンス。バージョン据え置きとクラスタの異常を検知し、更新 PR を作成する。
+homelab の週次メンテナンス。バージョン据え置きとクラスタの異常を検知し、更新 PR を作成する。手順自体を毎回見直して育てる。
 
 ## 背景
 
@@ -11,12 +11,19 @@ pin は再現性のために必要だが、**誰も上げなければ永久に�
 
 このコマンドはその再発防止のためのルーティンである。
 
+## 対象は vaultwarden のみ
+
+**現時点の点検対象は vaultwarden だけ。** 他のアプリ (immich / argocd / dex /
+external-secrets / tailscale-operator) は対象外。
+
+最初から全アプリを対象にすると、手順が実用に耐えるか検証する前に作業量だけが増える。
+**手順が固まっていない段階で対象を広げない。** 対象の広げ方は「対象の拡張」を参照。
+
 ## 引数
 
 - `$ARGUMENTS` — 省略可
-  - 引数なし: 全項目を点検してレポート
-  - `check`: 点検のみ（PR を作らない）
-  - `<app名>`: 指定アプリのバージョンだけ点検
+  - 引数なし: 通常の点検（記録と振り返りまで行う）
+  - `check`: 点検とレポートのみ。PR も記録も作らない（お試し実行用）
 
 ## 前提
 
@@ -24,82 +31,81 @@ pin は再現性のために必要だが、**誰も上げなければ永久に�
 - 参照は MCP ツール経由で行う（`mcp__kubectl__*` 等）。CLI の kubectl は使わない
 - write が必要になった場合は人間の承認（ask）を経ること
 
-## ワークフロー
+---
+
+## 手順
+
+### 0. 前回の記録を読む
+
+`Maintenance.md` の最新エントリを読み、以下を把握してから始める。
+
+- 前回持ち越した未対応の項目
+- 前回の振り返りで「次回やる」としたこと
+- 直近で手順がどう変わったか
+
+**ここを飛ばすと毎回ゼロから始まることになり、ループが成立しない。**
 
 ### 1. 接続確認
 
-`just preflight` で Tailscale / k8s / ArgoCD / Proxmox の疎通を確認する。
-到達できないレイヤーがあれば、その項目はスキップしてレポートに明記する
-（黙って飛ばさない）。
+`just preflight` で Tailscale / k8s / ArgoCD の疎通を確認する。
+到達できないレイヤーがあれば、その項目はスキップしてレポートに明記する（黙って飛ばさない）。
 
-### 2. バージョン点検
+### 2. vaultwarden のバージョン点検
 
-以下が pin されている全バージョンの棚卸し対象。**現在値はファイルから読むこと**
-（このリストの値は執筆時点のもので、更新されている可能性がある）。
-
-| 対象 | 定義ファイル | 上流 |
-|------|------------|------|
-| vaultwarden | `apps/vaultwarden/deployment.yaml` (`image:`) | https://github.com/dani-garcia/vaultwarden/releases |
-| busybox (initContainer) | `apps/vaultwarden/deployment.yaml` | Docker Hub `busybox` |
-| immich chart | `apps/immich/kustomization.yaml` (`helmCharts[].version`) | `oci://ghcr.io/immich-app/immich-charts` |
-| argo-cd chart | `apps/argocd/kustomization.yaml` | https://argoproj.github.io/argo-helm |
-| dex chart | `apps/dex/kustomization.yaml` | https://charts.dexidp.io |
-| external-secrets chart | `apps/external-secrets/kustomization.yaml` | https://charts.external-secrets.io |
-| tailscale-operator chart | `apps/tailscale-operator/kustomization.yaml` | https://pkgs.tailscale.com/helmcharts |
-
-各対象について:
-
-1. 現在 pin されているバージョンをファイルから読む
-2. 上流の最新安定版を調べる（GitHub Releases は `mcp__github__get_release_by_tag` /
-   `list_releases` を使うとリリース本文が正確に取れる。WebFetch の要約は情報が落ちる）
+1. 現在 pin されているバージョンを `apps/vaultwarden/deployment.yaml` の `image:` から読む
+   （この手順書にバージョンを書かないこと。書くと必ず陳腐化する）
+2. 上流の最新安定版を調べる
+   - https://github.com/dani-garcia/vaultwarden/releases
+   - `mcp__github__list_releases` / `get_release_by_tag` を使う。**WebFetch の要約は
+     情報が落ちるため、リリース本文の判断には使わない**（実例: 初回調査で WebFetch は
+     セキュリティ修正 8 件の内訳を「Most releases focus on security patches」と
+     圧縮してしまい、該当有無の判断ができなかった）
 3. 差がある場合、**間にある全リリースのリリースノートを読む**。1 つ飛ばしの更新でも
    途中バージョンの breaking change は効いてくる
 4. 以下を抽出する:
    - **セキュリティ修正**（advisory / CVE / GHSA）→ 最優先
    - **breaking change**（設定項目の削除・改名、デフォルト値の変更、必須化）
-   - **クライアント/他コンポーネントとの互換性要件**
-   - **アップグレード後に必要な管理作業**（マイグレーション等）
+   - **クライアントとの互換性要件**
+   - **アップグレード後に必要な管理作業**
 
 ### 3. クラスタ健全性の点検
 
 MCP で以下を確認する。
 
-- **ArgoCD**: 全 Application が `Synced` / `Healthy` か
+- **vaultwarden の Application**: `Synced` / `Healthy` か
   (`mcp__kubectl__gitops_apps_list_tool`)
-- **Pod**: 全 namespace で異常な状態のものがないか (`mcp__kubectl__get_pods`)
+- **vaultwarden の Pod**: Running か、再起動を繰り返していないか
+- **起動ログ**: エラー・警告が出ていないか (`mcp__kubectl__get_logs`)
 - **ノードのディスク空き**: `mcp__kubectl__node_stats_summary_tool`
   - **node01 のディスクは 20 GB しかなく、空きが逼迫している**（2026-08-03 時点で空き 4.2 GB）
   - **空きが 3 GB を切っていたらレポートの先頭に警告を出す**。DiskPressure に入ると
     ノード全体が不安定になる
   - `local-path` は容量を強制しないため、PVC の requests は実容量を意味しない
     （例: `immich-library` は 50Gi を要求しているが実ディスクは 20 GB）
-- **preview の消し忘れ**: `just preview-status` で `HEAD` 以外を追跡中のアプリがないか
+
+ディスクは vaultwarden 固有ではないが、**ノードが死ぬと vaultwarden も死ぬ**ため
+対象に含める。
 
 ### 4. レポート
 
-点検結果を以下の構成でまとめる。
-
 - 冒頭に **要対応の有無**（セキュリティ修正の未取り込み、ディスク逼迫、Sync 異常）
-- バージョン差分の一覧（現在 → 最新、リリース日、差の大きさ）
-- 各更新の要約（セキュリティ修正 / breaking change / 互換性要件）
+- バージョン差分（現在 → 最新、リリース日、間にあるリリース数）
+- 更新内容の要約（セキュリティ修正 / breaking change / 互換性要件）
 - クラスタの状態
 
-**問題がなければ「異常なし」と明記して終わる。** 無理に作業を作らない。
+**問題がなければ「異常なし」と明記して終わる。無理に作業を作らない。**
 
 ### 5. 更新 PR の作成
 
-更新すべきものがあれば PR を作る。ルール:
+更新すべきものがあれば PR を作る。
 
-- **1 アプリ 1 PR**。複数アプリの更新をまとめない（レビュー粒度を保つため）
 - PR 本文には必ず以下を書く:
   - なぜ上げるのか（セキュリティ修正 / 障害回避 / 定期更新）
-  - **この構成に該当する変更と、該当しない変更の切り分け**
-    （例: 組織機能の脆弱性は単一ユーザー構成では無害、など。該当しないものも
-    「確認した上で該当しない」と書く。書かないと再調査が発生する）
+  - **この構成に該当する変更と、該当しない変更の切り分け**。該当しないものも
+    「確認した上で該当しない」と書く（書かないと次回同じ調査が発生する）
   - breaking change の有無と、本構成への影響の確認結果
   - アップグレード後に確認すべき項目（チェックボックス）
-- 事前検証として `kubectl kustomize apps/<app>/` がビルドできることを確認する
-  （helm chart を使うアプリは `--enable-helm` が要る）
+- 事前検証として `kubectl kustomize apps/vaultwarden/` がビルドできることを確認する
 - **マージはしない**。エージェントによるマージはパーミッションで拒否される。
   PR を作るところまでが担当で、マージは人間が判断する
 
@@ -111,14 +117,65 @@ MCP で以下を確認する。
 - Pod が新世代に入れ替わり Running か
 - 起動ログにバージョンとエラーの有無
 
+### 7. 記録
+
+`Maintenance.md` の先頭に今回のエントリを追記する（新しいものが上）。書式は
+`Maintenance.md` の既存エントリに合わせる。最低限これらを書く:
+
+- 実行日
+- 点検結果（異常なしならそう書く）
+- 対応したこと（PR 番号）
+- 持ち越し（未対応で次回に送るもの。無ければ「なし」）
+
+### 8. 振り返り — 手順を更新する
+
+**これがこのルーティンの中核。** 毎回、以下 3 問に答える。
+
+1. **手順にない観点で問題を見つけたか？**
+   → 見つけたなら、その観点を手順に追加する。次回から自動的に見る
+2. **手順にあるが今回意味がなかった項目はあるか？**
+   → 惰性で残っている項目は削る。手順が長いほど実行されなくなる
+3. **見逃し・誤検知はあったか？**
+   → 閾値や判定条件を調整する（例: ディスク警告の 3 GB という線は妥当か）
+
+答えた結果、**手順書を変更すべきなら同じ PR に含めるか、フォローアップ PR を出す。**
+変更が不要なら「変更なし」と `Maintenance.md` に記録する。
+
+**「変更なし」が 3 回続いたら手順は安定したと判断し、対象の拡張を検討する。**
+
+---
+
+## 対象の拡張
+
+vaultwarden で以下が満たされたら、対象を 1 つだけ増やす。一度に複数増やさない。
+
+- 振り返りで「手順の変更なし」が 3 回続いている
+- 誤検知で無駄な PR を作っていない
+
+拡張先の候補と、増やすときに考えること:
+
+| 候補 | 現在の管理 | 増やすときの論点 |
+|------|-----------|----------------|
+| immich | helm chart | chart のバージョンと中のアプリのバージョンが別物。両方見る必要がある |
+| dex | helm chart | 同上。OIDC が壊れると ArgoCD にログインできなくなる |
+| external-secrets | helm chart | CRD を含むため更新の影響範囲が広い |
+| tailscale-operator | helm chart | 同上。壊れると全アプリの外部到達性が落ちる |
+| argocd | helm chart | self-management。壊すと復旧が面倒なので最後 |
+
+**別ストリームで helm 脱却を進めている。** helm chart を手書きリソースへ置き換えた
+アプリは、点検対象が chart バージョンからイメージタグに変わる。
+
+---
+
 ## 注意事項
 
-- **上流の「最新」を鵜呑みにしない**。alpine variant などバリアントごとに事情が違う。
+過去の実行で踏んだ落とし穴。**新しく踏んだらここに足す。**
+
+- **上流の「最新」を鵜呑みにしない**。バリアントごとに事情が違う。
   実例: vaultwarden 1.37.0 は alpine イメージの OpenSSL ビルド不具合があり、
-  alpine を使う本構成では 1.37.1 を選ぶ必要があった
-- **メジャーバージョンの飛び越しは慎重に**。特に argocd は self-management で
-  壊すと復旧が面倒なため、更新は単独 PR にして事前に breaking change を精査する
-- helm chart を使うアプリは、chart のバージョンと中のアプリのバージョンが別物である
-  ことに注意する。chart 更新がアプリ更新を伴わない場合もその逆もある
-- Plans.md に別ストリームとして「helm 脱却」がある。helm chart を手書きリソースへ
-  置き換えたアプリは、点検対象がイメージタグに変わるのでこの表を更新すること
+  alpine を使う本構成では 1.37.1 を選ぶ必要があった（2026-08-03）
+- **リリースノートは要約ツールを通さず原文を読む**。上記 WebFetch の実例を参照
+- **`local-path` は容量を強制しない**。PVC の requests は実容量を意味しない
+- **セキュリティ advisory は「組織機能の脆弱性」が多い**。本構成は単一ユーザー・
+  組織なしのため該当しないものが大半だが、**該当しないことを確認した記録を残す**。
+  残さないと毎回同じ調査をやり直すことになる
