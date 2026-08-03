@@ -91,7 +91,8 @@ Doppler (homelab/prd)
 ### エージェント操作ルール
 
 - **インフラ参照は MCP ツール経由で行う**: `mcp__kubectl__*`, `mcp__argocd__*`, `mcp__proxmox__*`, `mcp__tailscale__*` を使う
-- **kubectl / curl 等の CLI を直接使わない**: CLI は管理者権限の kubeconfig を使うため credential 分離が無効になる。MCP サーバーが read-only 制約を担保している
+- **インフラの参照（read）は MCP を使う**: CLI は管理者権限の kubeconfig を使うため credential 分離が無効になる。参照は MCP サーバーが read-only 制約を担保しているので MCP 経由を原則とする
+- **kubectl の書き込み（write）は人間レビュー付き（ask）でのみ許可**: MCP は read-only のため、デプロイ検証・データ移行など write が必要な操作は `kubectl` CLI を使う。`.claude/settings.json` の `permissions.ask` に `Bash(kubectl:*)` を設定し、エージェントが叩く kubectl は毎回ユーザーがコマンドを目視レビューして承認する運用とする（無断実行は不可）
 - **例外**: `tailscale up` / `tailscale status` / `just *` は CLI 許可済み（MCP 非対応の操作）
 
 ### トラブルシューティング
