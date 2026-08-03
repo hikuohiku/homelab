@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: coder
+  namespace: coder
+  annotations:
+    tailscale.com/experimental-forward-cluster-traffic-via-ingress: "true"
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: coder
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - coder
