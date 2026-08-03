@@ -36,19 +36,19 @@ resource "proxmox_virtual_environment_vm" "node01" {
   }
 
   cpu {
-    cores = 2
+    cores = 4
     type  = "host"
   }
 
   memory {
-    dedicated = 8192
+    dedicated = 12288
   }
 
   # Import disk from downloaded qcow2 image (no template/clone needed)
   disk {
     datastore_id = "local-lvm"
     interface    = "virtio0"
-    size         = 20
+    size         = 50
     file_format  = "raw"
     import_from  = proxmox_virtual_environment_download_file.nixos_image.id
   }
