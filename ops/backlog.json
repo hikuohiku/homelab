@@ -342,13 +342,14 @@
       "title": "busybox を 1.37 → 1.38.0 に上げる",
       "kind": "upgrade",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 14,
       "why": "T-0005 の調査 (run #6) で判明。3 箇所とも chown のみの initContainer（T-0003 参照）で busybox 固有機能に依存していない",
       "dod": "apps/vaultwarden/deployment.yaml, apps/coder/postgres.yaml, apps/immich/postgres.yaml の busybox タグが 3 箇所とも 1.38.0。ops/inventory.json の busybox current も更新",
       "refs": ["apps/vaultwarden/deployment.yaml", "apps/coder/postgres.yaml", "apps/immich/postgres.yaml", "ops/inventory.json"],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": "run #9: WebFetch で hub.docker.com のタグ一覧を確認し 1.38.0 が最新と確認して 3 箇所とも更新"
     },
     {
       "id": "T-0021",
