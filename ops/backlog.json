@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 34,
-  "updated": "2026-08-04T22:35:00Z",
+  "next_id": 35,
+  "updated": "2026-08-04T22:50:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）",
   "tasks": [
     {
@@ -222,7 +222,7 @@
       "title": "homelab に無い観点を探す — バックアップの健全性",
       "kind": "investigate",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 12,
       "why": "pbs (Proxmox Backup Server) は Terraform 管理外の手動運用。バックアップが実際に取れているか、復元できるかを誰も定期確認していない",
       "dod": "現状のバックアップ体制を調べて文書化し、確認が必要な点を個別タスクとして起票する。この調査では設定を変更しない",
@@ -231,7 +231,8 @@
         "CLAUDE.md"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": "run #8: repo 内の記録（pbs.tf.ignore, CLAUDE.md, local-path の性質）を横断して docs/backup.md に棚卸しをまとめた。実機（PBS のジョブ設定・実行結果・リストア可否）は autopilot のクラウドサンドボックスから到達できないため確認できず、T-0034（needs-human）として切り出した。T-0029 の blocked_by を T-0013 から T-0034 に更新した"
     },
     {
       "id": "T-0014",
@@ -472,7 +473,7 @@
       "priority": 21,
       "why": "T-0005 の調査 (run #6) で判明。postgres 本体は 16.9→16.14 の minor で問題ないが、vchord 拡張が 0.4.3→1.1.1 とメジャー相当の飛びで、ベクタ DB の実データに影響しうる（ops/inventory.json の policy=manual の理由）",
       "dod": "vchord 0.4→1.x の互換性・移行手順を確認する。CHARTER §4『データを失いうる変更』の手順どおり、着手前に immich のバックアップが実際に存在し復元できることを確認する",
-      "blocked_by": "T-0013（pbs バックアップ体制の調査）がまだ todo で、バックアップの健全性が未確認のため着手しない",
+      "blocked_by": "T-0034（PBS バックアップジョブの実機確認、needs-human）が終わっておらず、バックアップの健全性が未確認のため着手しない",
       "refs": ["apps/immich/postgres.yaml", "ops/inventory.json"],
       "created": "2026-08-04",
       "pr": null
@@ -516,6 +517,24 @@
       "why": "Maintenance.md 2026-08-03 の持ち越し。1.37.0 で追加されたレート制限は送信元 IP 単位。全クライアントが Tailscale プロキシ経由で同一 IP に見えるため、正規クライアントが 429 で弾かれていないか未確認",
       "dod": "ログまたはクライアントの実際の挙動から 429 が発生していないか確認する。発生していれば ROCKET_LIMIT_* 系の設定調整か、送信元判定の見直しを検討する。発生していなければ Maintenance.md に確認済みと記録する",
       "refs": ["Maintenance.md", "apps/vaultwarden/"],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0034",
+      "domain": "homelab",
+      "title": "PBS のバックアップジョブ設定・実行結果・リストア可否を実機で見てほしい",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "needs-human",
+      "priority": 12,
+      "why": "docs/backup.md（T-0013）の棚卸しで判明。node01 のアプリデータ（immich/vaultwarden/coder 等）は local-path で node01 のディスクに直接乗っており、PBS が node01 を対象にしたバックアップジョブを持っていなければ一切保護されていない。T-0029（immich postgres/vchord のメジャー更新、データを失いうる変更）はこれが確認できるまで着手できない",
+      "dod": "(1) PBS に node01 (qemu/113) を対象にしたバックアップジョブがあるか、(2) スケジュールと保持世代数、(3) 直近のジョブが成功しているか、(4) リストアを実際に試したことがあるか、(5) pbs 自身が片系（pbs を失うと node01 のバックアップも失う構成）になっていないか、の 5 点が docs/backup.md に追記される",
+      "needs_human_reason": "Tailscale 経由で homelab に到達できる環境（対話セッションの mcp__proxmox__* または PBS の Web UI）でしか調べられない。autopilot のクラウドサンドボックスは Tailscale に接続できず、物理的に手が届かない（ops/CHARTER.md §5.2）",
+      "refs": [
+        "docs/backup.md",
+        "terraform/proxmox/pbs.tf.ignore"
+      ],
       "created": "2026-08-04",
       "pr": null
     },
