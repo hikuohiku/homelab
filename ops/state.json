@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-04T20:00:00Z",
+  "updated": "2026-08-04T20:45:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-04T19:33:27Z"
+    "last_read": "2026-08-04T19:57:13Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -69,7 +69,15 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "issue #56 の未読フィードバックを反映: このクラウドサンドボックスのツール有無を実測し CHARTER §5.2 として記録（terraform/kustomize は無い。run #0 の人間セッションとは環境が違う）。T-0002（argo-cd chart バージョン二重管理に CI 検出を追加）・T-0003（busybox バージョン統一）を完遂。途中 git checkout の事故があったが commit 前だったため復旧し、CHARTER に教訓を追記",
-      "prs": [73, 74, 75]
+      "prs": [73, 74, 75, 76]
+    },
+    {
+      "n": 6,
+      "at": "2026-08-04T20:45:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "issue #56 の未読フィードバック 2 件（run #5 が last_read を進めずに終えたため残っていた）を反映。T-0017: check_version_sync.py の pyyaml 依存を除去し nix 側の抽出を brace 単位の構造依存に修正。CHARTER §2 に『複数タスクを扱う起動では前のタスクの PR が merge されるまで次のブランチを作らない』を追記（ops/ 記録が全タスク PR に相乗りするため並行 PR はコンフリクトする、run #5 の実例を踏まえた対処）",
+      "prs": [77]
     }
   ]
 }
