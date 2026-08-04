@@ -1,0 +1,78 @@
+name: Direct Push Guard
+
+# main の ruleset「CI 必須」は PR 経由のマージだけを対象にする。main への直 push は
+# CI を経ずに素通りする（issue #56）。これは防止ではなく検知: 直 push（マージされた PR に
+# 紐付かないコミット）で ops/ 以外のファイルが変更されていたら、このジョブを失敗させ、
+# フィードバック issue にコメントして次の autopilot 起動が気づけるようにする。
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+concurrency:
+  group: direct-push-guard-${{ github.sha }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: detect direct push outside ops/
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine if this commit came from a merged PR
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          merged=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
+            --jq 'map(select(.merged_at != null)) | length > 0')
+          echo "merged=$merged" >> "$GITHUB_OUTPUT"
+
+      - name: List changed files outside ops/
+        id: files
+        if: steps.pr.outputs.merged == 'false'
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [ -z "${BEFORE:-}" ] || [ "$BEFORE" = "0000000000000000000000000000000000000000" ]; then
+            range="HEAD~1..HEAD"
+          else
+            range="${BEFORE}..HEAD"
+          fi
+          git diff --name-only $range > changed.txt || true
+          grep -v '^ops/' changed.txt > outside.txt || true
+          {
+            echo "list<<GUARD_EOF"
+            cat outside.txt
+            echo "GUARD_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Fail and alert on direct push
+        if: steps.pr.outputs.merged == 'false' && steps.files.outputs.list != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OUTSIDE_FILES: ${{ steps.files.outputs.list }}
+        run: |
+          set -euo pipefail
+          echo "::error::main への直 push で ops/ 以外のファイルが変更されました（CI 未通過）"
+          echo "$OUTSIDE_FILES"
+          gh issue comment 56 --repo "${{ github.repository }}" --body "**direct-push-guard が main への直 push を検知しました。**
+
+          commit: ${{ github.sha }}
+          変更ファイル（ops/ 以外）:
+          \`\`\`
+          $OUTSIDE_FILES
+          \`\`\`
+
+          CI（kustomize build / terraform validate / ops state validate）を経由していない変更が main に入っています。内容を確認してください。"
+          exit 1
