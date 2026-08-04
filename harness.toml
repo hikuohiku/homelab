@@ -16,10 +16,10 @@ description = "Homelab IaC: Terraform + NixOS + Kubernetes (ArgoCD)"
 deny = [
   "Bash(sudo:*)",
 ]
-ask = [
-  "Bash(rm -r:*)",
-  "Bash(git push --force:*)",
-]
+# ask は使わない。ヘッドレスの定期実行（ops/CHARTER.md）では誰も承認できず、
+# プロンプトに当たった時点でその起動が丸ごと無駄になるため。
+# 止めたいものは deny に、それ以外は CI と ArgoCD 経由の変更経路で担保する。
+ask = []
 
 [safety.sandbox]
 failIfUnavailable = false
