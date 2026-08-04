@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 17,
-  "updated": "2026-08-04T20:30:00Z",
+  "next_id": 18,
+  "updated": "2026-08-04T20:45:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）",
   "tasks": [
     {
@@ -282,6 +282,22 @@
       "created": "2026-08-04",
       "pr": null,
       "notes": "run #4 でその場しのぎの urllib 版を書いて動かなかった（403）ため revert 済み。次に着手するときは build.py 単体で完結させようとせず、agent 側の前処理込みで設計すること"
+    },
+    {
+      "id": "T-0017",
+      "domain": "homelab",
+      "title": "ops/check_version_sync.py の pyyaml 依存を除去し、nix 側の抽出を位置依存から構造依存にする",
+      "kind": "ci",
+      "risk": "low",
+      "status": "in_progress",
+      "priority": 2,
+      "why": "issue #56 (2026-08-04 19:53:35) の指摘。T-0002 で追加した check_version_sync.py が pyyaml に依存しており ops/validate.py の『標準ライブラリのみ』方針と食い違っていた（autopilot のサンドボックスで手元検証できない）。nix 側の version 抽出も chart 名の後ろ 500 文字という固定 window で、2 つ目の HelmChart が足されると隣の version を誤って一致判定しうる位置依存の実装だった",
+      "dod": "check_version_sync.py が標準ライブラリのみで動く。nix 側の抽出は brace 単位で同じ attrset に閉じ込められ、別の HelmChart エントリの version を拾わない。CI から pyyaml のインストール手順を削除する",
+      "refs": [
+        "ops/check_version_sync.py",
+        ".github/workflows/ci.yml"
+      ],
+      "created": "2026-08-04"
     }
   ]
 }
