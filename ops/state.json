@@ -6,7 +6,7 @@
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": null
+    "last_read": "2026-08-04T18:26:42Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -37,6 +37,14 @@
       "kind": "scheduled(manual trigger)",
       "by": "cloud routine",
       "summary": "疎通確認。main への push は成功したが PR 作成前に終了。ruleset 導入後は直 push 不可のため運用を PR 経由へ変更",
+      "prs": []
+    },
+    {
+      "n": 2,
+      "at": "2026-08-04T18:59:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "issue #56 のフィードバックを反映し T-0014 起票。workflow の中身は書けたが GitHub App に workflows 権限が無く push 不可と判明、needs-human に変更",
       "prs": []
     }
   ]
