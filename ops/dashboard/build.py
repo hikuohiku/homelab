@@ -278,6 +278,12 @@ TEMPLATE = """<title>autopilot — 当直記録</title>
   --idle:#6a7382; --idle-soft:#e6e9ef;
 }}
 
+/* 埋め込み先のリセット CSS に依存しないための最小限の正規化 */
+*, *::before, *::after {{ box-sizing:border-box; }}
+body, h1, h2, h3, p, ul, ol, li, table, figure {{ margin:0; padding:0; }}
+ul, ol {{ list-style:none; }}
+table {{ border-spacing:0; }}
+
 body {{ background:var(--ground); color:var(--ink); font-family:var(--sans);
   line-height:1.65; -webkit-font-smoothing:antialiased; }}
 .wrap {{ max-width:1000px; margin:0 auto; padding:2.5rem 1.25rem 5rem;
