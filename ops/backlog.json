@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 35,
+  "next_id": 36,
   "updated": "2026-08-04T22:50:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）",
   "tasks": [
@@ -552,6 +552,21 @@
       "created": "2026-08-04",
       "pr": 84,
       "notes": "run #8: ops/validate.py に check_conflict_markers() を追加（.md / .json を対象、行頭一致）。わざと journal にコンフリクトマーカーを混ぜて 3 件検出 → 復元後 0 error に戻ることを手元で確認してから PR を出した（#56 の教訓『検出器はわざと壊して確かめる』を踏襲）"
+    },
+    {
+      "id": "T-0035",
+      "domain": "homelab",
+      "title": "ops/dashboard/index.html を Git 管理から外す",
+      "kind": "ci",
+      "risk": "low",
+      "status": "done",
+      "priority": 8,
+      "why": "issue #56 (2026-08-04 20:54:53) の指摘。直列化（run #6 の対処）は autopilot 自身の中でしか効かず、構築セッションなど他の主体が触る PR（#82/#83）とは依然として index.html で衝突した。build.py の生成物であり ops/*.json + journal から決定的に再生成できるので、そもそも Git 管理する理由が無い",
+      "dod": "ops/dashboard/index.html が .gitignore 対象になり追跡から外れる。CI (ops job) が build.py の実行成功を検証する。CHARTER §4/§7.1 の記述を更新する",
+      "refs": ["ops/dashboard/index.html", ".gitignore", ".github/workflows/ci.yml", "ops/CHARTER.md"],
+      "created": "2026-08-04",
+      "pr": null,
+      "notes": "run #9: git rm --cached で追跡除外、.gitignore に追加。CI の ops job に `python3 ops/dashboard/build.py` の実行成功チェックを追加。CHARTER §4 の相乗り例外リストと §7.1 を更新"
     }
   ]
 }
