@@ -137,13 +137,13 @@
       "id": "busybox",
       "kind": "image",
       "name": "busybox (initContainer)",
-      "current": "1.36 / 1.37 (割れている)",
+      "current": "1.37",
       "file": "apps/vaultwarden/deployment.yaml",
       "match": "busybox:",
       "mirrors": ["apps/coder/postgres.yaml", "apps/immich/postgres.yaml"],
       "upstream": "dockerhub:library/busybox",
       "policy": "auto",
-      "note": "3 箇所でバージョンが割れている。統一が先 (backlog 参照)"
+      "note": "T-0003 で 1.36/1.37 の割れを 1.37 に統一済み (2026-08-04)"
     },
     {
       "id": "k8s-nameserver",

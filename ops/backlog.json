@@ -44,8 +44,8 @@
       "domain": "homelab",
       "title": "busybox のバージョン割れ (1.36 / 1.37) を統一する",
       "kind": "refactor",
-      "risk": "medium",
-      "status": "todo",
+      "risk": "low",
+      "status": "done",
       "priority": 3,
       "why": "3 つの initContainer で 1.36 と 1.37 が混在している。揃っていない理由が無い",
       "dod": "3 箇所とも同じバージョン。ops/inventory.json の busybox エントリの current が単一の値になる",
@@ -55,7 +55,8 @@
         "apps/immich/postgres.yaml"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": 75,
+      "notes": "run #5: 3 箇所とも既存の初期化用 chown コマンドのみで busybox 固有機能に依存していないため、新しいタグを調べ直さず既存で使われていた 1.37 に統一した。ops/inventory.json の current も単一値に更新。risk は変更内容(initContainer の chown 実行のみ、patch バージョン内)に合わせて low に見直した"
     },
     {
       "id": "T-0004",
