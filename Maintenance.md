@@ -32,7 +32,8 @@ vaultwarden 1.36.0 の据え置きにより、web 以外の全クライアント
 - `ADMIN_TOKEN` が平文（起動ログに警告）。Argon2 PHC 化は今回見送り → `ops/backlog.json` T-0011（needs-human、Doppler への登録待ち）
 - 1.37.0 でレート制限が追加された。全クライアントが Tailscale プロキシ経由で同一
   送信元 IP に見えるため、429 が出ないか要確認 → `ops/backlog.json` T-0032
-- icon 取得のタイムアウトが多発。実害なし。`DISABLE_ICON_DOWNLOAD` で無効化可 → `ops/backlog.json` T-0031
+- icon 取得のタイムアウトが多発。実害なし。`DISABLE_ICON_DOWNLOAD` で無効化可 → **解消（2026-08-05）**:
+  `apps/vaultwarden/deployment.yaml` に `DISABLE_ICON_DOWNLOAD=true` を設定（`ops/backlog.json` T-0031）
 
 ### 振り返り
 

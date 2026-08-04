@@ -52,6 +52,10 @@ spec:
             # vaultwarden は ROCKET_PORT のデフォルトが 80。明示しておく
             - name: ROCKET_PORT
               value: "80"
+            # icon 取得のタイムアウトが多発していたが実害は無いと確認済み (Maintenance.md 2026-08-03)。
+            # ログを埋めるだけの無害な失敗のため無効化する (T-0031)
+            - name: DISABLE_ICON_DOWNLOAD
+              value: "true"
             # WebSocket 通知 (リアルタイム同期) は 1.x 系で HTTP ポートに統合済みのため
             # 別ポート/別 env (WEBSOCKET_ENABLED) は不要。Ingress も 80 だけで完結する。
             - name: ADMIN_TOKEN

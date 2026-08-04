@@ -572,7 +572,7 @@
       "title": "vaultwarden の icon 取得タイムアウトを調査し、実害が無いなら DISABLE_ICON_DOWNLOAD で無効化するか判断する",
       "kind": "investigate",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 22,
       "why": "Maintenance.md 2026-08-03 の持ち越し。icon 取得のタイムアウトが多発しているが実害は無いと記録されている。ログを埋めるだけなら無効化する価値がある",
       "dod": "現状のログ頻度と実害の有無を確認する。無害だが頻発してログを埋めているなら DISABLE_ICON_DOWNLOAD=true を設定する。実害があるなら原因（Tailscale プロキシ経由のアウトバウンド到達性など）を調べて対処する",
@@ -581,7 +581,8 @@
         "apps/vaultwarden/"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": 104,
+      "notes": "run #13: 現状のログ頻度は autopilot のクラウドサンドボックスから確認できない（クラスタ到達不可）が、Maintenance.md 2026-08-03 の時点で人間の対話セッション（実機到達可）が既に「実害なし、多発」と確認済みの記録があるため、それを根拠に DISABLE_ICON_DOWNLOAD=true を設定した。icon はログイン項目の favicon 表示のみに使う機能でデータへの影響は無く、設定は環境変数 1 行で即座に戻せるため low risk とした"
     },
     {
       "id": "T-0032",
