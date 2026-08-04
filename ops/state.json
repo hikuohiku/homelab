@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "updated": "2026-08-04T18:40:00Z",
+  "vision_stage": 1,
+  "vision_stage_label": "器を作る",
+  "feedback": {
+    "issue": 56,
+    "url": "https://github.com/hikuohiku/homelab/issues/56",
+    "last_read": null
+  },
+  "dashboard": {
+    "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
+  },
+  "routines": [
+    {
+      "id": "trig_01LyC3zdzPCF8WLSpLpWDVsr",
+      "name": "homelab autopilot",
+      "cron": "19 */3 * * * (UTC)",
+      "cron_human": "3 時間ごと",
+      "next": "2026-08-04 21:19 UTC",
+      "model": "claude-sonnet-5",
+      "url": "https://claude.ai/code/routines/trig_01LyC3zdzPCF8WLSpLpWDVsr"
+    }
+  ],
+  "runs": [
+    {
+      "n": 0,
+      "at": "2026-08-04T18:00:00Z",
+      "kind": "bootstrap",
+      "by": "human + Claude Code (対話セッション)",
+      "summary": "器の初期構築。VISION / CHARTER / backlog / inventory / CI / ダッシュボードを作成",
+      "prs": []
+    }
+  ]
+}

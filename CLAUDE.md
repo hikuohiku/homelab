@@ -59,6 +59,29 @@ node01 の root disk は 256 GiB（2026-08-04 にオンライン拡張）。`loc
 実ディスクを予約しないため、実使用量は引き続き監視する。拡張手順は
 [`docs/node01-storage.md`](docs/node01-storage.md)。
 
+## Autopilot（自律運用エージェント）
+
+`ops/` 配下に、homelab を人間の介入なしに保守し続けるエージェントの器がある。
+クラウドの定期実行（3 時間ごと）が独立セッションを起こし、backlog からタスクを取って PR を出す。
+
+| ファイル | 役割 |
+|---------|------|
+| `ops/VISION.md` | 何を目指しているか。**起動時に最初に読む** |
+| `ops/CHARTER.md` | 行動規範。auto-merge の条件、必ず人間に渡すもの |
+| `ops/backlog.json` | タスクキュー |
+| `ops/inventory.json` | バージョン監視対象 |
+| `ops/journal/` | 起動ごとの引き継ぎ記録 |
+| `ops/validate.py` | 状態ファイルの不変条件検査（CI から実行） |
+| `ops/dashboard/build.py` | 人間向けダッシュボードの生成 |
+
+- フィードバック窓口: [#56](https://github.com/hikuohiku/homelab/issues/56)（この issue にコメントすると次の起動で読まれる）
+- ダッシュボード: `ops/state.json` の `dashboard.artifact_url`
+- 定期実行の設定: `ops/state.json` の `routines`
+
+**人間がこのリポジトリを触るときの注意**: `ops/backlog.json` と `ops/state.json` は
+autopilot が直接 `main` に push する。コンフリクトを避けるため、手で編集するときは
+issue 経由で依頼するか、編集後すぐ push すること。
+
 ## Agent Operations
 
 エージェントが homelab 環境を読み取り専用で参照するための MCP サーバー構成。

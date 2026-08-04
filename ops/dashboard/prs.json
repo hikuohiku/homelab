@@ -1,0 +1,53 @@
+[
+  {
+    "autoMergeRequest": null,
+    "createdAt": "2026-08-04T18:17:57Z",
+    "headRefName": "autopilot/bootstrap",
+    "isDraft": false,
+    "number": 57,
+    "statusCheckRollup": [
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-08-04T18:22:31Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/hikuohiku/homelab/actions/runs/30938291610/job/92089884890",
+        "name": "kustomize build",
+        "startedAt": "2026-08-04T18:22:19Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-08-04T18:22:30Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/hikuohiku/homelab/actions/runs/30938291610/job/92089885050",
+        "name": "terraform validate",
+        "startedAt": "2026-08-04T18:22:20Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-08-04T18:22:28Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://github.com/hikuohiku/homelab/actions/runs/30938291610/job/92089885034",
+        "name": "ops state validate",
+        "startedAt": "2026-08-04T18:22:25Z",
+        "status": "COMPLETED",
+        "workflowName": "CI"
+      },
+      {
+        "__typename": "CheckRun",
+        "completedAt": "2026-08-04T18:22:12Z",
+        "conclusion": "SUCCESS",
+        "detailsUrl": "https://dashboard.gitguardian.com",
+        "name": "GitGuardian Security Checks",
+        "startedAt": "2026-08-04T18:22:11Z",
+        "status": "COMPLETED",
+        "workflowName": ""
+      }
+    ],
+    "title": "feat(ops): homelab を自律運用する autopilot の器を作る",
+    "url": "https://github.com/hikuohiku/homelab/pull/57"
+  }
+]
