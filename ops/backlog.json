@@ -10,7 +10,7 @@
       "title": "tailscale k8s-nameserver の floating tag `unstable` を固定バージョンに変える",
       "kind": "refactor",
       "risk": "medium",
-      "status": "todo",
+      "status": "in_progress",
       "priority": 1,
       "why": "repo 内で唯一バージョンが固定されていない箇所。Pod が再起動するたびに中身が変わりうるので、壊れたときに原因を特定できない",
       "dod": "apps/tailscale-operator/dns-config.yaml が具体的なバージョンタグを指し、ops/inventory.json の該当エントリも更新されている",
