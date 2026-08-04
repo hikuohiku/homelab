@@ -53,6 +53,9 @@ jobs:
           exit $fail
 
       - name: Validate standalone manifests parse
+        # kustomization から参照されていない YAML（apps.yaml など）を拾う。
+        # 直前の kustomize build が apps/*/charts/ に Helm chart を展開しているが、
+        # 中身は Go テンプレートで YAML ではないので除外する。
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -63,6 +66,8 @@ jobs:
               sys.exit("PyYAML missing")
           bad = []
           for f in glob.glob("apps/**/*.yaml", recursive=True):
+              if "/charts/" in f:
+                  continue
               try:
                   list(yaml.safe_load_all(pathlib.Path(f).read_text()))
               except Exception as e:
