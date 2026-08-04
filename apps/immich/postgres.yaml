@@ -37,7 +37,7 @@ spec:
         fsGroup: 999
       initContainers:
         - name: init-permissions
-          image: busybox:1.37
+          image: busybox:1.38.0
           command: ["sh", "-c", "chown -R 26:999 /var/lib/postgresql/data"]
           securityContext:
             runAsUser: 0
