@@ -62,7 +62,7 @@
       "title": ".terraform.lock.hcl に残っている tailscale provider の残骸を消す",
       "kind": "refactor",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 4,
       "why": "providers.tf で宣言していない tailscale 0.24.0 のエントリが lock ファイルに残っている",
       "dod": "lock ファイルが providers.tf の宣言と一致している",
@@ -70,7 +70,7 @@
         "terraform/proxmox/.terraform.lock.hcl"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": 68
     },
     {
       "id": "T-0005",
