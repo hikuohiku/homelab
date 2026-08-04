@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 37,
-  "updated": "2026-08-04T22:20:00Z",
+  "next_id": 38,
+  "updated": "2026-08-04T23:10:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -459,19 +459,39 @@
     {
       "id": "T-0026",
       "domain": "homelab",
-      "title": "external-secrets chart を 1.1.1 → 2.8.0 に上げる（メジャー更新、全リリースノートを読む）",
+      "title": "external-secrets chart を 1.1.1 → 1.3.2 に上げる（1.x 系最終版、2.8.0 メジャー更新の第1段）",
       "kind": "upgrade",
-      "risk": "high",
-      "status": "todo",
+      "risk": "medium",
+      "status": "done",
       "priority": 20,
-      "why": "T-0005 の調査 (run #6) で判明。1.1.1 → 2.8.0 は大きなメジャー更新の飛び。External Secrets Operator は secrets/ の実体を supply する基盤なので、壊れると全アプリのシークレット取得が止まりうる",
-      "dod": "1.1.1 から 2.8.0 までの全リリースノートを原文で読み、breaking change を洗い出す。CHARTER §4『メジャーバージョン更新』の手順に従い 1 PR 1 コンポーネントで刻む（必要なら 1.x の最終版などの中間ステップに分割する）。apps/external-secrets/kustomization.yaml の version、ops/inventory.json の current を更新",
+      "pr": 102,
+      "why": "T-0005 の調査 (run #6) で判明。1.1.1 → 2.8.0 は大きなメジャー更新の飛びだが、issue #56 (2026-08-04 22:42:36) で今夜の着手を勧められた。subagent 調査 (run #12) の結果、実在するバージョンは 1.1.1→1.2.0→1.2.1→1.3.0(リリース失敗、直後に撤回)→1.3.1→1.3.2→2.0.0→...→2.8.0 で、想定していた 1.4〜1.14 は存在しない。1.x 系の自然な区切りである 1.3.2（1.3.0 は壊れたリリースのため避ける）まででまず刻む",
+      "dod": "apps/external-secrets/kustomization.yaml の version が 1.3.2。ops/inventory.json の external-secrets-chart current も更新。CRD（ClusterSecretStore の doppler provider、ExternalSecret の data/target/secretStoreRef）・Helm values（installCRDs）に breaking change が無いことを原文で確認済み",
       "refs": [
         "apps/external-secrets/kustomization.yaml",
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "notes": "run #12: subagent に 1.1.1→2.8.0 の全リリースノート調査を投げた。当リポジトリの使用範囲（doppler単独の ClusterSecretStore、dataFrom/template/generator 不使用のシンプルな ExternalSecret×5、installCRDs: true のみ）に影響する breaking change は 1.x→2.x を通じて見つからなかった（v2.0.0 の実質的変更は未使用の Alibaba/Device42 プロバイダ削除のみ）。ただし CHARTER の『メジャー更新は刻む』方針と、v1.3.2 という自然な区切りが実在すること、CRD 本体の完全 diff は WebFetch のサイズ制限で検証しきれなかったことを踏まえ、1.3.2 と 2.8.0 の2段階に分割。残りは T-0037"
+    },
+    {
+      "id": "T-0037",
+      "domain": "homelab",
+      "title": "external-secrets chart を 1.3.2 → 2.8.0 に上げる（メジャー更新の第2段、T-0026 の続き）",
+      "kind": "upgrade",
+      "risk": "high",
+      "status": "todo",
+      "priority": 20,
+      "why": "T-0026 (run #12) の続き。1.x→2.x のメジャーバンプ自体は調査済みで、このリポジトリの使用範囲（doppler単独・シンプルな ExternalSecret のみ）に影響する breaking change は見つかっていない。ただし CRD 本体の完全 diff は未検証（WebFetch のサイズ制限）のため、T-0026 (1.3.2) のマージ・ArgoCD 反映が確認できてから改めて着手する",
+      "dod": "apps/external-secrets/kustomization.yaml の version が 2.8.0。ops/inventory.json の current も更新。着手前に T-0026 の反映後に異常の兆候が無いか（issue #56 へのフィードバック等）を確認する",
+      "blocked_by": "T-0026 のマージ・反映確認が先。ブロック理由というより実施順序の都合（同一コンポーネントの連続更新を同時に走らせない）",
+      "refs": [
+        "apps/external-secrets/kustomization.yaml",
+        "ops/inventory.json"
+      ],
+      "created": "2026-08-04",
+      "pr": null,
+      "notes": "run #12: T-0026 の分割で新規起票。調査結果は T-0026 の notes を参照"
     },
     {
       "id": "T-0027",
@@ -479,16 +499,18 @@
       "title": "immich server / machine-learning を v2.6.3 → v3.1.0 に上げる（メジャー更新）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "todo",
+      "status": "blocked",
       "priority": 20,
-      "why": "T-0005 の調査 (run #6) で判明。v3.0.0 で non-destructive editing・Workflows・バックグラウンドバックアップ変更・HLS トランスコーディングなど大きな変更がある。immich-server と immich-machine-learning は必ず同一バージョンで揃える（ops/inventory.json の mirrors）",
+      "why": "T-0005 の調査 (run #6) で判明。v3.0.0 で non-destructive editing・Workflows・バックグラウンドバックアップ変更・HLS トランスコーディングなど大きな変更がある。immich-server と immich-machine-learning は必ず同一バージョンで揃える（ops/inventory.json の mirrors）。データ移行を伴うため CHARTER §4『データを失いうる変更』に該当し、T-0029 と同じ理由でバックアップ健全性の確認が先",
       "dod": "v2.6.3 から v3.1.0 までの全リリースノートを原文で読み、DB マイグレーションや設定変更の要否を洗い出す。apps/immich/values.yaml の server / machine-learning 両方のタグを同時に v3.1.0 へ更新し、ops/inventory.json の current も両方更新",
+      "blocked_by": "T-0034（PBS バックアップジョブの実機確認、needs-human）が終わっておらず、immich のバックアップ健全性が未確認のため着手しない",
       "refs": [
         "apps/immich/values.yaml",
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": "run #12: issue #56 (2026-08-04 22:42:36) の指摘を受け todo → blocked に変更。データ移行を伴う点は T-0029 と同型のため、T-0034 待ちを明示した"
     },
     {
       "id": "T-0028",
@@ -496,17 +518,19 @@
       "title": "argo-cd chart を 9.1.6 → 10.2.3 に上げる（メジャー更新、ArgoCD 自身）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "todo",
+      "status": "blocked",
       "priority": 19,
       "why": "T-0005 の調査 (run #6) で判明。9→10 で server.additionalApplications/additionalProjects が別 chart (argocd-apps) に分離、redis-ha の selector-label immutability により手動 Pod 削除が必要になる場合があるなど breaking change を含む。ArgoCD 自身なので壊れると全アプリのデプロイ経路が止まる（ops/inventory.json の policy=manual の理由そのもの）",
       "dod": "9.1.6 から 10.2.3 までの全リリースノートを原文で読む。apps/argocd/kustomization.yaml と nix/images/proxmox-cloud/k3s-manifests.nix（T-0002 の二重管理、ops/check_version_sync.py が同時更新を検証する）の両方を同時に更新。CHARTER §4『到達性を失いうる変更（ArgoCD 自身）』の手順に従い、壊れたときの復旧手順を PR に明記する。policy=manual のため実装は用意できても最終判断は人間に委ねる必要があるか、この時点で再検討する",
+      "blocked_by": "ArgoCD 自身の破壊的更新。失敗すると revert を適用する経路（ArgoCD）ごと失われ、復旧にクラスタへの直接操作が要る。autopilot のクラウドサンドボックスは Tailscale 経由でクラスタに到達できないため、人間が起きていて Tailscale 経由でクラスタに触れる時間帯にのみ着手すべき（issue #56, 2026-08-04 22:42:36）。autopilot はその時間帯かどうかを判定する手段を持たないため、当面 blocked のままにし、着手可否の判断自体を人間からのフィードバックか、到達性確認の仕組み（T-0015）が整うのを待つ",
       "refs": [
         "apps/argocd/kustomization.yaml",
         "nix/images/proxmox-cloud/k3s-manifests.nix",
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": "run #12: issue #56 (2026-08-04 22:42:36) の指摘を受け todo → blocked に変更。理由は『戻せる形に落とせていない』（CHARTER §4）で、慎重さの問題ではなく手順として着手前提を満たしていない"
     },
     {
       "id": "T-0029",
