@@ -94,6 +94,14 @@
       "by": "cloud routine",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。T-0033（conflict marker 検出、#84）・T-0008（nix flake check を CI に追加、#85）・T-0009（weekly-maintenance と CHARTER の役割分担、#86）を完遂。続けて T-0013（PBS バックアップ体制の調査）を完遂し docs/backup.md を作成。実機確認が要る点は T-0034（needs-human）として切り出し、T-0029 の blocked_by を張り替えた",
       "prs": [84, 85, 86, 87]
+    },
+    {
+      "n": 9,
+      "at": "2026-08-04T21:37:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "run #8 の journal が『issue #56 に未読フィードバックなし』と誤記していたのを発見（実際は 2 件あり、目視比較での取りこぼし）。CHARTER §6 に機械的な洗い出しを追記し、2 件を反映: ops/dashboard/index.html を Git 管理から外す（T-0035, #88。直列化後も他の主体との衝突が続いていたため）、workflows/ruleset の権限非対称を記録（§5.2）。続けて T-0016（ダッシュボードの PR 一覧を gh CLI 非依存にする、#89）を完遂し、起動のたびに mcp__github__list_pull_requests でキャッシュを最新化する手順を確立。優先度 14 の patch 更新 3 件 T-0019/T-0020/T-0021（immich valkey・busybox・coder-postgres、#90/#91/#92）を完遂。副産物として WebFetch が curl の 403 を回避できるケース（hub.docker.com）と mcp__github__list_pull_requests の merged フィールドの不具合を発見し CHARTER に記録",
+      "prs": [88, 89, 90, 91, 92]
     }
   ]
 }
