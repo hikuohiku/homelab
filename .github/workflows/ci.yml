@@ -78,6 +78,43 @@ jobs:
           print("all yaml parses")
           PY
 
+  manifest-diff:
+    name: manifest deletion guard
+    # apps root Application は prune: true。render 結果からオブジェクトが消えると
+    # 次の sync でクラスタからも消える（PVC ならデータごと）。base/head の render を
+    # 比較し、消えたオブジェクトが PR 本文で明示的に許可されていなければ落とす
+    # （ops/check_manifest_deletions.py, issue #56 2026-08-04 22:04:42）。
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: head
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Install kustomize
+        run: |
+          set -euo pipefail
+          curl -sSfL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.8.1/kustomize_v5.8.1_linux_amd64.tar.gz \
+            | tar -xz -C /usr/local/bin kustomize
+          kustomize version
+
+      - name: Check for unexplained object deletions
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$PR_BODY" > /tmp/pr_body.txt
+          python3 head/ops/check_manifest_deletions.py base head /tmp/pr_body.txt
+
   terraform:
     name: terraform validate
     runs-on: ubuntu-latest

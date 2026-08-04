@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 36,
-  "updated": "2026-08-04T22:12:00Z",
+  "next_id": 37,
+  "updated": "2026-08-04T22:20:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -319,7 +319,10 @@
       "priority": 14,
       "why": "T-0005 の調査 (run #6) で判明。patch バージョン、リリースノートに特筆事項なし",
       "dod": "apps/dex/kustomization.yaml の version が 0.24.1。ops/inventory.json の dex-chart current も更新",
-      "refs": ["apps/dex/kustomization.yaml", "ops/inventory.json"],
+      "refs": [
+        "apps/dex/kustomization.yaml",
+        "ops/inventory.json"
+      ],
       "created": "2026-08-04",
       "pr": 79,
       "notes": "run #6: raw.githubusercontent.com 経由で Chart.yaml を確認し、0.24.0→0.24.1 は appVersion 2.44.0 のまま（dex 本体は不変、chart のパッケージング変更のみ）と確認した上で更新"
@@ -334,7 +337,10 @@
       "priority": 14,
       "why": "T-0005 の調査 (run #6) で判明。patch バージョン",
       "dod": "apps/immich/values.yaml の valkey タグが 9.1.1-alpine。ops/inventory.json の immich-valkey current も更新",
-      "refs": ["apps/immich/values.yaml", "ops/inventory.json"],
+      "refs": [
+        "apps/immich/values.yaml",
+        "ops/inventory.json"
+      ],
       "created": "2026-08-04",
       "pr": 90,
       "notes": "run #9: WebFetch で hub.docker.com のタグ一覧を確認（curl は docker hub への直接 HTTPS が組織 egress ポリシーで 403、WebFetch は別経路で到達できた）。9.1.1-alpine が 9.1 系の最新パッチと確認して更新"
@@ -349,7 +355,12 @@
       "priority": 14,
       "why": "T-0005 の調査 (run #6) で判明。3 箇所とも chown のみの initContainer（T-0003 参照）で busybox 固有機能に依存していない",
       "dod": "apps/vaultwarden/deployment.yaml, apps/coder/postgres.yaml, apps/immich/postgres.yaml の busybox タグが 3 箇所とも 1.38.0。ops/inventory.json の busybox current も更新",
-      "refs": ["apps/vaultwarden/deployment.yaml", "apps/coder/postgres.yaml", "apps/immich/postgres.yaml", "ops/inventory.json"],
+      "refs": [
+        "apps/vaultwarden/deployment.yaml",
+        "apps/coder/postgres.yaml",
+        "apps/immich/postgres.yaml",
+        "ops/inventory.json"
+      ],
       "created": "2026-08-04",
       "pr": 91,
       "notes": "run #9: WebFetch で hub.docker.com のタグ一覧を確認し 1.38.0 が最新と確認して 3 箇所とも更新"
@@ -364,7 +375,10 @@
       "priority": 14,
       "why": "T-0005 の調査 (run #6) で判明。16 系メジャー内の patch 5 つ分。postgres 18 系メジャー更新はデータ移行が要るため対象外（人間へ）",
       "dod": "apps/coder/postgres.yaml の postgres イメージタグが 17.10。ops/inventory.json の coder-postgres current も更新",
-      "refs": ["apps/coder/postgres.yaml", "ops/inventory.json"],
+      "refs": [
+        "apps/coder/postgres.yaml",
+        "ops/inventory.json"
+      ],
       "created": "2026-08-04",
       "pr": 92,
       "notes": "run #9: WebFetch で hub.docker.com のタグ一覧を確認し 17.10 が 17 系メジャー内の最新パッチと確認して更新。17.x マイナー内のためデータ移行は不要"
@@ -379,7 +393,10 @@
       "priority": 16,
       "why": "T-0005 の調査 (run #6) で判明。chart 側は 0.12.1 でデフォルトの immich app バージョンを v3.0.0 に、0.13.0 で release-please + OCI 配布 + cosign 署名に変更している。ただし repo は apps/immich/values.yaml で image タグを明示的に上書きしているため、chart の default 変更自体は影響しないはず（要確認）",
       "dod": "apps/immich/kustomization.yaml の chart version が 0.13.1。テンプレート構造の変更（values の形が変わっていないか）を diff で確認し、immich-server/immich-machine-learning の実際のバージョンは T-0021 とは独立に変わらないことを確かめる",
-      "refs": ["apps/immich/kustomization.yaml", "ops/inventory.json"],
+      "refs": [
+        "apps/immich/kustomization.yaml",
+        "ops/inventory.json"
+      ],
       "created": "2026-08-04",
       "pr": 95,
       "notes": "run #10: subagent が 0.12.0→0.13.1 の全リリース(0.12.1/0.13.0/0.13.1)を原文確認。0.12.1 のデフォルト appVersion 変更は image.tag 明示上書きのため無関係、0.12.1 の CNPG/Database CRD 移行は postgresql.* values を使っていないため無関係、0.13.0 の values.schema.json 追加はコメント整理のみで構造変更なし、OCI push 先も oci://ghcr.io/immich-app/immich-charts のまま。values.yaml の4つの上書きブロックは全て構造一致を確認済みのため、apps/immich/values.yaml への追随修正は不要と判断した"
@@ -395,7 +412,11 @@
       "why": "T-0005 の調査 (run #6) で判明。stable チャンネルの最新は v2.35.3。mainline の v2.36.0 は OAuth2 動的クライアント登録・login-type 非推奨化・chat model 設定の DB スキーマ変更など breaking change を含むため避ける。coder は autopilot 自身の開発環境をホストしている（ops/inventory.json のコメント）ため、更新に失敗すると足場を失うリスクがある点に注意。run #10 の subagent 調査で risk を medium → high に見直した: v2.34.7→v2.35.3 は実質マイナー1本分（約650コミット）で、`coder server` は起動時に DB migration を自動適用するが coder は down-migration を提供しないため、失敗時のロールバックはイメージタグを戻すだけでは不十分で Postgres のバックアップ復元が必要になる。coder-postgres は immich-postgres と同じく local-path で node01 のディスク上に直接あり（docs/backup.md）、バックアップの存在・復元手順は T-0034（needs-human）が解決するまで未確認。CHARTER §4『データを失いうる変更』に該当するため T-0029 と同様に着手を見送る。加えて v2.35.0/2.35.1 で X-Forwarded-Host の信頼元を CODER_PROXY_TRUSTED_ORIGINS で絞る変更が入っており、Tailscale 経由アクセス（CODER_ACCESS_URL）への影響が未検証",
       "dod": "T-0034 でバックアップの存在・復元手順が確認されてから着手する。apps/coder/deployment.yaml のイメージタグが v2.35.3。ops/inventory.json の current も更新。CODER_PROXY_TRUSTED_ORIGINS の要否を確認し、必要なら合わせて設定する。更新後に coder の Pod が正常に起動することを CI もしくは次回起動での間接確認で追う（このクラウド実行からは k8s に到達できないため、ArgoCD 側の反映確認は現状できない— T-0015 が解決すれば可能になる）",
       "blocked_by": "T-0034（PBS バックアップジョブの実機確認、needs-human）が終わっておらず、coder-postgres のバックアップ健全性が未確認のため着手しない",
-      "refs": ["apps/coder/deployment.yaml", "ops/inventory.json", "docs/backup.md"],
+      "refs": [
+        "apps/coder/deployment.yaml",
+        "ops/inventory.json",
+        "docs/backup.md"
+      ],
       "created": "2026-08-04",
       "pr": null
     },
@@ -409,7 +430,10 @@
       "priority": 18,
       "why": "T-0005 の調査 (run #6) で判明、正確な最新版は issue #56 (2026-08-04 20:20:15) のフィードバックで確定。operator chart の最新は 1.98.9（公開版: 1.98.9/1.98.4/1.98.3/1.96.5/1.94.2/1.94.1/1.92.5/1.92.4/1.92.3/1.90.9）。tailscale 本体の最新 stable は v1.102.1 だが chart は本体より遅れて出るため 1.98.9 が上限。同フィードバックで T-0025（k8s-nameserver を unstable-v1.103.54 へ）と揃えずに進めると operator と nameserver のバージョンが乖離すると指摘されている",
       "dod": "1.90.9 から 1.98.9 までのリリースノートを原文で読み breaking change を洗い出す。apps/tailscale-operator/kustomization.yaml の version を更新し、ops/inventory.json の current も更新。CHARTER §4 の『到達性を失いうる変更』の手順（復旧手順を PR に書く）に従う。T-0025 と同一 PR にする必要はないが、着手順序と組み合わせ（同時に揃えるか、operator → nameserver の順で刻むか）を先に決めてから着手する",
-      "refs": ["apps/tailscale-operator/kustomization.yaml", "ops/inventory.json"],
+      "refs": [
+        "apps/tailscale-operator/kustomization.yaml",
+        "ops/inventory.json"
+      ],
       "created": "2026-08-04",
       "pr": null,
       "notes": "run #7: 正確な最新版が判明したため blocked_by を解除。ただし risk=high の到達性変更であり、T-0025 との組み合わせ検討が先に必要なため todo のまま（着手は次回以降）"
@@ -424,7 +448,10 @@
       "priority": 18,
       "why": "T-0005 の調査 (run #6)。ghcr.io の tags API を直接叩いて確認済み（T-0001 と同じ手法）で unstable-v1.103.54 まで存在するが、issue #56 (2026-08-04 20:20:15) のフィードバックにより T-0024（operator chart は 1.98.9 が上限）と揃えるべきと判明。unstable-v1.103.54 まで進めると operator（1.98.9 系相当）と nameserver のバージョンが乖離する。unstable タグを追い続ける前提も見直し、stable 系タグが取れないか確認する",
       "dod": "k8s-nameserver に stable 系タグがあるか ghcr.io の tags API で確認する。無ければ operator chart (1.98.9 相当) と揃うバージョンの unstable タグを選ぶ。apps/tailscale-operator/dns-config.yaml のタグを更新、ops/inventory.json の current も更新。CHARTER §4 の到達性変更の手順（復旧手順を PR に明記）に従う。digest も合わせて確認する（T-0001 のやり方を踏襲）。T-0024 との着手順序を決めてから着手する",
-      "refs": ["apps/tailscale-operator/dns-config.yaml", "ops/inventory.json"],
+      "refs": [
+        "apps/tailscale-operator/dns-config.yaml",
+        "ops/inventory.json"
+      ],
       "created": "2026-08-04",
       "pr": null,
       "notes": "run #7: issue #56 のフィードバックを受け、T-0024 と組み合わせ・順序を揃える前提に変更"
@@ -439,7 +466,10 @@
       "priority": 20,
       "why": "T-0005 の調査 (run #6) で判明。1.1.1 → 2.8.0 は大きなメジャー更新の飛び。External Secrets Operator は secrets/ の実体を supply する基盤なので、壊れると全アプリのシークレット取得が止まりうる",
       "dod": "1.1.1 から 2.8.0 までの全リリースノートを原文で読み、breaking change を洗い出す。CHARTER §4『メジャーバージョン更新』の手順に従い 1 PR 1 コンポーネントで刻む（必要なら 1.x の最終版などの中間ステップに分割する）。apps/external-secrets/kustomization.yaml の version、ops/inventory.json の current を更新",
-      "refs": ["apps/external-secrets/kustomization.yaml", "ops/inventory.json"],
+      "refs": [
+        "apps/external-secrets/kustomization.yaml",
+        "ops/inventory.json"
+      ],
       "created": "2026-08-04",
       "pr": null
     },
@@ -453,7 +483,10 @@
       "priority": 20,
       "why": "T-0005 の調査 (run #6) で判明。v3.0.0 で non-destructive editing・Workflows・バックグラウンドバックアップ変更・HLS トランスコーディングなど大きな変更がある。immich-server と immich-machine-learning は必ず同一バージョンで揃える（ops/inventory.json の mirrors）",
       "dod": "v2.6.3 から v3.1.0 までの全リリースノートを原文で読み、DB マイグレーションや設定変更の要否を洗い出す。apps/immich/values.yaml の server / machine-learning 両方のタグを同時に v3.1.0 へ更新し、ops/inventory.json の current も両方更新",
-      "refs": ["apps/immich/values.yaml", "ops/inventory.json"],
+      "refs": [
+        "apps/immich/values.yaml",
+        "ops/inventory.json"
+      ],
       "created": "2026-08-04",
       "pr": null
     },
@@ -467,7 +500,11 @@
       "priority": 19,
       "why": "T-0005 の調査 (run #6) で判明。9→10 で server.additionalApplications/additionalProjects が別 chart (argocd-apps) に分離、redis-ha の selector-label immutability により手動 Pod 削除が必要になる場合があるなど breaking change を含む。ArgoCD 自身なので壊れると全アプリのデプロイ経路が止まる（ops/inventory.json の policy=manual の理由そのもの）",
       "dod": "9.1.6 から 10.2.3 までの全リリースノートを原文で読む。apps/argocd/kustomization.yaml と nix/images/proxmox-cloud/k3s-manifests.nix（T-0002 の二重管理、ops/check_version_sync.py が同時更新を検証する）の両方を同時に更新。CHARTER §4『到達性を失いうる変更（ArgoCD 自身）』の手順に従い、壊れたときの復旧手順を PR に明記する。policy=manual のため実装は用意できても最終判断は人間に委ねる必要があるか、この時点で再検討する",
-      "refs": ["apps/argocd/kustomization.yaml", "nix/images/proxmox-cloud/k3s-manifests.nix", "ops/inventory.json"],
+      "refs": [
+        "apps/argocd/kustomization.yaml",
+        "nix/images/proxmox-cloud/k3s-manifests.nix",
+        "ops/inventory.json"
+      ],
       "created": "2026-08-04",
       "pr": null
     },
@@ -482,7 +519,10 @@
       "why": "T-0005 の調査 (run #6) で判明。postgres 本体は 16.9→16.14 の minor で問題ないが、vchord 拡張が 0.4.3→1.1.1 とメジャー相当の飛びで、ベクタ DB の実データに影響しうる（ops/inventory.json の policy=manual の理由）",
       "dod": "vchord 0.4→1.x の互換性・移行手順を確認する。CHARTER §4『データを失いうる変更』の手順どおり、着手前に immich のバックアップが実際に存在し復元できることを確認する",
       "blocked_by": "T-0034（PBS バックアップジョブの実機確認、needs-human）が終わっておらず、バックアップの健全性が未確認のため着手しない",
-      "refs": ["apps/immich/postgres.yaml", "ops/inventory.json"],
+      "refs": [
+        "apps/immich/postgres.yaml",
+        "ops/inventory.json"
+      ],
       "created": "2026-08-04",
       "pr": null
     },
@@ -496,7 +536,9 @@
       "priority": 25,
       "why": "T-0005 の調査 (run #6) で判明。約 22 リリース分の差。意図的な完全一致 pin（理由コメントあり）なので、まず pin した理由が今も成り立つか確認するのが先。v0.109.0 のリリースノートに VM agent の IP 待機設定まわりの breaking change の言及がある",
       "dod": "providers.tf の pin 理由コメントを再確認し、今も成り立つか判断する。上げる場合は 0.89.1 から v0.111.1 までのリリースノートを原文で読み、breaking change を洗い出す。terraform apply は autopilot が実行できないため、実際の反映は人間の作業になる旨を PR に明記する",
-      "refs": ["terraform/proxmox/providers.tf"],
+      "refs": [
+        "terraform/proxmox/providers.tf"
+      ],
       "created": "2026-08-04",
       "pr": null
     },
@@ -510,7 +552,10 @@
       "priority": 22,
       "why": "Maintenance.md 2026-08-03 の持ち越し。icon 取得のタイムアウトが多発しているが実害は無いと記録されている。ログを埋めるだけなら無効化する価値がある",
       "dod": "現状のログ頻度と実害の有無を確認する。無害だが頻発してログを埋めているなら DISABLE_ICON_DOWNLOAD=true を設定する。実害があるなら原因（Tailscale プロキシ経由のアウトバウンド到達性など）を調べて対処する",
-      "refs": ["Maintenance.md", "apps/vaultwarden/"],
+      "refs": [
+        "Maintenance.md",
+        "apps/vaultwarden/"
+      ],
       "created": "2026-08-04",
       "pr": null
     },
@@ -524,7 +569,10 @@
       "priority": 22,
       "why": "Maintenance.md 2026-08-03 の持ち越し。1.37.0 で追加されたレート制限は送信元 IP 単位。全クライアントが Tailscale プロキシ経由で同一 IP に見えるため、正規クライアントが 429 で弾かれていないか未確認",
       "dod": "ログまたはクライアントの実際の挙動から 429 が発生していないか確認する。発生していれば ROCKET_LIMIT_* 系の設定調整か、送信元判定の見直しを検討する。発生していなければ Maintenance.md に確認済みと記録する",
-      "refs": ["Maintenance.md", "apps/vaultwarden/"],
+      "refs": [
+        "Maintenance.md",
+        "apps/vaultwarden/"
+      ],
       "created": "2026-08-04",
       "pr": null
     },
@@ -556,7 +604,9 @@
       "priority": 8,
       "why": "run #7 で origin/main が同時進行中の別 run に進んでいたため rebase で journal のコンフリクトを手で解消したが、末尾の `>>>>>>> ...` マーカー行を消し忘れたまま push・CI green・merge まで通ってしまった（#80）。ops/validate.py も kustomize build も markdown の中身までは見ないため検出できなかった",
       "dod": "ops/ 配下（少なくとも journal/*.md, *.json, *.md 全般）を conflict marker（行頭 `<<<<<<<` / `=======` / `>>>>>>>`）でスキャンし、見つかれば error にする。次に同じミスをしたら CI が落ちること",
-      "refs": ["ops/validate.py"],
+      "refs": [
+        "ops/validate.py"
+      ],
       "created": "2026-08-04",
       "pr": 84,
       "notes": "run #8: ops/validate.py に check_conflict_markers() を追加（.md / .json を対象、行頭一致）。わざと journal にコンフリクトマーカーを混ぜて 3 件検出 → 復元後 0 error に戻ることを手元で確認してから PR を出した（#56 の教訓『検出器はわざと壊して確かめる』を踏襲）"
@@ -571,10 +621,33 @@
       "priority": 8,
       "why": "issue #56 (2026-08-04 20:54:53) の指摘。直列化（run #6 の対処）は autopilot 自身の中でしか効かず、構築セッションなど他の主体が触る PR（#82/#83）とは依然として index.html で衝突した。build.py の生成物であり ops/*.json + journal から決定的に再生成できるので、そもそも Git 管理する理由が無い",
       "dod": "ops/dashboard/index.html が .gitignore 対象になり追跡から外れる。CI (ops job) が build.py の実行成功を検証する。CHARTER §4/§7.1 の記述を更新する",
-      "refs": ["ops/dashboard/index.html", ".gitignore", ".github/workflows/ci.yml", "ops/CHARTER.md"],
+      "refs": [
+        "ops/dashboard/index.html",
+        ".gitignore",
+        ".github/workflows/ci.yml",
+        "ops/CHARTER.md"
+      ],
       "created": "2026-08-04",
       "pr": 88,
       "notes": "run #9: git rm --cached で追跡除外、.gitignore に追加。CI の ops job に `python3 ops/dashboard/build.py` の実行成功チェックを追加。CHARTER §4 の相乗り例外リストと §7.1 を更新"
+    },
+    {
+      "id": "T-0036",
+      "domain": "homelab",
+      "title": "CI に kustomize render のオブジェクト削除検出ジョブを追加する（prune: true の安全網）",
+      "kind": "ci",
+      "risk": "low",
+      "status": "done",
+      "priority": 15,
+      "why": "apps root Application は syncPolicy.automated.prune: true。kustomize build --enable-helm の出力からオブジェクトが消えると次の sync でクラスタからも消え、PVC ならデータごと失われる。この検証は今まで人間（構築セッション）が chart 更新のたびに手で差分を取って確認していた（#95 のレビュー、issue #56 2026-08-04 22:04:42）。T-0026〜T-0029 の high risk メジャー更新はこの網が無いと安全に判断できない",
+      "dod": "PR の base/head 両方で全 kustomization.yaml を render し、消えたオブジェクトがあれば CI が落ちる。PR 本文に allow-delete: <Kind>/<namespace>/<name> の明示がある場合のみ許可する。わざとオブジェクトを消して落ちることを確認する",
+      "refs": [
+        "ops/check_manifest_deletions.py",
+        ".github/workflows/ci.yml"
+      ],
+      "created": "2026-08-04",
+      "pr": null,
+      "notes": "run #11: issue #56 のフィードバック(22:04:42)を反映して起票・即着手。ops/check_manifest_deletions.py を作成し、find_kustomization_dirs/parse_allowed/diff_and_check の純粋ロジックはサンドボックス上で python3 単体テスト済み（kustomize/helm が無いため render 自体はローカル検証できず CI 任せ、CHARTER §5.2）。CI に manifest-diff job を追加。ruleset の必須チェックへの追加は自分からはできないため、PR本文と issue #56 で構築セッションに依頼する"
     }
   ]
 }

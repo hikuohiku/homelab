@@ -165,6 +165,13 @@ high に該当するのは、失敗したときに元へ戻せないもの。**�
 - 上流の最新＝最善ではない。既知の不具合（例: vaultwarden 1.37.0 の alpine ビルド破損）を踏まない
 - 1 PR で 1 コンポーネント。まとめて上げない
 - 二重管理されている pin（`ops/inventory.json` の `mirrors`）は同じ PR で全部揃える
+- **CI (`manifest-diff` job) が `apps/` の render 結果からオブジェクトが消えていないかを機械的に検証する**
+  （`ops/check_manifest_deletions.py`, T-0036）。apps root Application は `prune: true` なので、
+  chart 更新で PVC 名や `metadata.name` が変わると次の sync でクラスタから消える。これまでは
+  chart 更新のたびに人間（構築セッション）が手で render 差分を確認していた（#95 のレビュー）。
+  意図的にオブジェクトを消す PR では本文に `allow-delete: <Kind>/<namespace>/<name>` を明記する。
+  **この検証は「データを失いうる変更」の判断材料の 1 つであって、バックアップの健全性確認の代わりにはならない**
+  （T-0029/T-0023 のように DB のメジャー更新でスキーマが壊れるケースは render の差分には出ない）
 
 ---
 
