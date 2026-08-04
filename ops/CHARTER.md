@@ -199,7 +199,7 @@ high に該当するのは、失敗したときに元へ戻せないもの。**�
 | `git` | ○ | push 可（`main` 直 push は ruleset で拒否される） |
 | `python3` | ○ | 3.11。`ops/validate.py` / `ops/dashboard/build.py` はこれで動く |
 | `jq` | ○ | |
-| `curl` | ○ | ただし `api.github.com` は組織 egress ポリシーで 403（`ghcr.io` 等は到達可） |
+| `curl` | ○ | ただし `api.github.com` / `registry.hub.docker.com` は組織 egress ポリシーで 403（`ghcr.io` / `raw.githubusercontent.com` 等は到達可）。**`WebFetch` ツールは curl とは別経路で、curl が 403 になるホスト（`hub.docker.com` で確認済み、2026-08-04 run #9）でも到達できることがある。** 上流のリリースノートやタグ一覧を調べるときは、`curl`/`urllib` が 403 になっても諦めず `WebFetch` を試す |
 | `node` | ○ | |
 | `docker` | ○ | |
 | `gh` | × | 上表のとおり `mcp__github__*` で代替 |
