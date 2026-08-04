@@ -598,7 +598,7 @@
         "apps/vaultwarden/"
       ],
       "created": "2026-08-04",
-      "pr": null,
+      "pr": 107,
       "notes": "run #13: 実際に 429 が発生していたかのログはクラスタ非到達のため確認できていないが、subagent に tailscale/tailscale と dani-garcia/vaultwarden の実ソースを直接読ませ、懸念の構造的な原因を特定した。Tailscale k8s operator の Ingress はリバースプロキシとして自 Pod から backend Service へ接続する実装（cmd/k8s-operator/ingress.go）のため raw TCP peer IP は常に proxy pod 自身になるが、`addProxyForwardedHeaders()` (ipn/ipnlocal/serve.go) が `X-Forwarded-For` に実クライアントの tailnet peer アドレスを `Set`（`Append` ではない）で書き込んでおり、クライアント側から偽装できない。一方 vaultwarden の `IP_HEADER` は未設定だとデフォルトの `X-Real-IP` を見るため、この `X-Forwarded-For` を読んでいなかった。`apps/vaultwarden/deployment.yaml` に `IP_HEADER=X-Forwarded-For` を追加して解消した。`IP_HEADER_TRUSTED_PROXIES` は既定の `local` のままで、直接の peer（proxy pod、CNI のプライベート IP）は自動的に信頼されるため変更不要"
     },
     {
