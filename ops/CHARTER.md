@@ -176,6 +176,37 @@ high に該当するのは、失敗したときに元へ戻せないもの。**�
 | `gh`（GitHub CLI） | この実行環境には入っていない（`command not found`）。GitHub 操作は `mcp__github__*` ツールで代替する（[§4](#4-pr-の作り方) 参照）。`api.github.com` への直接 HTTPS リクエスト（`curl`/`urllib` 等）も組織の egress ポリシーで 403 になり使えない。`ghcr.io` など GitHub 以外のレジストリは到達できる（2026-08-04 run #4 で確認） |
 | `git checkout <ref> -- .` / `git checkout <ref> -- <path>` | **使わない。** untracked ファイル以外の全 tracked ファイルを `<ref>` の内容で working tree ごと上書きする破壊的操作。ローカルの `main` ブランチは `git fetch` しても自動更新されず、`origin/main` とは別物として古いまま残ることがある（2026-08-04 run #5 で `git checkout main -- .` が stale なローカル `main` の内容で CHARTER/journal/state/backlog を上書きする事故を起こした。commit 前だったので `git reset --hard HEAD` で復旧）。ブランチの現在地を確認したいだけなら `git log -1 --format=%H origin/main` や `git status` / `git diff` を使う |
 
+### 5.2 この実行環境で使えるツール（事実の記録）
+
+**人間の環境（対話セッション・ローカル）とこのクラウド定期実行のサンドボックスは別物であり、使えるツールが違う。**
+`ops/journal/2026-08.md` の run #0（人間との対話セッション）では `terraform` / `kustomize` が手元で成功したと
+書かれているが、このクラウドサンドボックス（run #5 以降）には存在しない。**過去の run の記録を「この環境でも
+使える」の根拠にしない。** 実行のたびに前提が同じとは限らないので、疑わしければ `command -v <cmd>` で確認する。
+
+2026-08-04 run #5 でこのサンドボックスを確認した結果:
+
+| ツール | 有無 | 備考 |
+|--------|------|------|
+| `git` | ○ | push 可（`main` 直 push は ruleset で拒否される） |
+| `python3` | ○ | 3.11。`ops/validate.py` / `ops/dashboard/build.py` はこれで動く |
+| `jq` | ○ | |
+| `curl` | ○ | ただし `api.github.com` は組織 egress ポリシーで 403（`ghcr.io` 等は到達可） |
+| `node` | ○ | |
+| `docker` | ○ | |
+| `gh` | × | 上表のとおり `mcp__github__*` で代替 |
+| `kubectl` | × | 到達不能。CI に任せる |
+| `terraform` | × | `terraform fmt -check` / `validate` は手元でできない。CI（`terraform validate` job）に任せる |
+| `kustomize` | × | `kustomize build --enable-helm` は手元でできない。CI（`kustomize build` job）に任せる |
+| `nix` | × | flake 評価は手元でできない |
+| `just` | × | |
+| `direnv` | × | |
+| `sops` | × | 触ってはいけない対象（[§5](#5-触ってはいけないもの)）でもあるため、無くても支障はない |
+
+手元検証ができないツールについて「CI に任せる」と書いてある箇所は、**このサンドボックスに無いから CI に委譲している**のであって、
+妥協ではない。CI が落ちたら repo 側の変更を疑うこと。
+
+このリストは事実を記録するためのものなので、新しく気づいた有無をここに追記する（毎回試して確かめ直さない）。
+
 ルールを増やすときは、ここに「なぜ踏めないか」と「代わりに何をするか」をセットで書く。
 禁止だけ並べると、次の自分が回避策を探して時間を溶かす。
 

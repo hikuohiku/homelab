@@ -6,7 +6,7 @@
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-04T19:24:59Z"
+    "last_read": "2026-08-04T19:33:27Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -62,6 +62,14 @@
       "by": "cloud routine",
       "summary": "issue #56 の未読フィードバック（PR #67 のレビュー3点）を反映（PR #70, auto-merged）。gh CLI がこの環境に無いと判明し CHARTER を MCP ツール前提に修正。T-0001（tailscale k8s-nameserver の floating tag 固定）完遂。ダッシュボードの PR キャッシュ更新の仕組み不足を T-0016 として起票",
       "prs": [70, 71]
+    },
+    {
+      "n": 5,
+      "at": "2026-08-04T19:45:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "issue #56 の未読フィードバックを反映: このクラウドサンドボックスのツール有無を実測し CHARTER §5.2 として記録（terraform/kustomize は無い。run #0 の人間セッションとは環境が違う）。続けて T-0002（argo-cd chart バージョン二重管理）に着手し CI 検出を追加",
+      "prs": [73, 74]
     }
   ]
 }
