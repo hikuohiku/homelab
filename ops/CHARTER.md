@@ -174,6 +174,7 @@ high に該当するのは、失敗したときに元へ戻せないもの。**�
 | `sudo` | `deny` 対象。使わない |
 | `git push --force` | 使わない。やり直したいならブランチを作り直す |
 | `gh`（GitHub CLI） | この実行環境には入っていない（`command not found`）。GitHub 操作は `mcp__github__*` ツールで代替する（[§4](#4-pr-の作り方) 参照）。`api.github.com` への直接 HTTPS リクエスト（`curl`/`urllib` 等）も組織の egress ポリシーで 403 になり使えない。`ghcr.io` など GitHub 以外のレジストリは到達できる（2026-08-04 run #4 で確認） |
+| `git checkout <ref> -- .` / `git checkout <ref> -- <path>` | **使わない。** untracked ファイル以外の全 tracked ファイルを `<ref>` の内容で working tree ごと上書きする破壊的操作。ローカルの `main` ブランチは `git fetch` しても自動更新されず、`origin/main` とは別物として古いまま残ることがある（2026-08-04 run #5 で `git checkout main -- .` が stale なローカル `main` の内容で CHARTER/journal/state/backlog を上書きする事故を起こした。commit 前だったので `git reset --hard HEAD` で復旧）。ブランチの現在地を確認したいだけなら `git log -1 --format=%H origin/main` や `git status` / `git diff` を使う |
 
 ルールを増やすときは、ここに「なぜ踏めないか」と「代わりに何をするか」をセットで書く。
 禁止だけ並べると、次の自分が回避策を探して時間を溶かす。

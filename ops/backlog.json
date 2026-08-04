@@ -26,8 +26,8 @@
       "domain": "homelab",
       "title": "argo-cd chart バージョンの二重管理を解消する",
       "kind": "refactor",
-      "risk": "medium",
-      "status": "todo",
+      "risk": "low",
+      "status": "done",
       "priority": 2,
       "why": "9.1.6 が apps/argocd/kustomization.yaml と nix/images/proxmox-cloud/k3s-manifests.nix の 2 箇所に書かれている。片方だけ上げると bootstrap と実運用がずれる",
       "dod": "どちらか一方が単一の情報源になる。統一が難しい場合は、両方を必ず同時に更新すべき旨をコメントで両ファイルに明記し、CI で不一致を検出する",
@@ -36,7 +36,8 @@
         "nix/images/proxmox-cloud/k3s-manifests.nix"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": "run #5: 単一情報源への統合は nix の bootstrap 用 HelmChart CR と kustomize の helmCharts が構造的に別物のため見送り、DoD の代替案（コメント明記 + CI 検出）を採用。ops/check_version_sync.py を追加し CI (ops job) に組み込んだ。risk は実装した内容（コメント + CI 設定のみ、manifest 自体の値は不変）に合わせて low に見直した"
     },
     {
       "id": "T-0003",

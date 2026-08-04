@@ -40,6 +40,8 @@
         spec = {
           repo = "https://argoproj.github.io/argo-helm";
           chart = "argo-cd";
+          # apps/argocd/kustomization.yaml の version と必ず同時に更新する。
+          # 揃っていることは ops/check_version_sync.py が CI で検証する（T-0002）。
           version = "9.1.6";
           targetNamespace = "argocd";
           valuesContent = builtins.toJSON {

@@ -4,6 +4,8 @@ kind: Kustomization
 helmCharts:
   - name: argo-cd
     repo: https://argoproj.github.io/argo-helm
+    # bootstrap 用の nix/images/proxmox-cloud/k3s-manifests.nix の version と必ず同時に更新する。
+    # 揃っていることは ops/check_version_sync.py が CI で検証する（T-0002）。
     version: 9.1.6
     releaseName: argocd
     namespace: argocd
