@@ -97,7 +97,7 @@
       "title": "Plans.md の M2 (syncthing 移行) の記述を実態に合わせる",
       "kind": "docs",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 6,
       "why": "「ディスク空き不足で停止中」と書かれているが、2026-08-04 に node01 を 256 GiB へ拡張して前提が変わっている",
       "dod": "Plans.md の M2 の Status が現在の判断を反映している（保留理由がディスク以外に何か、あるいは着手可能になったか）",
@@ -107,7 +107,8 @@
         "docs/node01-storage.md"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": 80,
+      "notes": "run #7: M2 の保留理由からディスク容量を外し（2026-08-04 の node01 拡張で解消済み）、P2P 特性の移行可否検討のみに更新。Maintenance.md の 2026-08-03 持ち越し項目にも解消済みの注記を追加。移行の着手可否自体は判断していない（別タスク）"
     },
     {
       "id": "T-0007",
@@ -389,31 +390,32 @@
     {
       "id": "T-0024",
       "domain": "homelab",
-      "title": "tailscale-operator chart を 1.90.9 から最新に上げる（正確な最新版の確認が先に必要）",
+      "title": "tailscale-operator chart を 1.90.9 → 1.98.9 に上げる（T-0025 と組み合わせ・順序を揃えて着手）",
       "kind": "upgrade",
       "risk": "high",
       "status": "todo",
       "priority": 18,
-      "why": "T-0005 の調査 (run #6) で判明。ArtifactHub ミラー経由で少なくとも 1.98.9 以上、tailscale/tailscale 本体の最新 stable (v1.102.1 前後) と同じ版まで上がっている可能性が高い（このチャートのバージョンは tailscale/tailscale の tag と 1:1 対応）が、正確な最新版をこのクラウドサンドボックスから確認できなかった（pkgs.tailscale.com・artifacthub.io ともに到達不可、github.com への直接アクセスも repo-scope で弾かれる）。到達性の根幹（CHARTER §4 の到達性リスク区分）なので慎重に",
-      "dod": "着手前に pkgs.tailscale.com/helmcharts/index.yaml（到達できる環境から）で正確な最新版を確認する。apps/tailscale-operator/kustomization.yaml の version を更新し、ops/inventory.json の current も更新。CHARTER §4 の『到達性を失いうる変更』の手順（切れたときの復旧手順を PR に書く）に従う",
-      "blocked_by": "正確な最新版の確認。このサンドボックスからは到達できないため、次回起動で別の経路（ghcr.io ミラーの有無など）を試すか、確認できる環境を探す",
+      "why": "T-0005 の調査 (run #6) で判明、正確な最新版は issue #56 (2026-08-04 20:20:15) のフィードバックで確定。operator chart の最新は 1.98.9（公開版: 1.98.9/1.98.4/1.98.3/1.96.5/1.94.2/1.94.1/1.92.5/1.92.4/1.92.3/1.90.9）。tailscale 本体の最新 stable は v1.102.1 だが chart は本体より遅れて出るため 1.98.9 が上限。同フィードバックで T-0025（k8s-nameserver を unstable-v1.103.54 へ）と揃えずに進めると operator と nameserver のバージョンが乖離すると指摘されている",
+      "dod": "1.90.9 から 1.98.9 までのリリースノートを原文で読み breaking change を洗い出す。apps/tailscale-operator/kustomization.yaml の version を更新し、ops/inventory.json の current も更新。CHARTER §4 の『到達性を失いうる変更』の手順（復旧手順を PR に書く）に従う。T-0025 と同一 PR にする必要はないが、着手順序と組み合わせ（同時に揃えるか、operator → nameserver の順で刻むか）を先に決めてから着手する",
       "refs": ["apps/tailscale-operator/kustomization.yaml", "ops/inventory.json"],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": "run #7: 正確な最新版が判明したため blocked_by を解除。ただし risk=high の到達性変更であり、T-0025 との組み合わせ検討が先に必要なため todo のまま（着手は次回以降）"
     },
     {
       "id": "T-0025",
       "domain": "homelab",
-      "title": "tailscale k8s-nameserver を unstable-v1.91.150 → unstable-v1.103.54 に上げる",
+      "title": "tailscale k8s-nameserver を unstable-v1.91.150 → 安定系タグに上げる（T-0024 の operator chart 上限 1.98.9 と揃える。stable タグの有無を先に確認）",
       "kind": "upgrade",
       "risk": "high",
       "status": "todo",
       "priority": 18,
-      "why": "T-0005 の調査 (run #6)。ghcr.io の tags API を直接叩いて確認済み（T-0001 と同じ手法）。unstable-v1.91.150 → unstable-v1.103.54 で 12 マイナーバージョン分の差。cluster 内 DNS 解決に関わるため CHARTER §4 の『到達性を失いうる変更』に該当する",
-      "dod": "apps/tailscale-operator/dns-config.yaml のタグが unstable-v1.103.54。ops/inventory.json の current も更新。CHARTER §4 の到達性変更の手順（復旧手順を PR に明記）に従う。digest も合わせて確認する（T-0001 のやり方を踏襲）",
+      "why": "T-0005 の調査 (run #6)。ghcr.io の tags API を直接叩いて確認済み（T-0001 と同じ手法）で unstable-v1.103.54 まで存在するが、issue #56 (2026-08-04 20:20:15) のフィードバックにより T-0024（operator chart は 1.98.9 が上限）と揃えるべきと判明。unstable-v1.103.54 まで進めると operator（1.98.9 系相当）と nameserver のバージョンが乖離する。unstable タグを追い続ける前提も見直し、stable 系タグが取れないか確認する",
+      "dod": "k8s-nameserver に stable 系タグがあるか ghcr.io の tags API で確認する。無ければ operator chart (1.98.9 相当) と揃うバージョンの unstable タグを選ぶ。apps/tailscale-operator/dns-config.yaml のタグを更新、ops/inventory.json の current も更新。CHARTER §4 の到達性変更の手順（復旧手順を PR に明記）に従う。digest も合わせて確認する（T-0001 のやり方を踏襲）。T-0024 との着手順序を決めてから着手する",
       "refs": ["apps/tailscale-operator/dns-config.yaml", "ops/inventory.json"],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": "run #7: issue #56 のフィードバックを受け、T-0024 と組み合わせ・順序を揃える前提に変更"
     },
     {
       "id": "T-0026",
