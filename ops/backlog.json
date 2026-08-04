@@ -174,14 +174,14 @@
     {
       "id": "T-0011",
       "domain": "homelab",
-      "title": "vaultwarden の ADMIN_TOKEN が平文で保存されている件を解消する",
+      "title": "vaultwarden の ADMIN_TOKEN を Argon2 ハッシュ化する（Doppler への登録をお願いしたい）",
       "kind": "security",
       "risk": "high",
       "status": "needs-human",
       "priority": 11,
       "why": "Maintenance.md 2026-08-03 の持ち越し。Argon2 PHC 形式へのハッシュ化が見送られたまま",
       "dod": "ADMIN_TOKEN が Argon2 PHC ハッシュとして保存されている、または admin パネル自体が無効化されている",
-      "needs_human_reason": "シークレットのローテーションを伴う。CHARTER §4「シークレットの取り扱い」に該当",
+      "needs_human_reason": "Doppler に新しい ADMIN_TOKEN の Argon2 PHC ハッシュを登録する作業。credential の発行と登録はエージェントからは手が届かない。manifest 側の変更はこちらで用意するので、Doppler への登録だけお願いしたい",
       "refs": [
         "Maintenance.md",
         "apps/vaultwarden/"
