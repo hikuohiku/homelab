@@ -50,12 +50,12 @@
       "id": "tailscale-operator-chart",
       "kind": "helm",
       "name": "tailscale-operator",
-      "current": "1.90.9",
+      "current": "1.98.9",
       "file": "apps/tailscale-operator/kustomization.yaml",
       "match": "version:",
       "upstream": "github:tailscale/tailscale",
       "policy": "auto",
-      "note": "到達性の根幹。壊すとクラスタに届かなくなる"
+      "note": "到達性の根幹。壊すとクラスタに届かなくなる。T-0024 で 1.90.9→1.98.9 に更新（#100）。k8s-nameserver（同ファイル群内の別エントリ）と同じ tailscale/tailscale@vX.Y.Z タグから揃えて更新すること"
     },
     {
       "id": "vaultwarden",
@@ -149,12 +149,12 @@
       "id": "k8s-nameserver",
       "kind": "image",
       "name": "tailscale k8s-nameserver",
-      "current": "unstable-v1.91.150",
+      "current": "v1.98.9",
       "file": "apps/tailscale-operator/dns-config.yaml",
       "match": "k8s-nameserver",
       "upstream": "github:tailscale/tailscale",
       "policy": "auto",
-      "note": "T-0001 で floating tag (unstable) を固定した。tailscale/k8s-nameserver に「stable」相当のタグは無く、unstable-vX.Y.Z 形式のスナップショットのみ存在する。更新時は ghcr.io の digest を必ず確認する"
+      "note": "T-0025 で unstable-v1.91.150 → v1.98.9 に更新（#100）。訂正: T-0001/T-0005 時点（chart 1.90.9）では stable 相当のタグは無く unstable-vX.Y.Z のスナップショットのみだったが、chart 1.92 系以降は tailscale/tailscale の release tag と同じ非 floating な vX.Y.Z タグが ghcr.io / Docker Hub 両方に存在する。今後の更新は unstable-* に戻さず、tailscale-operator-chart と同じ vX.Y.Z で揃える"
     },
     {
       "id": "coder-workspace-image",

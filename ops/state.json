@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-04T22:20:00Z",
+  "updated": "2026-08-04T22:45:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -152,9 +152,11 @@
       "at": "2026-08-04T22:20:00Z",
       "kind": "scheduled",
       "by": "cloud routine",
-      "summary": "issue #56 の未読フィードバック1件（22:04:42、#95 のレンダリング差分の事後検証）を反映。CI にオブジェクト削除検出 job (manifest-diff) を追加する T-0036 を起票・即完遂し、apps root Application が prune: true である以上必要だった安全網を追加した（#98, auto-merge 設定予定）。",
+      "summary": "issue #56 の未読フィードバック1件（22:04:42、#95 のレンダリング差分の事後検証）を反映。CI にオブジェクト削除検出 job (manifest-diff) を追加する T-0036 を起票・完遂（#98）、ダッシュボード PR キャッシュを更新（#99）。続けて到達性の根幹である T-0024/T-0025（tailscale-operator chart 1.90.9→1.98.9 + k8s-nameserver unstable-v1.91.150→v1.98.9）を subagent 調査（実タグ間のテンプレート/CRD差分照合）に基づき完遂。副産物として k8s-nameserver の stable タグが chart 1.92 以降で利用可能になっていたと判明し、operator chart と揃えた（#100）。",
       "prs": [
-        98
+        98,
+        99,
+        100
       ]
     }
   ]

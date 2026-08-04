@@ -426,7 +426,7 @@
       "title": "tailscale-operator chart を 1.90.9 → 1.98.9 に上げる（T-0025 と組み合わせ・順序を揃えて着手）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "todo",
+      "status": "done",
       "priority": 18,
       "why": "T-0005 の調査 (run #6) で判明、正確な最新版は issue #56 (2026-08-04 20:20:15) のフィードバックで確定。operator chart の最新は 1.98.9（公開版: 1.98.9/1.98.4/1.98.3/1.96.5/1.94.2/1.94.1/1.92.5/1.92.4/1.92.3/1.90.9）。tailscale 本体の最新 stable は v1.102.1 だが chart は本体より遅れて出るため 1.98.9 が上限。同フィードバックで T-0025（k8s-nameserver を unstable-v1.103.54 へ）と揃えずに進めると operator と nameserver のバージョンが乖離すると指摘されている",
       "dod": "1.90.9 から 1.98.9 までのリリースノートを原文で読み breaking change を洗い出す。apps/tailscale-operator/kustomization.yaml の version を更新し、ops/inventory.json の current も更新。CHARTER §4 の『到達性を失いうる変更』の手順（復旧手順を PR に書く）に従う。T-0025 と同一 PR にする必要はないが、着手順序と組み合わせ（同時に揃えるか、operator → nameserver の順で刻むか）を先に決めてから着手する",
@@ -435,8 +435,8 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": null,
-      "notes": "run #7: 正確な最新版が判明したため blocked_by を解除。ただし risk=high の到達性変更であり、T-0025 との組み合わせ検討が先に必要なため todo のまま（着手は次回以降）"
+      "pr": 100,
+      "notes": "run #7: 正確な最新版が判明したため blocked_by を解除。ただし risk=high の到達性変更であり、T-0025 との組み合わせ検討が先に必要なため todo のまま（着手は次回以降） | run #11: subagent に調査を投げ、chart 1.90.9→1.98.9 の全中間版のテンプレート/CRD差分を tailscale/tailscale の実タグで直接照合（changelog散文ではなくソース差分）。この repo が使う機能（apiServerProxyConfig.mode: \"true\"、oauth: {} + operator-oauth Secret、DNSConfig の image.repo/tag）に影響する breaking change は無し。DNSConfig CRD は差分ゼロ除去・追加フィールドのみの後方互換変更。ロールバックは git revert + ArgoCD self-heal で完結し、人間・エージェントともクラスタに直接触れる必要が無いことを確認したうえで T-0025 と同一 PR (#100) で着手した"
     },
     {
       "id": "T-0025",
@@ -444,7 +444,7 @@
       "title": "tailscale k8s-nameserver を unstable-v1.91.150 → 安定系タグに上げる（T-0024 の operator chart 上限 1.98.9 と揃える。stable タグの有無を先に確認）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "todo",
+      "status": "done",
       "priority": 18,
       "why": "T-0005 の調査 (run #6)。ghcr.io の tags API を直接叩いて確認済み（T-0001 と同じ手法）で unstable-v1.103.54 まで存在するが、issue #56 (2026-08-04 20:20:15) のフィードバックにより T-0024（operator chart は 1.98.9 が上限）と揃えるべきと判明。unstable-v1.103.54 まで進めると operator（1.98.9 系相当）と nameserver のバージョンが乖離する。unstable タグを追い続ける前提も見直し、stable 系タグが取れないか確認する",
       "dod": "k8s-nameserver に stable 系タグがあるか ghcr.io の tags API で確認する。無ければ operator chart (1.98.9 相当) と揃うバージョンの unstable タグを選ぶ。apps/tailscale-operator/dns-config.yaml のタグを更新、ops/inventory.json の current も更新。CHARTER §4 の到達性変更の手順（復旧手順を PR に明記）に従う。digest も合わせて確認する（T-0001 のやり方を踏襲）。T-0024 との着手順序を決めてから着手する",
@@ -453,8 +453,8 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": null,
-      "notes": "run #7: issue #56 のフィードバックを受け、T-0024 と組み合わせ・順序を揃える前提に変更"
+      "pr": 100,
+      "notes": "run #7: issue #56 のフィードバックを受け、T-0024 と組み合わせ・順序を揃える前提に変更 | run #11: 調査の結果、T-0001/T-0005 時点の「k8s-nameserver に stable タグは無い」という前提が古くなっていたと判明。chart 1.92 系以降は tailscale/tailscale の release tag と同じ非 floating な vX.Y.Z タグが存在し、operator chart 1.98.9 は tailscale/tailscale@v1.98.9 からビルドされているため、nameserver も v1.98.9 を選べば operator と完全に一致する（ghcr.io/Docker Hub 双方で digest 確認済み）。unstable-v1.91.150 → v1.98.9 として T-0024 と同一 PR (#100) で着手"
     },
     {
       "id": "T-0026",
