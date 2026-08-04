@@ -92,7 +92,7 @@
       "at": "2026-08-04T22:05:00Z",
       "kind": "scheduled",
       "by": "cloud routine",
-      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。T-0033（ops/validate.py に conflict marker 検出を追加）を完遂。わざと journal にマーカーを混ぜて検出できることを確認してから PR を出した",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。T-0033（ops/validate.py に conflict marker 検出を追加、#84 merged）を完遂。続けて T-0008（nix flake check を CI に追加）に着手。subagent の調査で nix flake check が nixosConfigurations も評価対象に含むことを確認し、cachix/install-nix-action@v31 で CI job を追加",
       "prs": [84]
     }
   ]

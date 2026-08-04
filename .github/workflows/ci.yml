@@ -107,3 +107,19 @@ jobs:
         run: python3 ops/validate.py
       - name: check duplicated version pins are in sync
         run: python3 ops/check_version_sync.py
+
+  nix:
+    name: nix flake check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: cachix/install-nix-action@v31
+        with:
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      # ビルド（qcow2 イメージの実体化）は重いので評価のみ。--no-build は今のところ no-op
+      # （このフレークに checks 出力が無いため）だが、将来 checks が足された事故を防ぐ保険として付ける。
+      - name: flake check (evaluation only)
+        working-directory: nix/images/proxmox-cloud
+        run: nix flake check --no-build --print-build-logs
