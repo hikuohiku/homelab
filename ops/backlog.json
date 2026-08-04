@@ -372,13 +372,14 @@
       "title": "immich Helm chart を 0.12.0 → 0.13.1 に上げる（アプリのバージョンは変えない）",
       "kind": "upgrade",
       "risk": "medium",
-      "status": "todo",
+      "status": "done",
       "priority": 16,
       "why": "T-0005 の調査 (run #6) で判明。chart 側は 0.12.1 でデフォルトの immich app バージョンを v3.0.0 に、0.13.0 で release-please + OCI 配布 + cosign 署名に変更している。ただし repo は apps/immich/values.yaml で image タグを明示的に上書きしているため、chart の default 変更自体は影響しないはず（要確認）",
       "dod": "apps/immich/kustomization.yaml の chart version が 0.13.1。テンプレート構造の変更（values の形が変わっていないか）を diff で確認し、immich-server/immich-machine-learning の実際のバージョンは T-0021 とは独立に変わらないことを確かめる",
       "refs": ["apps/immich/kustomization.yaml", "ops/inventory.json"],
       "created": "2026-08-04",
-      "pr": null
+      "pr": 95,
+      "notes": "run #10: subagent が 0.12.0→0.13.1 の全リリース(0.12.1/0.13.0/0.13.1)を原文確認。0.12.1 のデフォルト appVersion 変更は image.tag 明示上書きのため無関係、0.12.1 の CNPG/Database CRD 移行は postgresql.* values を使っていないため無関係、0.13.0 の values.schema.json 追加はコメント整理のみで構造変更なし、OCI push 先も oci://ghcr.io/immich-app/immich-charts のまま。values.yaml の4つの上書きブロックは全て構造一致を確認済みのため、apps/immich/values.yaml への追随修正は不要と判断した"
     },
     {
       "id": "T-0023",
