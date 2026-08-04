@@ -462,7 +462,7 @@
       "title": "external-secrets chart を 1.1.1 → 2.8.0 に上げる（メジャー更新、全リリースノートを読む）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "todo",
+      "status": "in_progress",
       "priority": 20,
       "why": "T-0005 の調査 (run #6) で判明。1.1.1 → 2.8.0 は大きなメジャー更新の飛び。External Secrets Operator は secrets/ の実体を supply する基盤なので、壊れると全アプリのシークレット取得が止まりうる",
       "dod": "1.1.1 から 2.8.0 までの全リリースノートを原文で読み、breaking change を洗い出す。CHARTER §4『メジャーバージョン更新』の手順に従い 1 PR 1 コンポーネントで刻む（必要なら 1.x の最終版などの中間ステップに分割する）。apps/external-secrets/kustomization.yaml の version、ops/inventory.json の current を更新",
@@ -479,16 +479,18 @@
       "title": "immich server / machine-learning を v2.6.3 → v3.1.0 に上げる（メジャー更新）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "todo",
+      "status": "blocked",
       "priority": 20,
-      "why": "T-0005 の調査 (run #6) で判明。v3.0.0 で non-destructive editing・Workflows・バックグラウンドバックアップ変更・HLS トランスコーディングなど大きな変更がある。immich-server と immich-machine-learning は必ず同一バージョンで揃える（ops/inventory.json の mirrors）",
+      "why": "T-0005 の調査 (run #6) で判明。v3.0.0 で non-destructive editing・Workflows・バックグラウンドバックアップ変更・HLS トランスコーディングなど大きな変更がある。immich-server と immich-machine-learning は必ず同一バージョンで揃える（ops/inventory.json の mirrors）。データ移行を伴うため CHARTER §4『データを失いうる変更』に該当し、T-0029 と同じ理由でバックアップ健全性の確認が先",
       "dod": "v2.6.3 から v3.1.0 までの全リリースノートを原文で読み、DB マイグレーションや設定変更の要否を洗い出す。apps/immich/values.yaml の server / machine-learning 両方のタグを同時に v3.1.0 へ更新し、ops/inventory.json の current も両方更新",
+      "blocked_by": "T-0034（PBS バックアップジョブの実機確認、needs-human）が終わっておらず、immich のバックアップ健全性が未確認のため着手しない",
       "refs": [
         "apps/immich/values.yaml",
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": "run #12: issue #56 (2026-08-04 22:42:36) の指摘を受け todo → blocked に変更。データ移行を伴う点は T-0029 と同型のため、T-0034 待ちを明示した"
     },
     {
       "id": "T-0028",
@@ -496,17 +498,19 @@
       "title": "argo-cd chart を 9.1.6 → 10.2.3 に上げる（メジャー更新、ArgoCD 自身）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "todo",
+      "status": "blocked",
       "priority": 19,
       "why": "T-0005 の調査 (run #6) で判明。9→10 で server.additionalApplications/additionalProjects が別 chart (argocd-apps) に分離、redis-ha の selector-label immutability により手動 Pod 削除が必要になる場合があるなど breaking change を含む。ArgoCD 自身なので壊れると全アプリのデプロイ経路が止まる（ops/inventory.json の policy=manual の理由そのもの）",
       "dod": "9.1.6 から 10.2.3 までの全リリースノートを原文で読む。apps/argocd/kustomization.yaml と nix/images/proxmox-cloud/k3s-manifests.nix（T-0002 の二重管理、ops/check_version_sync.py が同時更新を検証する）の両方を同時に更新。CHARTER §4『到達性を失いうる変更（ArgoCD 自身）』の手順に従い、壊れたときの復旧手順を PR に明記する。policy=manual のため実装は用意できても最終判断は人間に委ねる必要があるか、この時点で再検討する",
+      "blocked_by": "ArgoCD 自身の破壊的更新。失敗すると revert を適用する経路（ArgoCD）ごと失われ、復旧にクラスタへの直接操作が要る。autopilot のクラウドサンドボックスは Tailscale 経由でクラスタに到達できないため、人間が起きていて Tailscale 経由でクラスタに触れる時間帯にのみ着手すべき（issue #56, 2026-08-04 22:42:36）。autopilot はその時間帯かどうかを判定する手段を持たないため、当面 blocked のままにし、着手可否の判断自体を人間からのフィードバックか、到達性確認の仕組み（T-0015）が整うのを待つ",
       "refs": [
         "apps/argocd/kustomization.yaml",
         "nix/images/proxmox-cloud/k3s-manifests.nix",
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": "run #12: issue #56 (2026-08-04 22:42:36) の指摘を受け todo → blocked に変更。理由は『戻せる形に落とせていない』（CHARTER §4）で、慎重さの問題ではなく手順として着手前提を満たしていない"
     },
     {
       "id": "T-0029",
