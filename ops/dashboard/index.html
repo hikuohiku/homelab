@@ -183,11 +183,11 @@ a { color:var(--sig); }
     <div class="mast__sub">
       <span>homelab を自律運用するエージェントの記録</span>
       <span>定期実行 未設定</span>
-      <span>生成 2026-08-04 19:10 UTC</span>
+      <span>生成 2026-08-04 19:22 UTC</span>
     </div>
   </header>
 
-  <div class="stats"><div class="stat stat--sig"><span class="stat__v">11 分前</span><span class="stat__l">最終起動</span></div><div class="stat stat--ok"><span class="stat__v">20</span><span class="stat__l">反映済みの変更</span></div><div class="stat stat--sig"><span class="stat__v">0</span><span class="stat__l">作業中の PR</span></div><div class="stat stat--crit"><span class="stat__v">1</span><span class="stat__l">あなた待ち</span></div></div>
+  <div class="stats"><div class="stat stat--sig"><span class="stat__v">-38 分前</span><span class="stat__l">最終起動</span></div><div class="stat stat--ok"><span class="stat__v">20</span><span class="stat__l">反映済みの変更</span></div><div class="stat stat--sig"><span class="stat__v">0</span><span class="stat__l">作業中の PR</span></div><div class="stat stat--crit"><span class="stat__v">2</span><span class="stat__l">あなた待ち</span></div></div>
 
   <section>
     <h2>やったこと</h2>
@@ -195,39 +195,39 @@ a { color:var(--sig); }
     <ul class="list">
       <li class="done">
         <a class="done__title" href="https://github.com/hikuohiku/homelab/pull/65">ops: workflows 権限の付与を受けて T-0014 のブロックを解除する</a>
-        <span class="done__meta">#65 · 3 分前</span>
+        <span class="done__meta">#65 · 14 分前</span>
       </li>
       <li class="done">
         <a class="done__title" href="https://github.com/hikuohiku/homelab/pull/64">ops: T-0014 の pr 番号を記録する (#63)</a>
-        <span class="done__meta">#64 · 6 分前</span>
+        <span class="done__meta">#64 · 17 分前</span>
       </li>
       <li class="done">
         <a class="done__title" href="https://github.com/hikuohiku/homelab/pull/63">ops: issue #56 のフィードバックを反映、T-0014 を needs-human に</a>
-        <span class="done__meta">#63 · 7 分前</span>
+        <span class="done__meta">#63 · 18 分前</span>
       </li>
       <li class="done">
         <a class="done__title" href="https://github.com/hikuohiku/homelab/pull/62">fix: permissions.ask を全廃する</a>
-        <span class="done__meta">#62 · 16 分前</span>
+        <span class="done__meta">#62 · 27 分前</span>
       </li>
       <li class="done">
         <a class="done__title" href="https://github.com/hikuohiku/homelab/pull/61">fix(ops): 権限プロンプトで起動が消えるのを防ぐ</a>
-        <span class="done__meta">#61 · 19 分前</span>
+        <span class="done__meta">#61 · 30 分前</span>
       </li>
       <li class="done">
         <a class="done__title" href="https://github.com/hikuohiku/homelab/pull/60">ops: 定期実行を 1 時間ごとに変更し、run #1 の記録を残す</a>
-        <span class="done__meta">#60 · 24 分前</span>
+        <span class="done__meta">#60 · 35 分前</span>
       </li>
       <li class="done">
         <a class="done__title" href="https://github.com/hikuohiku/homelab/pull/59">fix(ops): main への直 push を廃し、記録も PR に載せる</a>
-        <span class="done__meta">#59 · 25 分前</span>
+        <span class="done__meta">#59 · 37 分前</span>
       </li>
       <li class="done">
         <a class="done__title" href="https://github.com/hikuohiku/homelab/pull/58">feat(ops): 判断を人間に渡さない方針へ憲章を改める</a>
-        <span class="done__meta">#58 · 38 分前</span>
+        <span class="done__meta">#58 · 50 分前</span>
       </li>
       <li class="done">
         <a class="done__title" href="https://github.com/hikuohiku/homelab/pull/57">feat(ops): homelab を自律運用する autopilot の器を作る</a>
-        <span class="done__meta">#57 · 47 分前</span>
+        <span class="done__meta">#57 · 59 分前</span>
       </li>
       <li class="done">
         <a class="done__title" href="https://github.com/hikuohiku/homelab/pull/55">fix(coder): secure workspace SSH key before clone</a>
@@ -235,7 +235,7 @@ a { color:var(--sig); }
       </li>
       <li class="done">
         <a class="done__title" href="https://github.com/hikuohiku/homelab/pull/54">fix(coder): clone private skills over SSH</a>
-        <span class="done__meta">#54 · 2 時間前</span>
+        <span class="done__meta">#54 · 3 時間前</span>
       </li>
       <li class="done">
         <a class="done__title" href="https://github.com/hikuohiku/homelab/pull/53">feat(coder): use immutable workspace image</a>
@@ -260,6 +260,20 @@ a { color:var(--sig); }
           <span class="chip chip--quiet">リスク 高</span>
           <span class="task__refs"><code>Maintenance.md</code><code>apps/vaultwarden/</code></span>
         </div>
+      </li>
+      <li class="task task--crit">
+        <div class="task__head">
+          <span class="task__id">T-0015</span>
+          <h3 class="task__title">ArgoCD/k8s の健全性を homelab 側から repo に書き戻す経路を作る（T-0010 の解決策）</h3>
+        </div>
+        <p class="task__why">issue #56 (2026-08-04 19:12:21) で設計方向のフィードバックを受けた。クラウドから homelab へは到達できないが、逆にクラスタ内 CronJob が状態を repo へ push する方向なら到達性の制約を回避できる。medium リスクの auto-merge を続ける以上、効いたかを確認する経路が要る</p>
+        <p class="task__note">書き戻しに使う GitHub token の発行と Doppler への登録。必要スコープ: 対象 repo への contents:write（専用ブランチのみで良ければ fine-grained PAT で branch 制限可）。登録先キー名は実装時に backlog へ追記する。token 自体の発行はエージェントから手が届かない</p>
+        <div class="task__meta">
+          <span class="chip chip--crit">要判断</span>
+          <span class="chip chip--quiet">機能</span>
+          <span class="chip chip--quiet">リスク 中</span>
+          <span class="task__refs"><code>ops/CHARTER.md</code><code>apps/</code></span>
+        </div>
       </li></ul>
   </section>
 
@@ -268,7 +282,7 @@ a { color:var(--sig); }
     <p>使っていて感じたことを殴り書きで構いません。進め方への指摘は憲章に、やってほしいことはタスクとして取り込まれます。
        読んだら 3 行以内で返信します。<strong>返信が無い＝まだ読んでいない</strong>と判断してください。</p>
     <a class="fb__cta" href="https://github.com/hikuohiku/homelab/issues/56">issue #56 に書く</a>
-    <span class="fb__meta">最後に読んだ: 44 分前</span>
+    <span class="fb__meta">最後に読んだ: 10 分前</span>
   </section>
 
   <section>
@@ -280,20 +294,6 @@ a { color:var(--sig); }
     <h2>これからやること</h2>
     <p class="lede">上から順に着手します。1 タスク = 1 PR。</p>
     <ul class="list">
-      <li class="task task--idle">
-        <div class="task__head">
-          <span class="task__id">T-0014</span>
-          <h3 class="task__title">main への直 push を検知する CI (direct-push-guard) を追加する <a class="prlink" href="63">PR</a></h3>
-        </div>
-        <p class="task__why">main の ruleset『CI 必須』は PR 経由のマージだけを対象にし、main への直 push は CI を経ずに素通りする。issue #56 で人間から指摘を受けた</p>
-        
-        <div class="task__meta">
-          <span class="chip chip--idle">待ち</span>
-          <span class="chip chip--quiet">CI</span>
-          <span class="chip chip--quiet">リスク 低</span>
-          <span class="task__refs"><code>.github/workflows/direct-push-guard.yml</code></span>
-        </div>
-      </li>
       <li class="task task--idle">
         <div class="task__head">
           <span class="task__id">T-0001</span>
@@ -448,7 +448,7 @@ a { color:var(--sig); }
           <span class="task__refs"><code>ops/CHARTER.md</code><code>ops/journal/</code></span>
         </div>
       </li></ul>
-    <p class="more">ほか 1 件</p>
+    
   </section>
 
   <section>
