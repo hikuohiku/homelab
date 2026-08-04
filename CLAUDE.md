@@ -127,7 +127,11 @@ Doppler (homelab/prd)
 
 - **インフラ参照は MCP ツール経由で行う**: `mcp__kubectl__*`, `mcp__argocd__*`, `mcp__proxmox__*`, `mcp__tailscale__*` を使う
 - **インフラの参照（read）は MCP を使う**: CLI は管理者権限の kubeconfig を使うため credential 分離が無効になる。参照は MCP サーバーが read-only 制約を担保しているので MCP 経由を原則とする
-- **kubectl の書き込み（write）は人間レビュー付き（ask）でのみ許可**: MCP は read-only のため、デプロイ検証・データ移行など write が必要な操作は `kubectl` CLI を使う。`.claude/settings.json` の `permissions.ask` に `Bash(kubectl:*)` を設定し、エージェントが叩く kubectl は毎回ユーザーがコマンドを目視レビューして承認する運用とする（無断実行は不可）
+- **kubectl の書き込み（write）は `kubectl` CLI で行う**: MCP は read-only のため、デプロイ検証・データ移行など write が必要な操作は CLI を使う。
+  以前は `.claude/settings.json` の `permissions.ask` で毎回人間の承認を求めていたが、**`ask` は全廃した**。
+  ヘッドレスの定期実行（[`ops/CHARTER.md`](ops/CHARTER.md)）では誰も承認できず、プロンプトに当たった時点で
+  その起動が丸ごと無駄になるため（2026-08-04, run #1 が実際にこれで消えた）。
+  実質の歯止めは「変更は Git → CI → ArgoCD を通す」という経路そのものと、憲章 §5 が担う
 - **例外**: `tailscale up` / `tailscale status` / `just *` は CLI 許可済み（MCP 非対応の操作）
 
 ### トラブルシューティング
