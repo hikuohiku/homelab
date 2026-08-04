@@ -31,7 +31,7 @@ VISION が「何になろうとしているか」、この CHARTER が「どう�
 |---|------|
 | 0 | この CHARTER.md を読む |
 | 1 | **フィードバックを読む**（[§6](#6-人間からのフィードバック)）。未処理があれば最優先で反映する |
-| 2 | **前回の中断を拾う**: `gh pr list` でオープン PR、`git branch -r` で `autopilot/*` の残りブランチを見る。CI 失敗・コンフリクト・書きかけがあれば**新規タスクより先に**片付ける |
+| 2 | **前回の中断を拾う**: `mcp__github__list_pull_requests`（state: open）でオープン PR、`git branch -r` で `autopilot/*` の残りブランチを見る。CI 失敗・コンフリクト・書きかけがあれば**新規タスクより先に**片付ける |
 | 3 | `ops/backlog.json` と 直近の journal（`ops/journal/YYYY-MM.md`）の末尾を読む |
 | 4 | タスクを選ぶ（[§3](#3-タスクの選び方)） |
 | 5 | 実施 → PR（[§4](#4-pr-の作り方)）。**同じ PR に journal・backlog・state・ダッシュボードの更新も載せる**（[§7](#7-記録)） |
@@ -90,7 +90,11 @@ backlog が空、または全部 `blocked` のときは**調査タスクを自�
 | `medium` | 実インフラに影響するが可逆。patch/minor のバージョン更新、manifest の整合性修正、リソース調整 | CI green **かつ** ロールバック手順を PR 本文に明記していれば **auto-merge** |
 | `high` | 不可逆な変更、データを失いうる変更、到達性を失いうる変更、メジャーバージョン更新 | **自分で判断して進める。** ただし着手前に「戻せる形」に落とすこと（下記） |
 
-auto-merge は **`gh pr merge --merge --auto`**（このリポジトリは squash / rebase マージを許可していない）。
+この実行環境に `gh` CLI は無い（command not found）。GitHub 操作はすべて `mcp__github__*` ツールで行う
+（`list_pull_requests` / `create_pull_request` / `add_issue_comment` 等）。auto-merge は
+**`mcp__github__enable_pr_auto_merge`**（このリポジトリは squash / rebase マージを許可していないので `mergeMethod: MERGE`）。
+CI が既に green で PR が clean（pending チェックが無い）状態だと「auto-merge 不要、直接マージ可」のエラーになるので、
+その場合は `mcp__github__merge_pull_request`（`merge_method: merge`）でそのままマージしてよい。
 
 `main` には ruleset「main: CI 必須」が掛かっていて、`kustomize build` / `terraform validate` /
 `ops state validate` の 3 つが green でないとマージできない。**これが auto-merge の安全性の根拠**であり、
@@ -169,6 +173,7 @@ high に該当するのは、失敗したときに元へ戻せないもの。**�
 | `just preflight` / `just preview*` / `just plan` / `just apply` | 内部で `kubectl` や Doppler 認証を使い、homelab への到達を前提にしている |
 | `sudo` | `deny` 対象。使わない |
 | `git push --force` | 使わない。やり直したいならブランチを作り直す |
+| `gh`（GitHub CLI） | この実行環境には入っていない（`command not found`）。GitHub 操作は `mcp__github__*` ツールで代替する（[§4](#4-pr-の作り方) 参照）。`api.github.com` への直接 HTTPS リクエスト（`curl`/`urllib` 等）も組織の egress ポリシーで 403 になり使えない。`ghcr.io` など GitHub 以外のレジストリは到達できる（2026-08-04 run #4 で確認） |
 
 ルールを増やすときは、ここに「なぜ踏めないか」と「代わりに何をするか」をセットで書く。
 禁止だけ並べると、次の自分が回避策を探して時間を溶かす。
