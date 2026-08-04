@@ -40,3 +40,6 @@ Tailscale に接続できないため、物理的に手が届かない（`ops/CH
 - T-0029（immich postgres/vchord のメジャー更新、データを失いうる変更）は
   CHARTER §4「データを失いうる変更」の手順どおり、バックアップの存在と復元手順が
   確かめられるまで着手しない。T-0034 の確認が終わってから再検討する
+- T-0023（coder v2.34.7 → v2.35.3、DB migration を伴う更新）も同じ理由で blocked。
+  coder-postgres も local-path で node01 のディスク上に直接あり、coder は down-migration を
+  提供しないためロールバックにはバックアップ復元が要る（run #10 で判明）
