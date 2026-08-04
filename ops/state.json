@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-04T21:30:00Z",
+  "updated": "2026-08-04T21:45:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -78,6 +78,14 @@
       "by": "cloud routine",
       "summary": "issue #56 の未読フィードバック 2 件（run #5 が last_read を進めずに終えたため残っていた）を反映。T-0017: check_version_sync.py の pyyaml 依存を除去し nix 側の抽出を brace 単位の構造依存に修正。CHARTER §2 に『複数タスクを扱う起動では前のタスクの PR が merge されるまで次のブランチを作らない』を追記（ops/ 記録が全タスク PR に相乗りするため並行 PR はコンフリクトする、run #5 の実例を踏まえた対処）。続けて T-0005（inventory.json 全対象の上流調査）を完遂し、14 個の個別更新タスク T-0018〜T-0030 を起票。さらに T-0018（dex chart patch 更新）を完遂",
       "prs": [77, 78, 79]
+    },
+    {
+      "n": 7,
+      "at": "2026-08-04T21:19:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "run #6 とこの run が同時に走っていたことに気づき（作業中に origin/main が T-0018 の完了分だけ先行していた）、rebase で追従して journal/backlog/state の衝突を解消。issue #56 の未読フィードバック 2 件を反映し、tailscale-operator chart の確定情報(1.98.9)で T-0024 の blocked_by を解除、T-0025 と組み合わせる前提を追記。T-0006（Plans.md M2 のディスク要因解消の反映）・T-0007（Maintenance.md 持ち越し課題の backlog 取り込み、T-0031/T-0032 起票）を完遂。作業中に見つけた自分のミス（journal に git conflict marker を消し忘れたまま merge していた）を修正し、再発防止の CI 検出を T-0033 として起票",
+      "prs": [80, 81]
     }
   ]
 }
