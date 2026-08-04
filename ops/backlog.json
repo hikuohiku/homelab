@@ -276,7 +276,7 @@
       "title": "ダッシュボードの PR 一覧を gh CLI 非依存にする",
       "kind": "ci",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 13,
       "why": "run #4 で判明: この実行環境に `gh` CLI が無く、`ops/dashboard/build.py` の `fetch_prs()` が失敗してキャッシュ（`ops/dashboard/prs.json`）に頼るしかない。`api.github.com` への直接 HTTPS も組織の egress ポリシーで 403 になり build.py 単体では代替できない（`ghcr.io` など他ホストは到達できるので、egress は GitHub API に限定して塞がれている）。結果としてキャッシュが更新されず、ダッシュボードの PR 一覧が数十件古いまま固定化していた",
       "dod": "毎回の起動でダッシュボードの PR 一覧が実態と一致する。方向性の候補: (a) 起動のたびに agent が `mcp__github__list_pull_requests` で取得して `ops/dashboard/prs.json` を直接更新してから `build.py` を実行する運用にし、CHARTER §7.1 にその手順を明記する (b) build.py に `prs.json` が事前に用意されている前提を明記し、`gh` 実行は human のローカル実行時のみ有効なfallbackと位置付け直す。CI 実行環境（GitHub Actions runner）側は `gh` が使えるはずなので、その差も踏まえること",
@@ -287,7 +287,7 @@
       ],
       "created": "2026-08-04",
       "pr": null,
-      "notes": "run #4 でその場しのぎの urllib 版を書いて動かなかった（403）ため revert 済み。次に着手するときは build.py 単体で完結させようとせず、agent 側の前処理込みで設計すること"
+      "notes": "run #9: (a) を採用。CHARTER §7.1 に、起動のたびに mcp__github__list_pull_requests で open/closed を取得し build.py が期待する形へ変換して prs.json に書く手順を明記した。副産物として `mcp__github__list_pull_requests` の `merged` フィールドが closed 全件で `false` を返す実測不具合を発見し、`merged_at` の非 null 判定に置き換えるよう手順に明記した。この起動で実際に prs.json を最新化（88 件時点、41 件の merged PR）"
     },
     {
       "id": "T-0017",
