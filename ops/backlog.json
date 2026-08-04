@@ -54,8 +54,8 @@
         "apps/immich/postgres.yaml"
       ],
       "created": "2026-08-04",
-      "pr": null,
-      "notes": "run #5: 3 箇所とも既存の初期化用 chown コマンドのみで busybox 固有機能に依存していないため、新しいタグを調べ直さず既存で使われていた 1.37 に統一した。ops/inventory.json の current も単一値に更新。risk は変更内容（initContainer の chown 実行のみ、patch バージョン内）に合わせて low に見直した"
+      "pr": 75,
+      "notes": "run #5: 3 箇所とも既存の初期化用 chown コマンドのみで busybox 固有機能に依存していないため、新しいタグを調べ直さず既存で使われていた 1.37 に統一した。ops/inventory.json の current も単一値に更新。risk は変更内容(initContainer の chown 実行のみ、patch バージョン内)に合わせて low に見直した"
     },
     {
       "id": "T-0004",
