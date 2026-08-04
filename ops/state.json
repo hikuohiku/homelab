@@ -86,6 +86,14 @@
       "by": "cloud routine",
       "summary": "run #6 とこの run が同時に走っていたことに気づき（作業中に origin/main が T-0018 の完了分だけ先行していた）、rebase で追従して journal/backlog/state の衝突を解消。issue #56 の未読フィードバック 2 件を反映し、tailscale-operator chart の確定情報(1.98.9)で T-0024 の blocked_by を解除、T-0025 と組み合わせる前提を追記。T-0006（Plans.md M2 のディスク要因解消の反映）・T-0007（Maintenance.md 持ち越し課題の backlog 取り込み、T-0031/T-0032 起票）を完遂。作業中に見つけた自分のミス（journal に git conflict marker を消し忘れたまま merge していた）を修正し、再発防止の CI 検出を T-0033 として起票",
       "prs": [80, 81]
+    },
+    {
+      "n": 8,
+      "at": "2026-08-04T22:05:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。T-0033（ops/validate.py に conflict marker 検出を追加）を完遂。わざと journal にマーカーを混ぜて検出できることを確認してから PR を出した",
+      "prs": [84]
     }
   ]
 }
