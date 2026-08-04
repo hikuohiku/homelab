@@ -4,7 +4,7 @@ kind: Kustomization
 helmCharts:
   - name: dex
     repo: https://charts.dexidp.io
-    version: 0.24.0
+    version: 0.24.1
     releaseName: dex
     namespace: dex
     valuesFile: values.yaml
