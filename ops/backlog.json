@@ -231,17 +231,16 @@
       "title": "main への直 push を検知する CI (direct-push-guard) を追加する",
       "kind": "ci",
       "risk": "low",
-      "status": "needs-human",
+      "status": "todo",
       "priority": 0,
       "why": "main の ruleset『CI 必須』は PR 経由のマージだけを対象にし、main への直 push は CI を経ずに素通りする。issue #56 で人間から指摘を受けた",
       "dod": "push: branches: [main] で走る workflow が、マージされた PR に紐付かないコミットで ops/ 以外のファイルが変更された場合に失敗し、issue #56 にコメントする",
-      "needs_human_reason": "workflow の内容は書けたが、この環境の GitHub App credential に workflows 権限が無く `.github/workflows/` 配下への push が git push・API 経由のどちらも 403 (\"Resource not accessible by integration\") で拒否される。GitHub App の Settings → Permissions で Workflows を Read and write にするか、下記の内容を人間が直接コミットしてほしい。ファイル本体は branch `autopilot/T-0014-direct-push-guard` には無い（push できなかったため）。issue #56 のコメントに全文を貼った",
       "refs": [
         ".github/workflows/direct-push-guard.yml"
       ],
       "created": "2026-08-04",
       "pr": 63,
-      "notes": "issue #56 のフィードバックを受けて起票、同じ回で着手したが GitHub App の権限不足で push できず needs-human に変更"
+      "notes": "2026-08-04: GitHub App に workflows 権限が付与され、.github/workflows/ への push が可能になった。着手時にまず小さな workflow の push で権限を実地確認すること。run #2 で書いた workflow 本文は失われているので書き直しになる"
     }
   ]
 }
