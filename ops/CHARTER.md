@@ -270,10 +270,20 @@ PR に付いたレビューコメントも同じ扱い。**指摘を受けたら
 
 人間が朝に見る唯一の画面。`ops/` を更新したら**必ず**次を実行する。
 
-```bash
-python3 ops/validate.py          # 0 error であること。落ちたら直してから進む
-python3 ops/dashboard/build.py   # ops/dashboard/index.html を再生成
-```
+`ops/dashboard/build.py` の `fetch_prs()` は内部で `gh pr list` を呼ぶが、このクラウドサンドボックスに
+`gh` は無いので必ず失敗し、`ops/dashboard/prs.json` のキャッシュにフォールバックする（CHARTER §5.2）。
+**キャッシュは自動更新されない。** ビルド前に次の手順でキャッシュを最新化する（T-0016）。
+
+1. `mcp__github__list_pull_requests`（`state: open`）と（`state: closed`, `sort: updated`, `direction: desc`）
+   で取得する。**`merged` フィールドは信用しない**（closed の全件で `false` を返すことがある実測済みの不具合。
+   `merged_at` が非 null かどうかで判定する）
+2. `build.py` が期待する形へ変換して `ops/dashboard/prs.json` に書く:
+   `{"open": [{number, title, url, isDraft, createdAt, statusCheckRollup, headRefName, autoMergeRequest}, ...],
+   "merged": [{number, title, url, mergedAt, headRefName}, ...]}`（`merged` は `mergedAt` 降順で最大 60 件）。
+   open の `statusCheckRollup` は `mcp__github__pull_request_read`（`method: get_status`）の結果を
+   `[{"conclusion": "SUCCESS"|"PENDING"|"FAILURE"}]` 相当に変換すれば `ci_state()` が正しく判定する
+3. `python3 ops/validate.py` → 0 error であること。落ちたら直してから進む
+4. `python3 ops/dashboard/build.py` → `ops/dashboard/index.html` を再生成
 
 **`ops/dashboard/index.html` は Git 管理していない**（`.gitignore` 対象、T-0035）。`build.py` の
 生成物であり、`ops/*.json` + journal から決定的に再生成できるので repo に置く理由が無い。かつては
