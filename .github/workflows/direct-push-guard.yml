@@ -1,9 +1,13 @@
 name: Direct Push Guard
 
-# main の ruleset「CI 必須」は PR 経由のマージだけを対象にする。main への直 push は
-# CI を経ずに素通りする（issue #56）。これは防止ではなく検知: 直 push（マージされた PR に
-# 紐付かないコミット）で ops/ 以外のファイルが変更されていたら、このジョブを失敗させ、
-# フィードバック issue にコメントして次の autopilot 起動が気づけるようにする。
+# 現在 main の ruleset「CI 必須」は bypass を空にしてあり、required status checks が
+# main への直 push 自体を拒否する（GH013）。つまり平常時にこのジョブが実行される機会は無い。
+# このワークフローは、人間が強制マージ等のために enforcement を一時的に緩めた場合の
+# backstop として残している（issue #56 のレビューで「開いている穴を塞ぐもの」という
+# 前提が誤りだったと指摘され、位置付けを修正した）。
+# 発火したら: 直 push（マージされた PR に紐付かないコミット）で ops/ 以外のファイルが
+# 変更されていたら、このジョブを失敗させ、フィードバック issue にコメントして次の
+# autopilot 起動が気づけるようにする。
 
 on:
   push:
@@ -33,9 +37,20 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          merged=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
+          api_merged=$(gh api "repos/${{ github.repository }}/commits/${{ github.sha }}/pulls" \
             --jq 'map(select(.merged_at != null)) | length > 0')
-          echo "merged=$merged" >> "$GITHUB_OUTPUT"
+          # commits/{sha}/pulls はマージ直後に反映が間に合わず空を返すことがある（issue #56）。
+          # このリポジトリは merge commit のみ許可されている（squash/rebase 禁止）ため、
+          # マージコミットのメッセージからも判定し、どちらかが true なら PR 由来とみなす
+          msg_merged=false
+          if git log -1 --format=%s "${{ github.sha }}" | grep -qE '^Merge pull request #[0-9]+ from '; then
+            msg_merged=true
+          fi
+          if [ "$api_merged" = "true" ] || [ "$msg_merged" = "true" ]; then
+            echo "merged=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "merged=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: List changed files outside ops/
         id: files
@@ -49,7 +64,9 @@ jobs:
           else
             range="${BEFORE}..HEAD"
           fi
-          git diff --name-only $range > changed.txt || true
+          # git diff が失敗したら（force-push で BEFORE が失効した等）握り潰さずジョブを
+          # 失敗させる。差分が取れないまま success 扱いにすると検知が静かに素通りする（issue #56）
+          git diff --name-only $range > changed.txt
           grep -v '^ops/' changed.txt > outside.txt || true
           {
             echo "list<<GUARD_EOF"
