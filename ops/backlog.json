@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 34,
-  "updated": "2026-08-04T22:05:00Z",
+  "updated": "2026-08-04T22:20:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）",
   "tasks": [
     {
@@ -133,7 +133,7 @@
       "title": "nix flake check を CI に追加する",
       "kind": "ci",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 8,
       "why": "初期 CI は kustomize / terraform / ops のみ。nix 側の変更が機械検証されていない",
       "dod": "nix/ 配下の変更で CI が nix の評価エラーを検出できる。ビルドは重いので評価のみでよい。Cachix を使うなら secrets の扱いに注意",
@@ -141,7 +141,8 @@
         ".github/workflows/ci.yml"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": 85,
+      "notes": "run #8: subagent に調査を投げた。`nix flake check` は `checks.*` 以外に `nixosConfigurations.<name>.config.system.build.toplevel` / `packages.<system>.<name>` も評価対象に含む仕様（ビルドされるのは checks.* のみ）と Nix 公式マニュアル(2.19.1〜2.30.2)で確認済みのため、追加のコマンドなしで nix/images/proxmox-cloud のフレークを評価できる。`cachix/install-nix-action@v31` を使用（`DeterminateSystems/nix-installer-action` は既定で Determinate Nix + FlakeHub 連携に寄っているため見送り）。手元に nix が無いため実行検証はできず、CI 任せ（CHARTER §5.2）。ruleset の required checks には未追加（3 つ固定のまま）。必要なら別タスクで検討"
     },
     {
       "id": "T-0009",
