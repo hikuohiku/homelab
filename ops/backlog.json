@@ -489,7 +489,7 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": null,
+      "pr": 105,
       "notes": "run #13: subagent に v2.0.0〜v2.8.0 の全 GitHub Release 原文 + CRD bundle (1.3.2/2.8.0) の実差分 diff + Doppler provider Go 型定義の diff を取らせた。破壊的変更は v2.0.0 (Alibaba/Device42 provider 削除) と v2.2.0 (Flux OCIRepository consumer 向け) のみで、いずれも該当なし（Doppler / ArgoCD+Kustomize 使用のため）。Doppler 認証スキーマ・ClusterSecretStore/ExternalSecret の該当フィールドは 1.3.2/2.8.0 間で完全一致。1.3.0 以外に yank されたバージョンは無し。CRD bundle は追加のみで削除なし（manifest deletion guard の対象外）"
     },
     {
