@@ -168,6 +168,18 @@
       "prs": [
         102
       ]
+    },
+    {
+      "n": 13,
+      "at": "2026-08-04T23:20:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "issue #56 に未読フィードバックなし。T-0031（vaultwarden icon タイムアウトを DISABLE_ICON_DOWNLOAD で解消）・T-0037（external-secrets chart 1.3.2→2.8.0、CRD 実ソース照合で breaking change 無しと確認）・T-0032（vaultwarden の rate limit が Tailscale プロキシ経由で誤発火する構造的原因を特定し IP_HEADER=X-Forwarded-For で解消）を完遂。T-0030（terraform provider pin 見直し）は調査を完了し v0.111.1 への一段更新が安全と確認したが、.terraform.lock.hcl の再生成に terraform CLI（このサンドボックスに無い）が要るため needs-human に。副産物として別セッションによる並行実行（T-0037 の重複 PR #105）を発見し close した",
+      "prs": [
+        104,
+        106,
+        107
+      ]
     }
   ]
 }
