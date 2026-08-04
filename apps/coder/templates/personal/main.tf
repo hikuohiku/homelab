@@ -109,6 +109,11 @@ resource "coder_agent" "main" {
   startup_script = <<-EOT
     set -eu
 
+    if [ -f "$HOME/.ssh/id_ed25519" ]; then
+      chmod 700 "$HOME/.ssh"
+      chmod 600 "$HOME/.ssh/id_ed25519"
+    fi
+
     skills_dir="$HOME/ghq/github.com/hikuohiku/dots-skills"
     if [ ! -f "$skills_dir/AGENTS.md" ]; then
       export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"
