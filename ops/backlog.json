@@ -489,7 +489,7 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": null,
+      "pr": 106,
       "notes": "run #12: T-0026 の分割で新規起票。調査結果は T-0026 の notes を参照 | run #13: T-0026 (#102) が merge・反映確認済みであることを確認してから着手。subagent に v1.3.2〜v2.8.0 の全 11 リリース（v2.0.0〜v2.8.0）の release note を原文で読ませ、CRD (`externalsecrets`/`clustersecretstores`) を両タグの実ソースで直接比較させた。結論: v1.3.2 は 1.x 系最終版で直後に v2.0.0 が続くため想定していた欠番は無く、chart version と appVersion が完全一致することも確認。全区間で見つかった breaking change（Alibaba/Device42 プロバイダ削除、Sprig 由来のテンプレート関数改名、Flux OCIRepository のレイヤーセレクタ要件等）はいずれもこのリポジトリの使用範囲（doppler 単独、`template`/`dataFrom`/generator 不使用、Kustomize 経由デプロイ）に該当しない。`external-secrets.io/v1` の `remoteRef` enum・`target.deletionPolicy`・doppler の認証形状は両タグで同一（`target.creationPolicy` に `CreateOrMerge` が追加されたのみで既存の `Owner` 指定に影響なし）。CRD バンドルは generator CRD 追加で同等かそれ以上のサイズのため `ServerSideApply=true` の必要性も変わらない。T-0026 時点で「完全 diff は未検証」としていた CRD 本体を実ソース照合まで済ませたため risk を high→medium に見直して着手した"
     },
     {
