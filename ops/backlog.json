@@ -333,7 +333,7 @@
       "dod": "apps/immich/values.yaml の valkey タグが 9.1.1-alpine。ops/inventory.json の immich-valkey current も更新",
       "refs": ["apps/immich/values.yaml", "ops/inventory.json"],
       "created": "2026-08-04",
-      "pr": null,
+      "pr": 90,
       "notes": "run #9: WebFetch で hub.docker.com のタグ一覧を確認（curl は docker hub への直接 HTTPS が組織 egress ポリシーで 403、WebFetch は別経路で到達できた）。9.1.1-alpine が 9.1 系の最新パッチと確認して更新"
     },
     {
