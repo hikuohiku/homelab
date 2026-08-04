@@ -6,6 +6,9 @@ spec:
   nameserver:
     image:
       repo: tailscale/k8s-nameserver
-      # unstable が 2026-08-04 時点で指していたビルドと同一（digest 一致確認済み）。
-      # 中身は変えずに floating tag だけを固定した（backlog T-0001）
-      tag: unstable-v1.91.150
+      # v1.98.9 は operator chart 1.98.9 と同じ tailscale/tailscale@v1.98.9 タグからビルドされた
+      # 非 floating タグ（T-0025）。以前の unstable-v1.91.150 は floating tag を固定しただけの
+      # スナップショット（T-0001）で、operator chart とバージョンが揃っていなかった。
+      # k8s-nameserver の vX.Y.Z 系タグは chart 1.92 以降にならないと存在しない
+      # （1.90.9 当時の T-0001/T-0005 調査で「stable 相当のタグは無い」としたのはその時点では正しかった）。
+      tag: v1.98.9
