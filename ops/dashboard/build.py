@@ -211,7 +211,11 @@ def build() -> str:
     fb = state.get("feedback", {})
     fb_url = fb.get("url") or "https://github.com/hikuohiku/homelab/issues"
     routines = state.get("routines", [])
-    next_run = routines[0].get("next") if routines else None
+    # 固定の「次回時刻」は必ず腐るので持たない。間隔だけ見せる
+    cadence = None
+    if routines:
+        r = routines[0]
+        cadence = r.get("cron_human") or r.get("cron")
 
     failing = [p for p in prs if ci_state(p)[0] == "crit"]
 
@@ -245,7 +249,8 @@ def build() -> str:
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     stage = state.get("vision_stage", "?")
     stage_label = state.get("vision_stage_label", "")
-    next_html = f"<span>次の起動 {E(next_run)}</span>" if next_run else "<span>定期実行 未設定</span>"
+    next_html = (f"<span>起動間隔 {E(cadence)}</span>" if cadence
+                 else '<span class="warn-inline">定期実行 未設定</span>')
 
     return TEMPLATE.format(
         generated=generated, stage=stage, stage_label=E(stage_label), next_html=next_html,
@@ -317,6 +322,7 @@ body {{ background:var(--ground); color:var(--ink); font-family:var(--sans);
 .mast__sub {{ color:var(--muted); font-size:.86rem; font-family:var(--mono);
   display:flex; flex-wrap:wrap; gap:.4rem 1rem; }}
 .mast__stage {{ color:var(--sig); font-weight:600; }}
+.warn-inline {{ color:var(--crit); font-weight:600; }}
 
 .stats {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px;
   background:var(--line); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }}
