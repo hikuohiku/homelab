@@ -565,7 +565,7 @@
       "dod": "ops/dashboard/index.html が .gitignore 対象になり追跡から外れる。CI (ops job) が build.py の実行成功を検証する。CHARTER §4/§7.1 の記述を更新する",
       "refs": ["ops/dashboard/index.html", ".gitignore", ".github/workflows/ci.yml", "ops/CHARTER.md"],
       "created": "2026-08-04",
-      "pr": null,
+      "pr": 88,
       "notes": "run #9: git rm --cached で追跡除外、.gitignore に追加。CI の ops job に `python3 ops/dashboard/build.py` の実行成功チェックを追加。CHARTER §4 の相乗り例外リストと §7.1 を更新"
     }
   ]
