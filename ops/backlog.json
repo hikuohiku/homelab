@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 31,
-  "updated": "2026-08-04T21:15:00Z",
+  "next_id": 34,
+  "updated": "2026-08-04T21:40:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）",
   "tasks": [
     {
@@ -116,7 +116,7 @@
       "title": "Maintenance.md の持ち越し課題を backlog に取り込む",
       "kind": "docs",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 7,
       "why": "vaultwarden の ADMIN_TOKEN 平文 / icon 取得タイムアウト / Tailscale プロキシ経由のレート制限 429 懸念 が Maintenance.md に書き捨てられていて、誰も追っていない",
       "dod": "3 件がそれぞれ backlog のタスクになり（リスクに応じて needs-human 含む）、Maintenance.md 側からは backlog を参照する形になる",
@@ -124,7 +124,8 @@
         "Maintenance.md"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": "run #7: ADMIN_TOKEN は既存の T-0011 が担う。icon タイムアウトを T-0031、429 懸念を T-0032 として新規起票し、Maintenance.md の持ち越し 3 行から各タスクを参照する形に変更した"
     },
     {
       "id": "T-0008",
@@ -485,6 +486,48 @@
       "why": "T-0005 の調査 (run #6) で判明。約 22 リリース分の差。意図的な完全一致 pin（理由コメントあり）なので、まず pin した理由が今も成り立つか確認するのが先。v0.109.0 のリリースノートに VM agent の IP 待機設定まわりの breaking change の言及がある",
       "dod": "providers.tf の pin 理由コメントを再確認し、今も成り立つか判断する。上げる場合は 0.89.1 から v0.111.1 までのリリースノートを原文で読み、breaking change を洗い出す。terraform apply は autopilot が実行できないため、実際の反映は人間の作業になる旨を PR に明記する",
       "refs": ["terraform/proxmox/providers.tf"],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0031",
+      "domain": "homelab",
+      "title": "vaultwarden の icon 取得タイムアウトを調査し、実害が無いなら DISABLE_ICON_DOWNLOAD で無効化するか判断する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 22,
+      "why": "Maintenance.md 2026-08-03 の持ち越し。icon 取得のタイムアウトが多発しているが実害は無いと記録されている。ログを埋めるだけなら無効化する価値がある",
+      "dod": "現状のログ頻度と実害の有無を確認する。無害だが頻発してログを埋めているなら DISABLE_ICON_DOWNLOAD=true を設定する。実害があるなら原因（Tailscale プロキシ経由のアウトバウンド到達性など）を調べて対処する",
+      "refs": ["Maintenance.md", "apps/vaultwarden/"],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0032",
+      "domain": "homelab",
+      "title": "vaultwarden 1.37 のレート制限が Tailscale プロキシ経由の同一送信元 IP で誤発火していないか確認する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 22,
+      "why": "Maintenance.md 2026-08-03 の持ち越し。1.37.0 で追加されたレート制限は送信元 IP 単位。全クライアントが Tailscale プロキシ経由で同一 IP に見えるため、正規クライアントが 429 で弾かれていないか未確認",
+      "dod": "ログまたはクライアントの実際の挙動から 429 が発生していないか確認する。発生していれば ROCKET_LIMIT_* 系の設定調整か、送信元判定の見直しを検討する。発生していなければ Maintenance.md に確認済みと記録する",
+      "refs": ["Maintenance.md", "apps/vaultwarden/"],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0033",
+      "domain": "homelab",
+      "title": "ops/validate.py に git の conflict marker (<<<<<<< / ======= / >>>>>>>) の検出を追加する",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 8,
+      "why": "run #7 で origin/main が同時進行中の別 run に進んでいたため rebase で journal のコンフリクトを手で解消したが、末尾の `>>>>>>> ...` マーカー行を消し忘れたまま push・CI green・merge まで通ってしまった（#80）。ops/validate.py も kustomize build も markdown の中身までは見ないため検出できなかった",
+      "dod": "ops/ 配下（少なくとも journal/*.md, *.json, *.md 全般）を conflict marker（行頭 `<<<<<<<` / `=======` / `>>>>>>>`）でスキャンし、見つかれば error にする。次に同じミスをしたら CI が落ちること",
+      "refs": ["ops/validate.py"],
       "created": "2026-08-04",
       "pr": null
     }
