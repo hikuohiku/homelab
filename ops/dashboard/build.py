@@ -34,6 +34,9 @@ def load(name: str, default=None):
     return json.loads(p.read_text())
 
 
+MERGED_LIMIT = 60  # 取得上限。到達したら件数表示に "+" を付けて頭打ちを隠さない
+
+
 def _gh_prs(state: str, fields: str, limit: int) -> list[dict]:
     out = subprocess.run(
         ["gh", "pr", "list", "--state", state, "--limit", str(limit), "--json", fields],
@@ -48,7 +51,7 @@ def fetch_prs() -> tuple[list[dict], list[dict]]:
     try:
         data = {
             "open": _gh_prs("open", "number,title,url,isDraft,createdAt,statusCheckRollup,headRefName,autoMergeRequest", 30),
-            "merged": _gh_prs("merged", "number,title,url,mergedAt", 20),
+            "merged": _gh_prs("merged", "number,title,url,mergedAt,headRefName", MERGED_LIMIT),
         }
         cache.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
         return data["open"], data["merged"]
@@ -98,8 +101,10 @@ def rel_time(iso: str | None) -> str:
         t = datetime.fromisoformat(iso.replace("Z", "+00:00"))
     except ValueError:
         return iso
-    d = datetime.now(timezone.utc) - t
-    s = int(d.total_seconds())
+    s = int((datetime.now(timezone.utc) - t).total_seconds())
+    if s < 0:
+        # 記録側が実際より先の時刻を書くことがある。負の「◯分前」は読み手を混乱させる
+        return "たった今"
     if s < 3600:
         return f"{s // 60} 分前"
     if s < 86400:
@@ -226,6 +231,8 @@ def build() -> str:
         cadence = r.get("cron_human") or r.get("cron")
 
     failing = [p for p in prs if ci_state(p)[0] == "crit"]
+    # 取得上限に引っかかった件数をそのまま出すと、上限値を実績として見せてしまう
+    auto_merged = [p for p in merged if str(p.get("headRefName", "")).startswith("autopilot/")]
 
     # ---- 一番上の要約。人間が朝 5 秒で読む部分
     def stat(value, label, tone="sig"):
@@ -242,7 +249,8 @@ def build() -> str:
 
     stats = "".join([
         stat(rel_time(last_run.get("at")), "最終起動"),
-        stat(len(merged), "反映済みの変更", "ok" if merged else "idle"),
+        stat(f"{len(auto_merged)}+" if len(merged) >= MERGED_LIMIT else len(auto_merged),
+             "autopilot が反映した変更", "ok" if auto_merged else "idle"),
         stat(len(prs), "作業中の PR", "crit" if failing else "sig"),
         stat(len(by_status["needs-human"]), "あなた待ち", "crit" if by_status["needs-human"] else "idle"),
     ])
@@ -260,7 +268,7 @@ def build() -> str:
 
     prs_html = "".join(pr_row(p) for p in prs) or '<li class="empty">作業中の PR はありません。</li>'
     runs_html = "".join(journal_row(e) for e in journal[:4]) or '<li class="empty">まだ記録がありません。</li>'
-    done_html = "".join(done_row(p) for p in merged[:12]) or '<li class="empty">まだ反映された変更はありません。</li>'
+    done_html = "".join(done_row(p) for p in (auto_merged or merged)[:12]) or '<li class="empty">まだ反映された変更はありません。</li>'
     inv_html = "".join(inv_row(t) for t in inventory["targets"])
 
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
