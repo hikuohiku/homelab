@@ -107,14 +107,16 @@ resource "coder_agent" "main" {
   os             = "linux"
   arch           = "amd64"
   startup_script = <<-EOT
-    set -e
+    set -eu
 
-    # Install the latest code-server.
-    # Append "--version x.x.x" to install a specific version of code-server.
-    curl -fsSL https://code-server.dev/install.sh | sh -s -- --method=standalone --prefix=/tmp/code-server
+    skills_dir="$HOME/ghq/github.com/hikuohiku/dots-skills"
+    if [ ! -d "$skills_dir/.git" ]; then
+      mkdir -p "$(dirname "$skills_dir")"
+      git clone --depth=1 https://github.com/hikuohiku/dots-skills.git "$skills_dir"
+    fi
 
-    # Start code-server in the background.
-    /tmp/code-server/bin/code-server --auth none --port 13337 >/tmp/code-server.log 2>&1 &
+    /usr/local/bin/coder-home-activate
+    code-server --auth none --port 13337 >"$HOME/.cache/code-server.log" 2>&1 &
   EOT
 
   # The following metadata blocks are optional. They are used to display
@@ -285,7 +287,7 @@ resource "kubernetes_deployment_v1" "main" {
 
         container {
           name              = "dev"
-          image             = "codercom/enterprise-base:ubuntu"
+          image             = "ghcr.io/hikuohiku/coder-workspace@sha256:92fe21065b878d4dbded24eb40b90890b42d8c88c6b0d3860809589fce5cc522"
           image_pull_policy = "Always"
           command           = ["sh", "-c", coder_agent.main.init_script]
           security_context {
