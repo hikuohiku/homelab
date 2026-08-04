@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 14,
-  "updated": "2026-08-04T18:20:00Z",
+  "next_id": 15,
+  "updated": "2026-08-04T18:59:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）",
   "tasks": [
     {
@@ -224,6 +224,24 @@
       ],
       "created": "2026-08-04",
       "pr": null
+    },
+    {
+      "id": "T-0014",
+      "domain": "homelab",
+      "title": "main への直 push を検知する CI (direct-push-guard) を追加する",
+      "kind": "ci",
+      "risk": "low",
+      "status": "needs-human",
+      "priority": 0,
+      "why": "main の ruleset『CI 必須』は PR 経由のマージだけを対象にし、main への直 push は CI を経ずに素通りする。issue #56 で人間から指摘を受けた",
+      "dod": "push: branches: [main] で走る workflow が、マージされた PR に紐付かないコミットで ops/ 以外のファイルが変更された場合に失敗し、issue #56 にコメントする",
+      "needs_human_reason": "workflow の内容は書けたが、この環境の GitHub App credential に workflows 権限が無く `.github/workflows/` 配下への push が git push・API 経由のどちらも 403 (\"Resource not accessible by integration\") で拒否される。GitHub App の Settings → Permissions で Workflows を Read and write にするか、下記の内容を人間が直接コミットしてほしい。ファイル本体は branch `autopilot/T-0014-direct-push-guard` には無い（push できなかったため）。issue #56 のコメントに全文を貼った",
+      "refs": [
+        ".github/workflows/direct-push-guard.yml"
+      ],
+      "created": "2026-08-04",
+      "pr": null,
+      "notes": "issue #56 のフィードバックを受けて起票、同じ回で着手したが GitHub App の権限不足で push できず needs-human に変更"
     }
   ]
 }
