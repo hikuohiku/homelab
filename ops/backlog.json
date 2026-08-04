@@ -286,7 +286,7 @@
         "ops/CHARTER.md"
       ],
       "created": "2026-08-04",
-      "pr": null,
+      "pr": 89,
       "notes": "run #9: (a) を採用。CHARTER §7.1 に、起動のたびに mcp__github__list_pull_requests で open/closed を取得し build.py が期待する形へ変換して prs.json に書く手順を明記した。副産物として `mcp__github__list_pull_requests` の `merged` フィールドが closed 全件で `false` を返す実測不具合を発見し、`merged_at` の非 null 判定に置き換えるよう手順に明記した。この起動で実際に prs.json を最新化（88 件時点、41 件の merged PR）"
     },
     {
