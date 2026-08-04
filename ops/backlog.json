@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 34,
-  "updated": "2026-08-04T21:40:00Z",
+  "updated": "2026-08-04T22:05:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）",
   "tasks": [
     {
@@ -523,13 +523,14 @@
       "title": "ops/validate.py に git の conflict marker (<<<<<<< / ======= / >>>>>>>) の検出を追加する",
       "kind": "ci",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 8,
       "why": "run #7 で origin/main が同時進行中の別 run に進んでいたため rebase で journal のコンフリクトを手で解消したが、末尾の `>>>>>>> ...` マーカー行を消し忘れたまま push・CI green・merge まで通ってしまった（#80）。ops/validate.py も kustomize build も markdown の中身までは見ないため検出できなかった",
       "dod": "ops/ 配下（少なくとも journal/*.md, *.json, *.md 全般）を conflict marker（行頭 `<<<<<<<` / `=======` / `>>>>>>>`）でスキャンし、見つかれば error にする。次に同じミスをしたら CI が落ちること",
       "refs": ["ops/validate.py"],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": "run #8: ops/validate.py に check_conflict_markers() を追加（.md / .json を対象、行頭一致）。わざと journal にコンフリクトマーカーを混ぜて 3 件検出 → 復元後 0 error に戻ることを手元で確認してから PR を出した（#56 の教訓『検出器はわざと壊して確かめる』を踏襲）"
     }
   ]
 }

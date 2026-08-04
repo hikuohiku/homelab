@@ -134,6 +134,28 @@ def check_inventory(inv) -> None:
             err(f"{where}: file {f} が存在しない")
 
 
+CONFLICT_MARKER_PATTERNS = [
+    re.compile(r"^<{7}(?:\s|$)"),
+    re.compile(r"^={7}$"),
+    re.compile(r"^>{7}(?:\s|$)"),
+]
+
+
+def check_conflict_markers() -> None:
+    # run #7 (#80): journal のコンフリクト解消で `>>>>>>> ...` の消し忘れをそのまま merge してしまった。
+    # kustomize build / terraform validate は markdown/json の中身までは見ないので、ここで拾う。
+    for path in sorted(OPS.rglob("*")):
+        if not path.is_file() or path.suffix not in (".md", ".json"):
+            continue
+        try:
+            text = path.read_text()
+        except UnicodeDecodeError:
+            continue
+        for lineno, line in enumerate(text.splitlines(), start=1):
+            if any(pat.match(line) for pat in CONFLICT_MARKER_PATTERNS):
+                err(f"{path.relative_to(ROOT)}:{lineno}: git の conflict marker が残っている ({line!r})")
+
+
 def check_state(s) -> None:
     for k in ("updated", "runs", "feedback"):
         if k not in s:
@@ -158,6 +180,8 @@ def main() -> int:
         check_inventory(inventory)
     if state:
         check_state(state)
+
+    check_conflict_markers()
 
     for w in warnings:
         print(f"warning: {w}")
