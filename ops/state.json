@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-04T22:10:23Z",
+  "updated": "2026-08-04T22:20:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-04T21:38:00Z"
+    "last_read": "2026-08-04T22:04:42Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -45,7 +45,9 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "issue #56 のフィードバックを反映し T-0014 起票。workflow の中身は書けたが GitHub App に workflows 権限が無く push 不可と判明、needs-human に変更",
-      "prs": [63]
+      "prs": [
+        63
+      ]
     },
     {
       "n": 3,
@@ -53,7 +55,10 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "T-0014 完遂（direct-push-guard.yml push、workflows 権限が実際に効くことを確認）。issue #56 の設計フィードバックを受け T-0010 を T-0015 に具体化（token 待ちで needs-human）。続けて T-0004（terraform lock の残骸除去）も完遂",
-      "prs": [67, 68]
+      "prs": [
+        67,
+        68
+      ]
     },
     {
       "n": 4,
@@ -61,7 +66,10 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "issue #56 の未読フィードバック（PR #67 のレビュー3点）を反映（PR #70, auto-merged）。gh CLI がこの環境に無いと判明し CHARTER を MCP ツール前提に修正。T-0001（tailscale k8s-nameserver の floating tag 固定）完遂。ダッシュボードの PR キャッシュ更新の仕組み不足を T-0016 として起票",
-      "prs": [70, 71]
+      "prs": [
+        70,
+        71
+      ]
     },
     {
       "n": 5,
@@ -69,7 +77,12 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "issue #56 の未読フィードバックを反映: このクラウドサンドボックスのツール有無を実測し CHARTER §5.2 として記録（terraform/kustomize は無い。run #0 の人間セッションとは環境が違う）。T-0002（argo-cd chart バージョン二重管理に CI 検出を追加）・T-0003（busybox バージョン統一）を完遂。途中 git checkout の事故があったが commit 前だったため復旧し、CHARTER に教訓を追記",
-      "prs": [73, 74, 75, 76]
+      "prs": [
+        73,
+        74,
+        75,
+        76
+      ]
     },
     {
       "n": 6,
@@ -77,7 +90,11 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "issue #56 の未読フィードバック 2 件（run #5 が last_read を進めずに終えたため残っていた）を反映。T-0017: check_version_sync.py の pyyaml 依存を除去し nix 側の抽出を brace 単位の構造依存に修正。CHARTER §2 に『複数タスクを扱う起動では前のタスクの PR が merge されるまで次のブランチを作らない』を追記（ops/ 記録が全タスク PR に相乗りするため並行 PR はコンフリクトする、run #5 の実例を踏まえた対処）。続けて T-0005（inventory.json 全対象の上流調査）を完遂し、14 個の個別更新タスク T-0018〜T-0030 を起票。さらに T-0018（dex chart patch 更新）を完遂",
-      "prs": [77, 78, 79]
+      "prs": [
+        77,
+        78,
+        79
+      ]
     },
     {
       "n": 7,
@@ -85,7 +102,10 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "run #6 とこの run が同時に走っていたことに気づき（作業中に origin/main が T-0018 の完了分だけ先行していた）、rebase で追従して journal/backlog/state の衝突を解消。issue #56 の未読フィードバック 2 件を反映し、tailscale-operator chart の確定情報(1.98.9)で T-0024 の blocked_by を解除、T-0025 と組み合わせる前提を追記。T-0006（Plans.md M2 のディスク要因解消の反映）・T-0007（Maintenance.md 持ち越し課題の backlog 取り込み、T-0031/T-0032 起票）を完遂。作業中に見つけた自分のミス（journal に git conflict marker を消し忘れたまま merge していた）を修正し、再発防止の CI 検出を T-0033 として起票",
-      "prs": [80, 81]
+      "prs": [
+        80,
+        81
+      ]
     },
     {
       "n": 8,
@@ -93,7 +113,12 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。T-0033（conflict marker 検出、#84）・T-0008（nix flake check を CI に追加、#85）・T-0009（weekly-maintenance と CHARTER の役割分担、#86）を完遂。続けて T-0013（PBS バックアップ体制の調査）を完遂し docs/backup.md を作成。実機確認が要る点は T-0034（needs-human）として切り出し、T-0029 の blocked_by を張り替えた",
-      "prs": [84, 85, 86, 87]
+      "prs": [
+        84,
+        85,
+        86,
+        87
+      ]
     },
     {
       "n": 9,
@@ -101,7 +126,13 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "run #8 の journal が『issue #56 に未読フィードバックなし』と誤記していたのを発見（実際は 2 件あり、目視比較での取りこぼし）。CHARTER §6 に機械的な洗い出しを追記し、2 件を反映: ops/dashboard/index.html を Git 管理から外す（T-0035, #88。直列化後も他の主体との衝突が続いていたため）、workflows/ruleset の権限非対称を記録（§5.2）。続けて T-0016（ダッシュボードの PR 一覧を gh CLI 非依存にする、#89）を完遂し、起動のたびに mcp__github__list_pull_requests でキャッシュを最新化する手順を確立。優先度 14 の patch 更新 3 件 T-0019/T-0020/T-0021（immich valkey・busybox・coder-postgres、#90/#91/#92）を完遂。副産物として WebFetch が curl の 403 を回避できるケース（hub.docker.com）と mcp__github__list_pull_requests の merged フィールドの不具合を発見し CHARTER に記録",
-      "prs": [88, 89, 90, 91, 92]
+      "prs": [
+        88,
+        89,
+        90,
+        91,
+        92
+      ]
     },
     {
       "n": 10,
@@ -109,7 +140,22 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "issue #56 の未読フィードバック1件を反映: 「到達性を失いうる変更」の定義に、自分や人間がこの homelab を観測・操作する経路自身（Coder、GitHub Actions）を含める旨を CHARTER §4 に明記（#94）。T-0022（immich Helm chart 0.12.0→0.13.1、アプリバージョンは不変）を subagent の調査結果に基づき完遂（#95）。T-0023（coder v2.35.3 更新）は調査の結果、DB migration が不可逆でバックアップ未確認と判明し risk を medium→high に見直して blocked に変更（#96）。T-0012（自己振り返り、weekly recurring）で、PR の CI/merge 状況は webhook で自動通知されるためポーリング不要と発見し CHARTER §2 に反映。recurring タスクの再キュー方法が無かったため last_done/next_review の暫定運用を追加（#97）",
-      "prs": [94, 95, 96, 97]
+      "prs": [
+        94,
+        95,
+        96,
+        97
+      ]
+    },
+    {
+      "n": 11,
+      "at": "2026-08-04T22:20:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "issue #56 の未読フィードバック1件（22:04:42、#95 のレンダリング差分の事後検証）を反映。CI にオブジェクト削除検出 job (manifest-diff) を追加する T-0036 を起票・即完遂し、apps root Application が prune: true である以上必要だった安全網を追加した（#98, auto-merge 設定予定）。",
+      "prs": [
+        98
+      ]
     }
   ]
 }
