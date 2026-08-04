@@ -289,7 +289,7 @@
       "title": "ops/check_version_sync.py の pyyaml 依存を除去し、nix 側の抽出を位置依存から構造依存にする",
       "kind": "ci",
       "risk": "low",
-      "status": "in_progress",
+      "status": "done",
       "priority": 2,
       "why": "issue #56 (2026-08-04 19:53:35) の指摘。T-0002 で追加した check_version_sync.py が pyyaml に依存しており ops/validate.py の『標準ライブラリのみ』方針と食い違っていた（autopilot のサンドボックスで手元検証できない）。nix 側の version 抽出も chart 名の後ろ 500 文字という固定 window で、2 つ目の HelmChart が足されると隣の version を誤って一致判定しうる位置依存の実装だった",
       "dod": "check_version_sync.py が標準ライブラリのみで動く。nix 側の抽出は brace 単位で同じ attrset に閉じ込められ、別の HelmChart エントリの version を拾わない。CI から pyyaml のインストール手順を削除する",
@@ -297,7 +297,8 @@
         "ops/check_version_sync.py",
         ".github/workflows/ci.yml"
       ],
-      "created": "2026-08-04"
+      "created": "2026-08-04",
+      "pr": 77
     }
   ]
 }
