@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 38,
-  "updated": "2026-08-04T23:10:00Z",
+  "updated": "2026-08-04T23:19:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -480,18 +480,17 @@
       "title": "external-secrets chart を 1.3.2 → 2.8.0 に上げる（メジャー更新の第2段、T-0026 の続き）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "todo",
+      "status": "done",
       "priority": 20,
       "why": "T-0026 (run #12) の続き。1.x→2.x のメジャーバンプ自体は調査済みで、このリポジトリの使用範囲（doppler単独・シンプルな ExternalSecret のみ）に影響する breaking change は見つかっていない。ただし CRD 本体の完全 diff は未検証（WebFetch のサイズ制限）のため、T-0026 (1.3.2) のマージ・ArgoCD 反映が確認できてから改めて着手する",
       "dod": "apps/external-secrets/kustomization.yaml の version が 2.8.0。ops/inventory.json の current も更新。着手前に T-0026 の反映後に異常の兆候が無いか（issue #56 へのフィードバック等）を確認する",
-      "blocked_by": "T-0026 のマージ・反映確認が先。ブロック理由というより実施順序の都合（同一コンポーネントの連続更新を同時に走らせない）",
       "refs": [
         "apps/external-secrets/kustomization.yaml",
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
       "pr": null,
-      "notes": "run #12: T-0026 の分割で新規起票。調査結果は T-0026 の notes を参照"
+      "notes": "run #13: subagent に v2.0.0〜v2.8.0 の全 GitHub Release 原文 + CRD bundle (1.3.2/2.8.0) の実差分 diff + Doppler provider Go 型定義の diff を取らせた。破壊的変更は v2.0.0 (Alibaba/Device42 provider 削除) と v2.2.0 (Flux OCIRepository consumer 向け) のみで、いずれも該当なし（Doppler / ArgoCD+Kustomize 使用のため）。Doppler 認証スキーマ・ClusterSecretStore/ExternalSecret の該当フィールドは 1.3.2/2.8.0 間で完全一致。1.3.0 以外に yank されたバージョンは無し。CRD bundle は追加のみで削除なし（manifest deletion guard の対象外）"
     },
     {
       "id": "T-0027",
