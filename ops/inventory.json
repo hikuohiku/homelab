@@ -30,12 +30,12 @@
       "id": "external-secrets-chart",
       "kind": "helm",
       "name": "external-secrets",
-      "current": "1.3.2",
+      "current": "2.8.0",
       "file": "apps/external-secrets/kustomization.yaml",
       "match": "version:",
       "upstream": "github:external-secrets/external-secrets",
       "policy": "auto",
-      "note": "T-0026 で 1.1.1→1.3.2 に更新 (#run12)。2.8.0 までのメジャー更新は T-0037 で継続（1.x 系の自然な区切りで刻んだ）"
+      "note": "T-0026 で 1.1.1→1.3.2 (#run12)、T-0037 で 1.3.2→2.8.0 (#run13) に更新。1.3.2 は 1.x 系最終版で直後に 2.0.0 が続くため v1.4〜v1.x の欠番は無い。chart version と appVersion は完全一致"
     },
     {
       "id": "immich-chart",
