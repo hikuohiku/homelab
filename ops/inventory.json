@@ -149,12 +149,12 @@
       "id": "k8s-nameserver",
       "kind": "image",
       "name": "tailscale k8s-nameserver",
-      "current": "unstable",
+      "current": "unstable-v1.91.150",
       "file": "apps/tailscale-operator/dns-config.yaml",
       "match": "k8s-nameserver",
       "upstream": "github:tailscale/tailscale",
       "policy": "auto",
-      "note": "唯一の floating tag。再起動のたびに中身が変わりうる。固定するのが先 (backlog 参照)"
+      "note": "T-0001 で floating tag (unstable) を固定した。tailscale/k8s-nameserver に「stable」相当のタグは無く、unstable-vX.Y.Z 形式のスナップショットのみ存在する。更新時は ghcr.io の digest を必ず確認する"
     },
     {
       "id": "coder-workspace-image",

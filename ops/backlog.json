@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 16,
-  "updated": "2026-08-04T20:00:00Z",
+  "next_id": 17,
+  "updated": "2026-08-04T20:30:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）",
   "tasks": [
     {
@@ -10,7 +10,7 @@
       "title": "tailscale k8s-nameserver の floating tag `unstable` を固定バージョンに変える",
       "kind": "refactor",
       "risk": "medium",
-      "status": "todo",
+      "status": "done",
       "priority": 1,
       "why": "repo 内で唯一バージョンが固定されていない箇所。Pod が再起動するたびに中身が変わりうるので、壊れたときに原因を特定できない",
       "dod": "apps/tailscale-operator/dns-config.yaml が具体的なバージョンタグを指し、ops/inventory.json の該当エントリも更新されている",
@@ -261,6 +261,25 @@
       "created": "2026-08-04",
       "pr": null,
       "notes": "T-0010 を置き換える形の具体案。manifest の設計・実装自体は着手できるので、token 待ちの間に CronJob 用 manifest の下書きを進めてよい"
+    },
+    {
+      "id": "T-0016",
+      "domain": "homelab",
+      "title": "ダッシュボードの PR 一覧を gh CLI 非依存にする",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 13,
+      "why": "run #4 で判明: この実行環境に `gh` CLI が無く、`ops/dashboard/build.py` の `fetch_prs()` が失敗してキャッシュ（`ops/dashboard/prs.json`）に頼るしかない。`api.github.com` への直接 HTTPS も組織の egress ポリシーで 403 になり build.py 単体では代替できない（`ghcr.io` など他ホストは到達できるので、egress は GitHub API に限定して塞がれている）。結果としてキャッシュが更新されず、ダッシュボードの PR 一覧が数十件古いまま固定化していた",
+      "dod": "毎回の起動でダッシュボードの PR 一覧が実態と一致する。方向性の候補: (a) 起動のたびに agent が `mcp__github__list_pull_requests` で取得して `ops/dashboard/prs.json` を直接更新してから `build.py` を実行する運用にし、CHARTER §7.1 にその手順を明記する (b) build.py に `prs.json` が事前に用意されている前提を明記し、`gh` 実行は human のローカル実行時のみ有効なfallbackと位置付け直す。CI 実行環境（GitHub Actions runner）側は `gh` が使えるはずなので、その差も踏まえること",
+      "refs": [
+        "ops/dashboard/build.py",
+        "ops/dashboard/prs.json",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-04",
+      "pr": null,
+      "notes": "run #4 でその場しのぎの urllib 版を書いて動かなかった（403）ため revert 済み。次に着手するときは build.py 単体で完結させようとせず、agent 側の前処理込みで設計すること"
     }
   ]
 }

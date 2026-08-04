@@ -6,4 +6,6 @@ spec:
   nameserver:
     image:
       repo: tailscale/k8s-nameserver
-      tag: unstable
+      # unstable が 2026-08-04 時点で指していたビルドと同一（digest 一致確認済み）。
+      # 中身は変えずに floating tag だけを固定した（backlog T-0001）
+      tag: unstable-v1.91.150
