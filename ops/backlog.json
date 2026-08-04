@@ -141,7 +141,7 @@
         ".github/workflows/ci.yml"
       ],
       "created": "2026-08-04",
-      "pr": null,
+      "pr": 85,
       "notes": "run #8: subagent に調査を投げた。`nix flake check` は `checks.*` 以外に `nixosConfigurations.<name>.config.system.build.toplevel` / `packages.<system>.<name>` も評価対象に含む仕様（ビルドされるのは checks.* のみ）と Nix 公式マニュアル(2.19.1〜2.30.2)で確認済みのため、追加のコマンドなしで nix/images/proxmox-cloud のフレークを評価できる。`cachix/install-nix-action@v31` を使用（`DeterminateSystems/nix-installer-action` は既定で Determinate Nix + FlakeHub 連携に寄っているため見送り）。手元に nix が無いため実行検証はできず、CI 任せ（CHARTER §5.2）。ruleset の required checks には未追加（3 つ固定のまま）。必要なら別タスクで検討"
     },
     {
