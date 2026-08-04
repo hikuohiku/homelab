@@ -107,6 +107,9 @@ jobs:
         run: python3 ops/validate.py
       - name: check duplicated version pins are in sync
         run: python3 ops/check_version_sync.py
+      - name: dashboard build.py runs without error
+        # index.html は生成物なので git 管理していない（T-0035）。壊れていないことだけここで担保する
+        run: python3 ops/dashboard/build.py
 
   nix:
     name: nix flake check
