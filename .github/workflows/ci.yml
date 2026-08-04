@@ -105,3 +105,5 @@ jobs:
       - uses: actions/checkout@v4
       - name: validate
         run: python3 ops/validate.py
+      - name: check duplicated version pins are in sync
+        run: pip install --quiet pyyaml && python3 ops/check_version_sync.py
