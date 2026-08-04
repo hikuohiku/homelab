@@ -31,21 +31,32 @@ def load(name: str, default=None):
     return json.loads(p.read_text())
 
 
-def fetch_prs() -> list[dict]:
-    """オープン PR を取得。gh が無い/失敗したらキャッシュにフォールバックする。"""
+def _gh_prs(state: str, fields: str, limit: int) -> list[dict]:
+    out = subprocess.run(
+        ["gh", "pr", "list", "--state", state, "--limit", str(limit), "--json", fields],
+        cwd=ROOT, capture_output=True, text=True, timeout=60, check=True,
+    ).stdout
+    return json.loads(out)
+
+
+def fetch_prs() -> tuple[list[dict], list[dict]]:
+    """(オープン PR, 最近マージされた PR)。gh が使えなければキャッシュにフォールバックする。"""
     cache = OPS / "dashboard" / "prs.json"
     try:
-        out = subprocess.run(
-            ["gh", "pr", "list", "--state", "open", "--limit", "30", "--json",
-             "number,title,url,isDraft,createdAt,statusCheckRollup,headRefName,autoMergeRequest"],
-            cwd=ROOT, capture_output=True, text=True, timeout=60, check=True,
-        ).stdout
-        prs = json.loads(out)
-        cache.write_text(json.dumps(prs, ensure_ascii=False, indent=2) + "\n")
-        return prs
+        data = {
+            "open": _gh_prs("open", "number,title,url,isDraft,createdAt,statusCheckRollup,headRefName,autoMergeRequest", 30),
+            "merged": _gh_prs("merged", "number,title,url,mergedAt", 20),
+        }
+        cache.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
+        return data["open"], data["merged"]
     except Exception as e:  # noqa: BLE001
         print(f"warning: gh pr list に失敗したのでキャッシュを使う ({e})", file=sys.stderr)
-        return json.loads(cache.read_text()) if cache.exists() else []
+        if not cache.exists():
+            return [], []
+        data = json.loads(cache.read_text())
+        if isinstance(data, list):  # 旧フォーマット
+            return data, []
+        return data.get("open", []), data.get("merged", [])
 
 
 def ci_state(pr: dict) -> tuple[str, str]:
@@ -149,6 +160,14 @@ def pr_row(p: dict) -> str:
       </li>"""
 
 
+def done_row(p: dict) -> str:
+    return f"""
+      <li class="done">
+        <a class="done__title" href="{E(p['url'])}">{E(p['title'])}</a>
+        <span class="done__meta">#{p['number']} · {E(rel_time(p.get('mergedAt')))}</span>
+      </li>"""
+
+
 def journal_row(e: dict) -> str:
     lines = [l for l in e["body"].splitlines() if l.strip()]
     body = "\n".join(lines[:12])
@@ -180,7 +199,7 @@ def build() -> str:
     backlog = load("backlog.json", {"tasks": []})
     inventory = load("inventory.json", {"targets": []})
     tasks = backlog["tasks"]
-    prs = fetch_prs()
+    prs, merged = fetch_prs()
     journal = parse_journal()
 
     by_status = {k: [t for t in tasks if t["status"] == k] for k in STATUS_META}
@@ -202,25 +221,25 @@ def build() -> str:
 
     stats = "".join([
         stat(rel_time(last_run.get("at")), "最終起動"),
-        stat(len(prs), "オープン PR", "crit" if failing else "sig"),
-        stat(len(by_status["needs-human"]), "要判断", "crit" if by_status["needs-human"] else "idle"),
-        stat(len(by_status["todo"]), "待ちタスク", "idle"),
+        stat(len(merged), "反映済みの変更", "ok" if merged else "idle"),
+        stat(len(prs), "作業中の PR", "crit" if failing else "sig"),
+        stat(len(by_status["needs-human"]), "あなた待ち", "crit" if by_status["needs-human"] else "idle"),
     ])
 
-    attention = by_status["needs-human"] + by_status["blocked"]
+    # 人間に渡してよいのは「手が届かない」作業だけ（CHARTER §4）
     attention_html = (
-        "".join(task_row(t) for t in attention)
-        if attention else
-        '<li class="empty">人間に渡っているものはありません。</li>'
+        "".join(task_row(t) for t in by_status["needs-human"])
+        if by_status["needs-human"] else
+        '<li class="empty">ありません。手を動かしてほしいことが出たらここに出ます。</li>'
     )
 
-    queue = by_status["in_progress"] + by_status["todo"]
-    queue_html = "".join(task_row(t) for t in queue[:14]) or '<li class="empty">キューは空です。次の起動で調査タスクを起票します。</li>'
-    more = f'<p class="more">ほか {len(queue) - 14} 件</p>' if len(queue) > 14 else ""
+    queue = by_status["in_progress"] + by_status["todo"] + by_status["blocked"]
+    queue_html = "".join(task_row(t) for t in queue[:12]) or '<li class="empty">キューは空です。次の起動で調査タスクを起票します。</li>'
+    more = f'<p class="more">ほか {len(queue) - 12} 件</p>' if len(queue) > 12 else ""
 
-    prs_html = "".join(pr_row(p) for p in prs) or '<li class="empty">オープンな PR はありません。</li>'
-    runs_html = "".join(journal_row(e) for e in journal[:5]) or '<li class="empty">まだ記録がありません。</li>'
-    done_html = "".join(task_row(t) for t in by_status["done"][-6:]) or '<li class="empty">まだ完了したタスクはありません。</li>'
+    prs_html = "".join(pr_row(p) for p in prs) or '<li class="empty">作業中の PR はありません。</li>'
+    runs_html = "".join(journal_row(e) for e in journal[:4]) or '<li class="empty">まだ記録がありません。</li>'
+    done_html = "".join(done_row(p) for p in merged[:12]) or '<li class="empty">まだ反映された変更はありません。</li>'
     inv_html = "".join(inv_row(t) for t in inventory["targets"])
 
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
@@ -361,6 +380,15 @@ code {{ font-family:var(--mono); font-size:.76rem; color:var(--muted);
 .pr__age {{ font-size:.78rem; color:var(--muted); font-family:var(--mono); }}
 .prlink {{ font-size:.78rem; font-family:var(--mono); color:var(--sig); }}
 
+/* ---- done (反映済み) */
+.done {{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.35rem .75rem;
+  padding:.5rem .85rem; background:var(--surface); border:1px solid var(--line);
+  border-left:3px solid var(--ok); border-radius:var(--radius); }}
+.done__title {{ font-size:.92rem; color:var(--ink); text-decoration:none; flex:1 1 20rem; }}
+.done__title:hover {{ color:var(--sig); text-decoration:underline; }}
+.done__meta {{ font-family:var(--mono); font-size:.75rem; color:var(--muted);
+  font-variant-numeric:tabular-nums; }}
+
 /* ---- runs */
 .run {{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
   padding:.85rem 1rem; display:flex; flex-direction:column; gap:.4rem; }}
@@ -420,22 +448,28 @@ a {{ color:var(--sig); }}
   <div class="stats">{stats}</div>
 
   <section>
-    <h2>あなたの判断を待っているもの</h2>
-    <p class="lede">エージェントが自分では決めないと判断したもの。ここが空なら、朝に見るものはありません。</p>
-    <ul class="list">{attention}</ul>
+    <h2>やったこと</h2>
+    <p class="lede">マージ済み＝homelab に反映済みの変更。新しい順。</p>
+    <ul class="list">{done}</ul>
   </section>
 
   <section>
-    <h2>レビュー待ちの PR</h2>
-    <ul class="list">{prs}</ul>
+    <h2>あなたに手を動かしてほしいこと</h2>
+    <p class="lede">権限や認証まわりなど、こちらでは手が届かない作業だけを出します。判断を頼むことはありません。</p>
+    <ul class="list">{attention}</ul>
   </section>
 
   <section class="fb">
     <h2>フィードバックを書く</h2>
-    <p>殴り書きで構いません。進め方への指摘は憲章に、やってほしいことはタスクとして取り込まれます。
+    <p>使っていて感じたことを殴り書きで構いません。進め方への指摘は憲章に、やってほしいことはタスクとして取り込まれます。
        読んだら 3 行以内で返信します。<strong>返信が無い＝まだ読んでいない</strong>と判断してください。</p>
     <a class="fb__cta" href="{fb_url}">issue #{fb_issue} に書く</a>
     <span class="fb__meta">最後に読んだ: {fb_read}</span>
+  </section>
+
+  <section>
+    <h2>いま動かしているもの</h2>
+    <ul class="list">{prs}</ul>
   </section>
 
   <section>
@@ -446,13 +480,8 @@ a {{ color:var(--sig); }}
   </section>
 
   <section>
-    <h2>直近の起動</h2>
+    <h2>起動の記録</h2>
     <ul class="list">{runs}</ul>
-  </section>
-
-  <section>
-    <h2>終わったこと</h2>
-    <ul class="list">{done}</ul>
   </section>
 
   <section>

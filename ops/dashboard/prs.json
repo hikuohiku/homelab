@@ -1,53 +1,125 @@
-[
-  {
-    "autoMergeRequest": null,
-    "createdAt": "2026-08-04T18:17:57Z",
-    "headRefName": "autopilot/bootstrap",
-    "isDraft": false,
-    "number": 57,
-    "statusCheckRollup": [
-      {
-        "__typename": "CheckRun",
-        "completedAt": "2026-08-04T18:22:31Z",
-        "conclusion": "SUCCESS",
-        "detailsUrl": "https://github.com/hikuohiku/homelab/actions/runs/30938291610/job/92089884890",
-        "name": "kustomize build",
-        "startedAt": "2026-08-04T18:22:19Z",
-        "status": "COMPLETED",
-        "workflowName": "CI"
-      },
-      {
-        "__typename": "CheckRun",
-        "completedAt": "2026-08-04T18:22:30Z",
-        "conclusion": "SUCCESS",
-        "detailsUrl": "https://github.com/hikuohiku/homelab/actions/runs/30938291610/job/92089885050",
-        "name": "terraform validate",
-        "startedAt": "2026-08-04T18:22:20Z",
-        "status": "COMPLETED",
-        "workflowName": "CI"
-      },
-      {
-        "__typename": "CheckRun",
-        "completedAt": "2026-08-04T18:22:28Z",
-        "conclusion": "SUCCESS",
-        "detailsUrl": "https://github.com/hikuohiku/homelab/actions/runs/30938291610/job/92089885034",
-        "name": "ops state validate",
-        "startedAt": "2026-08-04T18:22:25Z",
-        "status": "COMPLETED",
-        "workflowName": "CI"
-      },
-      {
-        "__typename": "CheckRun",
-        "completedAt": "2026-08-04T18:22:12Z",
-        "conclusion": "SUCCESS",
-        "detailsUrl": "https://dashboard.gitguardian.com",
-        "name": "GitGuardian Security Checks",
-        "startedAt": "2026-08-04T18:22:11Z",
-        "status": "COMPLETED",
-        "workflowName": ""
-      }
-    ],
-    "title": "feat(ops): homelab を自律運用する autopilot の器を作る",
-    "url": "https://github.com/hikuohiku/homelab/pull/57"
-  }
-]
+{
+  "open": [],
+  "merged": [
+    {
+      "mergedAt": "2026-08-04T18:23:14Z",
+      "number": 57,
+      "title": "feat(ops): homelab を自律運用する autopilot の器を作る",
+      "url": "https://github.com/hikuohiku/homelab/pull/57"
+    },
+    {
+      "mergedAt": "2026-08-04T16:25:20Z",
+      "number": 55,
+      "title": "fix(coder): secure workspace SSH key before clone",
+      "url": "https://github.com/hikuohiku/homelab/pull/55"
+    },
+    {
+      "mergedAt": "2026-08-04T16:18:12Z",
+      "number": 54,
+      "title": "fix(coder): clone private skills over SSH",
+      "url": "https://github.com/hikuohiku/homelab/pull/54"
+    },
+    {
+      "mergedAt": "2026-08-04T04:42:17Z",
+      "number": 53,
+      "title": "feat(coder): use immutable workspace image",
+      "url": "https://github.com/hikuohiku/homelab/pull/53"
+    },
+    {
+      "mergedAt": "2026-08-03T14:58:51Z",
+      "number": 52,
+      "title": "feat: Coder 開発サーバーを手書き manifest で追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/52"
+    },
+    {
+      "mergedAt": "2026-08-03T14:17:36Z",
+      "number": 51,
+      "title": "feat: node01 を 4c/12GB/50GB にスケールアップ",
+      "url": "https://github.com/hikuohiku/homelab/pull/51"
+    },
+    {
+      "mergedAt": "2026-08-03T13:45:55Z",
+      "number": 50,
+      "title": "feat: 週次メンテナンスの手順を /weekly-maintenance コマンドに定義",
+      "url": "https://github.com/hikuohiku/homelab/pull/50"
+    },
+    {
+      "mergedAt": "2026-08-03T13:01:44Z",
+      "number": 49,
+      "title": "fix(vaultwarden): 1.36.0 → 1.37.1 でクライアント同期不具合を解消",
+      "url": "https://github.com/hikuohiku/homelab/pull/49"
+    },
+    {
+      "mergedAt": "2026-08-03T12:25:50Z",
+      "number": 48,
+      "title": "chore: kubectl を ask 付きで許可する方針を反映 + 移行 Plans 更新",
+      "url": "https://github.com/hikuohiku/homelab/pull/48"
+    },
+    {
+      "mergedAt": "2026-06-21T09:28:10Z",
+      "number": 47,
+      "title": "feat: vaultwarden を k8s へ移行する manifest を追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/47"
+    },
+    {
+      "mergedAt": "2026-06-21T06:28:16Z",
+      "number": 46,
+      "title": "chore: IaC 管理外の空 namespace を整理",
+      "url": "https://github.com/hikuohiku/homelab/pull/46"
+    },
+    {
+      "mergedAt": "2026-06-21T06:04:01Z",
+      "number": 45,
+      "title": "chore: Proxmox 棚卸しと pbs の手動管理方針を明示",
+      "url": "https://github.com/hikuohiku/homelab/pull/45"
+    },
+    {
+      "mergedAt": "2026-05-21T00:58:51Z",
+      "number": 43,
+      "title": "feat: GitHub Copilot PR レビューを日本語化",
+      "url": "https://github.com/hikuohiku/homelab/pull/43"
+    },
+    {
+      "mergedAt": "2026-05-20T15:10:25Z",
+      "number": 41,
+      "title": "feat: ArgoCD preview deploy commands + PVC data protection",
+      "url": "https://github.com/hikuohiku/homelab/pull/41"
+    },
+    {
+      "mergedAt": "2026-05-20T13:42:27Z",
+      "number": 39,
+      "title": "feat(immich): add Immich K8s manifests for LXC migration",
+      "url": "https://github.com/hikuohiku/homelab/pull/39"
+    },
+    {
+      "mergedAt": "2025-12-17T13:57:38Z",
+      "number": 33,
+      "title": "feat(nextcloud): add Nextcloud Helm chart configuration",
+      "url": "https://github.com/hikuohiku/homelab/pull/33"
+    },
+    {
+      "mergedAt": "2025-12-15T08:45:07Z",
+      "number": 32,
+      "title": "feat: Add Dex as central IdP with Google OIDC",
+      "url": "https://github.com/hikuohiku/homelab/pull/32"
+    },
+    {
+      "mergedAt": "2025-12-14T17:12:15Z",
+      "number": 29,
+      "title": "docs: Proxmox local storageのimportコンテンツタイプ設定を前提条件に追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/29"
+    },
+    {
+      "mergedAt": "2025-12-14T16:59:57Z",
+      "number": 27,
+      "title": "feat: add custom tailnet hostname for ArgoCD service",
+      "url": "https://github.com/hikuohiku/homelab/pull/27"
+    },
+    {
+      "mergedAt": "2025-12-14T13:19:54Z",
+      "number": 24,
+      "title": "fix: include version in release image filename",
+      "url": "https://github.com/hikuohiku/homelab/pull/24"
+    }
+  ]
+}

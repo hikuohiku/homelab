@@ -79,11 +79,16 @@ def check_backlog(b) -> None:
         if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(t.get("created", ""))):
             err(f"{where}: created は YYYY-MM-DD")
 
-        # CHARTER §4: high は実装せず人間に渡す
-        if t.get("risk") == "high" and t.get("status") in {"todo", "in_progress"}:
-            err(f"{where}: risk=high を autopilot が着手しようとしている。needs-human にすること (CHARTER §4)")
-        if t.get("status") == "needs-human" and not t.get("needs_human_reason"):
-            err(f"{where}: needs-human には needs_human_reason が必要")
+        # CHARTER §4: needs-human は「手が届かない」タスクのみ。判断の丸投げは禁止
+        if t.get("status") == "needs-human":
+            reason = t.get("needs_human_reason", "")
+            if not reason:
+                err(f"{where}: needs-human には needs_human_reason（人間に何をしてほしいか）が必要")
+            elif re.search(r"判断|決め|方針|相談|確認して|どうする", reason):
+                err(
+                    f"{where}: needs_human_reason が判断の依頼になっている。"
+                    f"人間に渡してよいのは権限・認証の手作業だけで、判断は自分の仕事 (CHARTER §4)"
+                )
         if t.get("status") == "blocked" and not t.get("blocked_by"):
             err(f"{where}: blocked には blocked_by が必要")
         if t.get("status") == "done" and not t.get("pr"):
