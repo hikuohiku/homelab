@@ -1,8 +1,8 @@
 {
   "version": 1,
   "next_id": 36,
-  "updated": "2026-08-04T22:50:00Z",
-  "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）",
+  "updated": "2026-08-04T22:12:00Z",
+  "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
       "id": "T-0001",
@@ -204,17 +204,20 @@
       "title": "この autopilot 自身の運用を journal から振り返り、CHARTER を改訂する",
       "kind": "meta",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 20,
       "why": "定期的に自分の運用を点検しないと、無駄な手順や抜けた観点が固定化する",
       "dod": "直近の journal を読み、うまくいっていない点を 1 つ以上特定して CHARTER か仕組みに反映する。何も無ければ「無かった」と journal に書く",
       "recurring": "weekly",
+      "last_done": "2026-08-04",
+      "next_review": "2026-08-11",
       "refs": [
         "ops/CHARTER.md",
         "ops/journal/"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": 97,
+      "notes": "run #10: run #1〜#10 の journal を振り返り、この起動で気づいた具体的な改善を CHARTER §2 に反映（PR 作成後の webhook ベースの見届け方。ポーリングではなく届いたイベントを使えることを実地で確認した）。副次的に「recurring タスクを再キューする仕組みが無い」ことに気づき、`last_done`/`next_review` フィールドをこのタスク自身に追加して当面の運用とした（`ops/backlog.json` の `_comment` に convention を追記）。汎用的な再オープン機構が要るほど recurring タスクが増えたら別途起票する"
     },
     {
       "id": "T-0013",
