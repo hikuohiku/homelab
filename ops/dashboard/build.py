@@ -23,6 +23,9 @@ OUT = OPS / "dashboard" / "index.html"
 
 E = html.escape
 
+# PR 一覧を取得できずキャッシュにフォールバックしたときの記録
+STALE: dict[str, str] = {}
+
 
 def load(name: str, default=None):
     p = OPS / name
@@ -50,7 +53,12 @@ def fetch_prs() -> tuple[list[dict], list[dict]]:
         cache.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
         return data["open"], data["merged"]
     except Exception as e:  # noqa: BLE001
-        print(f"warning: gh pr list に失敗したのでキャッシュを使う ({e})", file=sys.stderr)
+        # 取得できないこと自体は異常ではない（gh が無い実行環境がある）。
+        # まずいのは黙ってキャッシュを出すこと。人間には最新に見えて実際は古い。
+        print(f"warning: PR 一覧を取得できずキャッシュを使う ({e})", file=sys.stderr)
+        STALE["reason"] = str(e)[:100]
+        if cache.exists():
+            STALE["at"] = datetime.fromtimestamp(cache.stat().st_mtime, timezone.utc).isoformat()
         if not cache.exists():
             return [], []
         data = json.loads(cache.read_text())
@@ -223,6 +231,15 @@ def build() -> str:
     def stat(value, label, tone="sig"):
         return f'<div class="stat stat--{tone}"><span class="stat__v">{E(str(value))}</span><span class="stat__l">{E(label)}</span></div>'
 
+    stale_html = ""
+    if STALE:
+        stale_html = (
+            '<p class="stale">PR の一覧を取得できませんでした。下の「やったこと」と'
+            f'「いま動かしているもの」は<strong>{E(rel_time(STALE.get("at")))}のキャッシュ</strong>で、'
+            '現在の状態と違う可能性があります。'
+            f'<span class="stale__why">({E(STALE.get("reason",""))})</span></p>'
+        )
+
     stats = "".join([
         stat(rel_time(last_run.get("at")), "最終起動"),
         stat(len(merged), "反映済みの変更", "ok" if merged else "idle"),
@@ -255,7 +272,7 @@ def build() -> str:
     return TEMPLATE.format(
         generated=generated, stage=stage, stage_label=E(stage_label), next_html=next_html,
         stats=stats, attention=attention_html, queue=queue_html, more=more,
-        prs=prs_html, runs=runs_html, done=done_html, inv=inv_html,
+        prs=prs_html, runs=runs_html, done=done_html, inv=inv_html, stale=stale_html,
         fb_url=E(fb_url), fb_issue=E(str(fb.get("issue") or "?")),
         fb_read=E(rel_time(fb.get("last_read"))),
     )
@@ -323,6 +340,9 @@ body {{ background:var(--ground); color:var(--ink); font-family:var(--sans);
   display:flex; flex-wrap:wrap; gap:.4rem 1rem; }}
 .mast__stage {{ color:var(--sig); font-weight:600; }}
 .warn-inline {{ color:var(--crit); font-weight:600; }}
+.stale {{ background:var(--warn-soft); color:var(--warn); border:1px solid var(--warn);
+  border-radius:var(--radius); padding:.6rem .9rem; font-size:.86rem; }}
+.stale__why {{ font-family:var(--mono); font-size:.74rem; opacity:.75; margin-left:.4rem; }}
 
 .stats {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px;
   background:var(--line); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }}
@@ -452,6 +472,7 @@ a {{ color:var(--sig); }}
   </header>
 
   <div class="stats">{stats}</div>
+  {stale}
 
   <section>
     <h2>やったこと</h2>
