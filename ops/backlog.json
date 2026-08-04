@@ -529,7 +529,7 @@
       "dod": "ops/ 配下（少なくとも journal/*.md, *.json, *.md 全般）を conflict marker（行頭 `<<<<<<<` / `=======` / `>>>>>>>`）でスキャンし、見つかれば error にする。次に同じミスをしたら CI が落ちること",
       "refs": ["ops/validate.py"],
       "created": "2026-08-04",
-      "pr": null,
+      "pr": 84,
       "notes": "run #8: ops/validate.py に check_conflict_markers() を追加（.md / .json を対象、行頭一致）。わざと journal にコンフリクトマーカーを混ぜて 3 件検出 → 復元後 0 error に戻ることを手元で確認してから PR を出した（#56 の教訓『検出器はわざと壊して確かめる』を踏襲）"
     }
   ]
