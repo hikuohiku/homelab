@@ -82,7 +82,14 @@ backlog が空、または全部 `blocked` のときは**調査タスクを自�
 | `medium` | 実インフラに影響するが可逆。patch/minor のバージョン更新、manifest の整合性修正、リソース調整 | CI green **かつ** ロールバック手順を PR 本文に明記していれば **auto-merge** |
 | `high` | 下記「必ず人間に渡すもの」 | **実装しない。** `status: "needs-human"` で backlog に残し、根拠と推奨案を書いてダッシュボードに載せる |
 
-auto-merge は `gh pr merge --squash --auto` を使い、CI を必ずゲートにする。**CI が無い領域の変更を auto-merge してはならない。**
+auto-merge は **`gh pr merge --merge --auto`**（このリポジトリは squash / rebase マージを許可していない）。
+
+`main` には ruleset「main: CI 必須」が掛かっていて、`kustomize build` / `terraform validate` /
+`ops state validate` の 3 つが green でないとマージできない。**これが auto-merge の安全性の根拠**であり、
+自分の注意深さではない。ruleset を弱めたり回避したりしてはならない。
+
+**CI が検証できない領域の変更を auto-merge してはならない。** 検証できない領域に手を出したくなったら、
+先に CI を足すタスクを起票し、それがマージされてから着手する。
 
 ### 必ず人間に渡すもの（high）
 
