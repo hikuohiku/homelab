@@ -43,7 +43,7 @@ spec:
               mountPath: /var/lib/postgresql/data
       containers:
         - name: postgres
-          image: postgres:17.5
+          image: postgres:17.10
           env:
             - name: POSTGRES_USER
               value: coder
