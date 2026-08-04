@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 34,
-  "updated": "2026-08-04T22:20:00Z",
+  "updated": "2026-08-04T22:35:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）",
   "tasks": [
     {
@@ -150,7 +150,7 @@
       "title": "/weekly-maintenance コマンドを CHARTER に統合するか、役割を分ける",
       "kind": "refactor",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 9,
       "why": "vaultwarden の更新手順が .claude/commands/weekly-maintenance.md と ops/CHARTER.md の両方に書かれつつある。二重管理の芽",
       "dod": "どちらが情報源かが明確になっている。weekly-maintenance に残す価値がある部分（人間が手で回すときの手順）だけが残る",
@@ -159,7 +159,8 @@
         "ops/CHARTER.md"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": 86,
+      "notes": "run #8: 役割を分けた（統合ではなく分離）。バージョン監視・更新判断の一次情報源は ops/CHARTER.md §3/§4（autopilot が inventory.json の全対象を担当）。weekly-maintenance.md 固有の価値は実機（ArgoCD/kubectl/ノード）に到達できる人間の対話セッションでしかできない健全性確認に絞り、重複していた『落とし穴』の版更新一般の項目・対象拡大計画（3 回変更なしで対象を増やす）を削除して CHARTER 参照に置き換えた"
     },
     {
       "id": "T-0010",

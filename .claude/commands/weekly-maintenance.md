@@ -1,19 +1,34 @@
-homelab の週次メンテナンス。vaultwarden のバージョン据え置きと異常を検知し、更新 PR を作る。
+homelab の週次メンテナンス。vaultwarden の実機健全性を確認し、必要なら更新 PR を作る。
 
 pin したバージョンは誰も上げなければ据え置かれる。2026-08-03、vaultwarden 1.36.0 の
 放置でクライアント同期が全停止した（#49）。その再発防止。
 
+## この手順と ops/CHARTER.md の関係
+
+バージョン監視は `ops/inventory.json` の全対象（vaultwarden を含む）を autopilot が
+クラウドの定期実行で担っている（`ops/CHARTER.md` §3）。バージョン更新時の判断基準
+（上流最新＝最善ではない、リリースノートは原文を読む、1 PR 1 コンポーネント等）も
+`ops/CHARTER.md` §4「バージョン更新の作法」が一次情報源。ここには重複して書かない。
+
+この手順に固有の価値は、**実機（ArgoCD / kubectl / ノード）に到達できる人間の対話
+セッションでしかできない健全性確認**。autopilot はクラウドサンドボックスから
+homelab に到達できないため（`ops/CHARTER.md` §5.2）、この確認は autopilot では代替できない。
+
 ## 対象
 
-vaultwarden のみ。手順が固まる前に広げない。
+vaultwarden のみ。理由は「対象を広げる」計画ではなく、**実機確認が必要な対象がまだ
+vaultwarden しかない**こと（#49 の再発対象）。他の対象のバージョン監視はすでに
+autopilot が担っているので、ここで扱う対象を機械的に増やす必要はない。実機確認が
+要る別の懸念が出たら、そのときに対象を検討する。
 
 ## 手順
 
 0. `Maintenance.md` の前回エントリを読む（持ち越しと申し送り）
 1. `just preflight` で疎通確認。到達できない層はレポートに明記してスキップする
 2. バージョン点検。現在値は `apps/vaultwarden/deployment.yaml` から読む。上流は
-   `mcp__github__list_releases`。差があれば間の全リリースノートを読み、セキュリティ
-   修正・breaking change・クライアント互換要件を抽出する
+   `mcp__github__list_releases`。autopilot がすでに調査済みなら `ops/backlog.json` /
+   `ops/journal/` を先に確認し、二重調査を避ける。差があれば間の全リリースノートを
+   読む（判断基準は `ops/CHARTER.md` §4）
 3. 健全性点検。ArgoCD の Sync/Health、Pod、起動ログ、ノードのディスク空き
    （20GB しかない。3GB 未満なら警告をレポート先頭に）
 4. レポート。異常なしならそう書いて終わる。無理に作業を作らない
@@ -33,12 +48,10 @@ vaultwarden のみ。手順が固まる前に広げない。
 2. 意味がなかった項目はあるか → 削る。長い手順は実行されなくなる
 3. 見逃し・誤検知はあったか → 閾値を調整する
 
-「変更なし」が 3 回続いたら対象を 1 つ増やす。候補は immich / dex /
-external-secrets / tailscale-operator / argocd。argocd は self-management なので最後。
-
 ## 落とし穴
 
-- 上流の最新を鵜呑みにしない。1.37.0 は alpine のビルドが壊れており 1.37.1 が必要だった
-- リリースノートは要約させず原文を読む
+実機確認（ArgoCD / kubectl / ノード）に固有のもののみ。バージョン更新一般の落とし穴は
+`ops/CHARTER.md` §4 を参照。
+
 - `local-path` は容量を強制しない。PVC の requests は実容量ではない
 - 脆弱性の多くは組織機能。単一ユーザーでは該当しないが、確認した記録は残す
