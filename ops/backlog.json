@@ -555,15 +555,18 @@
       "title": "terraform bpg/proxmox provider の pin (0.89.1) を見直す（現在 v0.111.1 まで進んでいる）",
       "kind": "investigate",
       "risk": "medium",
-      "status": "todo",
+      "status": "needs-human",
       "priority": 25,
       "why": "T-0005 の調査 (run #6) で判明。約 22 リリース分の差。意図的な完全一致 pin（理由コメントあり）なので、まず pin した理由が今も成り立つか確認するのが先。v0.109.0 のリリースノートに VM agent の IP 待機設定まわりの breaking change の言及がある",
       "dod": "providers.tf の pin 理由コメントを再確認し、今も成り立つか判断する。上げる場合は 0.89.1 から v0.111.1 までのリリースノートを原文で読み、breaking change を洗い出す。terraform apply は autopilot が実行できないため、実際の反映は人間の作業になる旨を PR に明記する",
+      "needs_human_reason": "破壊的変更の調査自体は完了し、v0.111.1 への一段更新が安全と分かった（下記 notes）。ただし `.terraform.lock.hcl` の更新には provider バイナリの h1 ハッシュ（dirhash）を計算する必要があり、これは terraform CLI 本体でしか生成できない。この CI（`terraform validate` job）は既存の lock file をそのまま使う（`-upgrade` なし）ため、providers.tf の version だけ書き換えて lock を古いままにすると CI が落ちて ruleset でマージできない。**お願いしたいこと**: terraform が使える環境（人間の対話セッション、または run #0 と同じ環境）で `cd terraform/proxmox && terraform init -upgrade` を実行し、`providers.tf` の version を `= 0.111.1` に、`.terraform.lock.hcl` を再生成したものをコミットしてほしい。version 変更・破壊的変更の調査自体はここで完了しているので、コマンド実行だけで良い",
       "refs": [
-        "terraform/proxmox/providers.tf"
+        "terraform/proxmox/providers.tf",
+        "terraform/proxmox/.terraform.lock.hcl"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": "run #13: subagent に `.tf` ファイル全体（3 リソースタイプのみ使用: download_file, file, virtual_environment_vm）と v0.89.2〜v0.111.1 の CHANGELOG.md / upgrade guide を原文で照合させた。**結論: v0.111.1 への一段更新で安全、.tf ファイルの変更は不要。** 懸念されていた v0.109.0 の `agent.wait_for_ip` 反転（enabled→disabled）は、このリポジトリが `agent.wait_for_ip` を一切設定しておらず（`agent.enabled` のみ使用）、IP 出力（`node01_ip`）もハードコードされた文字列で `ipv4_addresses` を参照していないため無関係と確認。他の breaking change（network_device.enabled 非推奨、LXC cpu.units、VM/container 名の DNS 検証等）もすべて未使用のリソース/属性。providers.tf 冒頭のコメント（`完全一致 pin は nix 管理の terraform と噛み合わないため範囲指定`）は `required_version`（terraform 本体）についての説明で、`bpg/proxmox` provider の pin 理由コメントは別途存在しない（浅いクローンのため元コミットの経緯も確認できず）。terraform 本体が無いため lock file の regenerate ができず、version 変更だけでは CI が落ちる（`.terraform.lock.hcl` はハッシュの手書き生成ができない）ため needs-human とした"
     },
     {
       "id": "T-0031",
