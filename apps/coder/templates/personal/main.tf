@@ -110,9 +110,16 @@ resource "coder_agent" "main" {
     set -eu
 
     skills_dir="$HOME/ghq/github.com/hikuohiku/dots-skills"
-    if [ ! -d "$skills_dir/.git" ]; then
-      mkdir -p "$(dirname "$skills_dir")"
-      git clone --depth=1 https://github.com/hikuohiku/dots-skills.git "$skills_dir"
+    if [ ! -f "$skills_dir/AGENTS.md" ]; then
+      export GIT_SSH_COMMAND="ssh -o StrictHostKeyChecking=accept-new"
+      if [ -d "$skills_dir/.git" ]; then
+        git -C "$skills_dir" remote set-url origin git@github.com:hikuohiku/dots-skills.git
+        git -C "$skills_dir" fetch --depth=1 origin main
+        git -C "$skills_dir" checkout --force FETCH_HEAD
+      else
+        mkdir -p "$(dirname "$skills_dir")"
+        git clone --depth=1 git@github.com:hikuohiku/dots-skills.git "$skills_dir"
+      fi
     fi
 
     /usr/local/bin/coder-home-activate
