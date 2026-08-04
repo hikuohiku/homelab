@@ -464,6 +464,7 @@
       "risk": "medium",
       "status": "done",
       "priority": 20,
+      "pr": 102,
       "why": "T-0005 の調査 (run #6) で判明。1.1.1 → 2.8.0 は大きなメジャー更新の飛びだが、issue #56 (2026-08-04 22:42:36) で今夜の着手を勧められた。subagent 調査 (run #12) の結果、実在するバージョンは 1.1.1→1.2.0→1.2.1→1.3.0(リリース失敗、直後に撤回)→1.3.1→1.3.2→2.0.0→...→2.8.0 で、想定していた 1.4〜1.14 は存在しない。1.x 系の自然な区切りである 1.3.2（1.3.0 は壊れたリリースのため避ける）まででまず刻む",
       "dod": "apps/external-secrets/kustomization.yaml の version が 1.3.2。ops/inventory.json の external-secrets-chart current も更新。CRD（ClusterSecretStore の doppler provider、ExternalSecret の data/target/secretStoreRef）・Helm values（installCRDs）に breaking change が無いことを原文で確認済み",
       "refs": [
@@ -471,7 +472,6 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": null,
       "notes": "run #12: subagent に 1.1.1→2.8.0 の全リリースノート調査を投げた。当リポジトリの使用範囲（doppler単独の ClusterSecretStore、dataFrom/template/generator 不使用のシンプルな ExternalSecret×5、installCRDs: true のみ）に影響する breaking change は 1.x→2.x を通じて見つからなかった（v2.0.0 の実質的変更は未使用の Alibaba/Device42 プロバイダ削除のみ）。ただし CHARTER の『メジャー更新は刻む』方針と、v1.3.2 という自然な区切りが実在すること、CRD 本体の完全 diff は WebFetch のサイズ制限で検証しきれなかったことを踏まえ、1.3.2 と 2.8.0 の2段階に分割。残りは T-0037"
     },
     {
