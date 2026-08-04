@@ -25,7 +25,7 @@ spec:
       initContainers:
         # local-path の PVC は root:root で作成されるため、非 root 実行に備えて所有権を調整
         - name: init-permissions
-          image: busybox:1.36
+          image: busybox:1.37
           command: ["sh", "-c", "chown -R 1000:1000 /data"]
           securityContext:
             runAsUser: 0
