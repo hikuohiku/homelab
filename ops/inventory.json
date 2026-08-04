@@ -1,0 +1,193 @@
+{
+  "version": 1,
+  "_comment": "autopilot がバージョン更新を監視する対象。行番号は書かない（腐るため）。match は該当行を grep するための文字列。mirrors は同じバージョンを書いている別ファイル（更新時は必ず同じ PR で揃える）。policy: auto=patch/minor まで自動更新可 / manual=常に人間へ / pinned=意図的に固定、上げない",
+  "targets": [
+    {
+      "id": "argocd-chart",
+      "kind": "helm",
+      "name": "argo-cd",
+      "current": "9.1.6",
+      "file": "apps/argocd/kustomization.yaml",
+      "match": "version:",
+      "mirrors": ["nix/images/proxmox-cloud/k3s-manifests.nix"],
+      "upstream": "github:argoproj/argo-helm",
+      "release_prefix": "argo-cd-",
+      "policy": "manual",
+      "note": "ArgoCD 自身。壊すと全アプリのデプロイ経路が止まるため常に人間確認。bootstrap 側 (nix) と二重管理"
+    },
+    {
+      "id": "dex-chart",
+      "kind": "helm",
+      "name": "dex",
+      "current": "0.24.0",
+      "file": "apps/dex/kustomization.yaml",
+      "match": "version:",
+      "upstream": "github:dexidp/helm-charts",
+      "policy": "auto",
+      "note": "OIDC。認証が壊れると ArgoCD にログインできなくなるので検証を厚く"
+    },
+    {
+      "id": "external-secrets-chart",
+      "kind": "helm",
+      "name": "external-secrets",
+      "current": "1.1.1",
+      "file": "apps/external-secrets/kustomization.yaml",
+      "match": "version:",
+      "upstream": "github:external-secrets/external-secrets",
+      "policy": "auto"
+    },
+    {
+      "id": "immich-chart",
+      "kind": "helm",
+      "name": "immich (OCI)",
+      "current": "0.12.0",
+      "file": "apps/immich/kustomization.yaml",
+      "match": "version:",
+      "upstream": "github:immich-app/immich-charts",
+      "policy": "auto"
+    },
+    {
+      "id": "tailscale-operator-chart",
+      "kind": "helm",
+      "name": "tailscale-operator",
+      "current": "1.90.9",
+      "file": "apps/tailscale-operator/kustomization.yaml",
+      "match": "version:",
+      "upstream": "github:tailscale/tailscale",
+      "policy": "auto",
+      "note": "到達性の根幹。壊すとクラスタに届かなくなる"
+    },
+    {
+      "id": "vaultwarden",
+      "kind": "image",
+      "name": "vaultwarden/server",
+      "current": "1.37.1-alpine",
+      "file": "apps/vaultwarden/deployment.yaml",
+      "match": "vaultwarden/server:",
+      "upstream": "github:dani-garcia/vaultwarden",
+      "policy": "auto",
+      "note": "#49 の当事者。1.37.0 は alpine ビルドが壊れていた前例あり。リリースノートは必ず全文読む"
+    },
+    {
+      "id": "coder",
+      "kind": "image",
+      "name": "ghcr.io/coder/coder",
+      "current": "v2.34.7",
+      "file": "apps/coder/deployment.yaml",
+      "match": "coder/coder:",
+      "upstream": "github:coder/coder",
+      "policy": "auto",
+      "note": "autopilot 自身の開発環境をホストしている。更新中に自分の足場が消えないよう注意"
+    },
+    {
+      "id": "coder-postgres",
+      "kind": "image",
+      "name": "postgres",
+      "current": "17.5",
+      "file": "apps/coder/postgres.yaml",
+      "match": "image: postgres:",
+      "upstream": "dockerhub:library/postgres",
+      "policy": "auto",
+      "note": "メジャー更新 (17→18) はデータ移行が要るので必ず人間へ"
+    },
+    {
+      "id": "immich-server",
+      "kind": "image",
+      "name": "immich server",
+      "current": "v2.6.3",
+      "file": "apps/immich/values.yaml",
+      "match": "immich-app/immich-server",
+      "mirrors": ["apps/immich/values.yaml (machine-learning も同バージョン)"],
+      "upstream": "github:immich-app/immich",
+      "policy": "auto",
+      "note": "server と machine-learning は必ず同一バージョンで揃える"
+    },
+    {
+      "id": "immich-machine-learning",
+      "kind": "image",
+      "name": "immich-machine-learning",
+      "current": "v2.6.3",
+      "file": "apps/immich/values.yaml",
+      "match": "immich-machine-learning",
+      "upstream": "github:immich-app/immich",
+      "policy": "auto"
+    },
+    {
+      "id": "immich-valkey",
+      "kind": "image",
+      "name": "valkey",
+      "current": "9.1-alpine",
+      "file": "apps/immich/values.yaml",
+      "match": "valkey",
+      "upstream": "dockerhub:valkey/valkey",
+      "policy": "auto"
+    },
+    {
+      "id": "immich-postgres",
+      "kind": "image",
+      "name": "cloudnative-vectorchord",
+      "current": "16.9-0.4.3",
+      "file": "apps/immich/postgres.yaml",
+      "match": "vectorchord",
+      "upstream": "github:tensorchord/VectorChord-images",
+      "policy": "manual",
+      "note": "Immich のベクタ DB。データを持つのでメジャー/拡張バージョンの更新は人間へ"
+    },
+    {
+      "id": "busybox",
+      "kind": "image",
+      "name": "busybox (initContainer)",
+      "current": "1.36 / 1.37 (割れている)",
+      "file": "apps/vaultwarden/deployment.yaml",
+      "match": "busybox:",
+      "mirrors": ["apps/coder/postgres.yaml", "apps/immich/postgres.yaml"],
+      "upstream": "dockerhub:library/busybox",
+      "policy": "auto",
+      "note": "3 箇所でバージョンが割れている。統一が先 (backlog 参照)"
+    },
+    {
+      "id": "k8s-nameserver",
+      "kind": "image",
+      "name": "tailscale k8s-nameserver",
+      "current": "unstable",
+      "file": "apps/tailscale-operator/dns-config.yaml",
+      "match": "k8s-nameserver",
+      "upstream": "github:tailscale/tailscale",
+      "policy": "auto",
+      "note": "唯一の floating tag。再起動のたびに中身が変わりうる。固定するのが先 (backlog 参照)"
+    },
+    {
+      "id": "coder-workspace-image",
+      "kind": "image",
+      "name": "ghcr.io/hikuohiku/coder-workspace",
+      "current": "sha256 digest pin",
+      "file": "apps/coder/templates/personal/main.tf",
+      "match": "coder-workspace@sha256",
+      "upstream": "github:hikuohiku/coder-workspace",
+      "policy": "manual",
+      "note": "自分が動いている環境そのもの。digest pin は意図的"
+    },
+    {
+      "id": "nixpkgs",
+      "kind": "flake",
+      "name": "nixpkgs (nixos-unstable)",
+      "current": "flake.lock の rev",
+      "file": "nix/images/proxmox-cloud/flake.lock",
+      "match": "nixpkgs",
+      "upstream": "github:NixOS/nixpkgs",
+      "policy": "manual",
+      "note": "unstable 追従。更新は NixOS イメージの再ビルド + node01 の入れ替えを伴うので人間へ"
+    },
+    {
+      "id": "tf-provider-proxmox",
+      "kind": "terraform",
+      "name": "bpg/proxmox",
+      "current": "0.89.1",
+      "file": "terraform/proxmox/providers.tf",
+      "match": "bpg/proxmox",
+      "upstream": "github:bpg/terraform-provider-proxmox",
+      "policy": "manual",
+      "note": "完全一致 pin（理由コメントあり）。上げるときは理由ごと見直す"
+    }
+  ]
+}

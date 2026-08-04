@@ -1,0 +1,228 @@
+{
+  "version": 1,
+  "next_id": 14,
+  "updated": "2026-08-04T18:20:00Z",
+  "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）",
+  "tasks": [
+    {
+      "id": "T-0001",
+      "domain": "homelab",
+      "title": "tailscale k8s-nameserver の floating tag `unstable` を固定バージョンに変える",
+      "kind": "refactor",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 1,
+      "why": "repo 内で唯一バージョンが固定されていない箇所。Pod が再起動するたびに中身が変わりうるので、壊れたときに原因を特定できない",
+      "dod": "apps/tailscale-operator/dns-config.yaml が具体的なバージョンタグを指し、ops/inventory.json の該当エントリも更新されている",
+      "refs": [
+        "apps/tailscale-operator/dns-config.yaml"
+      ],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0002",
+      "domain": "homelab",
+      "title": "argo-cd chart バージョンの二重管理を解消する",
+      "kind": "refactor",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 2,
+      "why": "9.1.6 が apps/argocd/kustomization.yaml と nix/images/proxmox-cloud/k3s-manifests.nix の 2 箇所に書かれている。片方だけ上げると bootstrap と実運用がずれる",
+      "dod": "どちらか一方が単一の情報源になる。統一が難しい場合は、両方を必ず同時に更新すべき旨をコメントで両ファイルに明記し、CI で不一致を検出する",
+      "refs": [
+        "apps/argocd/kustomization.yaml",
+        "nix/images/proxmox-cloud/k3s-manifests.nix"
+      ],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0003",
+      "domain": "homelab",
+      "title": "busybox のバージョン割れ (1.36 / 1.37) を統一する",
+      "kind": "refactor",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 3,
+      "why": "3 つの initContainer で 1.36 と 1.37 が混在している。揃っていない理由が無い",
+      "dod": "3 箇所とも同じバージョン。ops/inventory.json の busybox エントリの current が単一の値になる",
+      "refs": [
+        "apps/vaultwarden/deployment.yaml",
+        "apps/coder/postgres.yaml",
+        "apps/immich/postgres.yaml"
+      ],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0004",
+      "domain": "homelab",
+      "title": ".terraform.lock.hcl に残っている tailscale provider の残骸を消す",
+      "kind": "refactor",
+      "risk": "low",
+      "status": "todo",
+      "priority": 4,
+      "why": "providers.tf で宣言していない tailscale 0.24.0 のエントリが lock ファイルに残っている",
+      "dod": "lock ファイルが providers.tf の宣言と一致している",
+      "refs": [
+        "terraform/proxmox/.terraform.lock.hcl"
+      ],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0005",
+      "domain": "homelab",
+      "title": "inventory.json の全対象について上流の最新リリースを調べ、更新タスクを起票する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 5,
+      "why": "現状 /weekly-maintenance が見ているのは vaultwarden 1 つだけ。他 16 対象は誰も見ていない",
+      "dod": "各対象の上流最新バージョンを調べ、差分があるものを個別の更新タスクとして backlog に起票する（1 コンポーネント 1 タスク）。この調査自体ではコードを変更しない",
+      "refs": [
+        "ops/inventory.json"
+      ],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0006",
+      "domain": "homelab",
+      "title": "Plans.md の M2 (syncthing 移行) の記述を実態に合わせる",
+      "kind": "docs",
+      "risk": "low",
+      "status": "todo",
+      "priority": 6,
+      "why": "「ディスク空き不足で停止中」と書かれているが、2026-08-04 に node01 を 256 GiB へ拡張して前提が変わっている",
+      "dod": "Plans.md の M2 の Status が現在の判断を反映している（保留理由がディスク以外に何か、あるいは着手可能になったか）",
+      "refs": [
+        "Plans.md",
+        "Maintenance.md",
+        "docs/node01-storage.md"
+      ],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0007",
+      "domain": "homelab",
+      "title": "Maintenance.md の持ち越し課題を backlog に取り込む",
+      "kind": "docs",
+      "risk": "low",
+      "status": "todo",
+      "priority": 7,
+      "why": "vaultwarden の ADMIN_TOKEN 平文 / icon 取得タイムアウト / Tailscale プロキシ経由のレート制限 429 懸念 が Maintenance.md に書き捨てられていて、誰も追っていない",
+      "dod": "3 件がそれぞれ backlog のタスクになり（リスクに応じて needs-human 含む）、Maintenance.md 側からは backlog を参照する形になる",
+      "refs": [
+        "Maintenance.md"
+      ],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0008",
+      "domain": "homelab",
+      "title": "nix flake check を CI に追加する",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 8,
+      "why": "初期 CI は kustomize / terraform / ops のみ。nix 側の変更が機械検証されていない",
+      "dod": "nix/ 配下の変更で CI が nix の評価エラーを検出できる。ビルドは重いので評価のみでよい。Cachix を使うなら secrets の扱いに注意",
+      "refs": [
+        ".github/workflows/ci.yml"
+      ],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0009",
+      "domain": "homelab",
+      "title": "/weekly-maintenance コマンドを CHARTER に統合するか、役割を分ける",
+      "kind": "refactor",
+      "risk": "low",
+      "status": "todo",
+      "priority": 9,
+      "why": "vaultwarden の更新手順が .claude/commands/weekly-maintenance.md と ops/CHARTER.md の両方に書かれつつある。二重管理の芽",
+      "dod": "どちらが情報源かが明確になっている。weekly-maintenance に残す価値がある部分（人間が手で回すときの手順）だけが残る",
+      "refs": [
+        ".claude/commands/weekly-maintenance.md",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0010",
+      "domain": "homelab",
+      "title": "ArgoCD の Health / Sync 状態を autopilot が確認できる経路を作る",
+      "kind": "feature",
+      "risk": "low",
+      "status": "blocked",
+      "priority": 10,
+      "why": "auto-merge した変更が実際に反映されて健全かを、次の起動で確認したい。クラウド実行環境からは Tailscale 越しの homelab に届かない",
+      "dod": "クラウド上の autopilot が ArgoCD / k8s の状態を読める。または、homelab 側から状態を push する仕組みがある",
+      "blocked_by": "クラウド実行環境から homelab への到達経路が無い。設計から必要",
+      "refs": [
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0011",
+      "domain": "homelab",
+      "title": "vaultwarden の ADMIN_TOKEN が平文で保存されている件を解消する",
+      "kind": "security",
+      "risk": "high",
+      "status": "needs-human",
+      "priority": 11,
+      "why": "Maintenance.md 2026-08-03 の持ち越し。Argon2 PHC 形式へのハッシュ化が見送られたまま",
+      "dod": "ADMIN_TOKEN が Argon2 PHC ハッシュとして保存されている、または admin パネル自体が無効化されている",
+      "needs_human_reason": "シークレットのローテーションを伴う。CHARTER §4「シークレットの取り扱い」に該当",
+      "refs": [
+        "Maintenance.md",
+        "apps/vaultwarden/"
+      ],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0012",
+      "domain": "homelab",
+      "title": "この autopilot 自身の運用を journal から振り返り、CHARTER を改訂する",
+      "kind": "meta",
+      "risk": "low",
+      "status": "todo",
+      "priority": 20,
+      "why": "定期的に自分の運用を点検しないと、無駄な手順や抜けた観点が固定化する",
+      "dod": "直近の journal を読み、うまくいっていない点を 1 つ以上特定して CHARTER か仕組みに反映する。何も無ければ「無かった」と journal に書く",
+      "recurring": "weekly",
+      "refs": [
+        "ops/CHARTER.md",
+        "ops/journal/"
+      ],
+      "created": "2026-08-04",
+      "pr": null
+    },
+    {
+      "id": "T-0013",
+      "domain": "homelab",
+      "title": "homelab に無い観点を探す — バックアップの健全性",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 12,
+      "why": "pbs (Proxmox Backup Server) は Terraform 管理外の手動運用。バックアップが実際に取れているか、復元できるかを誰も定期確認していない",
+      "dod": "現状のバックアップ体制を調べて文書化し、確認が必要な点を個別タスクとして起票する。この調査では設定を変更しない",
+      "refs": [
+        "terraform/proxmox/pbs.tf.ignore",
+        "CLAUDE.md"
+      ],
+      "created": "2026-08-04",
+      "pr": null
+    }
+  ]
+}

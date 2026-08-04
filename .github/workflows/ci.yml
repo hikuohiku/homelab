@@ -1,0 +1,102 @@
+name: CI
+
+# autopilot が出す PR の auto-merge ゲート。
+# ここが green であることが、人間のレビュー無しにマージしてよい根拠になる。
+# 検証できない領域を増やしたら、必ずこの CI にも検証を足すこと（ops/CHARTER.md §4）。
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  manifests:
+    name: kustomize build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.16.4
+
+      - name: Install kustomize
+        run: |
+          set -euo pipefail
+          curl -sSfL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.8.1/kustomize_v5.8.1_linux_amd64.tar.gz \
+            | tar -xz -C /usr/local/bin kustomize
+          kustomize version
+
+      - name: Build every kustomization
+        run: |
+          set -uo pipefail
+          fail=0
+          while IFS= read -r k; do
+            d=$(dirname "$k")
+            echo "::group::kustomize build $d"
+            if kustomize build --enable-helm "$d" > /dev/null; then
+              echo "ok"
+            else
+              echo "::error file=$k::kustomize build failed"
+              fail=1
+            fi
+            echo "::endgroup::"
+          done < <(find apps -name kustomization.yaml | sort)
+          exit $fail
+
+      - name: Validate standalone manifests parse
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import glob, sys, pathlib
+          try:
+              import yaml
+          except ImportError:
+              sys.exit("PyYAML missing")
+          bad = []
+          for f in glob.glob("apps/**/*.yaml", recursive=True):
+              try:
+                  list(yaml.safe_load_all(pathlib.Path(f).read_text()))
+              except Exception as e:
+                  bad.append(f"{f}: {e}")
+          if bad:
+              print("\n".join(f"::error file={b.split(':')[0]}::{b}" for b in bad))
+              sys.exit(1)
+          print("all yaml parses")
+          PY
+
+  terraform:
+    name: terraform validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.0
+          terraform_wrapper: false
+
+      - name: fmt
+        run: terraform fmt -check -recursive -diff
+
+      - name: init & validate
+        working-directory: terraform/proxmox
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  ops:
+    name: ops state validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: validate
+        run: python3 ops/validate.py
