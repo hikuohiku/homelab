@@ -56,6 +56,14 @@ spec:
             # ログを埋めるだけの無害な失敗のため無効化する (T-0031)
             - name: DISABLE_ICON_DOWNLOAD
               value: "true"
+            # 1.37.0 で追加されたレート制限は remote peer の IP を見るが、Tailscale Ingress は
+            # リバースプロキシとして自 Pod から backend へ接続するため、デフォルト設定では
+            # 全クライアントが同一の proxy pod IP に見えてしまう (T-0032)。Tailscale 側は
+            # X-Forwarded-For に実クライアントの tailnet peer アドレスを載せて送っているため、
+            # IP_HEADER で明示的に読ませる。IP_HEADER_TRUSTED_PROXIES は既定の "local" のままでよい
+            # (直接の peer である proxy pod の IP は CNI のプライベートアドレスのため自動的に信頼される)
+            - name: IP_HEADER
+              value: "X-Forwarded-For"
             # WebSocket 通知 (リアルタイム同期) は 1.x 系で HTTP ポートに統合済みのため
             # 別ポート/別 env (WEBSOCKET_ENABLED) は不要。Ingress も 80 だけで完結する。
             - name: ADMIN_TOKEN
