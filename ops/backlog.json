@@ -88,7 +88,7 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": null,
+      "pr": 78,
       "notes": "run #6: subagent + 手元検証（ghcr.io の tags API を直接叩いて k8s-nameserver の実際の最新タグを確認）で 15 対象中 vaultwarden のみ最新版と確認（1.37.0 の alpine ビルド破損の教訓どおり pin は正しい）。残り 14 対象に個別タスク T-0018〜T-0030 を起票した。tailscale-operator-chart のみ厳密な最新版を確認できず（pkgs.tailscale.com / artifacthub.io ともにこのサンドボックスから到達不可、api.github.com 相当の制限で github.com への直接アクセスも repo-scope で弾かれる）。coder-workspace-image（意図的な digest pin）と nixpkgs（rolling unstable、離散リリースでない）は対象外とした"
     },
     {
