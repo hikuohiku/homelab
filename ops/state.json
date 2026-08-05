@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T11:56:00Z",
+  "updated": "2026-08-05T12:26:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -548,6 +548,16 @@
         191,
         192,
         189
+      ]
+    },
+    {
+      "n": 49,
+      "at": "2026-08-05T12:26:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。backlog の todo（priority昇順）から T-0070（coder-postgres 用 restic backup CronJob）に着手・完遂。T-0069（vaultwarden）と同じ設計思想を PostgreSQL 向けに適用し、initContainer の pg_dump -Fc でネットワーク経由の一貫したダンプを取ってから restic で Backblaze B2 へ push する。pg_dump の initContainer は apps/coder/postgres.yaml と同じ postgres:17.10 を再利用し、新規 image pin を増やさない代わりに ops/inventory.json の mirrors + check_version_sync.py の GROUP を新設した（意図的にタグをずらして CI が exit 1 になることを確認済み）。credential は vaultwarden と同じ Doppler キーを再利用するため追加の登録依頼は無し。実際の push 成功確認は T-0067（credential 登録）待ちのため T-0099 として分離、T-0098（restic image tag 重複監視）の対象を coder-postgres 分に拡張した（#195）",
+      "prs": [
+        195
       ]
     }
   ]
