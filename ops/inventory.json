@@ -206,12 +206,12 @@
       "id": "gha-azure-setup-helm",
       "kind": "github-action",
       "name": "azure/setup-helm",
-      "current": "v4",
+      "current": "v5",
       "file": ".github/workflows/ci.yml",
       "match": "azure/setup-helm@",
       "upstream": "github:Azure/setup-helm",
       "policy": "auto",
-      "note": "T-0043 (run #16) で発見。最新 v5 は Node24 ランタイム更新のみ → T-0045"
+      "note": "T-0045 (run #17) で v4→v5 に更新。破壊的変更は Node24 ランタイムのみ（GitHub-hosted runner では透過的）"
     },
     {
       "id": "gha-hashicorp-setup-terraform",
