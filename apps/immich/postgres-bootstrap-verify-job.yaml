@@ -1,0 +1,152 @@
+# T-0111: cloudnative-vectorchord 16.10-1.0.0 以降で initdb ブートストラップ（docker-entrypoint.sh
+# 相当の自動初期化）が無くなった件の検証。空の使い捨て PVC に対して、T-0029 が上げようとしている
+# 実際のターゲットタグ (16.14-1.1.1) で手動 initdb ブートストラップが機能することを確認する。
+#
+# 手順は docker-library/postgres の docker-entrypoint.sh の挙動を手で再現する:
+#   1. initdb --username --pwfile --data-checksums で PGDATA を作成
+#   2. pg_hba.conf に `host all all all scram-sha-256` を追記（初期状態は socket の trust のみで
+#      TCP + パスワード認証が通らないため）
+#   3. 一時サーバー（listen_addresses='' で socket のみ）を起動し、POSTGRES_DB が
+#      POSTGRES_USER と異なる場合のみ createdb（initdb は POSTGRES_USER を初期スーパーユーザーとして
+#      作成済みなので createuser は不要）→ 停止
+#   4. 本番と同じ `shared_preload_libraries=vchord.so` を付けて再起動 → CREATE EXTENSION vchord
+#      が通ることを確認（vchord は shared_preload_libraries 有効化後の再起動を経てからでないと
+#      CREATE EXTENSION できない仕様、docs.vectorchord.ai 確認済み）
+#
+# 確認が取れたら、この PVC/Job は削除する PR を出す（immich-postgres の本番 Deployment は変更しない）。
+# 検証専用のため POSTGRES_PASSWORD は実運用と無関係な使い捨て値をハードコードしている。
+#
+# 結果の受け取り方: autopilot の ClusterRole には pods/log 権限が無いため stdout は読めない。
+# /dev/termination-log に判定用のサマリ行を書き、
+# `kubectl get pod -n immich -l job-name=immich-postgres-bootstrap-verify -o json` の
+# status.containerStatuses[].state.terminated.message から読む（T-0071 と同じ方式）。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-postgres-bootstrap-verify
+  namespace: immich
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: immich-postgres-bootstrap-verify
+  namespace: immich
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 600
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        fsGroup: 999
+      initContainers:
+        - name: init-permissions
+          image: busybox:1.38.0
+          command: ["sh", "-c", "chown -R 26:999 /var/lib/postgresql/data"]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgres-bootstrap
+          image: ghcr.io/tensorchord/cloudnative-vectorchord:16.14-1.1.1
+          command:
+            - bash
+            - -c
+            - |
+              set -u
+              LOGFILE=/tmp/pg-bootstrap.log
+              : > "$LOGFILE"
+              START=$(date +%s)
+
+              if [ -s "$PGDATA/PG_VERSION" ]; then
+                INITDB_RC=99
+              else
+                initdb --username="$POSTGRES_USER" --pwfile=<(printf '%s\n' "$POSTGRES_PASSWORD") $POSTGRES_INITDB_ARGS -D "$PGDATA" >>"$LOGFILE" 2>&1
+                INITDB_RC=$?
+              fi
+
+              BOOT_START_RC=1
+              START_RC=1
+              EXT_RC=1
+              EXT_VERSION=none
+
+              if [ "$INITDB_RC" -eq 0 ]; then
+                echo "host all all all scram-sha-256" >> "$PGDATA/pg_hba.conf"
+
+                pg_ctl -D "$PGDATA" -o "-c listen_addresses='' -p 5432" -w start >>"$LOGFILE" 2>&1
+                BOOT_START_RC=$?
+
+                if [ "$BOOT_START_RC" -eq 0 ]; then
+                  if [ "$POSTGRES_DB" != "$POSTGRES_USER" ]; then
+                    createdb --username="$POSTGRES_USER" "$POSTGRES_DB" >>"$LOGFILE" 2>&1
+                  fi
+                  pg_ctl -D "$PGDATA" -w stop >>"$LOGFILE" 2>&1
+
+                  pg_ctl -D "$PGDATA" -o "-c listen_addresses=* -c shared_preload_libraries=vchord.so -p 5432" -w start >>"$LOGFILE" 2>&1
+                  START_RC=$?
+
+                  if [ "$START_RC" -eq 0 ]; then
+                    EXT_OUT=$(PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -tAc "CREATE EXTENSION IF NOT EXISTS vchord CASCADE; SELECT extversion FROM pg_extension WHERE extname='vchord';" 2>>"$LOGFILE")
+                    EXT_RC=$?
+                    EXT_VERSION=$(printf '%s' "$EXT_OUT" | tail -1 | tr -d ' \n')
+
+                    pg_ctl -D "$PGDATA" -w stop >>"$LOGFILE" 2>&1
+                  fi
+                fi
+              fi
+
+              END=$(date +%s)
+              ELAPSED=$((END - START))
+              LOG_TAIL=$(tail -c 1500 "$LOGFILE" 2>/dev/null | tr '\n' ' ')
+              MSG="initdb_rc=$INITDB_RC boot_start_rc=$BOOT_START_RC start_rc=$START_RC extension_rc=$EXT_RC vchord_version=$EXT_VERSION elapsed_seconds=$ELAPSED log_tail=$LOG_TAIL"
+              echo "$MSG"
+              echo "$MSG" > /dev/termination-log
+
+              if [ "$INITDB_RC" -ne 0 ] || [ "$START_RC" -ne 0 ] || [ "$EXT_RC" -ne 0 ] || [ "$EXT_VERSION" = "none" ]; then
+                exit 1
+              fi
+              exit 0
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 26
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: POSTGRES_USER
+              value: verify
+            - name: POSTGRES_DB
+              value: verify
+            - name: POSTGRES_PASSWORD
+              value: postgres-bootstrap-verify-throwaway
+            - name: POSTGRES_INITDB_ARGS
+              value: "--data-checksums"
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: immich-postgres-bootstrap-verify
