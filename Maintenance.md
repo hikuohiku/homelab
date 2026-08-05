@@ -36,9 +36,14 @@ vaultwarden 1.36.0 の据え置きにより、web 以外の全クライアント
   同一になる。ただし `X-Forwarded-For` には実クライアントの tailnet peer アドレスが入っているため、
   `apps/vaultwarden/deployment.yaml` に `IP_HEADER=X-Forwarded-For` を設定して読ませるようにした
   （`ops/backlog.json` T-0032）。実際に 429 が発生していたかどうかのログ確認はできていない
-  （クラスタ到達不可）が、原因側の設定不備は解消した
-- icon 取得のタイムアウトが多発。実害なし。`DISABLE_ICON_DOWNLOAD` で無効化可 → **解消（2026-08-05）**:
-  `apps/vaultwarden/deployment.yaml` に `DISABLE_ICON_DOWNLOAD=true` を設定（`ops/backlog.json` T-0031）
+  （クラスタ到達不可）が、原因側の設定不備は解消した。あわせて `IP_HEADER_TRUSTED_PROXIES` を既定の
+  `local`（private アドレス全体を信頼）からこの k3s クラスタの pod CIDR `10.42.0.0/16` に絞り、
+  クラスタ内部の別 Pod による `X-Forwarded-For` 詐称の余地を減らした（T-0038）
+- icon 取得のタイムアウトが多発。実害なし。`DISABLE_ICON_DOWNLOAD` で無効化可 → **見送り（2026-08-05）**:
+  一度 `DISABLE_ICON_DOWNLOAD=true` を設定したが、「実害なしと記録済みの事象のために利用者に見える
+  機能（クライアントのサイトアイコン表示）を犠牲にしている」という指摘（issue #56）を受けて revert した。
+  ログノイズを消す価値より favicon 表示を残す価値のほうが大きいと判断（`ops/backlog.json` T-0031、
+  `dropped`）。実害が出るようになったら改めて起票する
 
 ### 振り返り
 
