@@ -1043,7 +1043,7 @@
       "title": "coder-postgres / immich-postgres コンテナに securityContext (runAsNonRoot 等) を追加できるか検証する",
       "kind": "security",
       "risk": "medium",
-      "status": "todo",
+      "status": "in_progress",
       "priority": 20,
       "why": "run #24: subagent の調査で発見。同じ手書き Deployment でも vaultwarden/coder のコンテナは runAsNonRoot/allowPrivilegeEscalation/seccompProfile をコンテナレベルで明示しているのに対し、apps/coder/postgres.yaml と apps/immich/postgres.yaml の postgres コンテナには Pod レベルの fsGroup しか無く、コンテナレベルの securityContext が丸ごと無い",
       "dod": "postgres 公式イメージの実行 UID（通常 999）を確認したうえで、runAsNonRoot: true 等を追加してもコンテナが正常に起動することが分かる形に落とす。immich-postgres は既存の initContainer が chown で UID 26/999 を使い分けているため、その整合も確認する。CI (manifest-diff) で意図しないオブジェクト削除が無いことも確認する",

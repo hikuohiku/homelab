@@ -44,6 +44,16 @@ spec:
       containers:
         - name: postgres
           image: postgres:17.10
+          # 公式 postgres イメージは UID/GID 999 で postgres ユーザーを作成する
+          # (docker-library/postgres Dockerfile: groupadd -r postgres --gid=999,
+          # useradd -r -g postgres --uid=999)。init-permissions の chown 999:999 と揃える。
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
           env:
             - name: POSTGRES_USER
               value: coder
