@@ -22,6 +22,16 @@
 # 既にクラスタ上に Failed 状態で存在し Job.spec.template は不変フィールドのため、T-0108 と
 # 同じ理由（Replace=true 単体は spec.selector 等の immutable フィールドで SyncFailed する）で
 # argocd.argoproj.io/sync-options: Replace=true,Force=true を付ける。
+#
+# T-0071 2回目実行（run #64 の PR #230 merge 後）で原因判明: restore_output_tail に
+# `lchown ... operation not permitted` が大量に出ていた。securityContext が
+# `capabilities: drop: ["ALL"]` のため、コンテナは root で動いていても CAP_CHOWN が無く、
+# restic がバックアップ時点の所有者へ復元しようとして失敗する（restic はこれを ignore して
+# 復元自体は続行するため file_count・DB dump の中身は正しいが、エラー件数が閾値を超えて
+# 最終的に restic 自体が exit 1 で終わる）。ファイル内容の復元可否を見る検証では所有者の
+# 復元は不要なため、`capabilities.add: ["CHOWN"]` を restore コンテナにだけ足して解消する
+# （drop ["ALL"] は維持し、必要な権限だけ足し戻す）。本番の immich Pod や他コンポーネントの
+# securityContext には影響しない、この使い捨て Job だけの変更。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -105,6 +115,7 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+              add: ["CHOWN"]
           resources:
             requests:
               cpu: 50m
