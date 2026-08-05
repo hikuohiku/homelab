@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 51,
-  "updated": "2026-08-05T02:10:00Z",
+  "next_id": 52,
+  "updated": "2026-08-05T01:51:30Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -912,6 +912,24 @@
       "created": "2026-08-05",
       "pr": 125,
       "notes": "run #19: subagent に cachix/cachix-action・softprops/action-gh-release・DeterminateSystems/nix-installer-action・actions/checkout の実ソース/action.yml/changelog を原文確認させた。結論: 4 件とも現状の使い方（release-image.yml が実際に渡す input）に対して安全。cachix-action は authToken/signingKey が無いと pushMode=None で push を一切行わないため、v17 の『push 失敗が job 失敗として伝播する』変更はそもそも発火しない。revert は不要と判断し、CHARTER §5.4 として release-image.yml の CI 非カバレッジと今後の確認手順を明文化した。着手時点では T-0049 として起票したが、同時に走っていた別セッションが T-0049（nixpkgs flake.lock の経年、#124）を先にマージしたため、rebase 時に T-0050 へ採番し直した（本 run 自身も run #18 と自称したが同じ理由で run #19 に採番し直した）"
+    },
+    {
+      "id": "T-0051",
+      "domain": "homelab",
+      "title": "check_version_sync.py の検証対象を inventory.json の mirrors 全件に揃える",
+      "kind": "ci",
+      "risk": "low",
+      "status": "done",
+      "priority": 8,
+      "why": "backlog の todo が 0 件だったため CHARTER §3 の調査（run #20、subagent 併用）で発見。ops/inventory.json は mirrors を 4 件宣言している（argocd-chart, busybox, immich-server, gha-actions-checkout）が、ops/check_version_sync.py の PAIRS は argo-cd の 1 件しか実装していなかった。CHARTER §4『バージョン更新の作法』は『二重管理されている pin は同じ PR で全部揃える』と定めており、その機械的な担保がこのスクリプトのはずだったが、busybox（3 ファイル）・immich-server/machine-learning（同一ファイル内の別ブロック）・actions/checkout（3 ファイル、ci.yml だけで 6 箇所）のいずれかを片方だけ更新した PR が CI green のまま auto-merge されうる状態だった",
+      "dod": "ops/inventory.json の mirrors を持つ target 全件について、check_version_sync.py が不一致を検出できる。PAIRS を 2 者間限定の構造から N 者間のグループ検証（GROUPS）に一般化し、ファイル内に同じ値が複数回出現するケース（actions/checkout の ci.yml 内 6 箇所）もファイル内一致まで検証する。追加した各検証は、わざと値をずらして exit 1 になることを確認してから出す",
+      "refs": [
+        "ops/check_version_sync.py",
+        "ops/inventory.json"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #20: PAIRS を GROUPS（targets: [(path, fn), ...] を N 件受け付け、先頭を canonical として全件比較）に一般化。busybox は 3 ファイルとも extract_image_tag（単純な prefix 直後の値）、immich-server/machine-learning は同一ファイル内の 2 ブロックを新設の extract_yaml_top_level_block（0-indent のトップレベルキーで区切る、nix 側の brace 境界と同じ考え方）+ extract_tag_in_block で構造的に分離、actions/checkout は extract_all_action_tags で 1 ファイル内の全 `uses:` 出現を集めてファイル内不一致も検出できるようにした。4 グループとも意図的に値をずらして exit 1 になることを確認済み（busybox 3 ファイル中 1 つ、immich machine-learning のみ、ci.yml 内 1 箇所のみ、の 3 パターン）。手元で `python3 ops/check_version_sync.py` が exit 0 で通ることも確認済み（stdlib のみ、CHARTER §5.2 のサンドボックスでも検証可能）"
     }
   ]
 }
