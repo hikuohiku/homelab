@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 85,
-  "updated": "2026-08-05T07:45:00Z",
+  "next_id": 86,
+  "updated": "2026-08-05T08:05:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1520,7 +1520,7 @@
         "ops/CHARTER.md"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 168,
       "notes": "history 追記処理(append_line/get_raw_content)を report.py に追加。RBAC・トークン権限は既存のまま変更なし（同じ Contents:write スコープで書き込み先のパスが増えるだけ）。手元では構文確認のみ（`python3 -c \"import ast; ast.parse(...)\"`）で、実際に CronJob が動いて履歴を書き込めるかは次の起動で T-0075 と同様に ops-health-report ブランチの ops/health/history/ を見て確認する。ファイルサイズの上限は T-0084 で追跡"
     },
     {
@@ -1539,8 +1539,28 @@
         "apps/ops-health-reporter/report.py"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 168,
       "notes": "T-0083 の PR に相乗りして起票（残った不確実性の追跡、CHARTER §4）"
+    },
+    {
+      "id": "T-0085",
+      "domain": "homelab",
+      "title": "pvc_usage の 404 が「まだ実行前」か「壊れている」かを区別する基準を CHARTER に明記する",
+      "kind": "docs",
+      "risk": "low",
+      "status": "done",
+      "priority": 6,
+      "why": "issue #56 (2026-08-05 07:41:02、構築セッション経由) の指摘。T-0080 の pvc-usage-reporter は初回実行前は 404 を返すのが正常だが、その基準が記録されていないため、時間が経ってから 404 を見た次の起動が『まだ動いていない』と『壊れている』を区別できないおそれがあった",
+      "dod": "ops/CHARTER.md §2 に、対象 CronJob の schedule から算出した初回実行予定時刻と、それを過ぎても 404 が続く場合は異常とみなす基準を明記する",
+      "refs": [
+        "ops/CHARTER.md",
+        "apps/immich/pvc-usage-cronjob.yaml",
+        "apps/vaultwarden/pvc-usage-cronjob.yaml",
+        "apps/coder/pvc-usage-cronjob.yaml"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #38: CHARTER §2 に schedule (5/15/25 */6 * * *) から算出した実行予定時刻（00:05/06:05/12:05/18:05 UTC + namespace ごとの分オフセット）を明記し、それを過ぎてもなお 404 なら CronJob の異常を疑う基準を追加した"
     }
   ]
 }
