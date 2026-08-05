@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T20:48:27Z",
+  "updated": "2026-08-05T20:55:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -730,6 +730,27 @@
       "summary": "run #65 の PR #236（T-0071, vaultwarden restore-verify Job 追加）merge 後、vaultwarden-restic-restore-verify Job を確認したところ初回実行で成功していた（restore_rc=0, elapsed_seconds=9, file_count=4, rsa_key_count=1, db_sqlite_magic_ok=true）。immich で判明した CHOWN/FOWNER/DAC_OVERRIDE + クリーンアップの教訓を初回実装から織り込んでいたため試行錯誤は不要だった。結果を docs/backup.md に記録し検証専用リソースを削除する PR を出した（#237, merged）。T-0071 は immich・vaultwarden の2分が完了、coder-postgres 分が残り in_progress のまま継続。この run 自身の state.json 記録更新（runs 追記・last_read 反映）は行われないまま起動が終了しており、次の run（#67）が埋め合わせた",
       "prs": [
         237
+      ]
+    },
+    {
+      "n": 67,
+      "at": "2026-08-05T20:48:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "T-0071 の残り1分、coder-postgres の restore-verify Job を追加した（apps/coder/restic-restore-verify-job.yaml, #238, merged）。単一ファイルの pg_dump ダンプ向けに emptyDir + pg_restore --list / -f /dev/null による検証に設計を変えた。merge 直後は ArgoCD の coder Application がまだ旧revisionのままで Job 未反映だったため、結果確認は次の起動に持ち越し。この記録（journal/backlog/state/prs.json）は別 PR（#239）に分けて出した",
+      "prs": [
+        238,
+        239
+      ]
+    },
+    {
+      "n": 68,
+      "at": "2026-08-05T20:55:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断（PR #239, run #66/#67 の記録埋め合わせ）を merge・ブランチ削除で片付けた。issue #56 に未読フィードバック無し。backlog は todo 0件・全件 blocked/needs-human だったため、in_progress だった T-0071 の続きを拾った。coder-postgres の restore-verify Job（#238）の結果を kubectl で確認（restore_rc=0, elapsed_seconds=8, pg_restore_list_rc=0, pg_restore_full_rc=0）。immich・vaultwarden・coder-postgres の3コンポーネント全てで復元試験が完了したため T-0071 を done にし、docs/backup.md に記録・検証用 Job を削除。これに依存していた T-0023/T-0027/T-0029（メジャー版更新）の blocked_by を解消し todo に戻した",
+      "prs": [
+        240
       ]
     }
   ]
