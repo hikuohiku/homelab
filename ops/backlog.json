@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 111,
-  "updated": "2026-08-05T21:54:49Z",
+  "updated": "2026-08-05T21:59:25Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -556,18 +556,18 @@
       "title": "immich の postgres (cloudnative-vectorchord) を 16.9-0.4.3 → 16.14-1.1.1 に上げる（vchord 拡張のメジャー更新）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "in_progress",
+      "status": "todo",
       "priority": 21,
       "why": "T-0005 の調査 (run #6) で判明。postgres 本体は 16.9→16.14 の minor で問題ないが、vchord 拡張が 0.4.3→1.1.1 とメジャー相当の飛びで、ベクタ DB の実データに影響しうる（ops/inventory.json の policy=manual の理由）",
-      "dod": "vchord 0.4→1.x の互換性・移行手順を確認する。CHARTER §4『データを失いうる変更』の手順どおり、着手前に immich のバックアップが実際に存在し復元できることを確認する",
+      "dod": "vchord 0.4→1.x の互換性・移行手順を確認する。CHARTER §4『データを失いうる変更』の手順どおり、着手前に immich のバックアップが実際に存在し復元できることを確認する。**再着手前に、cloudnative-vectorchord 16.14-1.1.1 イメージの ENTRYPOINT/CMD が 16.9-0.4.3 と互換か（Dockerfile を実際に確認）を必ず調べる**（run #72 で CrashLoopBackOff を踏んだ実例あり）",
       "blocked_by": null,
       "refs": [
         "apps/immich/postgres.yaml",
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": 244,
-      "notes": " | run #68: T-0071（restic 復元試験）が3コンポーネント全て完了したため blocked_by を解消し todo に戻した。メジャーバージョン更新であることに変わりはないため、着手時は CHARTER §4「high を戻せる形に落とす」（1 PR 1 コンポーネント、変更点を全部読む）を引き続き適用する。 | run #70: subagent に VectorChord 0.4.3→1.1.1 の release notes / immich 公式ドキュメント / immich PR #23845 を一次情報源で確認させた。ベアなイメージタグ差し替えだけでは不十分で、`ALTER EXTENSION vchord UPDATE;`（sql/upgrade/ の連鎖スクリプトを1コマンドで適用、immich公式も手動作業と明記）と、オンディスク形式が変わるインデックスの REINDEX が別途必要と判明。postgres.yaml の image タグ更新と同じ PR で `apps/immich/vchord-upgrade-job.yaml`（ALTER EXTENSION UPDATE→バージョン確認→vchord系インデックスを動的検出しREINDEX、接続リトライ付きで Deployment の Recreate ロールアウトと順序非依存に設計）を追加した。戻し方: ALTER EXTENSION UPDATE は単一トランザクションでアトミック、失敗時は image タグを16.9-0.4.3 に戻せば catalog と .so の整合が復元する。REINDEX 個別失敗はテーブル本体データに触れないため再実行で復旧可。T-0071 でバックアップ復元は確認済み。CI green を確認のうえ、high risk のため縛る変更同様に慎重を期し、Job の termination-log 結果を次回起動でkubectl get pod 経由で確認してから最終的に done とする。 | run #72: PR #244 の CI 6件全て green・mergeable_state: clean を確認し、「縛る変更」（memory limits 等）に該当しないこと・T-0071 でリストア確認済みであることから merge した（91243f1）。merge 直後に ArgoCD の immich Application を確認したが sync revision がまだ旧 commit のままで反映前だった（2分待って再確認したが変化なし）。ALTER EXTENSION UPDATE + REINDEX Job の成否はまだ確認できないため in_progress のまま。次回起動で ArgoCD 同期後の Job の termination message を確認してから done にする。"
+      "pr": null,
+      "notes": " | run #68: T-0071（restic 復元試験）が3コンポーネント全て完了したため blocked_by を解消し todo に戻した。メジャーバージョン更新であることに変わりはないため、着手時は CHARTER §4「high を戻せる形に落とす」（1 PR 1 コンポーネント、変更点を全部読む）を引き続き適用する。 | run #70: subagent に VectorChord 0.4.3→1.1.1 の release notes / immich 公式ドキュメント / immich PR #23845 を一次情報源で確認させた。ベアなイメージタグ差し替えだけでは不十分で、`ALTER EXTENSION vchord UPDATE;`（sql/upgrade/ の連鎖スクリプトを1コマンドで適用、immich公式も手動作業と明記）と、オンディスク形式が変わるインデックスの REINDEX が別途必要と判明。postgres.yaml の image タグ更新と同じ PR で `apps/immich/vchord-upgrade-job.yaml`（ALTER EXTENSION UPDATE→バージョン確認→vchord系インデックスを動的検出しREINDEX、接続リトライ付きで Deployment の Recreate ロールアウトと順序非依存に設計）を追加した。戻し方: ALTER EXTENSION UPDATE は単一トランザクションでアトミック、失敗時は image タグを16.9-0.4.3 に戻せば catalog と .so の整合が復元する。REINDEX 個別失敗はテーブル本体データに触れないため再実行で復旧可。T-0071 でバックアップ復元は確認済み。CI green を確認のうえ、high risk のため縛る変更同様に慎重を期し、Job の termination-log 結果を次回起動でkubectl get pod 経由で確認してから最終的に done とする。 | run #72: PR #244 の CI 6件全て green・mergeable_state: clean を確認し merge した（91243f1）。ArgoCD 同期後、**immich-postgres が CrashLoopBackOff に入った**（コンテナ起動自体が失敗: `exec: \"-c\": executable file not found in $PATH`、exitCode 128、runc create failed 段階のエラーで postgres バイナリは一度も実行されていない）。manifest は `command:` を指定せず `args: [-c, shared_preload_libraries=vchord.so]` のみを渡しており、16.9-0.4.3 では動いていたこの形が 16.14-1.1.1 の ENTRYPOINT では通らなくなっていた（CI の kustomize build はレンダリングされたマニフェストの構文しか見ておらず、コンテナが実際に起動するかは検証できない領域）。postgres バイナリが起動していないため ALTER EXTENSION UPDATE も REINDEX も未実行、ディスク上の拡張カタログ・データは 0.4.3 のまま無傷と判断し、image タグ・`vchord-upgrade-job.yaml`・`ops/inventory.json` を全て 16.9-0.4.3 側に revert する PR #247 を即座に出した（CHARTER §9「auto-merge した変更の後に不具合の兆候が出たら即ロールバック」）。次に着手するときは、まずこのイメージの Dockerfile/entrypoint スクリプトの実体を読み、`command:` を明示すべきかを事前に確認する。"
     },
     {
       "id": "T-0030",
