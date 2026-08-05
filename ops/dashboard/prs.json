@@ -1,21 +1,20 @@
 {
-  "open": [
+  "open": [],
+  "merged": [
+    {
+      "number": 200,
+      "title": "ci: helm バイナリを v3.16.4 → v3.21.3 に更新 (T-0102)",
+      "url": "https://github.com/hikuohiku/homelab/pull/200",
+      "mergedAt": "2026-08-05T14:38:46Z",
+      "headRefName": "autopilot/T-0102-helm-binary-3.21.3"
+    },
     {
       "number": 199,
       "title": "ドキュメントが案内する just recipe の実在を CI で検証する (T-0096)",
       "url": "https://github.com/hikuohiku/homelab/pull/199",
-      "isDraft": false,
-      "createdAt": "2026-08-05T13:36:01Z",
-      "statusCheckRollup": [
-        {
-          "conclusion": "PENDING"
-        }
-      ],
-      "headRefName": "autopilot/T-0096-doc-just-recipe-check",
-      "autoMergeRequest": null
-    }
-  ],
-  "merged": [
+      "mergedAt": "2026-08-05T13:41:09Z",
+      "headRefName": "autopilot/T-0096-doc-just-recipe-check"
+    },
     {
       "number": 198,
       "title": "immich 内蔵バックアップの実在検証を pvc-usage-reporter に追加 (T-0068 follow-up)",
@@ -90,7 +89,7 @@
       "number": 187,
       "title": "docs: apps/README.md の ArgoCD Application 出力例を実態に合わせる (T-0094)",
       "url": "https://github.com/hikuohiku/homelab/pull/187",
-      "mergedAt": "2026-08-05T10:33:00Z",
+      "mergedAt": "2026-08-05T10:29:02Z",
       "headRefName": "autopilot/T-0094-apps-readme-app-list"
     },
     {
@@ -379,62 +378,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/141",
       "mergedAt": "2026-08-05T03:58:37Z",
       "headRefName": "autopilot/run25-wrapup"
-    },
-    {
-      "number": 140,
-      "title": "feat(ops): inventory.json に observability_impact フィールドを追加する (T-0059)",
-      "url": "https://github.com/hikuohiku/homelab/pull/140",
-      "mergedAt": "2026-08-05T03:57:19Z",
-      "headRefName": "autopilot/T-0059-inventory-observability-impact"
-    },
-    {
-      "number": 139,
-      "title": "ops: issue #56 のフィードバックを反映する (T-0059)",
-      "url": "https://github.com/hikuohiku/homelab/pull/139",
-      "mergedAt": "2026-08-05T03:53:48Z",
-      "headRefName": "autopilot/T-0059-feedback-cooldown-pagination"
-    },
-    {
-      "number": 138,
-      "title": "ops: run #24 の記録をまとめ、ダッシュボードを再生成する",
-      "url": "https://github.com/hikuohiku/homelab/pull/138",
-      "mergedAt": "2026-08-05T03:31:16Z",
-      "headRefName": "autopilot/run24-wrapup"
-    },
-    {
-      "number": 137,
-      "title": "security(postgres): コンテナに securityContext を追加する (T-0058)",
-      "url": "https://github.com/hikuohiku/homelab/pull/137",
-      "mergedAt": "2026-08-05T03:25:53Z",
-      "headRefName": "autopilot/T-0058-postgres-securitycontext"
-    },
-    {
-      "number": 136,
-      "title": "docs: apps/README.md のディレクトリ構造図をアプリ追加に追随させる (T-0057)",
-      "url": "https://github.com/hikuohiku/homelab/pull/136",
-      "mergedAt": "2026-08-05T03:19:19Z",
-      "headRefName": "autopilot/T-0057-apps-readme-drift"
-    },
-    {
-      "number": 135,
-      "title": "docs: README.md の Terraform ファイル構成・前提バージョンを実態に合わせる (T-0056)",
-      "url": "https://github.com/hikuohiku/homelab/pull/135",
-      "mergedAt": "2026-08-05T03:17:24Z",
-      "headRefName": "autopilot/T-0056-readme-terraform-drift"
-    },
-    {
-      "number": 134,
-      "title": "fix(immich): 実測なしの memory limits を外す",
-      "url": "https://github.com/hikuohiku/homelab/pull/134",
-      "mergedAt": "2026-08-05T02:55:04Z",
-      "headRefName": "autopilot/immich-drop-mem-limits"
-    },
-    {
-      "number": 133,
-      "title": "ops: run #23 の記録をまとめ、ダッシュボードを再生成する",
-      "url": "https://github.com/hikuohiku/homelab/pull/133",
-      "mergedAt": "2026-08-05T02:53:27Z",
-      "headRefName": "autopilot/run23-wrapup"
     }
   ]
 }
