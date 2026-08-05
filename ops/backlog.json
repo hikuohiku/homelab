@@ -2116,7 +2116,7 @@
           "残っていなければ apps/immich/postgres.yaml の image タグを一時的に 16.14-1.1.1 に戻して再現させ、kubectl logs -n immich <pod> -c postgres でエラーを確認する（PGDATA は 0.4.3 のまま無傷なので安全という前提。違えば教えてほしい）"
         ],
         "links": [
-          "https://github.com/hikuohiku/homelab/issues/56"
+          {"url": "https://github.com/hikuohiku/homelab/issues/56", "label": "issue #56"}
         ]
       }
     }
