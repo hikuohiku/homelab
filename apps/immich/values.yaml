@@ -15,6 +15,15 @@ controllers:
               secretKeyRef:
                 name: immich-postgres-credentials
                 key: password
+        # node01 は 4c/11.7GiB の単一ノード（T-0055）。API サーバー本体はリクエスト処理と
+        # サムネイル/ジョブキュー消化が主で、他コンポーネント（coder 等）ほど重くない
+        resources:
+          requests:
+            cpu: 150m
+            memory: 256Mi
+          limits:
+            cpu: 1500m
+            memory: 2Gi
 
 immich:
   persistence:
@@ -30,6 +39,14 @@ valkey:
           image:
             repository: docker.io/valkey/valkey
             tag: 9.1.1-alpine
+          # immich のジョブキュー/キャッシュ用途のみで、他コンポーネントよりずっと軽い（T-0055）
+          resources:
+            requests:
+              cpu: 25m
+              memory: 32Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
   persistence:
     data:
       enabled: true
@@ -57,6 +74,16 @@ machine-learning:
             TRANSFORMERS_CACHE: /cache
             HF_XET_CACHE: /cache/huggingface-xet
             MPLCONFIGDIR: /cache/matplotlib-config
+          # CLIP/顔認識モデルのロードでメモリが跳ねうるため、他コンポーネントより広めに確保
+          # （T-0055）。requests は待機時の実測に近い最低保証、limits はモデルロード時の
+          # バーストを許容しつつ他 Pod（vaultwarden/coder 含む）を巻き込まない上限
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 2000m
+              memory: 3Gi
   persistence:
     cache:
       enabled: true
