@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 99,
+  "next_id": 100,
   "updated": "2026-08-05T10:30:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
@@ -1284,13 +1284,15 @@
       "title": "coder-postgres 用 backup CronJob（pg_dump + restic）を追加する",
       "kind": "feature",
       "risk": "medium",
-      "status": "todo",
+      "status": "done",
       "priority": 40,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針・構築セッションの調査。PostgreSQL は restic で PGDATA を直接舐めてはいけない（サーバを止めない限り一貫したスナップショットにならないと PostgreSQL 公式が明記）。`pg_dump` を使う。immich-postgres（cloudnative-vectorchord）は対象外（拡張本体を含めた扱いが別途要るため T-0029 側で検討）、まず coder-postgres（素の postgres）から着手する",
       "dod": "CronJob が `pg_dump` の出力を restic で T-0067 の保存先へ push する。retention は T-0068 と同じ方針。credential は既存の coder-postgres Secret を流用し、restic 側のキー名は T-0069 に揃える",
-      "notes": "run #48: issue #56 (10:29:40) の指摘を受け blocked → todo に変更。manifest の設計・記述は T-0067（credential 発行）を待たずに進められる",
+      "notes": "run #48: issue #56 (10:29:40) の指摘を受け blocked → todo に変更。manifest の設計・記述は T-0067（credential 発行）を待たずに進められる | run #49: T-0069 と同じ設計（稼働中 DB を直接 restic に渡さず、一貫性のあるダンプを先に作る）を PostgreSQL 向けに適用。initContainer で `pg_dump -Fc` を実行（apps/coder/postgres.yaml と同じ postgres:17.10 イメージを再利用、新規 image pin を増やさないため ops/inventory.json の coder-postgres エントリに mirrors を追加し check_version_sync.py に対応する GROUP を新設、意図的にタグをずらして CI が exit 1 になることを確認した）。restic-backup/retention コンテナは vaultwarden (T-0069) と同じく新規の memory limit は設定していない（CHARTER §4『縛る変更には実測が要る』、CPU limit のみ）ため cooldown 対象外と判断し auto-merge の対象とした。coder 自身の Deployment には触れておらず（新規 CronJob/ExternalSecret の追加のみ）、coder の可用性・観測経路には影響しない。実際に restic push が成功するかは T-0067（credential 登録）待ちのため T-0099 として確認タスクを別途起票した。done とするが、DoD の『保存先へ push する』が実際に成功したことの確認は T-0099 が担う",
       "refs": [
         "apps/coder/postgres.yaml",
+        "apps/coder/restic-backup-cronjob.yaml",
+        "apps/coder/restic-external-secret.yaml",
         "docs/backup.md"
       ],
       "created": "2026-08-05",
@@ -1786,16 +1788,36 @@
     {
       "id": "T-0098",
       "domain": "homelab",
-      "title": "restic/restic イメージタグの同一ファイル内重複を check_version_sync.py の監視対象に追加する",
+      "title": "restic/restic イメージタグの重複を check_version_sync.py の監視対象に追加する",
       "kind": "ci",
       "risk": "low",
       "status": "todo",
       "priority": 45,
-      "why": "T-0069 (#191) で apps/vaultwarden/restic-backup-cronjob.yaml に restic/restic:0.19.1 が2箇所（backup と retention の CronJob）独立して書かれた。T-0090/T-0082 と同型のドリフトパターンで、片方だけ更新した PR が CI green のまま素通りしうる",
-      "dod": "ops/check_version_sync.py の GROUPS に restic-backup-cronjob.yaml 内の2出現を追加する。意図的に値をずらして CI が exit 1 になることを確認する",
+      "why": "T-0069 (#191) で apps/vaultwarden/restic-backup-cronjob.yaml に restic/restic:0.19.1 が2箇所（backup と retention の CronJob）独立して書かれた。T-0090/T-0082 と同型のドリフトパターンで、片方だけ更新した PR が CI green のまま素通りしうる。T-0070 (run #49) で apps/coder/restic-backup-cronjob.yaml にも同じタグの CronJob が2つ追加され、ファイル間（vaultwarden ⇔ coder-postgres）でも同じ重複が生じている。対象はこの4箇所（vaultwarden の2つ、coder-postgres の2つ）に拡張する",
+      "dod": "ops/check_version_sync.py の GROUPS に apps/vaultwarden/restic-backup-cronjob.yaml と apps/coder/restic-backup-cronjob.yaml、それぞれ内部の2出現（backup/retention）を1つの GROUP として追加する（ops/inventory.json の vaultwarden-restic-image / coder-postgres-restic-image エントリの note も『未登録』の記述を削除して更新する）。意図的に値をずらして CI が exit 1 になることを確認する",
       "refs": [
         "ops/check_version_sync.py",
-        "apps/vaultwarden/restic-backup-cronjob.yaml"
+        "apps/vaultwarden/restic-backup-cronjob.yaml",
+        "apps/coder/restic-backup-cronjob.yaml",
+        "ops/inventory.json"
+      ],
+      "created": "2026-08-05",
+      "pr": null
+    },
+    {
+      "id": "T-0099",
+      "domain": "homelab",
+      "title": "T-0070（coder-postgres restic backup）が実際に成功しているか確認する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "blocked",
+      "priority": 41,
+      "why": "T-0070 は manifest 実装のみで、実際に restic push が成功するかは T-0067 の credential 登録が終わるまで検証できない（このクラウドサンドボックスは k8s Job のログを見られない）。T-0097（vaultwarden 版）と同型",
+      "dod": "T-0067 の Doppler 登録後、次回以降の起動で ops-health-report の pod_issues に `coder-restic-backup`/`coder-restic-retention` の CronJob の Job が Failed で出ていないかを確認する。問題なければ docs/backup.md に成功日時を記録して done にする。継続的に失敗するなら症状を記録し、原因調査を新規タスクとして起票する",
+      "blocked_by": "T-0067（credential 登録。登録完了後の確認作業自体は autopilot が行う）",
+      "refs": [
+        "apps/coder/restic-backup-cronjob.yaml",
+        "docs/backup.md"
       ],
       "created": "2026-08-05",
       "pr": null

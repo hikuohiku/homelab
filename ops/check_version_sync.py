@@ -263,6 +263,17 @@ GROUPS = [
             )),
         ],
     },
+    {
+        "name": "coder-postgres image tag (T-0070, inventory: coder-postgres)",
+        "targets": [
+            ("apps/coder/postgres.yaml", lambda: extract_image_tag(
+                "apps/coder/postgres.yaml", "image: postgres:"
+            )),
+            ("apps/coder/restic-backup-cronjob.yaml", lambda: extract_image_tag(
+                "apps/coder/restic-backup-cronjob.yaml", "image: postgres:"
+            )),
+        ],
+    },
 ]
 
 
