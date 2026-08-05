@@ -6,7 +6,7 @@
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T15:49:52Z"
+    "last_read": "2026-08-05T16:12:29Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -601,6 +601,16 @@
         205,
         206,
         207
+      ]
+    },
+    {
+      "n": 54,
+      "at": "2026-08-05T16:35:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 の未読5件（すべて構築セッション経由、15:56〜16:12）を反映。#205（T-0103）を merge しないでほしいという依頼は run #53 が既に merge した後で間に合わなかったが、結果的に構築セッションが Doppler に追加した RESTIC_ プレフィックス付きキーと manifest 側（プレフィックス無し）の両方が揃って3 namespace とも SecretSynced に復帰したと確認。冗長になった Doppler の重複キー整理を T-0105（needs-human、新規追加分の削除を依頼）として起票し、manifest の revert は不要と判断した。構築セッションが restic を直接実行し B2 との往復を実証した際、forget --prune で削除権限があると判明した点を受け、append-only key への分離を T-0106（needs-human, blocked_by: T-0071）として起票。本命の T-0104（一度きりの検証Job）は immich 分のみ構築セッションの実測で成功確認（snapshot保存・内蔵DBダンプ14世代を確認）でき T-0100 を done に。vaultwarden/coder-postgres 分はまだ未確認のため T-0104 を in_progress のまま issue #56 で確認を依頼した（#210）",
+      "prs": [
+        210
       ]
     }
   ]
