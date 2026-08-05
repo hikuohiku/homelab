@@ -1987,7 +1987,7 @@
       "title": "autopilot をクラウドの毎時 cron からクラスタ内常駐に移す",
       "kind": "infra",
       "risk": "medium",
-      "status": "in_progress",
+      "status": "done",
       "priority": 5,
       "why": "毎時 cron でクラウドサンドボックスを起動する方式は、起動のたびにリポジトリを取り直し、実機（k8s / Proxmox / Doppler）にも到達できない。クラスタ内に常駐させれば起動待ちが消え、実機に直接届く。VISION.md のステージ3『常駐基盤を自前に持つ』にあたる。",
       "dod": "autopilot namespace の Deployment が Running で、claude -p のループが回り、そこから PR が作れている。クラウドの routine はバックストップとして残す（クラスタが壊れたとき autopilot も道連れになるため、消さない）。",
@@ -1998,7 +1998,54 @@
       ],
       "created": "2026-08-05",
       "pr": 219,
-      "notes": "構築セッションで実施。検証済み: (1) claude -p が CLAUDE_CODE_OAUTH_TOKEN だけ（クリーンな env・空の HOME）で認証できる、(2) クラスタ内の Pod から api.anthropic.com に到達できる（このワークスペース自身が node01 上の k3s Pod）、(3) image は ghcr に publish 済みで digest pin、(4) AUTOPILOT_GITHUB_TOKEN が Contents/PR/Issues すべて書き込み可であることを API で確認。既存の GITHUB_HEALTH_REPORTER_TOKEN は pull_requests:write が無く（POST /pulls が 403）流用できないため専用トークンを分けた。PR #219 は replicas: 0 で入れ、本 PR で 1 に上げる。"
+      "notes": "構築セッションで実施。検証済み: (1) claude -p が CLAUDE_CODE_OAUTH_TOKEN だけ（クリーンな env・空の HOME）で認証できる、(2) クラスタ内の Pod から api.anthropic.com に到達できる（このワークスペース自身が node01 上の k3s Pod）、(3) image は ghcr に publish 済みで digest pin、(4) AUTOPILOT_GITHUB_TOKEN が Contents/PR/Issues すべて書き込み可であることを API で確認。既存の GITHUB_HEALTH_REPORTER_TOKEN は pull_requests:write が無く（POST /pulls が 403）流用できないため専用トークンを分けた。PR #219 は replicas: 0 で入れ、本 PR で 1 に上げる。 | この PR (T-0090系ではなくクラスタ内 autopilot 初回起動): replicas=1/readyReplicas=1 を kubectl で確認し、この PR 自体をこの Pod から curl + REST API で作成できたことで DoD の残り（そこから PR が作れている）を満たした。"
+    },
+    {
+      "id": "T-0107",
+      "domain": "homelab",
+      "title": "Proxmox pveproxy 証明書の SAN 不一致を解消するまで terraform apply を止める",
+      "kind": "investigate",
+      "risk": "high",
+      "status": "needs-human",
+      "priority": 2,
+      "why": "T-0074 の調査中（issue #56, 2026-08-05 16:43:19 構築セッション経由）に見つかった。構築セッションが Coder ワークスペースから `terraform plan` を実行したところ `proxmox_download_file.nixos_image` に `1 to add` が出た。この判定は Proxmox の pveproxy 証明書の SAN 不一致による TLS 検証エラー（`x509: certificate is valid for 127.0.0.1, ::1, 192.168.1.2, ..., not 192.168.0.2`）の最中に出ており、『ファイルが本当に無い』のか『TLS 検証失敗で存在確認できなかった』のかが未確定。`vm-nixos.tf` はこのリソースを `replace_triggered_by` に持つため、誤って apply すると node01 の VM が再作成されうる（不可逆・到達性を失いうる変更）。",
+      "dod": "証明書の SAN に実際の LAN IP（192.168.0.2）を含めるか、到達に使うアドレスを証明書の SAN に合わせる（Proxmox 側の設定変更）。解消後、`terraform plan` を再実行し `proxmox_download_file.nixos_image` の diff が消える（または本物の差分だと確定する）ことを確認する。",
+      "needs_human_reason": "Proxmox の pveproxy 証明書の再発行・SAN 追加は PVE 管理コンソールでの手作業。autopilot にも構築セッションにも実行できない",
+      "human_action": {
+        "summary": "Proxmox の pveproxy 証明書に実際の LAN IP (192.168.0.2) を SAN として含めてください（または到達先アドレスを証明書の SAN に合わせてください）",
+        "why": "証明書問題が解消しないと terraform plan の diff が本物か TLS エラーによる誤検知かを機械的に区別できず、誤って terraform apply すると node01 VM が再作成されうる",
+        "steps": [
+          "対応が終わるまで、この件が解消したと確認できるまで `terraform apply` / `just apply` を実行しないでください（このタスクの最優先事項です）",
+          "証明書対応後、構築セッションに issue #56 で `terraform plan` の再実行を依頼していただくか、対応が終わった旨をコメントしてください"
+        ],
+        "links": []
+      },
+      "refs": [
+        "terraform/proxmox/vm-nixos.tf",
+        "docs/terraform-plan-in-ci.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "T-0074 が『詳細と当面の注意は T-0107』として forward-reference していたが、run #56 (#213) はこの本体を起票し損ねていた（#216 が埋める予定だったが substrate 移行と競合し stale のまま残った）。この PR で実体を起票する。"
+    },
+    {
+      "id": "T-0108",
+      "domain": "homelab",
+      "title": "vaultwarden restic backup verify Job のハング原因を切り分ける（timeout 延長では未解決）",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 40,
+      "why": "T-0097 の検証中に `vaultwarden-restic-backup-verify` Job が `activeDeadlineSeconds=1800` で `DeadlineExceeded` になった。immich(332MiB/12秒)・coder-postgres は成功しており、vaultwarden のデータ量(4.6MiB)ではこの遅さは説明できない。#214 で 1800→3600 に緩和したが、構築セッション（issue #56, 2026-08-05 17:25:40/17:34:55）から『延長は原因が「本当に時間がかかる処理」だった場合の対処であり、いま原因不明なのに延ばすと30分失敗が60分失敗になるだけ』『restic のロックが残ったまま次回以降も失敗し続ける状態になっていた（restic unlock --remove-all で解消済み、今後は自動化が要る）』という具体的な指摘を受けた。",
+      "dod": "(1) 検証用 Job (apps/vaultwarden/restic-backup-verify-job.yaml) に `restic unlock`（backup の前に stale ロックだけ外す、安全）を追加する。(2) `restic backup` に `--verbose` と環境変数 `RESTIC_PROGRESS_FPS=1` を追加し、途中経過をログに残す。(3) 診断のため `activeDeadlineSeconds` を短く（300秒程度）戻す（延ばす方向ではなく、早く失敗させて途中経過を見る）。(4) 検証用 Job（`restic-backup-verify-job.yaml`、調査目的）は `ttlSecondsAfterFinished` を設定しない（Pod が消えるとログが読めず切り分けができない。定常運用の CronJob 側は対象外）。(5) 本番 CronJob (`restic-backup-cronjob.yaml`) 側にも `restic unlock` を先頭に入れる（1回の失敗が恒久的な失敗になるのを防ぐ、CHARTER に一般則として残す価値がある）。実行結果のログは autopilot からは読めない（§5.5、pods/log 権限なし）ため、構築セッションに issue #56 で確認を依頼する。",
+      "blocked_by": null,
+      "refs": [
+        "apps/vaultwarden/restic-backup-verify-job.yaml",
+        "apps/vaultwarden/restic-backup-cronjob.yaml"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "T-0097 が『T-0108 で activeDeadlineSeconds を緩和したうえで再実行を待つ』として forward-reference していたが実体が起票されていなかった（T-0107 と同じ経緯）。#214 で timeout 緩和は既に着手済みだが、構築セッションの後続指摘（unlock 自動化・verbose 診断・timeout短縮での切り分け）はまだ manifest に反映されていない。次回以降で実装する。"
     }
   ]
 }
