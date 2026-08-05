@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 94,
-  "updated": "2026-08-05T08:55:00Z",
+  "next_id": 97,
+  "updated": "2026-08-05T10:30:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1708,6 +1708,60 @@
       "created": "2026-08-05",
       "pr": 186,
       "notes": "run #46: DoD の代替案（固定値を書かず ops/state.json の routines を単一の情報源として指す）を採用。具体的な数値は state.json 側で変わっても CLAUDE.md の修正が要らなくなる"
+    },
+    {
+      "id": "T-0094",
+      "domain": "homelab",
+      "title": "apps/README.md の『期待される出力』例が ArgoCD Application 10件中4件しか載っていない",
+      "kind": "docs",
+      "risk": "low",
+      "status": "done",
+      "priority": 40,
+      "why": "run #47 の subagent 調査で発見。apps/README.md の `kubectl get application -n argocd` 出力例が `apps`/`argocd`/`external-secrets`/`tailscale-operator` の4件のみで、実際の apps/kustomization.yaml は9個の子 Application（argocd, agent-rbac, dex, external-secrets, tailscale-operator, immich, vaultwarden, coder, ops-health-reporter）+ root の apps で計10件。T-0057 で直した同ファイル内のディレクトリ構造図とは別ブロックのため見落とされていた。この手順で確認する人間・エージェントが『思ったより少ない』と誤診しかねない",
+      "dod": "apps/README.md の期待される出力ブロックが apps/kustomization.yaml の実際の子 Application 一覧+root と一致する",
+      "refs": [
+        "apps/README.md",
+        "apps/kustomization.yaml"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #47: apps/kustomization.yaml と突き合わせて9子app+root=10件に更新。合わせて一覧の由来（kustomization.yaml参照）を一行添えた。docs のみで挙動影響なし"
+    },
+    {
+      "id": "T-0095",
+      "domain": "homelab",
+      "title": "apps/README.md の『事前設定 (初回のみ)』が使われていない旧ブートストラップ手順を案内している",
+      "kind": "docs",
+      "risk": "low",
+      "status": "todo",
+      "priority": 41,
+      "why": "run #47 の subagent 調査で発見。apps/README.md の『K3s シークレットの事前生成』(openssl で CA/Token を作り `doppler secrets set K3S_TOKEN=... K3S_CA_CERT=... K3S_CA_KEY=...`) と『VM 再構築後』の `just inject-secrets` は、リポジトリ全体を grep しても K3S_TOKEN/K3S_CA_CERT/K3S_CA_KEY を参照する箇所が無く、justfile にも inject-secrets という recipe が存在しない（確認済み、run #47）。実際のブートストラップは同ファイル前半に書かれている sops-nix → doppler-token Secret → ArgoCD/ESO の経路のみで完結しており、この節は sops-nix 導入前の古い手順の残骸と見られる。VM 再構築の際にこの節を真に受けると、何も消費されない Doppler 変数を設定する無駄な作業と、実行すると失敗する `just inject-secrets`（unknown recipe）に時間を溶かす",
+      "dod": "K3s シークレット事前生成の節と `just inject-secrets` の呼び出しを apps/README.md から削除する（または、実際に使われている sops-nix 経路への書き換えとして残す）。削除前に本当にどこからも参照されていないことを再度 grep で確認する",
+      "refs": [
+        "apps/README.md",
+        "justfile",
+        "nix/images/proxmox-cloud/configuration.nix"
+      ],
+      "created": "2026-08-05",
+      "pr": null
+    },
+    {
+      "id": "T-0096",
+      "domain": "homelab",
+      "title": "ドキュメントが参照する `just <recipe>` の実在を CI で検証する",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 45,
+      "why": "run #47 の subagent 調査で発見。T-0095（apps/README.md が存在しない `just inject-secrets` を案内していた）と同型のドキュメント drift は、今の CI (check_version_sync.py / validate.py) では検出できない。バージョン pin の重複や state ファイルの不変条件は見ているが『ドキュメントが実在しないコマンドを指している』は対象外",
+      "dod": "README.md/apps/README.md/CLAUDE.md 等から `` `just <word>` `` の出現を抽出し、justfile の実際の recipe 名と突き合わせる標準ライブラリのみのスクリプト（例: ops/check_doc_commands.py）を追加し、ops job に組み込む。意図的に存在しない recipe 名を書いて CI が exit 1 になることを確認する",
+      "refs": [
+        "ops/check_doc_commands.py",
+        ".github/workflows/ci.yml",
+        "justfile"
+      ],
+      "created": "2026-08-05",
+      "pr": null
     }
   ]
 }
