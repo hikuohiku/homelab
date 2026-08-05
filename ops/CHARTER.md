@@ -57,6 +57,16 @@ PVC 実使用量・コンテナ/ノードの実メモリ・CPU 使用量は `pvc
 `ops/health/history/YYYY-MM-DD.jsonl`（1行1回分、T-0083）を辿る。値の妥当性は単点観測では判断できない
 （issue #56, 2026-08-05 07:25:18 の指摘。アイドル時の数字だけで memory limits 等を決めない）。
 
+**起動直後に「前回の自分は正常に終わったか」も同じ `latest.json` の `autopilot` キーで確認する**（T-0110）。
+常駐化（§5.5）以降、autopilot は自分自身が CrashLoopBackOff や、クラッシュせずにハングしているだけの
+静かな失敗に陥っても自分では気づけない。`autopilot.deployment.readyReplicas` が 1 未満、
+`autopilot.heartbeat.last_end.exit_code` が非 0、または `last_start`（実行中のイテレーション開始）から
+`ITERATION_TIMEOUT_SECONDS`（現行 3600s）を大きく超えて `last_end` が来ていなければ、直前の起動が
+異常終了またはハング中の疑いがある。異常が見えたら新規タスクより先に原因を調べる（§9 と同じ扱い）。
+`heartbeat` は loop.sh の `[autopilot] <timestamp> iteration #N start/end exit=... elapsed=...` 行を
+`ops-health-reporter` が正規表現で抜き出したものだけで、生ログそのものはここに含まれない
+（pods/log の読み取り権限は autopilot namespace に閉じた Role のみ、他 namespace には及ばない）。
+
 **バックアップ CronJob 自身が「取れているはず」と主張しているだけでは足りない**（issue #56,
 2026-08-05 12:35:47 の指摘。T-0068 は immich 内蔵の日次 DB ダンプが `UPLOAD_LOCATION/backups/`
 に落ちている前提だったが、これはソースコードで確認しただけで実機で見ていなかった。前提が崩れて

@@ -353,7 +353,52 @@ def render_health(h):
     return (f'<p class="hl__apps">'
             f'{chip(f"アプリ {len(apps) - len(bad)}/{len(apps)} 正常", "ok" if not bad else "crit")}'
             f'<span class="hl__at">{E(rel_time(h.get("generated_at")))}の状態</span></p>'
-            f"{node_html}{issue_html}")
+            f"{render_autopilot_self(h)}{node_html}{issue_html}")
+
+
+def render_autopilot_self(h):
+    """T-0110: autopilot 自身（namespace autopilot）が report.py の autopilot キーで返す
+    readyReplicas とハートビート（loop.sh の心拍ログ）から、静かなハング/異常終了を示す。"""
+    ap = (h or {}).get("autopilot") or {}
+    if not ap or "error" in ap:
+        return ""
+    dep = ap.get("deployment") or {}
+    hb = ap.get("heartbeat") or {}
+    last_start, last_end = hb.get("last_start"), hb.get("last_end")
+
+    tone, msgs = "ok", []
+    if (dep.get("readyReplicas") or 0) < 1:
+        tone = "crit"
+        msgs.append("readyReplicas 0")
+
+    running = last_start and (not last_end or last_start["iteration"] > last_end["iteration"])
+    if running:
+        started = last_start["timestamp"]
+        try:
+            elapsed = int(
+                (datetime.now(timezone.utc)
+                 - datetime.fromisoformat(started.replace("Z", "+00:00"))).total_seconds()
+            )
+        except ValueError:
+            elapsed = None
+        if elapsed is not None and elapsed > 3700:
+            tone = "crit"
+            msgs.append(f"iteration #{last_start['iteration']} が {elapsed // 60} 分実行中"
+                        " (timeout 3600s 超、ハングの疑い)")
+        else:
+            msgs.append(f"iteration #{last_start['iteration']} 実行中（開始 {rel_time(started)}）")
+    elif last_end:
+        if last_end.get("exit_code") not in (0, None):
+            tone = "crit" if tone != "crit" else tone
+            msgs.append(f"iteration #{last_end['iteration']} exit={last_end['exit_code']}"
+                        f"（{rel_time(last_end['timestamp'])}）")
+        else:
+            msgs.append(f"iteration #{last_end['iteration']} 正常終了（{rel_time(last_end['timestamp'])}）")
+    else:
+        tone = "warn" if tone == "ok" else tone
+        msgs.append("心拍ログがまだ無い")
+
+    return f'<p class="hl__apps">{chip("autopilot " + " / ".join(msgs), tone)}</p>'
 
 
 def render_gantt(tasks, merged, runs):

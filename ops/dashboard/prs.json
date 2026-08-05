@@ -1,19 +1,28 @@
 {
   "open": [
     {
-      "number": 226,
-      "title": "chore(backup): restic backup 検証用 Job 3つを削除する (T-0104)",
-      "url": "https://github.com/hikuohiku/homelab/pull/226",
+      "number": 227,
+      "title": "feat(ops-health-reporter): autopilot 自身の健全性を latest.json に追加する (T-0110)",
+      "url": "https://github.com/hikuohiku/homelab/pull/227",
       "isDraft": false,
-      "createdAt": "2026-08-05T18:57:41Z",
+      "createdAt": "2026-08-05T19:20:00Z",
       "statusCheckRollup": [
-        {"conclusion": "PENDING"}
+        {
+          "conclusion": "PENDING"
+        }
       ],
-      "headRefName": "autopilot/T-0104-remove-verify-jobs",
+      "headRefName": "autopilot/T-0110-autopilot-self-health",
       "autoMergeRequest": null
     }
   ],
   "merged": [
+    {
+      "number": 226,
+      "title": "chore(backup): restic backup 検証用 Job 3つを削除する (T-0104)",
+      "url": "https://github.com/hikuohiku/homelab/pull/226",
+      "mergedAt": "2026-08-05T19:04:40Z",
+      "headRefName": "autopilot/T-0104-remove-verify-jobs"
+    },
     {
       "number": 225,
       "title": "fix(vaultwarden): restic verify Job の ArgoCD 再作成が失敗していたのを修正 (T-0108)",
@@ -426,13 +435,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/159",
       "mergedAt": "2026-08-05T05:56:52Z",
       "headRefName": "autopilot/recover-charter-cooldown-rule"
-    },
-    {
-      "number": 158,
-      "title": "T-0015/T-0075: ops-health-reporter の動作確認、run #30 のラップアップ",
-      "url": "https://github.com/hikuohiku/homelab/pull/158",
-      "mergedAt": "2026-08-05T05:39:41Z",
-      "headRefName": "autopilot/T-0075-health-reporter-confirmed"
     }
   ]
 }

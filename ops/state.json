@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T18:56:00Z",
+  "updated": "2026-08-05T19:12:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -669,6 +669,16 @@
       "summary": "前回の中断: PR #225（run #59, T-0108 の Force=true 修正）が既に merge 済みと git log で確認。kubectl で vaultwarden-restic-backup-verify Job が Complete（2026-08-05T18:49:46Z 完了）になったことを確認し、immich/coder-postgres と合わせ3コンポーネントとも restic backup 成功が確認できたため T-0097/T-0104/T-0108 を done に更新。T-0104 の DoD どおり検証用 Job 3つ（apps/{vaultwarden,coder,immich}/restic-backup-verify-job.yaml）を削除する PR を出した。T-0071（restic 復元試験）の blocked_by（T-0104）を解除し todo に戻した。issue #56 に新規の人間フィードバックなし（last_read 以降の唯一のコメントは run #59 自身の投稿）",
       "prs": [
         226
+      ]
+    },
+    {
+      "n": 61,
+      "at": "2026-08-05T19:12:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断: PR #226（T-0104, restic backup verify Job 3つの削除）が open のまま残っていた。CI の manifest deletion guard 失敗の原因（PR本文のallow-delete行がバックティックで囲まれ正規表現に一致しなかった）を特定し、本文修正→close/reopen→CI green→merge。issue #56 に新規の人間フィードバックなし（last_readは既にPR#226で最新まで進んでいた）。T-0110（autopilot自身の健全性監視、priority 15）に着手し、ops-health-reporterにautopilot namespaceのDeployment/Pod状態と心拍ログ（iteration開始/終了、生ログは含めない）を追加するPRを出した。",
+      "prs": [
+        227
       ]
     }
   ]
