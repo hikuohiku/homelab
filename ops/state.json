@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T22:06:08Z",
+  "updated": "2026-08-06T08:50:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -845,6 +845,22 @@
       "kind": "scheduled",
       "by": "in-cluster autopilot",
       "summary": "前回の中断: なし（run #76 の journal 欠落を検知）。issue #56 に新規フィードバックなし。backlog todo (T-0029) 着手前の kubectl 確認で immich-postgres が CrashLoopBackOff（PR #257 由来）と判明、init-bootstrap initContainer は正常終了で main container の postgres プロセスが起動直後に exit code 1。pods/log 権限が無く原因未確認のため CHARTER §9 に従い即座に revert（PR作成中）。T-0112 として構築セッションへのログ確認依頼を needs-human で起票し T-0029 の blocked_by とした",
+      "prs": []
+    },
+    {
+      "n": 78,
+      "at": "2026-08-05T23:37:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断: PR #258（run #77, T-0029 revert）の merge を kubectl で直接確認。immich-postgres は 16.9-0.4.3 で Running 1/1・restarts 0、immich Application は Synced/Healthy（sync revision 5f708ac）に復帰済み。issue #56 に新規フィードバックなし（last_read 以降0件）。backlog の todo が0件だったため、ops/inventory.json の policy:auto 対象（dex/immich/external-secrets/valkey/coder/tailscale-operator/k8s-nameserver）の上流最新リリースを確認したが、いずれも既に最新か既知の理由で見送り済みと確認し、新規タスクの起票は無し。T-0029 は T-0112（構築セッションのログ確認待ち）で blocked のまま",
+      "prs": []
+    },
+    {
+      "n": 79,
+      "at": "2026-08-06T08:50:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。state.json の runs に run #78 の記録が漏れていたため埋め合わせた。issue #56 に未読フィードバックなし。backlog の todo が0件だったため CLAUDE.md/docs の実態乖離を調査し、apps/autopilot/ が Tech Stack の Apps 一覧・Directory Structure のどちらにも記載されていないと発見。T-0113 として起票・即完遂",
       "prs": []
     }
   ]
