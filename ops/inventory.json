@@ -239,12 +239,12 @@
       "id": "gha-cachix-cachix-action",
       "kind": "github-action",
       "name": "cachix/cachix-action",
-      "current": "v15",
+      "current": "v17",
       "file": ".github/workflows/release-image.yml",
       "match": "cachix/cachix-action@",
       "upstream": "github:cachix/cachix-action",
       "policy": "auto",
-      "note": "T-0043 (run #16) で発見。最新 v17 は 2 メジャー遅れ → T-0047"
+      "note": "T-0047 (run #17) で v15→v17 に更新。破壊的変更は Node24 ランタイムのみ。v17 でエラー伝播の修正が入っており、これまで握り潰されていた push 失敗が今後は CI 失敗として顕在化しうる（workflow_dispatch 手動実行のため次回実行時に確認）"
     },
     {
       "id": "gha-softprops-action-gh-release",
