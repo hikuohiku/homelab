@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 61,
-  "updated": "2026-08-05T04:11:00Z",
+  "next_id": 62,
+  "updated": "2026-08-05T04:21:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1094,6 +1094,25 @@
       "created": "2026-08-05",
       "pr": null,
       "notes": "run #26: subagent 2件で調査。(1) 発見自体は repo 横断調査の subagent（apps/dex, apps/argocd の値ファイルを実際に Read して確認）。(2) 修正方式は別の subagent に dexidp/dex と argoproj/argo-cd の実ソース（GitHub 上のソースコード、changelogではなく）を直接確認させた。dex の $VAR 展開が staticClients には効かない（idEnv/secretEnv という別フィールドが必要、dexidp/dex#4212 で明示的に未実装と確認された既知のギャップ）という誤りやすい落とし穴を事前に潰せた。ArgoCD 側は `$secret-name:key` 構文と `app.kubernetes.io/part-of=argocd` ラベル要件をソースコード（util/settings/settings.go）で確認済み。着手前に Doppler 登録が必須という順序性（dex の envFrom は Secret 不在だと Pod が起動しないため）が高リスクの核心なので、needs-human とし、手順2以降はこちらの続きの起動で行う"
+    },
+    {
+      "id": "T-0061",
+      "domain": "homelab",
+      "title": "issue #56 の未読フィードバック2件を反映（時刻表示のJST化、残った不確実性のbacklog追跡）",
+      "kind": "meta",
+      "risk": "low",
+      "status": "done",
+      "priority": 8,
+      "why": "issue #56 の未読フィードバック2件。(1) 2026-08-05 04:09:56「時間表記JSTがいい」— journal・ダッシュボードの人間向け時刻表示が UTC のままだった。(2) 2026-08-05 04:18:44 — #100（tailscale-operator/k8s-nameserver 更新）が実機で問題なかったと人間から報告があったが、それを記録する経路が無く、PR 本文に書いた「残った不確実性」も誰にも追跡されず埋もれたままだった",
+      "dod": "(1) ops/CHARTER.md に人間向け表示は JST・内部データは UTC のままという規約を明記し、journal の見出し例と ops/dashboard/build.py の表示（生成時刻・ガントの目盛り・ツールチップ）を JST に変える。(2) ops/inventory.json の tailscale-operator-chart / k8s-nameserver に実機確認済みの事実を記録する。(3) PR に書いた「残った不確実性」を backlog の needs-human タスクとして起票する運用を CHARTER §4 に追記する",
+      "refs": [
+        "ops/CHARTER.md",
+        "ops/dashboard/build.py",
+        "ops/inventory.json"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #27: (1) CHARTER §7.2『時刻表記』を新設。journal 見出し例を JST に更新、dashboard/build.py に JST = timezone(timedelta(hours=9)) を定義し generated/ガント目盛り/ツールチップを JST 表示に変更（rel_time() は相対表示のため対象外、変更なし）。(2) CHARTER §4 に『残った不確実性は同じ PR で backlog にも needs-human タスクとして起票する』運用を追記。(3) #100 の実機確認結果（DNS 解決 OK）を tailscale-operator-chart / k8s-nameserver の note に追記。#100 の PR 本文にあったもう1点（admissionregistration.k8s.io/v1）は未使用機能のため実害なしのまま据え置き、新規タスクは起票していない（人間の報告で既に決着済みのため）"
     }
   ]
 }

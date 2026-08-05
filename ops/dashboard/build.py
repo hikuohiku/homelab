@@ -15,11 +15,14 @@ import pathlib
 import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 OPS = pathlib.Path(__file__).resolve().parent.parent
 ROOT = OPS.parent
 OUT = OPS / "dashboard" / "index.html"
+
+# 人間が読む面は JST で表示する（内部データは UTC のまま、CHARTER §7.2）
+JST = timezone(timedelta(hours=9))
 
 E = html.escape
 
@@ -277,11 +280,11 @@ def render_gantt(tasks: list[dict], merged: list[dict], runs: list[dict]) -> str
     while cur <= t1:
         if cur >= t0:
             ticks.append(f'<span class="gtick" style="left:{x(cur):.3f}%"><i></i>'
-                         f'<em>{cur.strftime("%H:%M")}</em></span>')
+                         f'<em>{cur.astimezone(JST).strftime("%H:%M")}</em></span>')
         cur = cur.fromtimestamp(cur.timestamp() + step, tz=timezone.utc)
 
     run_marks = "".join(
-        f'<span class="grun" style="left:{x(w):.3f}%" title="起動 {w.strftime("%m-%d %H:%M")} UTC"></span>'
+        f'<span class="grun" style="left:{x(w):.3f}%" title="起動 {w.astimezone(JST).strftime("%m-%d %H:%M")} JST"></span>'
         for w in sorted(run_times)
     )
 
@@ -292,7 +295,7 @@ def render_gantt(tasks: list[dict], merged: list[dict], runs: list[dict]) -> str
             continue
         dots = "".join(
             f'<span class="gmark gmark--{sid}" style="left:{x(w):.3f}%" '
-            f'title="#{p["number"]} {E(p["title"])}（{w.strftime("%m-%d %H:%M")} UTC）"></span>'
+            f'title="#{p["number"]} {E(p["title"])}（{w.astimezone(JST).strftime("%m-%d %H:%M")} JST）"></span>'
             for w, _s, p in sorted(mine)
         )
         lanes.append(f"""
@@ -308,7 +311,7 @@ def render_gantt(tasks: list[dict], merged: list[dict], runs: list[dict]) -> str
       {''.join(lanes)}
       <div class="gantt__axis"><span class="glane__label"></span><span class="glane__track">{''.join(ticks)}</span><span class="glane__n"></span></div>
     </div>
-    <p class="lede">印ひとつが main に入った変更 1 件。横位置がマージ時刻（UTC）。上段の細い線が起動。</p>"""
+    <p class="lede">印ひとつが main に入った変更 1 件。横位置がマージ時刻（JST）。上段の細い線が起動。</p>"""
 
 
 def journal_row(e: dict) -> str:
@@ -403,7 +406,7 @@ def build() -> str:
     streams_html = render_streams(tasks)
     gantt_html = render_gantt(tasks, merged, runs)
 
-    generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+    generated = datetime.now(JST).strftime("%Y-%m-%d %H:%M JST")
     stage = state.get("vision_stage", "?")
     stage_label = state.get("vision_stage_label", "")
     next_html = (f"<span>起動間隔 {E(cadence)}</span>" if cadence
