@@ -998,7 +998,7 @@
         "apps/coder/deployment.yaml"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 132,
       "notes": "run #23: immich-server（requests 150m/256Mi, limits 1500m/2Gi）・valkey（requests 25m/32Mi, limits 250m/256Mi）・machine-learning（requests 200m/512Mi, limits 2000m/3Gi）に resources を追加。既存コンポーネントの requests 合計（約700m/1.2GiB）に今回の追加分（約375m/800Mi）を足しても node01 の 4c/11.7GiB に対して余裕があることを確認。immich chart（bjw-s app-template ベース）自体はデフォルトで resources を設定していないことを WebFetch で確認済み（controllers.<name>.containers.main.resources が正しいキー、既存の image/env と同じ階層）。limits 合計は既存分と合わせても memory 側で概ね9GiB程度に収まり、全コンポーネントが同時に上限まで張り付く想定はしていない"
     }
   ]
