@@ -211,6 +211,7 @@ high に該当するのは、失敗したときに元へ戻せないもの。**�
 | `git push --force` | 使わない。やり直したいならブランチを作り直す |
 | `gh`（GitHub CLI） | この実行環境には入っていない（`command not found`）。GitHub 操作は `mcp__github__*` ツールで代替する（[§4](#4-pr-の作り方) 参照）。`api.github.com` への直接 HTTPS リクエスト（`curl`/`urllib` 等）も組織の egress ポリシーで 403 になり使えない。`ghcr.io` など GitHub 以外のレジストリは到達できる（2026-08-04 run #4 で確認） |
 | `git checkout <ref> -- .` / `git checkout <ref> -- <path>` | **使わない。** untracked ファイル以外の全 tracked ファイルを `<ref>` の内容で working tree ごと上書きする破壊的操作。ローカルの `main` ブランチは `git fetch` しても自動更新されず、`origin/main` とは別物として古いまま残ることがある（2026-08-04 run #5 で `git checkout main -- .` が stale なローカル `main` の内容で CHARTER/journal/state/backlog を上書きする事故を起こした。commit 前だったので `git reset --hard HEAD` で復旧）。ブランチの現在地を確認したいだけなら `git log -1 --format=%H origin/main` や `git status` / `git diff` を使う |
+| `git push origin --delete <branch>` | このサンドボックスからは **403 で失敗する**（2026-08-05 run #14 で確認。リモートブランチ削除の権限が無い）。ブランチ名を作り直したいときは、削除できない前提で **最初から正しい名前で 1 回だけ push する**。誤って重複ブランチを作ってしまったら、削除は次の起動か人間に委ねて journal に残す。§4 の「ブランチ発見時は main に同内容が入っていないか確認する」が、削除できない前提での実務上の代替手段になる |
 
 ### 5.2 この実行環境で使えるツール（事実の記録）
 

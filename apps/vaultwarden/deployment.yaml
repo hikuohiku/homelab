@@ -52,10 +52,6 @@ spec:
             # vaultwarden は ROCKET_PORT のデフォルトが 80。明示しておく
             - name: ROCKET_PORT
               value: "80"
-            # icon 取得のタイムアウトが多発していたが実害は無いと確認済み (Maintenance.md 2026-08-03)。
-            # ログを埋めるだけの無害な失敗のため無効化する (T-0031)
-            - name: DISABLE_ICON_DOWNLOAD
-              value: "true"
             # 1.37.0 で追加されたレート制限は remote peer の IP を見るが、Tailscale Ingress は
             # リバースプロキシとして自 Pod から backend へ接続するため、デフォルト設定では
             # 全クライアントが同一の proxy pod IP に見えてしまう (T-0032)。Tailscale 側は
