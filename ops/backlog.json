@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 38,
-  "updated": "2026-08-04T23:10:00Z",
+  "next_id": 39,
+  "updated": "2026-08-05T00:20:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -574,7 +574,7 @@
       "title": "vaultwarden の icon 取得タイムアウトを調査し、実害が無いなら DISABLE_ICON_DOWNLOAD で無効化するか判断する",
       "kind": "investigate",
       "risk": "low",
-      "status": "done",
+      "status": "dropped",
       "priority": 22,
       "why": "Maintenance.md 2026-08-03 の持ち越し。icon 取得のタイムアウトが多発しているが実害は無いと記録されている。ログを埋めるだけなら無効化する価値がある",
       "dod": "現状のログ頻度と実害の有無を確認する。無害だが頻発してログを埋めているなら DISABLE_ICON_DOWNLOAD=true を設定する。実害があるなら原因（Tailscale プロキシ経由のアウトバウンド到達性など）を調べて対処する",
@@ -584,7 +584,7 @@
       ],
       "created": "2026-08-04",
       "pr": 104,
-      "notes": "run #13: 現状のログ頻度は autopilot のクラウドサンドボックスから確認できない（クラスタ到達不可）が、Maintenance.md 2026-08-03 の時点で人間の対話セッション（実機到達可）が既に「実害なし、多発」と確認済みの記録があるため、それを根拠に DISABLE_ICON_DOWNLOAD=true を設定した。icon はログイン項目の favicon 表示のみに使う機能でデータへの影響は無く、設定は環境変数 1 行で即座に戻せるため low risk とした"
+      "notes": "run #13: 現状のログ頻度は autopilot のクラウドサンドボックスから確認できない（クラスタ到達不可）が、Maintenance.md 2026-08-03 の時点で人間の対話セッション（実機到達可）が既に「実害なし、多発」と確認済みの記録があるため、それを根拠に DISABLE_ICON_DOWNLOAD=true を設定した。icon はログイン項目の favicon 表示のみに使う機能でデータへの影響は無く、設定は環境変数 1 行で即座に戻せるため low risk とした | run #14: issue #56 (2026-08-04 23:31:31) の指摘を受け revert（PR 未定）。「実害なし」と記録済みの事象を解消するために利用者に見える機能（クライアントのサイトアイコン表示）を犠牲にしており、天秤が釣り合っていなかった。ログノイズを消す価値 < favicon を失う価値、という判断で dropped にする。ログが本当に問題になったら（例えば PVC を圧迫する、外部への大量リクエストで別の実害が出る等）改めて起票する"
     },
     {
       "id": "T-0032",
@@ -676,6 +676,22 @@
       "created": "2026-08-04",
       "pr": 98,
       "notes": "run #11: issue #56 のフィードバック(22:04:42)を反映して起票・即着手。ops/check_manifest_deletions.py を作成し、find_kustomization_dirs/parse_allowed/diff_and_check の純粋ロジックはサンドボックス上で python3 単体テスト済み（kustomize/helm が無いため render 自体はローカル検証できず CI 任せ、CHARTER §5.2）。CI に manifest-diff job を追加。ruleset の必須チェックへの追加は自分からはできないため、PR本文と issue #56 で構築セッションに依頼する"
+    },
+    {
+      "id": "T-0038",
+      "domain": "homelab",
+      "title": "vaultwarden の IP_HEADER_TRUSTED_PROXIES を Tailscale proxy Pod の IP レンジに絞る",
+      "kind": "security",
+      "risk": "low",
+      "status": "todo",
+      "priority": 30,
+      "why": "T-0032 (#107) の残余リスク。issue #56 (2026-08-04 23:39:21) の指摘。IP_HEADER_TRUSTED_PROXIES が既定の `local` のままだと、クラスタ内部から vaultwarden に直接到達できる主体が X-Forwarded-For を任意に詐称でき、ログイン試行のレート制限（ブルートフォース保護）の帰属がずれうる。変更前（IP_HEADER 未設定で X-Real-IP を見ていた頃）も同じ条件だったため、この変更が状況を悪化させたわけではない",
+      "dod": "IP_HEADER_TRUSTED_PROXIES を Tailscale proxy Pod の実 IP レンジ（Pod CIDR、または proxy Pod の Service ClusterIP）に絞る。絞った結果、正規の Tailscale Ingress 経由アクセスがレート制限で誤って弾かれないことを確認する（PR 本文に確認方法を明記）",
+      "refs": [
+        "apps/vaultwarden/deployment.yaml"
+      ],
+      "created": "2026-08-05",
+      "pr": null
     }
   ]
 }
