@@ -1,0 +1,109 @@
+# T-0071: restic バックアップの復元試験（immich 分）。
+#
+# immich-restic-backup CronJob（apps/immich/restic-backup-cronjob.yaml）が B2 に取っている
+# スナップショットを、本番の immich-library PVC には一切触れずに使い捨ての別 PVC へ実際に
+# restic restore し、「データが読めること」を機械的に確認する。人間の新方針
+# （issue #56, 2026-08-05 04:40:59「試したことのないバックアップは、バックアップではありません」）
+# に沿った一度きりの検証。確認が取れ次第、この PVC/Job は削除する PR を出す
+# （immich-restic-backup 側の CronJob は変更しない）。
+#
+# 結果の受け取り方: autopilot の ClusterRole (autopilot-reader) には pods/log 権限が無いため、
+# コンテナの stdout は読めない。代わりに /dev/termination-log に判定用のサマリ行を書き、
+# `kubectl get pod -n immich -l job-name=immich-restic-restore-verify -o json` の
+# status.containerStatuses[].state.terminated.message から読む（get pods は許可されている、
+# ops/CHARTER.md §5.5 の RBAC 一覧参照）。restic/restic イメージは alpine ベース (busybox) で
+# find/od/date が使えることを Dockerfile 確認済み（restic v0.19.1 の docker/Dockerfile,
+# alpine:latest + apk add ca-certificates fuse openssh-client tzdata jq）。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: immich-restore-verify
+  namespace: immich
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: immich-restic-restore-verify
+  namespace: immich
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1800
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+        - name: restic-restore
+          image: restic/restic:0.19.1
+          command:
+            - sh
+            - -c
+            - |
+              set -u
+              START=$(date +%s)
+              restic restore latest --target /mnt/restore
+              RESTORE_RC=$?
+              END=$(date +%s)
+              ELAPSED=$((END - START))
+              FILE_COUNT=$(find /mnt/restore -type f 2>/dev/null | wc -l | tr -d ' ')
+              DUMP=$(find /mnt/restore -path '*/backups/*.sql.gz' 2>/dev/null | sort | tail -1)
+              DUMP_OK=false
+              if [ -n "$DUMP" ]; then
+                MAGIC=$(od -An -tx1 -N2 "$DUMP" 2>/dev/null | tr -d ' ')
+                [ "$MAGIC" = "1f8b" ] && DUMP_OK=true
+              fi
+              MSG="restore_rc=$RESTORE_RC elapsed_seconds=$ELAPSED file_count=$FILE_COUNT db_dump=${DUMP:-none} db_dump_gzip_magic_ok=$DUMP_OK"
+              echo "$MSG"
+              echo "$MSG" > /dev/termination-log
+              if [ "$RESTORE_RC" -ne 0 ] || [ "$FILE_COUNT" -eq 0 ] || [ "$DUMP_OK" != "true" ]; then
+                exit 1
+              fi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          env:
+            - name: RESTIC_B2_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: immich-restic-credentials
+                  key: RESTIC_B2_BUCKET
+            - name: RESTIC_REPOSITORY
+              value: "b2:$(RESTIC_B2_BUCKET):immich"
+            - name: RESTIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: immich-restic-credentials
+                  key: RESTIC_PASSWORD
+            - name: B2_ACCOUNT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: immich-restic-credentials
+                  key: B2_ACCOUNT_ID
+            - name: B2_ACCOUNT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: immich-restic-credentials
+                  key: B2_ACCOUNT_KEY
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+          volumeMounts:
+            - name: restore-target
+              mountPath: /mnt/restore
+      volumes:
+        - name: restore-target
+          persistentVolumeClaim:
+            claimName: immich-restore-verify

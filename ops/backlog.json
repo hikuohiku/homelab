@@ -1316,7 +1316,7 @@
       "title": "restic バックアップの復元試験を実施する（本丸）",
       "kind": "investigate",
       "risk": "low",
-      "status": "todo",
+      "status": "in_progress",
       "priority": 41,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針。『試したことのないバックアップは、バックアップではありません』。T-0068〜T-0070 で作った CronJob が実際に復元可能なデータを作れているかを、別 namespace か使い捨て環境に実際に復元して確認する。T-0023/T-0027/T-0029（データを失いうるメジャー更新）はこれが通るまで着手できない（T-0034 dropped に伴い、これらの blocked_by をここに張り替え済み）",
       "dod": "immich / vaultwarden / coder-postgres それぞれについて、restic のバックアップから使い捨て環境（別 namespace 等）に実際に復元し、データが読めることを確認する。**復元にかかった時間を実測して記録する**（PBS 退役判断の材料になる、人間の依頼どおり）。結果を docs/backup.md に記録する",
@@ -1327,7 +1327,7 @@
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": " | run #50: issue #56 (12:48:16) の指摘で、immich がまだほとんど使われていない（332MiB）今のうちに復元試験まで通しておくべきと助言された。T-0068〜T-0070 の実装は完了済みのため blocked_by を T-0067 のみに絞った。T-0067 が片付き次第、最優先で着手する。 | run #53: T-0067 done。ただし T-0103（remoteRef タイポ）修正直後のため、まだ一度も backup が成功した実績が無い。T-0104（検証 Job）の結果を待ってから着手する。 | run #57 (2巡目): substrate が in-cluster 常駐に変わったため『write 権限が要るため実行できない可能性』という懸念は解消（T-0104 と同じ Git→ArgoCD 経路で書き込み不要のまま実行できる） | run #60: T-0104 が done になり blocked_by 解消。immich/coder-postgres/vaultwarden 全3コンポーネントで restic backup 成功が確認できたので着手可能な todo に上げる"
+      "notes": " | run #50: issue #56 (12:48:16) の指摘で、immich がまだほとんど使われていない（332MiB）今のうちに復元試験まで通しておくべきと助言された。T-0068〜T-0070 の実装は完了済みのため blocked_by を T-0067 のみに絞った。T-0067 が片付き次第、最優先で着手する。 | run #53: T-0067 done。ただし T-0103（remoteRef タイポ）修正直後のため、まだ一度も backup が成功した実績が無い。T-0104（検証 Job）の結果を待ってから着手する。 | run #57 (2巡目): substrate が in-cluster 常駐に変わったため『write 権限が要るため実行できない可能性』という懸念は解消（T-0104 と同じ Git→ArgoCD 経路で書き込み不要のまま実行できる） | run #60: T-0104 が done になり blocked_by 解消。immich/coder-postgres/vaultwarden 全3コンポーネントで restic backup 成功が確認できたので着手可能な todo に上げる | run #62: 3コンポーネント同時は1PRとして大きいため immich から着手（run #50 の助言どおり、まだ使用量が少ないうち）。apps/immich/restic-restore-verify-job.yaml で使い捨て PVC (immich-restore-verify) + 一度きりの Job を追加、restic restore latest → ファイル数と DB ダンプの gzip マジックバイト確認 → 結果を /dev/termination-log に書く方式にした（autopilot に pods/log 権限が無いため、get pods で読める terminationMessage 経由で結果を受け取る）。次の起動で Job の Complete/Failed と terminationMessage を確認し、成功していれば docs/backup.md に実測時間を記録した上で vaultwarden/coder-postgres も同じ形で続ける。in_progress のまま、3コンポーネント全部終わってから done にする"
     },
     {
       "id": "T-0072",
