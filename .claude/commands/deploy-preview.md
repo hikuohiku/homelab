@@ -31,5 +31,4 @@ ArgoCD を使ったフィーチャーブランチのデプロイ検証フロー�
 ## 注意事項
 
 - preview 中はルート `apps` Application の auto-sync が無効になる（既存アプリの場合）
-- テスト完了後は必ず `preview-reset` で復元すること
-- `just argocd-bootstrap` はルート Application を main の状態で再適用する（AutoSync 有効化用）
+- テスト完了後は必ず `preview-reset` で復元すること（`just preview-reset apps` がルート Application を HEAD に戻し auto-sync も復元する）

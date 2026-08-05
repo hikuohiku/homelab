@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 102,
-  "updated": "2026-08-05T10:30:00Z",
+  "updated": "2026-08-05T13:35:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1211,7 +1211,7 @@
       "title": "バックアップ対象（immich ライブラリ等）の実サイズを測定してほしい",
       "kind": "investigate",
       "risk": "low",
-      "status": "needs-human",
+      "status": "done",
       "priority": 36,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針。immich ライブラリが 300GB か 1TB かで restic の保存先の最適解が変わる（300GB/月なら Backblaze B2 が $2.09、1TB 級なら Hetzner Storage Box の固定 €3.20 が逆転する）",
       "dod": "immich ライブラリ（UPLOAD_LOCATION の PVC）、vaultwarden の /data、coder-postgres・immich-postgres の DB サイズを実機で測定し、docs/backup.md に記録する。T-0067 の保存先選定の判断材料にする",
@@ -1220,8 +1220,8 @@
         "docs/backup.md"
       ],
       "created": "2026-08-05",
-      "pr": null,
-      "notes": "run #31: issue #56 (05:35:04) で上限が判明。ops-health-report (05:30:09) の node allocatable ephemeral-storage が 51250152Ki（≈48.9GiB）しか無く、immich ライブラリは物理的に 49GiB を超えられない。300GB/1TB 想定は前提から外れ、保存先は Backblaze B2 で確定（Hetzner Storage Box との比較は不要）。ただし正確な実使用バイト数（T-0077 待ち）と、そもそも disk 全体が 48.9GiB しか無いという事実自体の確認（T-0079）はまだ完了していないため needs-human のまま"
+      "pr": 199,
+      "notes": "run #31: issue #56 (05:35:04) で上限が判明。ops-health-report (05:30:09) の node allocatable ephemeral-storage が 51250152Ki（≈48.9GiB）しか無く、immich ライブラリは物理的に 49GiB を超えられない。300GB/1TB 想定は前提から外れ、保存先は Backblaze B2 で確定（Hetzner Storage Box との比較は不要）。ただし正確な実使用バイト数（T-0077 待ち）と、そもそも disk 全体が 48.9GiB しか無いという事実自体の確認（T-0079）はまだ完了していないため needs-human のまま | run #50: T-0080 (pvc-usage-reporter) が実際に稼働し、human の手を借りずに実測できた。immich-library 約332MiB、immich-postgres-data 約302MiB、vaultwarden-data 約4.6MiB、coder-postgres-data も小。合計1GiB未満（ops/health/latest.json pvc_usage, 2026-08-05T12:30:04Z）。docs/backup.md に記録し、T-0067 の needs_human_reason にも反映。done とする。"
     },
     {
       "id": "T-0067",
@@ -1233,14 +1233,15 @@
       "priority": 36,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針。restic ベースのバックアップに保存先が要る。構築セッションの調査では Backblaze B2（$2.09/300GB・復元エグレス無料枠あり）を推奨、ライブラリが 1TB に近いなら Hetzner Storage Box（固定 €3.20）が逆転する（T-0066 の実測結果で確定する）",
       "dod": "T-0066 の実測結果を踏まえて保存先を確定し、アカウントを作成、restic リポジトリ用の append-only なアプリケーションキー（node01 が乗っ取られてもバックアップを消せないように）を発行し、Doppler の homelab/prd に登録する。登録先キー名は実装時（T-0068〜T-0070）にこちらで backlog へ追記する",
-      "needs_human_reason": "外部サービスのアカウント作成とコストが動く契約、および credential の発行・Doppler への登録。CHARTER §4『人間に渡してよいもの』の『権限・認証の手作業』『コストや契約が動くもの』に該当し、エージェントからは手が届かない。T-0069 (#191) で実装した ExternalSecret が参照するキー名が確定したので、以下をそのまま Doppler の homelab/prd に登録してほしい: `RESTIC_PASSWORD`（暗号化パスワード、新規に生成して登録）/ `RESTIC_B2_BUCKET`（B2 バケット名）/ `RESTIC_B2_ACCOUNT_ID` / `RESTIC_B2_ACCOUNT_KEY`（B2 application key、append-only 推奨）。詳細は docs/backup.md 参照",
+      "needs_human_reason": "外部サービスのアカウント作成とコストが動く契約、および credential の発行・Doppler への登録。CHARTER §4『人間に渡してよいもの』の『権限・認証の手作業』『コストや契約が動くもの』に該当し、エージェントからは手が届かない。T-0069 (#191) で実装した ExternalSecret が参照するキー名が確定したので、以下をそのまま Doppler の homelab/prd に登録してほしい: `RESTIC_PASSWORD`（暗号化パスワード、新規に生成して登録）/ `RESTIC_B2_BUCKET`（B2 バケット名）/ `RESTIC_B2_ACCOUNT_ID` / `RESTIC_B2_ACCOUNT_KEY`（B2 application key、append-only 推奨）。詳細は docs/backup.md 参照 【run #50 追記】実サイズが判明（T-0066 done、docs/backup.md 参照）: 全データ合計 1GiB 未満。Backblaze B2 の無料枠（10GB）に収まり、月額コストは実質ゼロと見込める。Hetzner との比較検討は不要。",
       "blocked_by": "T-0066（保存先の選定に実サイズが要る）",
       "refs": [
         "docs/backup.md",
         "apps/vaultwarden/restic-external-secret.yaml"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": null,
+      "notes": "run #50: ops-health-report で観測。T-0067 未完了のまま T-0068/T-0069/T-0070 のrestic-external-secret.yaml (creationPolicy: Owner) が Doppler に無いキーを参照しており、ExternalSecret が同期できず Secret が作られない状態が続いている。ArgoCD はこれを検知してvaultwarden/coder/immich の3 Application を Degraded と報告する（history: 08-05 11:30 まで全10アプリHealthy → 12:00 vaultwardenのみDegraded (T-0069 #191/#192 merge直後) → 13:00 coder/immichも追加でDegraded (T-0070 #195, T-0068 #196 merge後)、時系列が完全一致）。各アプリ本体（vaultwarden/coder/immich自体のPod）は正常で、Degradedの実体はrestic用のExternalSecretが解決できないことによるものと推定（このクラウドサンドボックスからはkubectl/ArgoCD MCPともに到達できず個々のリソースの健全性までは直接確認できていない）。T-0067（Doppler credential登録）が完了すれば解消される見込み。次回以降、T-0067完了後のrun で3アプリがHealthyに戻ることを確認すること。"
     },
     {
       "id": "T-0068",
@@ -1312,12 +1313,13 @@
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針。『試したことのないバックアップは、バックアップではありません』。T-0068〜T-0070 で作った CronJob が実際に復元可能なデータを作れているかを、別 namespace か使い捨て環境に実際に復元して確認する。T-0023/T-0027/T-0029（データを失いうるメジャー更新）はこれが通るまで着手できない（T-0034 dropped に伴い、これらの blocked_by をここに張り替え済み）",
       "dod": "immich / vaultwarden / coder-postgres それぞれについて、restic のバックアップから使い捨て環境（別 namespace 等）に実際に復元し、データが読めることを確認する。**復元にかかった時間を実測して記録する**（PBS 退役判断の材料になる、人間の依頼どおり）。結果を docs/backup.md に記録する",
       "needs_human_reason": "復元試験にはクラスタへの到達（別 namespace の作成、restic restore コマンドの実行）が要る。autopilot のクラウドサンドボックスは到達できない（CHARTER §5.2）。ただし実装（CronJob の manifest、restic restore の手順書）自体はブロックされずに進められるため blocked のままにし、needs-human への切り替えは T-0068〜T-0070 が終わってから判断する",
-      "blocked_by": "T-0068, T-0069, T-0070（復元試験には先にバックアップが取れている必要がある）",
+      "blocked_by": "T-0067（restic/B2 credential 登録。T-0068〜T-0070 の実装自体は完了済みだが、実際にバックアップが成功していないと復元試験もできない）",
       "refs": [
         "docs/backup.md"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": null,
+      "notes": " | run #50: issue #56 (12:48:16) の指摘で、immich がまだほとんど使われていない（332MiB）今のうちに復元試験まで通しておくべきと助言された。T-0068〜T-0070 の実装は完了済みのため blocked_by を T-0067 のみに絞った。T-0067 が片付き次第、最優先で着手する。"
     },
     {
       "id": "T-0072",
@@ -1435,10 +1437,10 @@
       "kind": "investigate",
       "risk": "high",
       "status": "needs-human",
-      "priority": 1,
-      "why": "issue #56 (2026-08-05 05:35:04, 構築セッション経由)。ops-health-report ブランチ (generated_at: 2026-08-05T05:30:09Z) が報告する node の allocatable/capacity ephemeral-storage は 51250152Ki（≈48.9GiB）。一方 `terraform/proxmox/vm-nixos.tf` の `size = 256`（GiB）、`docs/node01-storage.md`（『2026-08-04 に 50GiB→256GiB へ拡張した』）、`CLAUDE.md`（『node01 の root disk は 256 GiB』）は全て 256GiB を前提にしている。**PVC requested 合計は 215Gi（immich-library 単体で 50Gi）で、実測どおり 48.9GiB しか無いなら既に定義上のオーバーコミット状態。** local-path は実ディスクを予約しないため、使用量が実容量に達した時点で node 上の全データ（immich 写真・vaultwarden シークレット・coder workspace・両 postgres）が同時に破損しうる。system Pod（argocd/coredns/local-path-provisioner/metrics-server 等）の restarts が軒並み 19 回で揃っており、手動で行った growpart/resize2fs がノード再起動の過程で失われた可能性がある",
+      "priority": 30,
+      "why": "issue #56 (2026-08-05 05:35:04, 構築セッション経由)。ops-health-report ブランチ (generated_at: 2026-08-05T05:30:09Z) が報告する node の allocatable/capacity ephemeral-storage は 51250152Ki（≈48.9GiB）。一方 `terraform/proxmox/vm-nixos.tf` の `size = 256`（GiB）、`docs/node01-storage.md`（『2026-08-04 に 50GiB→256GiB へ拡張した』）、`CLAUDE.md`（『node01 の root disk は 256 GiB』）は全て 256GiB を前提にしている。**PVC requested 合計は 215Gi（immich-library 単体で 50Gi）で、実測どおり 48.9GiB しか無いなら既に定義上のオーバーコミット状態。** local-path は実ディスクを予約しないため、使用量が実容量に達した時点で node 上の全データ（immich 写真・vaultwarden シークレット・coder workspace・両 postgres）が同時に破損しうる。system Pod（argocd/coredns/local-path-provisioner/metrics-server 等）の restarts が軒並み 19 回で揃っており、手動で行った growpart/resize2fs がノード再起動の過程で失われた可能性がある 【run #50 追記】T-0080 (pvc-usage-reporter) の実測により、実データ使用量は全 PVC 合計で1GiB未満（48.9GiBの2%未満）と判明した。当面の逼迫・データ同時破損の切迫感は無い。ただし『256GiB のはずが 48.9GiB しか見えていない』という記述と実測の食い違い自体は解消していないため、確認は引き続き必要（緊急ではないが記述整合性のために確認したい）。",
       "dod": "人間が node01 で `df -h /` と `lsblk` を実行し、(1) パーティション/ファイルシステムの実サイズ、(2) 256GiB へ拡張したはずの領域が実際に root ファイルシステムまで反映されているか、を確認する。結果を踏まえて次のいずれかに分岐する: (a) 実ディスクが本当に48.9GiB程度しか無い→ growpart/resize2fs をやり直すか、terraform の size を実態に合わせて修正し、215Gi分のPVC要求をどう減らす/どこに逃がすかを検討する新タスクを起票する (b) kubelet 側の ephemeral-storage 計算が古い/誤り（再起動で直る等）→ health report 側の実装かCronJobの再起動を疑う。**autopilot 側では docs/terraform を先に『直さない』**（構築セッションの助言どおり、実態が未確定のうちにドキュメントだけ書き換えると誤った事実が固定化する）",
-      "needs_human_reason": "node01 の実機（Proxmox ホストまたは NixOS 本体）で `df -h` / `lsblk` を実行してほしい。Tailscale 越しに到達できる人間の環境でしか実行できず、autopilot のクラウドサンドボックスは物理的に到達できない（CHARTER §5.2）",
+      "needs_human_reason": "node01 の実機（Proxmox ホストまたは NixOS 本体）で `df -h` / `lsblk` を実行してほしい。Tailscale 越しに到達できる人間の環境でしか実行できず、autopilot のクラウドサンドボックスは物理的に到達できない（CHARTER §5.2）。【run #50 追記】急ぎではない: 実データ使用量は1GiB未満（T-0080実測）で当面のディスク逼迫リスクは無いと分かっている。記述（terraform/docs/CLAUDE.md の256GiB）を実態に合わせたいので、手が空いたときに `df -h`/`lsblk` の結果を教えてほしい、という位置づけ",
       "refs": [
         "terraform/proxmox/vm-nixos.tf",
         "docs/node01-storage.md",
@@ -1758,7 +1760,7 @@
       "title": "ドキュメントが参照する `just <recipe>` の実在を CI で検証する",
       "kind": "ci",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 45,
       "why": "run #47 の subagent 調査で発見。T-0095（apps/README.md が存在しない `just inject-secrets` を案内していた）と同型のドキュメント drift は、今の CI (check_version_sync.py / validate.py) では検出できない。バージョン pin の重複や state ファイルの不変条件は見ているが『ドキュメントが実在しないコマンドを指している』は対象外",
       "dod": "README.md/apps/README.md/CLAUDE.md 等から `` `just <word>` `` の出現を抽出し、justfile の実際の recipe 名と突き合わせる標準ライブラリのみのスクリプト（例: ops/check_doc_commands.py）を追加し、ops job に組み込む。意図的に存在しない recipe 名を書いて CI が exit 1 になることを確認する",
@@ -1768,7 +1770,8 @@
         "justfile"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": 199,
+      "notes": "run #50: ops/check_doc_commands.py を追加。実行したところ .claude/commands/deploy-preview.md が存在しない `just argocd-bootstrap` を案内していたのを検出（本来の目的どおり真の drift を1件発見）。`just preview-reset apps`が同じ役割を果たすため実態に合わせて記述を修正し、CI (ops job) に組み込んだ。"
     },
     {
       "id": "T-0097",

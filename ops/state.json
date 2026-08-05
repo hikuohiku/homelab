@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T12:47:00Z",
+  "updated": "2026-08-05T13:40:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T12:35:47Z"
+    "last_read": "2026-08-05T12:48:16Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -561,6 +561,16 @@
         196,
         197,
         198
+      ]
+    },
+    {
+      "n": 50,
+      "at": "2026-08-05T13:20:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 の未読2件を反映: T-0080 の実測でPVC使用量が全体で1GiB未満と判明したのを受け、T-0066を done化しdocs/backup.mdに記録、T-0067のneeds_human_reasonにB2無料枠で足りる旨を追記、T-0079の緊急度をpriority 1→30に引き下げ、T-0071のblocked_byをT-0067のみに絞った。ops-health-reportを確認したところcoder/immich/vaultwardenの3アプリがDegradedと判明。history上、各restic backup CronJob (T-0068/T-0069/T-0070) のmerge直後に順次Degraded化しており、原因はT-0067未完了でrestic用ExternalSecretが同期できていないことと推定（アプリ本体は正常）。T-0067のneeds_human_reasonに反映しpush通知で人間に伝えた。続けてT-0096（ドキュメントのjust recipe実在をCIで検証）を完遂。ops/check_doc_commands.pyを新設し、実際に.claude/commands/deploy-preview.mdの存在しないrecipe参照（drift）を1件検出・修正した（#199）。",
+      "prs": [
+        199
       ]
     }
   ]
