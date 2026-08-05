@@ -765,7 +765,7 @@
         ".github/workflows/release-image.yml"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 115,
       "notes": "run #16: WebFetch で upstream の releases ページと README を確認。最新は v22。README には『このアクションは Action 自体のバージョンに関わらず常に最新の Determinate Nix をインストールする（固定した Nix バージョンが必要なら determinate-nix-action へ）』とあり、Action 参照の pin と実際にインストールされる Nix バージョンは無関係と判明。ここでの懸念は Nix バージョンではなく Action 自体のコードが `@main` だとレビュー無しに変わりうる点なので、リポジトリの他の Action と同じ慣習（メジャータグ pin）に合わせて `@v22` に固定した。Nix バージョンの固定は別の関心事のため対象外とした"
     },
     {
