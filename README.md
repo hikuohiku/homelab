@@ -265,7 +265,7 @@ ProxmoxがデフォルトでHTTPSを使用しています。自己署名証明�
 - Proxmoxに有効なSSL証明書をインストール（Let's Encryptなど）
 
 **自己署名証明書を許可する場合**:
-- `providers.tf`の`insecure = false`を`insecure = true`に変更
+- `providers.tf`の`provider "proxmox"`ブロックに`insecure = true`を追加（デフォルトは`false`で、現状の`providers.tf`には明記されていない。値を変更するのではなく新規に追加する）
 
 ### 認証エラー
 
