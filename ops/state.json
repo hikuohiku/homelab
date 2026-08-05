@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T08:51:00Z",
+  "updated": "2026-08-05T09:10:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -497,6 +497,24 @@
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし（last_read 以降新規コメント0件、全64件を機械的に確認）。backlog の唯一の todo だった T-0090（ci.yml の manifests job / manifest-diff job に独立に書かれている azure/setup-helm の version 入力と kustomize バイナリ版が監視対象外）を完遂。ops/inventory.json に2エントリを追加し、ops/check_version_sync.py に extract_yaml_job_block（jobs: 配下の2-indent境界でブロックを絞る）とそれを使う2つの抽出関数、GROUPS に2グループを追加。DoD の『意図的に値をずらして CI が exit 1 になることを確認する』は手元で ci.yml を一時的に書き換えて両パターンとも検出できることを確認し、diff が空であることを確認して復元した（#178）。続けて subagent に新しい調査観点探しを投げ3件発見: T-0091（ci.yml の terraform_version が 1.15.0 のまま最新 1.15.8 より8パッチ遅れ、CHANGELOG 全文確認のうえ即完遂）、T-0092（README.md が存在しない providers.tf の insecure フィールドを参照、todo）、T-0093（CLAUDE.md の定期実行間隔『3時間ごと』が ops/state.json の実際の毎時と食い違う、todo）",
       "prs": [
         178
+      ]
+    },
+    {
+      "n": 44,
+      "at": "2026-08-05T08:50:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なしで開始。backlog の唯一の todo だった T-0090 に着手し実装・検証まで終えて PR #179 を作成したところ、別セッションが同時刻に同じ T-0090 を先に完遂・merge 済み（#178）と判明。#178 の実装で DoD 達成済みと確認し、#179 は理由を説明した上で close（重複、run #13 の #105/#106 と同型）。ブランチは git push --delete が 403 のため孤児のまま残る。issue #56 に新規フィードバックなし。この run の記録用 PR (#181) は main が #180/#182 の merge で先行したため DIRTY になり merge できず、run #45 が close して記録を復元した",
+      "prs": []
+    },
+    {
+      "n": 45,
+      "at": "2026-08-05T09:01:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "前回の中断: PR #181（run #44 の記録用 PR）が main の #180/#182 先行merge により DIRTY だったため close し、失われていなかった実質的な変更（prs.json の PR178 反映）は main に既に反映済みと確認、journal の run #44 エントリのみ本 run で復元した。issue #56 に未読フィードバックなし。T-0092（README.md の insecure 記述 drift）を完遂: bpg/proxmox provider の実ドキュメント（GitHub raw, docs/index.md）で insecure 引数がサポートされている（デフォルト false）ことを確認し、README の手順を『既存の値を変更』ではなく『provider ブロックに insecure = true を新規追加』に書き換えた",
+      "prs": [
+        183
       ]
     }
   ]
