@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T21:15:00Z",
+  "updated": "2026-08-05T21:20:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -761,6 +761,16 @@
       "summary": "前回の中断: PR #240（run #67/#68 由来、T-0071 coder-postgres 分の完了）を、CI green・kubectl での Job succeeded 独立確認のうえ merge した。T-0071（restic 復元試験）が3コンポーネント全て完了。issue #56 に新規フィードバックなし。backlog の todo（T-0023/T-0027/T-0029、いずれも T-0071 完了で blocked 解除済み）のうち優先度最上位の T-0023（coder v2.34.7→v2.35.3, stable）に着手。subagent に GitHub Release 本文原文と DB migration ファイル一覧の直接照合を依頼し、この区間に新規 migration が無い（000001〜000500 で完全一致）こと、CODER_PROXY_TRUSTED_ORIGINS はワイルドカードルーティング専用で当リポジトリは無関係なことを確認。apps/coder/deployment.yaml を更新し PR #241 を出した。",
       "prs": [
         241
+      ]
+    },
+    {
+      "n": 70,
+      "at": "2026-08-05T21:20:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし（PR #241 は既に main に merge 済みと確認）。issue #56 に新規フィードバックなし。backlog の todo（T-0027/T-0029、いずれも T-0071 完了で blocked 解除済み）のうち優先度最上位の T-0027（immich server/machine-learning メジャー更新）に着手。実際の差分は起票時点（v2.6.3）から T-0086 で既に v2.7.5 まで上がっていたと判明。subagent に v2.7.5〜v3.1.0 の全リリースノート原文を確認させ、破壊的変更が v3.0.0 に集中していること・vchord とのバージョン依存はソフト（範囲チェックのみ）で T-0029 と独立に進行できること・pgvecto.rs 削除や環境変数削除が当リポジトリに無関係なことを確認した。T-0071 でバックアップ復元は確認済みのため着手し、apps/immich/values.yaml・ops/inventory.json を更新して PR #242 を出した。CI 6件全て green を確認済み、次のステップで merge する。",
+      "prs": [
+        242
       ]
     }
   ]
