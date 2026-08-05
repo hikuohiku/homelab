@@ -15,14 +15,19 @@
 #
 # T-0108: この Job オブジェクトは既に Failed 状態でクラスタに存在しており、
 # Job.spec.template は不変フィールドのため通常の patch では更新できない。
-# argocd.argoproj.io/sync-options: Replace=true で ArgoCD に delete+recreate させる。
+# Replace=true 単体（kubectl replace 相当）では spec.selector 等の immutable フィールドを
+# 含む置き換えは失敗する（PUT でも immutable 制約はサーバー側で強制される）。実際に #223
+# merge 後、ArgoCD の operationState が "field is immutable" で SyncFailed を繰り返していた
+# （2026-08-05 18:43 UTC 時点で4回リトライ済み、kubectl で直接確認）。Force=true を足すと
+# kubectl replace --force 相当になり、失敗時に delete → create で入れ直すため、この Job には
+# Replace 単体ではなく Replace=true,Force=true が必要。
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: vaultwarden-restic-backup-verify
   namespace: vaultwarden
   annotations:
-    argocd.argoproj.io/sync-options: Replace=true
+    argocd.argoproj.io/sync-options: Replace=true,Force=true
 spec:
   backoffLimit: 1
   # T-0108: 診断目的で短く戻す（延ばす方向ではなく、早く失敗させて --verbose の途中経過を見る）

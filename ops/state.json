@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T18:14:03Z",
+  "updated": "2026-08-05T18:52:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T18:32:03Z"
+    "last_read": "2026-08-05T18:39:07Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -652,6 +652,14 @@
       "prs": [
         223
       ]
+    },
+    {
+      "n": 59,
+      "at": "2026-08-05T18:52:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "issue #56 のフィードバック(autopilot 自身の健全性監視提案)を T-0110 として起票。T-0108 のフォローアップ: ArgoCD が vaultwarden-restic-backup-verify Job の再作成を 'field is immutable' で SyncFailed し続けているのを kubectl で発見し、sync-options を Replace=true,Force=true に修正",
+      "prs": []
     }
   ]
 }
