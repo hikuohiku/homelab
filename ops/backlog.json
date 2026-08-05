@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 88,
-  "updated": "2026-08-05T08:25:00Z",
+  "next_id": 91,
+  "updated": "2026-08-05T08:42:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1586,7 +1586,7 @@
       "title": "T-0086 (immich v2.7.5) 反映後、machine-learning Pod が健全に起動しているか ops-health-report で確認する",
       "kind": "investigate",
       "risk": "low",
-      "status": "blocked",
+      "status": "done",
       "priority": 15,
       "why": "T-0086 の調査で、v2.7.0/v2.7.1 時点で一部 CPU（AVX2 非対応等）向けに ML コンテナが numpy 関連でクラッシュする一時的な不具合があったと判明（v2.7.2 で修正済みのため v2.7.5 には修正が含まれるが、node01 の CPU 世代でも問題ないかは未確認）",
       "dod": "T-0086 の PR が merge・ArgoCD に反映されてから1起動以上後、ops-health-report ブランチの pod_issues に immich-machine-learning の CrashLoopBackOff/Error が無いことを確認する。問題が無ければ done、あれば v2.6.3 への revert PR を出す",
@@ -1594,6 +1594,43 @@
       "refs": [
         "apps/immich/values.yaml",
         "ops/health/latest.json"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #42: #171 merge (08:16:43Z) 後の ops-health-report (generated_at 08:30:04Z) を確認。immich アプリは Synced/Healthy、pod_issues に immich-server/immich-machine-learning のいずれも出現せず（restarts の載っている pod は argocd/coredns/local-path-provisioner/metrics-server の常駐系のみで、いずれもノード再起動由来の既知の値。immich 側に新規のクラッシュ兆候なし）。v2.7.0/v2.7.1 の numpy クラッシュは node01 で再発していないと確認できたため done"
+    },
+    {
+      "id": "T-0088",
+      "domain": "homelab",
+      "title": "ops/inventory.json の tf-provider-proxmox current が 0.89.1 のまま古い（実際は 0.111.1）を修正する",
+      "kind": "docs",
+      "risk": "low",
+      "status": "done",
+      "priority": 30,
+      "why": "T-0030（人間が #145 で 0.89.1→0.111.1 に更新、run #27 で確認済み）の後、terraform/proxmox/providers.tf の pin は 0.111.1 に進んだが ops/inventory.json の current フィールドが更新されないまま残っていた。inventory.json は auto-policy の上流バージョン調査（run #39 等）が読む唯一の情報源のため、古いままだと将来の調査が実際の差分（0.111.1→最新）ではなく見せかけの大きな差分（0.89.1→最新）を報告し、調査の手間を無駄にする",
+      "dod": "ops/inventory.json の tf-provider-proxmox.current が terraform/proxmox/providers.tf の実際の pin (0.111.1) と一致する",
+      "refs": [
+        "ops/inventory.json",
+        "terraform/proxmox/providers.tf"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #42: subagent の調査で発見。providers.tf:17 の `version = \"= 0.111.1\"` と突き合わせて確認済み、値を修正するのみで挙動に影響しないため即完遂"
+    },
+    {
+      "id": "T-0090",
+      "domain": "homelab",
+      "title": ".github/workflows/ci.yml の kustomize/azure-setup-helm バイナリ版が inventory.json / check_version_sync.py の監視対象に入っていない",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 30,
+      "why": "run #42 の subagent 調査で発見。ci.yml の manifests job と manifest-diff job の両方に azure/setup-helm (version: v3.16.4) と kustomize (v5.8.1、curl でダウンロード) が独立に2箇所ずつ書かれている。T-0042〜T-0048 は `uses: foo@vX` 形式の GitHub Actions のみを棚卸し対象にしており、これらはバイナリのバージョン文字列のため対象外だった。check_version_sync.py の GROUPS にも該当エントリが無く、2箇所の値がずれても CI は検出できない。ずれると manifests job と manifest-diff job で異なる kustomize/helm バージョンがレンダリングに使われ、T-0036 の削除検出（manifest-diff）がツールバージョン差分由来の偽陽性/偽陰性を出しうる",
+      "dod": "ops/inventory.json に azure/setup-helm と kustomize の2エントリを追加（policy: auto）。ops/check_version_sync.py の GROUPS に、ci.yml 内の2箇所ずつの出現を検証する2グループを追加（既存の actions/checkout グループと同じパターン）。意図的に値をずらして CI (ops job) が exit 1 になることを確認する",
+      "refs": [
+        ".github/workflows/ci.yml",
+        "ops/inventory.json",
+        "ops/check_version_sync.py"
       ],
       "created": "2026-08-05",
       "pr": null
