@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T21:20:00Z",
+  "updated": "2026-08-05T21:49:21Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -772,6 +772,14 @@
       "prs": [
         242
       ]
+    },
+    {
+      "n": 71,
+      "at": "2026-08-05T21:49:21Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断（PR #244, T-0029 immich postgres/vchord メジャー更新, run #70 由来）を拾った。CI 6件全て green・mergeable_state: clean を確認し、「縛る変更」に該当しないこと（memory limits 未設定）・T-0071 でリストア確認済みであることから CHARTER §4 の high risk 手順を満たしていると判断して merge した（91243f1）。merge 直後に ArgoCD の immich sync を確認したが、まだ旧 commit のまま反映前だった（2分待って再確認したが変化なし、ポーリング間隔待ちと判断）。backlog の T-0029 は `done` にはせず `in_progress` にした。PR に含まれる vchord 拡張の `ALTER EXTENSION UPDATE` + REINDEX の一度きり Job の成否は autopilot の read-only 権限では次回 ArgoCD 同期後に kubectl でしか確認できないため。issue #56 に新規フィードバックなし。homelab の健全性（ops-health-report, generated_at 21:30:09Z）は Application 11 件全て Synced/Healthy、autopilot 自身の heartbeat も正常。",
+      "prs": []
     }
   ]
 }

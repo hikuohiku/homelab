@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 111,
-  "updated": "2026-08-05T21:10:00Z",
+  "updated": "2026-08-05T21:49:21Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -556,7 +556,7 @@
       "title": "immich の postgres (cloudnative-vectorchord) を 16.9-0.4.3 → 16.14-1.1.1 に上げる（vchord 拡張のメジャー更新）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "todo",
+      "status": "in_progress",
       "priority": 21,
       "why": "T-0005 の調査 (run #6) で判明。postgres 本体は 16.9→16.14 の minor で問題ないが、vchord 拡張が 0.4.3→1.1.1 とメジャー相当の飛びで、ベクタ DB の実データに影響しうる（ops/inventory.json の policy=manual の理由）",
       "dod": "vchord 0.4→1.x の互換性・移行手順を確認する。CHARTER §4『データを失いうる変更』の手順どおり、着手前に immich のバックアップが実際に存在し復元できることを確認する",
@@ -566,8 +566,8 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": null,
-      "notes": " | run #68: T-0071（restic 復元試験）が3コンポーネント全て完了したため blocked_by を解消し todo に戻した。メジャーバージョン更新であることに変わりはないため、着手時は CHARTER §4「high を戻せる形に落とす」（1 PR 1 コンポーネント、変更点を全部読む）を引き続き適用する。"
+      "pr": 244,
+      "notes": " | run #68: T-0071（restic 復元試験）が3コンポーネント全て完了したため blocked_by を解消し todo に戻した。メジャーバージョン更新であることに変わりはないため、着手時は CHARTER §4「high を戻せる形に落とす」（1 PR 1 コンポーネント、変更点を全部読む）を引き続き適用する。 | run #71: 前回起動が作成していた PR #244（CI green 済み）を、縛る変更（memory limits 等）に該当しないこと・T-0071 でリストア確認済みであることを確認したうえで merge した。ArgoCD の immich sync はまだ反映前（sync revision が旧 commit のまま）。`ALTER EXTENSION vchord UPDATE` + REINDEX の一度きり Job（`immich-vchord-upgrade`）の成否は次回起動で `kubectl get pod -n immich -l job-name=immich-vchord-upgrade` の terminationMessage を確認してから done にする。"
     },
     {
       "id": "T-0030",
