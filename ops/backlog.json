@@ -1980,6 +1980,53 @@
       ],
       "created": "2026-08-05",
       "pr": null
+    },
+    {
+      "id": "T-0107",
+      "domain": "homelab",
+      "title": "Proxmox の pveproxy 証明書 SAN 不一致を解消し、terraform plan の proxmox_download_file 誤判定を切り分ける",
+      "kind": "investigate",
+      "risk": "high",
+      "status": "needs-human",
+      "priority": 0,
+      "why": "T-0074 (run #56, issue #56 2026-08-05 16:50:38 構築セッション) の実測。構築セッションが Doppler 登録済みの TF_TOKEN_APP_TERRAFORM_IO で terraform plan を実行したところ、proxmox_download_file.nixos_image が `1 to add, 0 to change, 0 to destroy` と表示された（#149 のレビューで想定していた『moved のみ・0 changes』と異なる）。vm-nixos.tf はこのリソースに replace_triggered_by を張っているため、この差分が本物なら apply で node01 VM 自体が再作成されうる。判定の根拠になった datastore のファイル一覧取得が TLS 証明書検証エラー（`x509: certificate is valid for 127.0.0.1, ::1, 192.168.1.2, ..., not 192.168.0.2`）で失敗しており、『ファイルが本当に無い』のか『TLS 検証失敗で存在確認できなかった』のかが未確定",
+      "dod": "Proxmox の pveproxy 証明書の SAN を、実際に plan/apply が使う到達経路（構築セッションが使った LAN IP 192.168.0.2、または名前解決が通れば Tailscale名 hikuo-homeserver.tailae6c2.ts.net）に一致させる（証明書の再発行、または SAN に到達アドレスを追加）。解消後に改めて terraform plan を実行し、proxmox_download_file.nixos_image の diff が消える（=元々TLSエラーによる誤判定だった）か、本物の差分として残る（=別の原因を追う）かを切り分ける。切り分けが済むまでは T-0074（terraform plan の継続的可視化）に着手しない",
+      "needs_human_reason": "terraform apply を実行する前に、必ず plan 出力で proxmox_download_file.nixos_image の差分内容を読んでください（node01 が再作成される危険があります）。Proxmox の証明書 SAN を実際のネットワーク構成に合わせて再発行するのは、管理コンソール・物理アクセスが要る人間専用の作業です。",
+      "refs": [
+        "terraform/proxmox/vm-nixos.tf",
+        "terraform/proxmox/nixos-image.tf"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #56: T-0074 の why/dod が T-0107 を forward-reference していたが実体が backlog に無い状態だったため、参照内容に合わせて起票した。到達性を失いうる変更（node01 自体の再作成リスク）に該当するため priority 0 とした",
+      "human_action": {
+        "summary": "terraform apply を実行する前に、この plan 差分（node01再作成の疑い）を必ず確認してください",
+        "why": "TLS証明書検証エラーにより、node01のVMが再作成されるかどうかが未確定なまま `1 to add` という差分が出ている。確認せずにapplyすると意図せずnode01が壊れる可能性がある。",
+        "steps": [
+          "terraform plan の出力で proxmox_download_file.nixos_image の差分内容を確認する",
+          "Proxmoxの証明書SANを実際のネットワーク構成（LAN IP / Tailscale名）に合わせて再発行する",
+          "再発行後に構築セッションへ terraform plan の再実行を issue #56 経由で依頼し、diff が消えるか確認する"
+        ],
+        "links": []
+      }
+    },
+    {
+      "id": "T-0108",
+      "domain": "homelab",
+      "title": "vaultwarden-restic-backup-verify の DeadlineExceeded (1800秒) を緩和し再実行する",
+      "kind": "fix",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 6,
+      "why": "T-0097 (run #56, issue #56 2026-08-05 17:14:24 構築セッション) の実測。T-0104 の検証 Job のうち vaultwarden 分のみ Failed（immich 332MiB/12秒・coder-postgres は Complete）。ログでは sqlite の一貫コピー完了とresticリポジトリ作成成功までは進んでいるが、restic backup 本体が activeDeadlineSeconds=1800 に到達し kill された。対象データは4.6MiBのみで immich より2桁以上小さく、単なる『遅い』ではなく『止まっている』可能性が高いが、原因の特定にはログの続きが要る（構築セッションに issue #56 で依頼中）。CHARTER §4『縛る変更には実測か裏付けが要る』が対象にするのは主に制限を厳しくする方向で、既に失敗を引き起こしている制限を緩める方向の変更は急いで構わないという構築セッションの整理（issue #56, 17:14:24）に従い、原因特定と並行して timeout を緩和し再実行を試みる",
+      "dod": "apps/vaultwarden/restic-backup-cronjob.yaml の vaultwarden-restic-backup CronJob と apps/vaultwarden/restic-backup-verify-job.yaml の activeDeadlineSeconds を 1800 → 3600 に緩和する（immich の一度きり検証 Job と同じ値。日次 CronJob 側も本番相当のため同時に直す）。検証 Job は既に Failed で終了しており spec.template は不変のため、別名（例: vaultwarden-restic-backup-verify-2）で新しい Job として再実行する。次回以降の起動で ops-health-report の pod_issues に新しい Job が Failed で出ていないか確認し、Complete が確認できたら T-0097 の blocked_by を解除し T-0104/T-0097 を done にする。緩和後も同じ場所で止まるなら timeout の問題ではないため、T-0108 を再オープンしログの続きから原因を追う",
+      "refs": [
+        "apps/vaultwarden/restic-backup-cronjob.yaml",
+        "apps/vaultwarden/restic-backup-verify-job.yaml"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #56: 起票と同時に issue #56 で構築セッションにログの続き（restic backup コマンドの最終出力）の確認も依頼した。timeout緩和とログ調査を並行して進める"
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T16:20:00Z",
+  "updated": "2026-08-05T17:45:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -619,6 +619,14 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "同じ cron から並行して起動していた別セッション（run #54 として先に #209 を merge）と、issue #56 の同じフィードバックを同時に処理してしまい、内容が完全重複した PR #210 を作成・push 後に発覚。#210 は base 乖離で dirty になっており、merge すると backlog.json に T-0100/T-0105/T-0106 の重複エントリを作る危険があったため merge せず close した（run #13/#44/#46 と同型の重複）。#209 の方が T-0068/T-0101 の done 化まで含み内容が広いため、origin/main への追加反映は不要と判断。PR キャッシュ（ops/dashboard/prs.json）に #209 を追加し、run #54 の記録に漏れていた pr 番号（#209）も補完した",
+      "prs": []
+    },
+    {
+      "n": 56,
+      "at": "2026-08-05T17:35:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "前回の中断: 無し。ただし origin/main が別セッションの #212/#213 で先行していたため、独自に用意していた同等の変更（T-0060/T-0105/T-0099更新、CHARTER §4）は破棄し、origin/main の状態から再出発。issue #56 の未読7件を確認し、#213 が反映しきれていなかった抜け2点を発見: T-0074/T-0097 が「T-0107」「T-0108」を forward-reference していたが backlog に実体が無かった（next_idだけ109に進んでいたバグ）ため、参照内容に合わせてT-0107（Proxmox証明書SAN不一致、terraform plan誤判定の切り分け、needs-human）・T-0108（vaultwarden-restic-backup-verifyのDeadlineExceeded緩和、todo）を起票し、T-0099（coder-postgres backup検証）をdoneに更新した。issue #56に返信しlast_readを更新",
       "prs": []
     }
   ]
