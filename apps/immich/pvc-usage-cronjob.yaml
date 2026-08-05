@@ -177,13 +177,16 @@ spec:
                   value: "1"
               # PVC の中身は immich-server/postgres コンテナのそれぞれ異なる UID
               # で書かれており、このジョブは対象 PVC の実データを正確に数える
-              # ことが目的のため root で読む（DAC_OVERRIDE を保持し、
-              # capabilities は絞らない）。書き込みは volumeMounts の
-              # readOnly: true が構造的に禁止しており、root であることによる
-              # 追加リスクは無い
+              # ことが目的のため root で読む。ただし読み取り専用のパーミッション
+              # チェック回避（DAC_READ_SEARCH）だけを許可し、書き込み回避を含む
+              # フルの root 権限（DAC_OVERRIDE 等）は持たせない。書き込みは
+              # volumeMounts の readOnly: true でも構造的に禁止している
               securityContext:
                 runAsUser: 0
                 allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                  add: ["DAC_READ_SEARCH"]
               # 数万ファイル規模の stat 走査でもファイル内容は読まないためメモリは
               # 低く収まる見込みだが実測はしていない。暴走しても他 Pod を巻き込まない
               # 目的の緩い上限（CHARTER §4「縛る変更には実測か裏付けが要る」対象）
