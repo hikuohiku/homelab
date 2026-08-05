@@ -214,7 +214,18 @@ backlog が空、または全部 `blocked` のときは**調査タスクを自�
   （issue #56, 2026-08-04 21:38:00。coder-postgres の patch 更新(#92)で、Coder 自身が作業を観測する経路である
   という観点が PR 本文に無かった指摘）
 - 手元で検証できることは push 前に検証する（`kustomize build --enable-helm <dir>`、`terraform fmt -check` 等）。
-  ツールが無ければ CI に任せてよい。**`kubectl` は使わない**（[§5.1](#51-権限プロンプトを踏まない)）
+  ツールが無ければ CI に任せてよい。**この行は §5.1（旧・クラウド定期実行サンドボックス）の記述に基づき
+  `kubectl` 不使用としていたが、§5.5（クラスタ内常駐, 2026-08-05〜）以降は read-only の `kubectl` が
+  実際に動く。** merge・ArgoCD sync 後に Job の実行結果などを直接確認するのに使ってよい。書き込み系
+  操作（`apply`/`delete`/`patch`/`exec`/`cp`）が禁止なのは変わらない（[§5](#5-触ってはいけないもの)）
+- **内容が変わりうる Job リソース（検証用 Job など、同じ名前のまま再実行・再検証するもの）には、
+  最初から `argocd.argoproj.io/sync-options: Force=true,Replace=true` を付けておく。** Job の
+  `.spec.template` は Kubernetes 側で不変フィールドのため、通常の apply では2回目以降の変更が
+  `field is immutable` で失敗し ArgoCD が `OutOfSync` のまま固まる。`Replace=true` 単体は
+  `kubectl replace` の PUT セマンティクスのままで同じ検証に引っかかるため、`Force=true` を
+  併用して delete→re-create させる必要がある（ArgoCD 公式ドキュメント sync-options で確認）。
+  この問題は T-0108 と T-0111（run #75, #250-#254）で2回独立に踏んでおり、後付けで気づくたびに
+  1 起動分の待ち時間（ArgoCD の sync 検出込みで数分）を無駄にしている
 - **PR 本文に「残った不確実性」（実機で確認できていない点）を書いたら、同じ PR で backlog にも軽量な
   確認待ちタスクとして起票する**（`status: needs-human`, `kind: investigate`, risk はその不確実性自体の
   リスクに合わせる）。PR 本文の中に埋もれさせない。実機で確認できた（人間や構築セッションからの報告を
