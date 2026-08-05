@@ -4,7 +4,14 @@
     python3 ops/dashboard/build.py
 
 出力: ops/dashboard/index.html （Artifact として publish される）
-標準ライブラリのみ。入力が同じなら出力も同じ（決定的）。
+
+設計方針:
+  - 主役は「人間が何をすればいいか」と「何が動いているか」。個々のタスクは既定で隠す
+  - 数はすべてこのファイルが backlog.json から数える。文章側で数えない（食い違いの元）
+  - PC では 2 カラム、狭い画面では 1 カラム
+  - 依存関係・進捗・時間推移は図で示す
+
+標準ライブラリのみ。入力が同じなら出力も同じ（生成時刻を除く）。
 """
 
 from __future__ import annotations
@@ -15,19 +22,41 @@ import pathlib
 import re
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 
 OPS = pathlib.Path(__file__).resolve().parent.parent
 ROOT = OPS.parent
 OUT = OPS / "dashboard" / "index.html"
 
-# 人間が読む面は JST で表示する（内部データは UTC のまま、CHARTER §7.2）
-JST = timezone(timedelta(hours=9))
-
 E = html.escape
-
-# PR 一覧を取得できずキャッシュにフォールバックしたときの記録
 STALE: dict[str, str] = {}
+
+STATUS_META = {
+    "todo": ("待ち", "idle"),
+    "in_progress": ("作業中", "sig"),
+    "blocked": ("詰まり", "warn"),
+    "needs-human": ("あなた待ち", "crit"),
+    "done": ("完了", "ok"),
+    "dropped": ("取り下げ", "idle"),
+}
+
+# 大きい粒度の「流れ」。色は識別のみを担う（dataviz 参照パレット先頭6スロット、light/dark 検証済み）。
+# light では一部が対サーフェス 3:1 未満のため、必ず可視ラベルを併記して色だけに頼らない。
+STREAMS = [
+    ("kiki", "器をつくる", ("meta", "feature"), "自律運用の土台そのもの"),
+    ("kenshou", "検証を固める", ("ci",), "壊れた変更を機械的に止める"),
+    ("tsuijuu", "版に追従する", ("upgrade",), "依存を塩漬けにしない"),
+    ("seiri", "食い違いを直す", ("refactor", "docs"), "記録と実態のずれを潰す"),
+    ("anzen", "安全を上げる", ("security",), "秘密と権限の扱い"),
+    ("chousa", "観測して探す", ("investigate",), "見えていないものを見る"),
+]
+KIND_TO_STREAM = {k: s[0] for s in STREAMS for k in s[2]}
+OTHER_STREAM = ("other", "運用記録", (), "journal とダッシュボード")
+ALL_STREAMS = STREAMS + [OTHER_STREAM]
+
+
+def stream_of(task: dict) -> str:
+    return task.get("stream") or KIND_TO_STREAM.get(task.get("kind", ""), "other")
 
 
 def load(name: str, default=None):
@@ -37,7 +66,21 @@ def load(name: str, default=None):
     return json.loads(p.read_text())
 
 
-MERGED_LIMIT = 60  # 取得上限。到達したら件数表示に "+" を付けて頭打ちを隠さない
+def load_health() -> dict | None:
+    """homelab から書き戻された健全性レポート（別ブランチにある）。"""
+    for ref in ("origin/ops-health-report", "ops-health-report"):
+        try:
+            out = subprocess.run(
+                ["git", "show", f"{ref}:ops/health/latest.json"],
+                cwd=ROOT, capture_output=True, text=True, timeout=30, check=True,
+            ).stdout
+            return json.loads(out)
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+MERGED_LIMIT = 60
 
 
 def _gh_prs(state: str, fields: str, limit: int) -> list[dict]:
@@ -49,7 +92,6 @@ def _gh_prs(state: str, fields: str, limit: int) -> list[dict]:
 
 
 def fetch_prs() -> tuple[list[dict], list[dict]]:
-    """(オープン PR, 最近マージされた PR)。gh が使えなければキャッシュにフォールバックする。"""
     cache = OPS / "dashboard" / "prs.json"
     try:
         data = {
@@ -59,54 +101,35 @@ def fetch_prs() -> tuple[list[dict], list[dict]]:
         cache.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
         return data["open"], data["merged"]
     except Exception as e:  # noqa: BLE001
-        # 取得できないこと自体は異常ではない（gh が無い実行環境がある）。
-        # まずいのは黙ってキャッシュを出すこと。人間には最新に見えて実際は古い。
         print(f"warning: PR 一覧を取得できずキャッシュを使う ({e})", file=sys.stderr)
         STALE["reason"] = str(e)[:100]
         if cache.exists():
             STALE["at"] = datetime.fromtimestamp(cache.stat().st_mtime, timezone.utc).isoformat()
-        if not cache.exists():
-            return [], []
-        data = json.loads(cache.read_text())
-        if isinstance(data, list):  # 旧フォーマット
-            return data, []
-        return data.get("open", []), data.get("merged", [])
-
-
-def ci_state(pr: dict) -> tuple[str, str]:
-    rollup = pr.get("statusCheckRollup") or []
-    if not rollup:
-        return "idle", "CI 未実行"
-    concl = [c.get("conclusion") or c.get("state") or "" for c in rollup]
-    if any(c in ("FAILURE", "ERROR", "TIMED_OUT", "CANCELLED") for c in concl):
-        return "crit", "CI 失敗"
-    if any(c in ("", "PENDING", "IN_PROGRESS", "QUEUED", "EXPECTED") for c in concl):
-        return "warn", "CI 実行中"
-    return "ok", "CI green"
+            data = json.loads(cache.read_text())
+            if isinstance(data, list):
+                return data, []
+            return data.get("open", []), data.get("merged", [])
+        return [], []
 
 
 def parse_journal() -> list[dict]:
-    """journal の見出しを新しい順に拾う。"""
     entries = []
     for f in sorted((OPS / "journal").glob("*.md"), reverse=True):
-        text = f.read_text()
-        blocks = re.split(r"^## ", text, flags=re.M)[1:]
-        for b in blocks:
+        for b in re.split(r"^## ", f.read_text(), flags=re.M)[1:]:
             head, _, body = b.partition("\n")
-            entries.append({"head": head.strip(), "body": body.strip(), "file": f.name})
+            entries.append({"head": head.strip(), "body": body.strip()})
     return entries
 
 
-def rel_time(iso: str | None) -> str:
+def rel_time(iso) -> str:
     if not iso:
         return "—"
     try:
-        t = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+        t = datetime.fromisoformat(str(iso).replace("Z", "+00:00"))
     except ValueError:
-        return iso
+        return str(iso)
     s = int((datetime.now(timezone.utc) - t).total_seconds())
     if s < 0:
-        # 記録側が実際より先の時刻を書くことがある。負の「◯分前」は読み手を混乱させる
         return "たった今"
     if s < 3600:
         return f"{s // 60} 分前"
@@ -115,644 +138,710 @@ def rel_time(iso: str | None) -> str:
     return f"{s // 86400} 日前"
 
 
-# ---------------------------------------------------------------- rendering
-
-# 大きい粒度の「流れ」。kind から導く（タスクに stream があればそれを優先）。
-# 色は dataviz 参照パレットの先頭 6 スロットを固定順で使用（light/dark とも検証済み）。
-# light の一部が 3:1 未満のため、識別は必ず可視ラベルで担保する（色だけに頼らない）。
-STREAMS = [
-    ("kiki",   "器をつくる",   ("meta", "feature"),        "#2a78d6", "#3987e5"),
-    ("kenshou", "検証を固める", ("ci",),                    "#eb6834", "#d95926"),
-    ("tsuijuu", "版に追従する", ("upgrade",),               "#1baf7a", "#199e70"),
-    ("seiri",  "食い違いを直す", ("refactor", "docs"),       "#eda100", "#c98500"),
-    ("anzen",  "安全を上げる",  ("security",),              "#e87ba4", "#d55181"),
-    ("chousa", "観測して探す",  ("investigate",),           "#008300", "#008300"),
-]
-KIND_TO_STREAM = {k: s[0] for s in STREAMS for k in s[2]}
-STREAM_BY_ID = {s[0]: s for s in STREAMS}
-OTHER_STREAM = ("other", "運用記録", (), "#6a7382", "#8e97a7")
+def ci_state(pr: dict) -> tuple[str, str]:
+    rollup = pr.get("statusCheckRollup") or []
+    if not rollup:
+        return "idle", "CI 未実行"
+    c = [x.get("conclusion") or x.get("state") or "" for x in rollup]
+    if any(v in ("FAILURE", "ERROR", "TIMED_OUT", "CANCELLED") for v in c):
+        return "crit", "CI 失敗"
+    if any(v in ("", "PENDING", "IN_PROGRESS", "QUEUED", "EXPECTED") for v in c):
+        return "warn", "CI 実行中"
+    return "ok", "CI green"
 
 
-def stream_of(task: dict) -> str:
-    return task.get("stream") or KIND_TO_STREAM.get(task.get("kind", ""), "other")
-
-
-RISK_LABEL = {"low": "低", "medium": "中", "high": "高"}
-STATUS_META = {
-    # status: (表示名, 意味色)
-    "todo": ("待ち", "idle"),
-    "in_progress": ("作業中", "sig"),
-    "blocked": ("詰まり", "warn"),
-    "needs-human": ("要対応", "crit"),
-    "done": ("完了", "ok"),
-    "dropped": ("取り下げ", "idle"),
-}
-KIND_LABEL = {
-    "ci": "CI", "upgrade": "更新", "refactor": "整理", "docs": "記録",
-    "feature": "機能", "investigate": "調査", "security": "安全", "meta": "自己点検",
-}
+def human_bytes(n) -> str:
+    try:
+        n = float(n)
+    except (TypeError, ValueError):
+        return "—"
+    for u in ("B", "KiB", "MiB", "GiB", "TiB"):
+        if n < 1024 or u == "TiB":
+            return f"{n:.0f} B" if u == "B" else f"{n:.1f} {u}"
+        n /= 1024
+    return "—"
 
 
 def chip(text: str, tone: str) -> str:
     return f'<span class="chip chip--{tone}">{E(text)}</span>'
 
 
-def task_row(t: dict) -> str:
-    label, tone = STATUS_META.get(t["status"], (t["status"], "idle"))
-    refs = "".join(f"<code>{E(r)}</code>" for r in t.get("refs", [])[:3])
-    pr = t.get("pr")
-    pr_html = f' <a class="prlink" href="{E(str(pr))}">PR</a>' if pr else ""
-    note = t.get("needs_human_reason") or t.get("blocked_by") or ""
-    note_html = f'<p class="task__note">{E(note)}</p>' if note else ""
-    return f"""
-      <li class="task task--{tone}">
-        <div class="task__head">
-          <span class="task__id">{E(t['id'])}</span>
-          <h3 class="task__title">{E(t['title'])}{pr_html}</h3>
-        </div>
-        <p class="task__why">{E(t.get('why',''))}</p>
-        {note_html}
-        <div class="task__meta">
-          {chip(label, tone)}
-          {chip(KIND_LABEL.get(t.get('kind',''), t.get('kind','')), 'quiet')}
-          {chip('リスク ' + RISK_LABEL.get(t.get('risk',''), '?'), 'quiet')}
-          <span class="task__refs">{refs}</span>
-        </div>
-      </li>"""
+def bar(segments, total: int) -> str:
+    if not total:
+        return ""
+    out = []
+    for n, tone, label in segments:
+        if not n:
+            continue
+        out.append(f'<span class="seg seg--{tone}" style="width:{n / total * 100:.4f}%" '
+                   f'title="{E(label)} {n} 件"></span>')
+    return f'<span class="bar">{"".join(out)}</span>'
 
 
-def pr_row(p: dict) -> str:
-    tone, ci_label = ci_state(p)
-    auto = "auto-merge 予約済" if p.get("autoMergeRequest") else "手動マージ待ち"
-    draft = " · draft" if p.get("isDraft") else ""
-    return f"""
-      <li class="pr pr--{tone}">
-        <a class="pr__title" href="{E(p['url'])}">#{p['number']} {E(p['title'])}</a>
-        <div class="task__meta">
-          {chip(ci_label, tone)}
-          {chip(auto, 'quiet')}
-          <span class="pr__age">{E(rel_time(p.get('createdAt')))}{E(draft)}</span>
-        </div>
-      </li>"""
+def _blocked_ids(t: dict):
+    return re.findall(r"T-\d{4}", str(t.get("blocked_by", "")))
 
 
-def done_row(p: dict) -> str:
-    return f"""
-      <li class="done">
-        <a class="done__title" href="{E(p['url'])}">{E(p['title'])}</a>
-        <span class="done__meta">#{p['number']} · {E(rel_time(p.get('mergedAt')))}</span>
-      </li>"""
+def render_asks(tasks):
+    asks = [t for t in tasks if t["status"] == "needs-human"]
+    if not asks:
+        return ('<li><p class="empty">いまお願いしたいことはありません。'
+                'autopilot が自分で進められる状態です。</p></li>', 0)
+    blocked = [t for t in tasks if t["status"] == "blocked"]
 
+    def unblocks(tid):
+        direct = [b for b in blocked if tid in _blocked_ids(b)]
+        indirect = []
+        for d in direct:
+            indirect += [b for b in blocked
+                         if d["id"] in _blocked_ids(b) and b not in direct and b not in indirect]
+        return direct + indirect
 
-
-def render_streams(tasks: list[dict]) -> str:
-    """ストリームごとの現在地。色は識別（点）、状態は意味色（帯）に分けて担う。"""
-    order = ["todo", "in_progress", "blocked", "needs-human", "done", "dropped"]
     rows = []
-    for sid, label, _kinds, _lc, _dc in STREAMS + [OTHER_STREAM]:
+    for t in sorted(asks, key=lambda x: (-len(unblocks(x["id"])), x.get("priority", 999))):
+        un = unblocks(t["id"])
+        ha = t.get("human_action") or {}
+        why = ha.get("why") or t.get("needs_human_reason") or t.get("why", "")
+        steps = ha.get("steps") or []
+        links = ha.get("links") or []
+        effect = (f'<span class="ask__effect">これが済むと <b>{len(un)} 件</b>が動き出します</span>'
+                  if un else '<span class="ask__effect ask__effect--none">他を止めてはいません</span>')
+        if steps:
+            steps_html = ('<details class="ask__steps"><summary>手順を開く'
+                          f'（{len(steps)} ステップ）</summary><ol>'
+                          + "".join(f"<li>{s}</li>" for s in steps) + "</ol></details>")
+        else:
+            steps_html = ('<p class="ask__nosteps">手順が未整理です。autopilot に '
+                          '<code>human_action.steps</code> を書かせてください。</p>')
+        links_html = ("<p class=\"ask__links\">" + " ".join(
+            f'<a href="{E(l["url"])}">{E(l["label"])}</a>' for l in links) + "</p>") if links else ""
+        unlist = ""
+        if un:
+            unlist = ('<p class="ask__unblocks">解けるもの: '
+                      + "、".join(E(b["title"][:24]) for b in un[:4])
+                      + (f"　ほか {len(un) - 4} 件" if len(un) > 4 else "") + "</p>")
+        rows.append(f"""
+      <li class="ask">
+        <div class="ask__head"><span class="ask__id">{E(t['id'])}</span>
+          <h3 class="ask__title">{E(ha.get('summary') or t['title'])}</h3></div>
+        {effect}
+        <p class="ask__why">{E(why)}</p>
+        {steps_html}{links_html}{unlist}
+      </li>""")
+    return "".join(rows), len(asks)
+
+
+def render_chain(tasks):
+    blocked = [t for t in tasks if t["status"] == "blocked"]
+    asks = [t for t in tasks if t["status"] == "needs-human"]
+    if not blocked:
+        return '<p class="empty">詰まっているものはありません。</p>'
+    roots = []
+    for a in asks:
+        direct = [b for b in blocked if a["id"] in _blocked_ids(b)]
+        if direct:
+            roots.append((a, direct))
+    if not roots:
+        return '<p class="empty">人間待ちが原因の詰まりはありません。</p>'
+    cols = []
+    for a, direct in sorted(roots, key=lambda x: -len(x[1])):
+        mids = []
+        total = len(direct)
+        for d in direct:
+            kids = [b for b in blocked if d["id"] in _blocked_ids(b)]
+            total += len(kids)
+            leaves = "".join(f'<span class="chain__leaf">{E(k["title"][:28])}</span>' for k in kids)
+            mids.append(f'<div class="chain__mid"><span class="chain__node chain__node--blocked">'
+                        f'{E(d["title"][:34])}</span>'
+                        + (f'<div class="chain__leaves">{leaves}</div>' if kids else "") + "</div>")
+        ha = a.get("human_action") or {}
+        cols.append(f"""
+      <div class="chain">
+        <div class="chain__root"><span class="chain__badge">あなた</span>
+          <span class="chain__node chain__node--ask">{E(ha.get('summary') or a['title'][:34])}</span>
+          <span class="chain__count">→ {total} 件が解ける</span></div>
+        <div class="chain__mids">{''.join(mids)}</div>
+      </div>""")
+    return f'<div class="chains">{"".join(cols)}</div>'
+
+
+def render_projects(tasks):
+    rows = []
+    for sid, label, _k, blurb in ALL_STREAMS:
         mine = [t for t in tasks if stream_of(t) == sid]
         if not mine:
             continue
-        counts = {k: sum(1 for t in mine if t["status"] == k) for k in order}
-        live = counts["todo"] + counts["in_progress"] + counts["blocked"] + counts["needs-human"]
+        c = {k: sum(1 for t in mine if t["status"] == k) for k in STATUS_META}
         total = len(mine)
-        segs = []
-        for k in order:
-            if not counts[k]:
-                continue
-            tone = STATUS_META.get(k, (k, "idle"))[1]
-            pct = counts[k] / total * 100
-            segs.append(
-                f'<span class="seg seg--{tone}" style="width:{pct:.4f}%" '
-                f'title="{E(STATUS_META[k][0])} {counts[k]} 件"></span>'
-            )
-        detail = " / ".join(f"{STATUS_META[k][0]} {counts[k]}" for k in order if counts[k])
+        live = c["todo"] + c["in_progress"] + c["blocked"] + c["needs-human"]
+        segs = [(c["done"], "ok", "完了"), (c["dropped"], "idle", "取り下げ"),
+                (c["in_progress"], "sig", "作業中"), (c["todo"], "idle", "待ち"),
+                (c["blocked"], "warn", "詰まり"), (c["needs-human"], "crit", "あなた待ち")]
+        state = ("完了" if not live else f"あなた待ち {c['needs-human']}" if c["needs-human"]
+                 else f"詰まり {c['blocked']}" if c["blocked"] else f"進行中 {live}")
+        tone = ("ok" if not live else "crit" if c["needs-human"]
+                else "warn" if c["blocked"] else "sig")
         rows.append(f"""
-      <li class="stream">
-        <span class="stream__dot stream__dot--{sid}" aria-hidden="true"></span>
-        <span class="stream__name">{E(label)}</span>
-        <span class="stream__bar">{''.join(segs)}</span>
-        <span class="stream__n">{total}<span class="stream__live">{f' / 残 {live}' if live else ' / 完'}</span></span>
-        <span class="stream__detail">{E(detail)}</span>
-      </li>""")
-    return "".join(rows) or '<li class="empty">まだタスクがありません。</li>'
+      <li class="proj"><span class="proj__dot proj__dot--{sid}" aria-hidden="true"></span>
+        <div class="proj__body">
+          <div class="proj__head"><h3>{E(label)}</h3>{chip(state, tone)}</div>
+          <p class="proj__blurb">{E(blurb)}</p>
+          {bar(segs, total)}
+          <p class="proj__n">{c['done']} / {total} 完了</p>
+        </div></li>""")
+    return "".join(rows)
 
 
-def render_gantt(tasks: list[dict], merged: list[dict], runs: list[dict]) -> str:
-    """起動ごとの成果を時間軸に並べる。行＝ストリーム、印＝main に入った PR。"""
+def render_health(h):
+    if not h:
+        return ('<p class="empty">homelab からの状態がまだ届いていません。'
+                '<code>ops-health-report</code> ブランチを確認してください。</p>')
+    apps = h.get("applications", []) or []
+    bad = [a for a in apps if a.get("sync") != "Synced" or a.get("health") != "Healthy"]
+    issues = h.get("pod_issues", []) or []
+    nodes = h.get("nodes") or []
+    nm = h.get("node_metrics") or []
+    node_html = ""
+    if nodes:
+        cap = (nodes[0].get("capacity") or {})
+
+        def ki(v):
+            try:
+                return int(str(v).replace("Ki", "")) * 1024
+            except (TypeError, ValueError):
+                return 0
+
+        mem_cap, disk_cap = ki(cap.get("memory")), ki(cap.get("ephemeral-storage"))
+        try:
+            cpu_cap = float(cap.get("cpu") or 0)
+        except (TypeError, ValueError):
+            cpu_cap = 0.0
+        mem_used = ki(nm[0].get("memory")) if nm else 0
+        try:
+            cpu_used = int(str(nm[0]["cpu"]).replace("n", "")) / 1e9 if nm else 0.0
+        except (TypeError, ValueError, KeyError):
+            cpu_used = 0.0
+        pvc_bytes = 0
+        for grp in h.get("pvc_usage") or []:
+            for u in (grp.get("usage") or []):
+                try:
+                    pvc_bytes += int(u.get("bytes") or 0)
+                except (TypeError, ValueError):
+                    pass
+
+        def meter(label, used, cap_, extra):
+            pct = (used / cap_ * 100) if cap_ else 0
+            tone = "crit" if pct > 85 else "warn" if pct > 70 else "ok"
+            return (f'<div class="meter"><div class="meter__top"><span>{E(label)}</span>'
+                    f'<span class="meter__v">{E(extra)}</span></div>'
+                    f'<span class="meter__track"><span class="meter__fill meter__fill--{tone}" '
+                    f'style="width:{min(pct, 100):.1f}%"></span></span></div>')
+
+        node_html = (meter("CPU", cpu_used, cpu_cap, f"{cpu_used:.2f} / {cpu_cap:.0f} コア")
+                     + meter("メモリ", mem_used, mem_cap,
+                             f"{human_bytes(mem_used)} / {human_bytes(mem_cap)}")
+                     + meter("アプリのデータ", pvc_bytes, disk_cap,
+                             f"{human_bytes(pvc_bytes)} / {human_bytes(disk_cap)}"))
+    issue_html = ""
+    if issues:
+        issue_html = ('<details class="hl__issues"><summary>再起動の多い Pod '
+                      f'{len(issues)} 件</summary><ul>'
+                      + "".join(f'<li>{E(str(p.get("namespace", "")))}/'
+                                f'{E(str(p.get("name", ""))[:32])} '
+                                f'<span>{E(str(p.get("restarts", "?")))} 回</span></li>'
+                                for p in issues[:10]) + "</ul></details>")
+    return (f'<p class="hl__apps">'
+            f'{chip(f"アプリ {len(apps) - len(bad)}/{len(apps)} 正常", "ok" if not bad else "crit")}'
+            f'<span class="hl__at">{E(rel_time(h.get("generated_at")))}の状態</span></p>'
+            f"{node_html}{issue_html}")
+
+
+def render_gantt(tasks, merged, runs):
     pr2stream = {}
     for t in tasks:
         if t.get("pr"):
-            pr2stream[int(t["pr"])] = stream_of(t)
-
+            try:
+                pr2stream[int(t["pr"])] = stream_of(t)
+            except (TypeError, ValueError):
+                pass
     marks = []
     for p in merged:
         ts = p.get("mergedAt")
         if not ts:
             continue
         try:
-            when = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+            marks.append((datetime.fromisoformat(ts.replace("Z", "+00:00")),
+                          pr2stream.get(p["number"], "other"), p))
         except ValueError:
-            continue
-        marks.append((when, pr2stream.get(p["number"], "other"), p))
+            pass
     if not marks:
         return ""
-
     run_times = []
     for r in runs:
         try:
             run_times.append(datetime.fromisoformat(str(r.get("at", "")).replace("Z", "+00:00")))
         except ValueError:
             pass
-
     t0 = min([m[0] for m in marks] + run_times)
     t1 = datetime.now(timezone.utc)
     span = max((t1 - t0).total_seconds(), 1)
 
-    def x(when) -> float:
-        return max(0.0, min(100.0, (when - t0).total_seconds() / span * 100))
+    def x(w):
+        return max(0.0, min(100.0, (w - t0).total_seconds() / span * 100))
 
-    # 時間目盛り（3 時間ごと）
-    ticks = []
-    step = 3 * 3600
-    first = t0.replace(minute=0, second=0, microsecond=0)
-    cur = first
+    ticks, cur = [], t0.replace(minute=0, second=0, microsecond=0)
     while cur <= t1:
         if cur >= t0:
             ticks.append(f'<span class="gtick" style="left:{x(cur):.3f}%"><i></i>'
-                         f'<em>{cur.astimezone(JST).strftime("%H:%M")}</em></span>')
-        cur = cur.fromtimestamp(cur.timestamp() + step, tz=timezone.utc)
-
-    run_marks = "".join(
-        f'<span class="grun" style="left:{x(w):.3f}%" title="起動 {w.astimezone(JST).strftime("%m-%d %H:%M")} JST"></span>'
-        for w in sorted(run_times)
-    )
-
+                         f'<em>{cur.strftime("%H:%M")}</em></span>')
+        cur = datetime.fromtimestamp(cur.timestamp() + 6 * 3600, tz=timezone.utc)
     lanes = []
-    for sid, label, _k, _lc, _dc in STREAMS + [OTHER_STREAM]:
+    for sid, label, _k, _b in ALL_STREAMS:
         mine = [m for m in marks if m[1] == sid]
         if not mine:
             continue
-        dots = "".join(
-            f'<span class="gmark gmark--{sid}" style="left:{x(w):.3f}%" '
-            f'title="#{p["number"]} {E(p["title"])}（{w.astimezone(JST).strftime("%m-%d %H:%M")} JST）"></span>'
-            for w, _s, p in sorted(mine)
-        )
-        lanes.append(f"""
-        <div class="glane">
-          <span class="glane__label"><span class="stream__dot stream__dot--{sid}" aria-hidden="true"></span>{E(label)}</span>
-          <span class="glane__track">{dots}</span>
-          <span class="glane__n">{len(mine)}</span>
-        </div>""")
-
-    return f"""
-    <div class="gantt">
-      <div class="gantt__runs"><span class="glane__label">起動</span><span class="glane__track">{run_marks}</span><span class="glane__n">{len(run_times)}</span></div>
-      {''.join(lanes)}
-      <div class="gantt__axis"><span class="glane__label"></span><span class="glane__track">{''.join(ticks)}</span><span class="glane__n"></span></div>
-    </div>
-    <p class="lede">印ひとつが main に入った変更 1 件。横位置がマージ時刻（JST）。上段の細い線が起動。</p>"""
+        dots = "".join(f'<span class="gmark gmark--{sid}" style="left:{x(w):.3f}%" '
+                       f'title="#{p["number"]} {E(p["title"])}"></span>'
+                       for w, _s, p in sorted(mine, key=lambda z: z[0]))
+        lanes.append(f'<div class="glane"><span class="glane__label">'
+                     f'<span class="proj__dot proj__dot--{sid}" aria-hidden="true"></span>'
+                     f'{E(label)}</span><span class="glane__track">{dots}</span>'
+                     f'<span class="glane__n">{len(mine)}</span></div>')
+    runs_html = "".join(f'<span class="grun" style="left:{x(w):.3f}%"></span>'
+                        for w in sorted(run_times))
+    return (f'<div class="gantt"><div class="glane gantt__runs">'
+            f'<span class="glane__label">起動</span>'
+            f'<span class="glane__track">{runs_html}</span>'
+            f'<span class="glane__n">{len(run_times)}</span></div>{"".join(lanes)}'
+            f'<div class="glane gantt__axis"><span class="glane__label"></span>'
+            f'<span class="glane__track">{"".join(ticks)}</span>'
+            f'<span class="glane__n"></span></div></div>')
 
 
-def journal_row(e: dict) -> str:
-    lines = [l for l in e["body"].splitlines() if l.strip()]
-    body = "\n".join(lines[:12])
-    # markdown の箇条書きだけ最低限拾う
-    items = [E(re.sub(r"^\s*[-*]\s*", "", l)) for l in body.splitlines() if l.strip().startswith(("-", "*"))]
-    inner = "".join(f"<li>{i}</li>" for i in items) or f"<li>{E(body[:300])}</li>"
-    return f"""
-      <li class="run">
-        <h3 class="run__head">{E(e['head'])}</h3>
-        <ul class="run__body">{inner}</ul>
-      </li>"""
-
-
-def inv_row(t: dict) -> str:
-    pol = {"auto": ("自動可", "ok"), "manual": ("要判断", "warn"), "pinned": ("固定", "idle")}[t["policy"]]
-    mirrors = t.get("mirrors") or []
-    mirror_html = f'<span class="inv__mirror">+{len(mirrors)} 箇所に重複</span>' if mirrors else ""
-    return f"""
-      <tr>
-        <td class="inv__name">{E(t['name'])}{mirror_html}</td>
-        <td><code>{E(str(t['current']))}</code></td>
-        <td class="inv__file"><code>{E(t['file'])}</code></td>
-        <td>{chip(pol[0], pol[1])}</td>
-      </tr>"""
+def render_detail(tasks):
+    rows = []
+    order = {"needs-human": 0, "blocked": 1, "in_progress": 2, "todo": 3, "done": 4, "dropped": 5}
+    for t in sorted(tasks, key=lambda x: (order.get(x["status"], 9), x.get("priority", 999), x["id"])):
+        label, tone = STATUS_META.get(t["status"], (t["status"], "idle"))
+        sid = stream_of(t)
+        sl = next((s[1] for s in ALL_STREAMS if s[0] == sid), sid)
+        pr = (f'<a href="https://github.com/hikuohiku/homelab/pull/{t["pr"]}">#{t["pr"]}</a>'
+              if t.get("pr") else "")
+        note = t.get("needs_human_reason") or t.get("blocked_by") or ""
+        rows.append(f'<tr data-status="{E(t["status"])}">'
+                    f'<td class="dt__id">{E(t["id"])}</td><td>{chip(label, tone)}</td>'
+                    f'<td class="dt__stream">{E(sl)}</td>'
+                    f'<td class="dt__title">{E(t["title"])}'
+                    + (f'<span class="dt__note">{E(str(note)[:110])}</span>' if note else "")
+                    + f'</td><td class="dt__pr">{pr}</td></tr>')
+    return "".join(rows)
 
 
 def build() -> str:
-    state = load("state.json", {})
-    backlog = load("backlog.json", {"tasks": []})
-    inventory = load("inventory.json", {"targets": []})
+    state = load("state.json", {}) or {}
+    backlog = load("backlog.json", {"tasks": []}) or {"tasks": []}
     tasks = backlog["tasks"]
     prs, merged = fetch_prs()
+    health = load_health()
+    runs = state.get("runs", []) or []
     journal = parse_journal()
 
-    by_status = {k: [t for t in tasks if t["status"] == k] for k in STATUS_META}
-    for k in by_status:
-        by_status[k].sort(key=lambda t: t.get("priority", 999))
-
-    runs = state.get("runs", [])
-    last_run = runs[-1] if runs else {}
-    fb = state.get("feedback", {})
-    fb_url = fb.get("url") or "https://github.com/hikuohiku/homelab/issues"
-    routines = state.get("routines", [])
-    # 固定の「次回時刻」は必ず腐るので持たない。間隔だけ見せる
-    cadence = None
-    if routines:
-        r = routines[0]
-        cadence = r.get("cron_human") or r.get("cron")
-
-    failing = [p for p in prs if ci_state(p)[0] == "crit"]
-    # 取得上限に引っかかった件数をそのまま出すと、上限値を実績として見せてしまう
+    counts = {k: sum(1 for t in tasks if t["status"] == k) for k in STATUS_META}
+    asks_html, n_asks = render_asks(tasks)
     auto_merged = [p for p in merged if str(p.get("headRefName", "")).startswith("autopilot/")]
+    last_run = runs[-1] if runs else {}
+    routines = state.get("routines") or []
+    cadence = (routines[0].get("cron_human") or routines[0].get("cron")) if routines else None
+    fb = state.get("feedback", {}) or {}
 
-    # ---- 一番上の要約。人間が朝 5 秒で読む部分
-    def stat(value, label, tone="sig"):
-        return f'<div class="stat stat--{tone}"><span class="stat__v">{E(str(value))}</span><span class="stat__l">{E(label)}</span></div>'
+    alive_tone, alive_text = "idle", "起動の記録がありません"
+    try:
+        gap = (datetime.now(timezone.utc) - datetime.fromisoformat(
+            str(last_run.get("at")).replace("Z", "+00:00"))).total_seconds()
+        alive_tone, alive_text = (("crit", "止まっているかも") if gap > 7200 else
+                                  ("warn", "しばらく動きなし") if gap > 4500 else
+                                  ("ok", "動いています"))
+    except Exception:  # noqa: BLE001
+        pass
 
-    stale_html = ""
-    if STALE:
-        stale_html = (
-            '<p class="stale">PR の一覧を取得できませんでした。下の「やったこと」と'
-            f'「いま動かしているもの」は<strong>{E(rel_time(STALE.get("at")))}のキャッシュ</strong>で、'
-            '現在の状態と違う可能性があります。'
-            f'<span class="stale__why">({E(STALE.get("reason",""))})</span></p>'
-        )
+    stale_html = (f'<p class="stale">PR 一覧を取得できませんでした。表示は'
+                  f'{E(rel_time(STALE.get("at")))}のキャッシュです。</p>') if STALE else ""
 
-    stats = "".join([
-        stat(rel_time(last_run.get("at")), "最終起動"),
-        stat(f"{len(auto_merged)}+" if len(merged) >= MERGED_LIMIT else len(auto_merged),
-             "autopilot が反映した変更", "ok" if auto_merged else "idle"),
-        stat(len(prs), "作業中の PR", "crit" if failing else "sig"),
-        stat(len(by_status["needs-human"]), "あなた待ち", "crit" if by_status["needs-human"] else "idle"),
-    ])
+    runs_html = ""
+    for e in journal[:3]:
+        items = [E(re.sub(r"^\s*[-*]\s*", "", l)) for l in e["body"].splitlines()
+                 if l.strip().startswith(("-", "*"))][:4]
+        runs_html += (f'<li class="run"><h4>{E(e["head"][:44])}</h4><ul>'
+                      + "".join(f"<li>{i[:110]}</li>" for i in items) + "</ul></li>")
 
-    # 人間に渡してよいのは「手が届かない」作業だけ（CHARTER §4）
-    attention_html = (
-        "".join(task_row(t) for t in by_status["needs-human"])
-        if by_status["needs-human"] else
-        '<li class="empty">ありません。手を動かしてほしいことが出たらここに出ます。</li>'
-    )
-
-    queue = by_status["in_progress"] + by_status["todo"] + by_status["blocked"]
-    queue_html = "".join(task_row(t) for t in queue[:12]) or '<li class="empty">キューは空です。次の起動で調査タスクを起票します。</li>'
-    more = f'<p class="more">ほか {len(queue) - 12} 件</p>' if len(queue) > 12 else ""
-
-    prs_html = "".join(pr_row(p) for p in prs) or '<li class="empty">作業中の PR はありません。</li>'
-    runs_html = "".join(journal_row(e) for e in journal[:4]) or '<li class="empty">まだ記録がありません。</li>'
-    done_html = "".join(done_row(p) for p in (auto_merged or merged)[:12]) or '<li class="empty">まだ反映された変更はありません。</li>'
-    inv_html = "".join(inv_row(t) for t in inventory["targets"])
-    streams_html = render_streams(tasks)
-    gantt_html = render_gantt(tasks, merged, runs)
-
-    generated = datetime.now(JST).strftime("%Y-%m-%d %H:%M JST")
-    stage = state.get("vision_stage", "?")
-    stage_label = state.get("vision_stage_label", "")
-    next_html = (f"<span>起動間隔 {E(cadence)}</span>" if cadence
-                 else '<span class="warn-inline">定期実行 未設定</span>')
+    done_html = "".join(
+        f'<li class="done"><a href="{E(p["url"])}">{E(p["title"][:54])}</a>'
+        f'<span>#{p["number"]} · {E(rel_time(p.get("mergedAt")))}</span></li>'
+        for p in (auto_merged or merged)[:8])
 
     return TEMPLATE.format(
-        generated=generated, stage=stage, stage_label=E(stage_label), next_html=next_html,
-        stats=stats, attention=attention_html, queue=queue_html, more=more,
-        prs=prs_html, runs=runs_html, done=done_html, inv=inv_html, stale=stale_html,
-        streams=streams_html, gantt=gantt_html,
-        fb_url=E(fb_url), fb_issue=E(str(fb.get("issue") or "?")),
-        fb_read=E(rel_time(fb.get("last_read"))),
+        generated=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
+        stage=state.get("vision_stage", "?"), stage_label=E(state.get("vision_stage_label", "")),
+        alive_tone=alive_tone, alive_text=E(alive_text),
+        last_run=E(rel_time(last_run.get("at"))), cadence=E(cadence or "定期実行 未設定"),
+        n_asks=n_asks, n_blocked=counts["blocked"], n_done=counts["done"],
+        n_total=len(tasks), n_runs=len(runs),
+        asks=asks_html, chain=render_chain(tasks), projects=render_projects(tasks),
+        health=render_health(health), gantt=render_gantt(tasks, merged, runs),
+        detail=render_detail(tasks), runs=runs_html, done=done_html,
+        fb_url=E(fb.get("url") or "https://github.com/hikuohiku/homelab/issues"),
+        fb_issue=E(str(fb.get("issue") or "?")), fb_read=E(rel_time(fb.get("last_read"))),
+        stale=stale_html,
     )
 
 
-TEMPLATE = """<title>autopilot — 当直記録</title>
+TEMPLATE = """<title>autopilot — homelab 当直記録</title>
 <style>
 :root {{
-  --ground:#eef0f4; --surface:#fbfcfe; --line:#d8dce5; --ink:#161a21; --muted:#5b6473;
-  --sig:#41528c; --sig-soft:#e3e7f4;
-  --ok:#2c6f52; --ok-soft:#dfeee7;
-  --warn:#8a5c0d; --warn-soft:#f6ebd7;
-  --crit:#983737; --crit-soft:#f7e2e2;
+  --ground:#eef0f4; --surface:#fbfcfe; --surface2:#f3f5f9; --line:#d8dce5;
+  --ink:#161a21; --muted:#5b6473;
+  --sig:#41528c; --sig-soft:#e3e7f4; --ok:#2c6f52; --ok-soft:#dfeee7;
+  --warn:#8a5c0d; --warn-soft:#f6ebd7; --crit:#983737; --crit-soft:#f7e2e2;
   --idle:#6a7382; --idle-soft:#e6e9ef;
   --serif: ui-serif, "Iowan Old Style", "Source Serif 4", "Hiragino Mincho ProN", Georgia, serif;
   --sans: ui-sans-serif, system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif;
   --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
-  --radius:3px;
+  --r:4px;
 }}
+.proj__dot--kiki,.gmark--kiki {{ background:#2a78d6; }}
+.proj__dot--kenshou,.gmark--kenshou {{ background:#eb6834; }}
+.proj__dot--tsuijuu,.gmark--tsuijuu {{ background:#1baf7a; }}
+.proj__dot--seiri,.gmark--seiri {{ background:#eda100; }}
+.proj__dot--anzen,.gmark--anzen {{ background:#e87ba4; }}
+.proj__dot--chousa,.gmark--chousa {{ background:#008300; }}
+.proj__dot--other,.gmark--other {{ background:#6a7382; }}
 @media (prefers-color-scheme: dark) {{
   :root {{
-    --ground:#0d0f14; --surface:#151922; --line:#272d3a; --ink:#e6e9f0; --muted:#8e97a7;
-    --sig:#96a6e0; --sig-soft:#1e2439;
-    --ok:#63bd93; --ok-soft:#152a22;
-    --warn:#dcac5e; --warn-soft:#2c2415;
-    --crit:#ef9190; --crit-soft:#2f1c1e;
+    --ground:#0d0f14; --surface:#151922; --surface2:#1b202b; --line:#272d3a;
+    --ink:#e6e9f0; --muted:#8e97a7;
+    --sig:#96a6e0; --sig-soft:#1e2439; --ok:#63bd93; --ok-soft:#152a22;
+    --warn:#dcac5e; --warn-soft:#2c2415; --crit:#ef9190; --crit-soft:#2f1c1e;
     --idle:#8e97a7; --idle-soft:#1c212b;
   }}
+  .proj__dot--kiki,.gmark--kiki {{ background:#3987e5; }}
+  .proj__dot--kenshou,.gmark--kenshou {{ background:#d95926; }}
+  .proj__dot--tsuijuu,.gmark--tsuijuu {{ background:#199e70; }}
+  .proj__dot--seiri,.gmark--seiri {{ background:#c98500; }}
+  .proj__dot--anzen,.gmark--anzen {{ background:#d55181; }}
 }}
 :root[data-theme="dark"] {{
-  --ground:#0d0f14; --surface:#151922; --line:#272d3a; --ink:#e6e9f0; --muted:#8e97a7;
-  --sig:#96a6e0; --sig-soft:#1e2439;
-  --ok:#63bd93; --ok-soft:#152a22;
-  --warn:#dcac5e; --warn-soft:#2c2415;
-  --crit:#ef9190; --crit-soft:#2f1c1e;
+  --ground:#0d0f14; --surface:#151922; --surface2:#1b202b; --line:#272d3a;
+  --ink:#e6e9f0; --muted:#8e97a7;
+  --sig:#96a6e0; --sig-soft:#1e2439; --ok:#63bd93; --ok-soft:#152a22;
+  --warn:#dcac5e; --warn-soft:#2c2415; --crit:#ef9190; --crit-soft:#2f1c1e;
   --idle:#8e97a7; --idle-soft:#1c212b;
 }}
-:root[data-theme="light"] {{
-  --ground:#eef0f4; --surface:#fbfcfe; --line:#d8dce5; --ink:#161a21; --muted:#5b6473;
-  --sig:#41528c; --sig-soft:#e3e7f4;
-  --ok:#2c6f52; --ok-soft:#dfeee7;
-  --warn:#8a5c0d; --warn-soft:#f6ebd7;
-  --crit:#983737; --crit-soft:#f7e2e2;
-  --idle:#6a7382; --idle-soft:#e6e9ef;
-}}
+:root[data-theme="dark"] .proj__dot--kiki,:root[data-theme="dark"] .gmark--kiki{{background:#3987e5}}
+:root[data-theme="dark"] .proj__dot--kenshou,:root[data-theme="dark"] .gmark--kenshou{{background:#d95926}}
+:root[data-theme="dark"] .proj__dot--tsuijuu,:root[data-theme="dark"] .gmark--tsuijuu{{background:#199e70}}
+:root[data-theme="dark"] .proj__dot--seiri,:root[data-theme="dark"] .gmark--seiri{{background:#c98500}}
+:root[data-theme="dark"] .proj__dot--anzen,:root[data-theme="dark"] .gmark--anzen{{background:#d55181}}
 
-/* 埋め込み先のリセット CSS に依存しないための最小限の正規化 */
-*, *::before, *::after {{ box-sizing:border-box; }}
-body, h1, h2, h3, p, ul, ol, li, table, figure {{ margin:0; padding:0; }}
-ul, ol {{ list-style:none; }}
-table {{ border-spacing:0; }}
-
-body {{ background:var(--ground); color:var(--ink); font-family:var(--sans);
-  line-height:1.65; -webkit-font-smoothing:antialiased; }}
-.wrap {{ max-width:1000px; margin:0 auto; padding:2.5rem 1.25rem 5rem;
-  display:flex; flex-direction:column; gap:2.75rem; }}
-
-/* ---- masthead */
-.mast {{ display:flex; flex-direction:column; gap:.6rem;
-  border-bottom:2px solid var(--ink); padding-bottom:1rem; }}
-.mast__row {{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.75rem 1.25rem; }}
-.mast h1 {{ font-family:var(--serif); font-size:clamp(1.7rem,4vw,2.4rem); font-weight:600;
-  letter-spacing:-.01em; text-wrap:balance; }}
-.mast__sub {{ color:var(--muted); font-size:.86rem; font-family:var(--mono);
-  display:flex; flex-wrap:wrap; gap:.4rem 1rem; }}
-.mast__stage {{ color:var(--sig); font-weight:600; }}
-.warn-inline {{ color:var(--crit); font-weight:600; }}
-.stale {{ background:var(--warn-soft); color:var(--warn); border:1px solid var(--warn);
-  border-radius:var(--radius); padding:.6rem .9rem; font-size:.86rem; }}
-.stale__why {{ font-family:var(--mono); font-size:.74rem; opacity:.75; margin-left:.4rem; }}
-
-.stats {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:1px;
-  background:var(--line); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }}
-.stat {{ background:var(--surface); padding:1rem 1.1rem; display:flex; flex-direction:column; gap:.15rem;
-  border-top:3px solid var(--idle); }}
-.stat--sig {{ border-top-color:var(--sig); }}
-.stat--crit {{ border-top-color:var(--crit); }}
-.stat--ok {{ border-top-color:var(--ok); }}
-.stat__v {{ font-family:var(--mono); font-size:1.5rem; font-variant-numeric:tabular-nums;
+*,*::before,*::after {{ box-sizing:border-box; }}
+body,h1,h2,h3,h4,p,ul,ol,li,table,details {{ margin:0; padding:0; }}
+ul,ol {{ list-style:none; }}
+body {{ background:var(--ground); color:var(--ink); font-family:var(--sans); line-height:1.65;
+  -webkit-font-smoothing:antialiased; }}
+.wrap {{ max-width:1180px; margin:0 auto; padding:2rem 1.1rem 4rem;
+  display:flex; flex-direction:column; gap:1.5rem; }}
+a {{ color:var(--sig); }}
+.mast {{ border-bottom:2px solid var(--ink); padding-bottom:.85rem;
+  display:flex; flex-wrap:wrap; align-items:baseline; gap:.5rem 1rem; }}
+.mast h1 {{ font-family:var(--serif); font-size:clamp(1.45rem,3vw,1.95rem); font-weight:600;
+  letter-spacing:-.01em; }}
+.mast__meta {{ font-family:var(--mono); font-size:.76rem; color:var(--muted);
+  display:flex; flex-wrap:wrap; gap:.3rem .9rem; margin-left:auto; }}
+.stats {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(132px,1fr)); gap:1px;
+  background:var(--line); border:1px solid var(--line); border-radius:var(--r); overflow:hidden; }}
+.stat {{ background:var(--surface); padding:.7rem .9rem; display:flex; flex-direction:column;
+  gap:.08rem; border-top:3px solid var(--idle); }}
+.stat--ok{{border-top-color:var(--ok)}} .stat--crit{{border-top-color:var(--crit)}}
+.stat--warn{{border-top-color:var(--warn)}} .stat--sig{{border-top-color:var(--sig)}}
+.stat__v {{ font-family:var(--mono); font-size:1.22rem; font-variant-numeric:tabular-nums;
   letter-spacing:-.02em; }}
-.stat__l {{ font-size:.78rem; color:var(--muted); letter-spacing:.06em; }}
-
-/* ---- sections */
-section {{ display:flex; flex-direction:column; gap:1rem; }}
-h2 {{ font-family:var(--serif); font-size:1.15rem; font-weight:600;
-  display:flex; align-items:baseline; gap:.6rem; }}
+.stat__l {{ font-size:.72rem; color:var(--muted); }}
+.cols {{ display:grid; grid-template-columns:1fr; gap:1.5rem; }}
+@media (min-width:920px) {{ .cols {{ grid-template-columns:1.6fr 1fr; align-items:start; }} }}
+.col {{ display:flex; flex-direction:column; gap:1.5rem; min-width:0; }}
+section {{ display:flex; flex-direction:column; gap:.65rem; }}
+h2 {{ font-family:var(--serif); font-size:1.06rem; font-weight:600;
+  display:flex; align-items:baseline; gap:.5rem; }}
 h2::after {{ content:""; flex:1; height:1px; background:var(--line); }}
-.lede {{ color:var(--muted); font-size:.88rem; margin-top:-.5rem; }}
-
-ul.list {{ list-style:none; display:flex; flex-direction:column; gap:.6rem; }}
-.empty {{ color:var(--muted); font-size:.9rem; background:var(--surface);
-  border:1px dashed var(--line); border-radius:var(--radius); padding:.9rem 1rem; }}
-.more {{ color:var(--muted); font-size:.85rem; }}
-
-/* ---- task */
-.task {{ background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--idle);
-  border-radius:var(--radius); padding:.85rem 1rem; display:flex; flex-direction:column; gap:.4rem; }}
-.task--crit {{ border-left-color:var(--crit); }}
-.task--warn {{ border-left-color:var(--warn); }}
-.task--sig  {{ border-left-color:var(--sig); }}
-.task--ok   {{ border-left-color:var(--ok); }}
-.task__head {{ display:flex; gap:.6rem; align-items:baseline; flex-wrap:wrap; }}
-.task__id {{ font-family:var(--mono); font-size:.78rem; color:var(--muted);
-  font-variant-numeric:tabular-nums; }}
-.task__title {{ font-size:.98rem; font-weight:600; text-wrap:balance; }}
-.task__why {{ font-size:.88rem; color:var(--muted); }}
-.task__note {{ font-size:.85rem; color:var(--crit); background:var(--crit-soft);
-  padding:.4rem .6rem; border-radius:var(--radius); }}
-.task__meta {{ display:flex; flex-wrap:wrap; align-items:center; gap:.4rem; margin-top:.15rem; }}
-.task__refs {{ display:flex; flex-wrap:wrap; gap:.35rem; }}
-
-code {{ font-family:var(--mono); font-size:.76rem; color:var(--muted);
-  background:var(--idle-soft); padding:.1rem .35rem; border-radius:2px; }}
-
-.chip {{ font-size:.73rem; letter-spacing:.04em; padding:.12rem .5rem; border-radius:999px;
+.lede {{ color:var(--muted); font-size:.82rem; margin-top:-.3rem; }}
+.empty {{ color:var(--muted); font-size:.86rem; background:var(--surface);
+  border:1px dashed var(--line); border-radius:var(--r); padding:.8rem .95rem; }}
+.card {{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r); }}
+.chip {{ font-size:.71rem; padding:.08rem .46rem; border-radius:999px;
   background:var(--idle-soft); color:var(--idle); white-space:nowrap; }}
-.chip--ok {{ background:var(--ok-soft); color:var(--ok); }}
-.chip--warn {{ background:var(--warn-soft); color:var(--warn); }}
-.chip--crit {{ background:var(--crit-soft); color:var(--crit); }}
-.chip--sig {{ background:var(--sig-soft); color:var(--sig); }}
-.chip--quiet {{ background:transparent; color:var(--muted); border:1px solid var(--line); }}
-
-/* ---- pr */
-.pr {{ background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--idle);
-  border-radius:var(--radius); padding:.75rem 1rem; display:flex; flex-direction:column; gap:.35rem; }}
-.pr--ok {{ border-left-color:var(--ok); }}
-.pr--warn {{ border-left-color:var(--warn); }}
-.pr--crit {{ border-left-color:var(--crit); }}
-.pr__title {{ font-weight:600; font-size:.95rem; color:var(--ink); text-decoration:none; }}
-.pr__title:hover {{ color:var(--sig); text-decoration:underline; }}
-.pr__age {{ font-size:.78rem; color:var(--muted); font-family:var(--mono); }}
-.prlink {{ font-size:.78rem; font-family:var(--mono); color:var(--sig); }}
-
-
-/* ---- streams / gantt
-   ストリームの色は識別のみを担う（dataviz 参照パレット先頭6スロット、light/dark とも検証済み）。
-   light では一部が 3:1 未満のため、必ず可視ラベルを併記して色だけに頼らない。
-   状態（完了/待ち/詰まり/要対応）は意味色の帯で別に表す。 */
-.stream__dot--kiki,.gmark--kiki {{ background:#2a78d6; }}
-.stream__dot--kenshou,.gmark--kenshou {{ background:#eb6834; }}
-.stream__dot--tsuijuu,.gmark--tsuijuu {{ background:#1baf7a; }}
-.stream__dot--seiri,.gmark--seiri {{ background:#eda100; }}
-.stream__dot--anzen,.gmark--anzen {{ background:#e87ba4; }}
-.stream__dot--chousa,.gmark--chousa {{ background:#008300; }}
-.stream__dot--other,.gmark--other {{ background:#6a7382; }}
-
-.stream {{ display:grid; grid-template-columns:auto minmax(7rem,auto) 1fr auto;
-  grid-template-areas:"dot name bar n" ". detail detail detail";
-  align-items:center; gap:.25rem .6rem;
-  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
-  padding:.6rem .85rem; }}
-.stream__dot {{ grid-area:dot; width:.7rem; height:.7rem; border-radius:2px; display:inline-block; }}
-.stream__name {{ grid-area:name; font-weight:600; font-size:.92rem; }}
-.stream__bar {{ grid-area:bar; display:flex; gap:2px; height:.55rem; min-width:5rem; }}
+.chip--ok{{background:var(--ok-soft);color:var(--ok)}}
+.chip--warn{{background:var(--warn-soft);color:var(--warn)}}
+.chip--crit{{background:var(--crit-soft);color:var(--crit)}}
+.chip--sig{{background:var(--sig-soft);color:var(--sig)}}
+code {{ font-family:var(--mono); font-size:.75rem; background:var(--idle-soft);
+  padding:.06rem .3rem; border-radius:2px; }}
+.bar {{ display:flex; gap:2px; height:.48rem; }}
 .seg {{ display:block; border-radius:2px; min-width:3px; }}
-.seg--ok {{ background:var(--ok); }} .seg--idle {{ background:var(--idle); }}
-.seg--warn {{ background:var(--warn); }} .seg--crit {{ background:var(--crit); }}
-.seg--sig {{ background:var(--sig); }}
-.stream__n {{ grid-area:n; font-family:var(--mono); font-size:.82rem; font-variant-numeric:tabular-nums; }}
-.stream__live {{ color:var(--muted); font-size:.74rem; }}
-.stream__detail {{ grid-area:detail; font-size:.74rem; color:var(--muted); font-family:var(--mono); }}
-
-.gantt {{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
-  padding:.85rem 1rem; display:flex; flex-direction:column; gap:.35rem; overflow-x:auto; }}
-.glane, .gantt__runs, .gantt__axis {{ display:grid; grid-template-columns:9.5rem 1fr 2.2rem;
-  align-items:center; gap:.6rem; min-width:34rem; }}
-.glane__label {{ font-size:.8rem; display:flex; align-items:center; gap:.4rem; white-space:nowrap; }}
-.glane__track {{ position:relative; height:1.05rem; border-left:1px solid var(--line);
-  border-right:1px solid var(--line); }}
-.glane__track::before {{ content:""; position:absolute; inset:50% 0 auto 0; height:1px; background:var(--line); }}
-.glane__n {{ font-family:var(--mono); font-size:.74rem; color:var(--muted); text-align:right;
+.seg--ok{{background:var(--ok)}} .seg--idle{{background:var(--idle)}}
+.seg--warn{{background:var(--warn)}} .seg--crit{{background:var(--crit)}} .seg--sig{{background:var(--sig)}}
+.asks {{ display:flex; flex-direction:column; gap:.65rem; }}
+.ask {{ background:var(--surface); border:1px solid var(--crit); border-left:4px solid var(--crit);
+  border-radius:var(--r); padding:.85rem .95rem; display:flex; flex-direction:column; gap:.4rem; }}
+.ask__head {{ display:flex; gap:.45rem; align-items:baseline; flex-wrap:wrap; }}
+.ask__id {{ font-family:var(--mono); font-size:.73rem; color:var(--muted); }}
+.ask__title {{ font-size:.99rem; font-weight:600; text-wrap:balance; }}
+.ask__effect {{ font-size:.8rem; color:var(--crit); background:var(--crit-soft);
+  align-self:flex-start; padding:.12rem .55rem; border-radius:var(--r); }}
+.ask__effect--none {{ color:var(--muted); background:var(--idle-soft); }}
+.ask__why {{ font-size:.85rem; color:var(--muted); }}
+.ask__steps summary {{ cursor:pointer; font-size:.84rem; font-weight:600; color:var(--sig);
+  padding:.25rem 0; }}
+.ask__steps ol {{ list-style:decimal; padding-left:1.35rem; display:flex; flex-direction:column;
+  gap:.35rem; font-size:.86rem; margin-top:.25rem; }}
+.ask__steps li::marker {{ color:var(--muted); font-family:var(--mono); font-size:.78rem; }}
+.ask__nosteps {{ font-size:.81rem; color:var(--warn); }}
+.ask__links a {{ font-size:.81rem; margin-right:.8rem; }}
+.ask__unblocks {{ font-size:.75rem; color:var(--muted); }}
+.chains {{ display:flex; flex-direction:column; gap:.7rem; }}
+.chain {{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+  padding:.75rem .85rem; display:flex; flex-direction:column; gap:.45rem; overflow-x:auto; }}
+.chain__root {{ display:flex; align-items:center; gap:.45rem; flex-wrap:wrap; }}
+.chain__badge {{ font-size:.67rem; background:var(--crit); color:var(--surface);
+  padding:.06rem .45rem; border-radius:999px; }}
+.chain__node {{ font-size:.83rem; padding:.24rem .55rem; border-radius:var(--r);
+  border:1px solid var(--line); background:var(--surface2); }}
+.chain__node--ask {{ border-color:var(--crit); background:var(--crit-soft); color:var(--crit);
+  font-weight:600; }}
+.chain__node--blocked {{ border-color:var(--warn); background:var(--warn-soft); color:var(--warn); }}
+.chain__count {{ font-size:.77rem; color:var(--muted); font-family:var(--mono); }}
+.chain__mids {{ display:flex; flex-direction:column; gap:.35rem; padding-left:1rem;
+  border-left:2px solid var(--line); margin-left:.45rem; }}
+.chain__mid {{ display:flex; flex-direction:column; gap:.25rem; }}
+.chain__leaves {{ display:flex; flex-wrap:wrap; gap:.25rem; padding-left:1rem; }}
+.chain__leaf {{ font-size:.74rem; color:var(--muted); background:var(--idle-soft);
+  padding:.12rem .42rem; border-radius:var(--r); }}
+.projs {{ display:flex; flex-direction:column; gap:.5rem; }}
+.proj {{ display:flex; gap:.55rem; background:var(--surface); border:1px solid var(--line);
+  border-radius:var(--r); padding:.65rem .85rem; }}
+.proj__dot {{ width:.58rem; height:.58rem; border-radius:2px; margin-top:.42rem; flex:none; }}
+.proj__body {{ flex:1; display:flex; flex-direction:column; gap:.25rem; min-width:0; }}
+.proj__head {{ display:flex; align-items:baseline; gap:.45rem; flex-wrap:wrap; }}
+.proj__head h3 {{ font-size:.92rem; font-weight:600; }}
+.proj__blurb {{ font-size:.77rem; color:var(--muted); }}
+.proj__n {{ font-size:.73rem; color:var(--muted); font-family:var(--mono);
   font-variant-numeric:tabular-nums; }}
-.gmark {{ position:absolute; top:50%; transform:translate(-50%,-50%); width:7px; height:11px;
+.hl__apps {{ display:flex; align-items:center; gap:.45rem; flex-wrap:wrap; }}
+.hl__at {{ font-size:.74rem; color:var(--muted); font-family:var(--mono); }}
+.meter {{ display:flex; flex-direction:column; gap:.15rem; margin-top:.5rem; }}
+.meter__top {{ display:flex; justify-content:space-between; font-size:.79rem; gap:.5rem; }}
+.meter__v {{ font-family:var(--mono); font-size:.74rem; color:var(--muted);
+  font-variant-numeric:tabular-nums; }}
+.meter__track {{ height:.42rem; background:var(--idle-soft); border-radius:999px; overflow:hidden; }}
+.meter__fill {{ display:block; height:100%; border-radius:999px; }}
+.meter__fill--ok{{background:var(--ok)}} .meter__fill--warn{{background:var(--warn)}}
+.meter__fill--crit{{background:var(--crit)}}
+.hl__issues summary {{ cursor:pointer; font-size:.79rem; color:var(--muted); margin-top:.55rem; }}
+.hl__issues ul {{ font-size:.76rem; color:var(--muted); font-family:var(--mono);
+  display:flex; flex-direction:column; gap:.12rem; margin-top:.25rem; }}
+.gantt {{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+  padding:.7rem .85rem; display:flex; flex-direction:column; gap:.28rem; overflow-x:auto; }}
+.glane {{ display:grid; grid-template-columns:8.2rem 1fr 1.9rem; align-items:center; gap:.5rem;
+  min-width:28rem; }}
+.glane__label {{ font-size:.77rem; display:flex; align-items:center; gap:.3rem; white-space:nowrap; }}
+.glane__track {{ position:relative; height:.95rem; border-left:1px solid var(--line);
+  border-right:1px solid var(--line); }}
+.glane__track::before {{ content:""; position:absolute; inset:50% 0 auto 0; height:1px;
+  background:var(--line); }}
+.glane__n {{ font-family:var(--mono); font-size:.71rem; color:var(--muted); text-align:right; }}
+.gmark {{ position:absolute; top:50%; transform:translate(-50%,-50%); width:6px; height:10px;
   border-radius:2px; box-shadow:0 0 0 2px var(--surface); }}
 .grun {{ position:absolute; top:2px; bottom:2px; width:2px; transform:translateX(-50%);
-  background:var(--muted); opacity:.5; border-radius:1px; }}
-.gantt__axis .glane__track {{ height:1.1rem; border:none; }}
+  background:var(--muted); opacity:.45; }}
+.gantt__axis .glane__track {{ border:none; }}
 .gantt__axis .glane__track::before {{ display:none; }}
 .gtick {{ position:absolute; top:0; transform:translateX(-50%); display:flex;
   flex-direction:column; align-items:center; }}
-.gtick i {{ width:1px; height:4px; background:var(--line); display:block; }}
-.gtick em {{ font-style:normal; font-family:var(--mono); font-size:.66rem; color:var(--muted); }}
-
-@media (prefers-color-scheme: dark) {{
-.stream__dot--kiki,.gmark--kiki {{ background:#3987e5; }}
-.stream__dot--kenshou,.gmark--kenshou {{ background:#d95926; }}
-.stream__dot--tsuijuu,.gmark--tsuijuu {{ background:#199e70; }}
-.stream__dot--seiri,.gmark--seiri {{ background:#c98500; }}
-.stream__dot--anzen,.gmark--anzen {{ background:#d55181; }}
-.stream__dot--chousa,.gmark--chousa {{ background:#008300; }}
-.stream__dot--other,.gmark--other {{ background:#8e97a7; }}
-}}
-:root[data-theme="dark"] {{
-.stream__dot--kiki,.gmark--kiki {{ background:#3987e5; }}
-.stream__dot--kenshou,.gmark--kenshou {{ background:#d95926; }}
-.stream__dot--tsuijuu,.gmark--tsuijuu {{ background:#199e70; }}
-.stream__dot--seiri,.gmark--seiri {{ background:#c98500; }}
-.stream__dot--anzen,.gmark--anzen {{ background:#d55181; }}
-.stream__dot--chousa,.gmark--chousa {{ background:#008300; }}
-.stream__dot--other,.gmark--other {{ background:#8e97a7; }}
-}}
-
-/* ---- done (反映済み) */
-.done {{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.35rem .75rem;
-  padding:.5rem .85rem; background:var(--surface); border:1px solid var(--line);
-  border-left:3px solid var(--ok); border-radius:var(--radius); }}
-.done__title {{ font-size:.92rem; color:var(--ink); text-decoration:none; flex:1 1 20rem; }}
-.done__title:hover {{ color:var(--sig); text-decoration:underline; }}
-.done__meta {{ font-family:var(--mono); font-size:.75rem; color:var(--muted);
-  font-variant-numeric:tabular-nums; }}
-
-/* ---- runs */
-.run {{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
-  padding:.85rem 1rem; display:flex; flex-direction:column; gap:.4rem; }}
-.run__head {{ font-family:var(--mono); font-size:.82rem; color:var(--sig);
-  font-variant-numeric:tabular-nums; }}
-.run__body {{ list-style:none; display:flex; flex-direction:column; gap:.25rem;
-  font-size:.88rem; color:var(--ink); }}
-.run__body li {{ padding-left:1rem; position:relative; }}
-.run__body li::before {{ content:"›"; position:absolute; left:.15rem; color:var(--muted); }}
-
-/* ---- inventory */
-.tablewrap {{ overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius);
-  background:var(--surface); }}
-table {{ border-collapse:collapse; width:100%; font-size:.85rem; }}
-th, td {{ text-align:left; padding:.5rem .75rem; border-bottom:1px solid var(--line);
-  vertical-align:top; white-space:nowrap; }}
-th {{ font-size:.74rem; letter-spacing:.08em; color:var(--muted); font-weight:600;
-  background:var(--idle-soft); }}
-tr:last-child td {{ border-bottom:none; }}
-.inv__name {{ font-weight:600; white-space:normal; }}
-.inv__mirror {{ display:block; font-size:.72rem; color:var(--warn); font-weight:400; }}
-.inv__file code {{ font-size:.72rem; }}
-
-/* ---- feedback */
-.fb {{ background:var(--sig-soft); border:1px solid var(--sig); border-radius:var(--radius);
-  padding:1.25rem 1.35rem; display:flex; flex-direction:column; gap:.7rem; }}
-.fb h2 {{ color:var(--sig); }}
-.fb h2::after {{ background:var(--sig); opacity:.3; }}
-.fb p {{ font-size:.9rem; }}
+.gtick i {{ width:1px; height:4px; background:var(--line); }}
+.gtick em {{ font-style:normal; font-family:var(--mono); font-size:.63rem; color:var(--muted); }}
+.run {{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+  padding:.55rem .8rem; }}
+.run h4 {{ font-family:var(--mono); font-size:.75rem; color:var(--sig); }}
+.run ul {{ font-size:.79rem; display:flex; flex-direction:column; gap:.12rem; margin-top:.2rem; }}
+.run li {{ padding-left:.75rem; position:relative; color:var(--muted); }}
+.run li::before {{ content:"›"; position:absolute; left:0; }}
+.done {{ display:flex; flex-direction:column; gap:.05rem; padding:.42rem .7rem;
+  background:var(--surface); border:1px solid var(--line); border-left:3px solid var(--ok);
+  border-radius:var(--r); }}
+.done a {{ font-size:.83rem; color:var(--ink); text-decoration:none; }}
+.done a:hover {{ color:var(--sig); text-decoration:underline; }}
+.done span {{ font-family:var(--mono); font-size:.69rem; color:var(--muted); }}
+.fb {{ background:var(--sig-soft); border:1px solid var(--sig); border-radius:var(--r);
+  padding:.95rem 1.05rem; display:flex; flex-direction:column; gap:.5rem; }}
+.fb h2 {{ color:var(--sig); }} .fb h2::after {{ background:var(--sig); opacity:.3; }}
+.fb p {{ font-size:.84rem; }}
 .fb__cta {{ align-self:flex-start; background:var(--sig); color:var(--surface);
-  padding:.55rem 1.1rem; border-radius:var(--radius); text-decoration:none;
-  font-weight:600; font-size:.9rem; }}
-.fb__cta:hover {{ opacity:.88; }}
+  padding:.42rem 1rem; border-radius:var(--r); text-decoration:none; font-weight:600;
+  font-size:.85rem; }}
 .fb__cta:focus-visible {{ outline:2px solid var(--ink); outline-offset:2px; }}
-.fb__meta {{ font-family:var(--mono); font-size:.78rem; color:var(--muted); }}
-
-footer {{ color:var(--muted); font-size:.8rem; font-family:var(--mono);
-  border-top:1px solid var(--line); padding-top:1rem;
-  display:flex; flex-wrap:wrap; gap:.4rem 1.2rem; }}
-a {{ color:var(--sig); }}
-@media (prefers-reduced-motion: reduce) {{ * {{ transition:none !important; animation:none !important; }} }}
+.fb__meta {{ font-family:var(--mono); font-size:.73rem; color:var(--muted); }}
+.detail {{ background:var(--surface); border:1px solid var(--line); border-radius:var(--r);
+  padding:.85rem .95rem; }}
+.detail > summary {{ cursor:pointer; font-family:var(--serif); font-size:1rem; font-weight:600; }}
+.filters {{ display:flex; flex-wrap:wrap; gap:.3rem; margin:.75rem 0 .5rem; }}
+.filters button {{ font:inherit; font-size:.75rem; padding:.18rem .6rem; border-radius:999px;
+  border:1px solid var(--line); background:var(--surface2); color:var(--muted); cursor:pointer; }}
+.filters button[aria-pressed="true"] {{ background:var(--sig); color:var(--surface);
+  border-color:var(--sig); }}
+.filters button:focus-visible {{ outline:2px solid var(--ink); outline-offset:2px; }}
+.tablewrap {{ overflow-x:auto; max-height:60vh; overflow-y:auto; }}
+table {{ border-collapse:collapse; width:100%; font-size:.81rem; }}
+th,td {{ text-align:left; padding:.38rem .55rem; border-bottom:1px solid var(--line);
+  vertical-align:top; }}
+th {{ font-size:.71rem; color:var(--muted); background:var(--idle-soft); position:sticky; top:0; }}
+.dt__id {{ font-family:var(--mono); font-size:.73rem; color:var(--muted); white-space:nowrap; }}
+.dt__stream {{ white-space:nowrap; color:var(--muted); font-size:.75rem; }}
+.dt__title {{ min-width:15rem; }}
+.dt__note {{ display:block; font-size:.71rem; color:var(--muted); margin-top:.12rem; }}
+.dt__pr {{ font-family:var(--mono); font-size:.73rem; white-space:nowrap; }}
+tr[hidden] {{ display:none; }}
+.detail__count {{ font-family:var(--mono); font-size:.73rem; color:var(--muted); }}
+.stale {{ background:var(--warn-soft); color:var(--warn); border:1px solid var(--warn);
+  border-radius:var(--r); padding:.45rem .8rem; font-size:.81rem; }}
+footer {{ color:var(--muted); font-size:.75rem; font-family:var(--mono);
+  border-top:1px solid var(--line); padding-top:.75rem; display:flex; flex-wrap:wrap;
+  gap:.3rem 1rem; }}
+@media (prefers-reduced-motion:reduce) {{ *{{transition:none!important;animation:none!important}} }}
 </style>
 
 <div class="wrap">
   <header class="mast">
-    <div class="mast__row">
-      <h1>autopilot — 当直記録</h1>
-      <span class="chip chip--sig">段階 {stage}・{stage_label}</span>
-    </div>
-    <div class="mast__sub">
-      <span>homelab を自律運用するエージェントの記録</span>
-      {next_html}
-      <span>生成 {generated}</span>
-    </div>
+    <h1>autopilot — homelab 当直記録</h1>
+    <span class="chip chip--sig">段階 {stage}・{stage_label}</span>
+    <span class="mast__meta"><span>{cadence}</span><span>生成 {generated}</span></span>
   </header>
 
-  <div class="stats">{stats}</div>
   {stale}
 
-  <section>
-    <h2>いま何が動いているか</h2>
-    <p class="lede">タスクを大きい流れで分けたもの。帯は状態の内訳（完了・待ち・詰まり・要対応）。</p>
-    <ul class="list">{streams}</ul>
-  </section>
+  <div class="stats">
+    <div class="stat stat--{alive_tone}"><span class="stat__v">{alive_text}</span>
+      <span class="stat__l">ループの状態（最終起動 {last_run}）</span></div>
+    <div class="stat stat--crit"><span class="stat__v">{n_asks}</span>
+      <span class="stat__l">あなたにお願いしたいこと</span></div>
+    <div class="stat stat--warn"><span class="stat__v">{n_blocked}</span>
+      <span class="stat__l">詰まっているもの</span></div>
+    <div class="stat stat--ok"><span class="stat__v">{n_done} / {n_total}</span>
+      <span class="stat__l">完了したタスク</span></div>
+    <div class="stat stat--sig"><span class="stat__v">{n_runs}</span>
+      <span class="stat__l">これまでの起動</span></div>
+  </div>
 
-  <section>
-    <h2>これまでの流れ</h2>
-    {gantt}
-  </section>
+  <div class="cols">
+    <div class="col">
+      <section>
+        <h2>あなたにお願いしたいこと</h2>
+        <p class="lede">autopilot には手が届かない作業だけです。判断を求めることはありません。</p>
+        <ul class="asks">{asks}</ul>
+      </section>
 
-  <section>
-    <h2>やったこと</h2>
-    <p class="lede">マージ済み＝homelab に反映済みの変更。新しい順。</p>
-    <ul class="list">{done}</ul>
-  </section>
+      <section>
+        <h2>何が何を止めているか</h2>
+        <p class="lede">左のひとつが済むと、右の連鎖がまとめて動き出します。</p>
+        {chain}
+      </section>
 
-  <section>
-    <h2>あなたに手を動かしてほしいこと</h2>
-    <p class="lede">権限や認証まわりなど、こちらでは手が届かない作業だけを出します。判断を頼むことはありません。</p>
-    <ul class="list">{attention}</ul>
-  </section>
+      <section>
+        <h2>いま進んでいること</h2>
+        <p class="lede">大きい流れごとの進み具合。個々のタスクは下の「詳細」にあります。</p>
+        <ul class="projs">{projects}</ul>
+      </section>
 
-  <section class="fb">
-    <h2>フィードバックを書く</h2>
-    <p>使っていて感じたことを殴り書きで構いません。進め方への指摘は憲章に、やってほしいことはタスクとして取り込まれます。
-       読んだら 3 行以内で返信します。<strong>返信が無い＝まだ読んでいない</strong>と判断してください。</p>
-    <a class="fb__cta" href="{fb_url}">issue #{fb_issue} に書く</a>
-    <span class="fb__meta">最後に読んだ: {fb_read}</span>
-  </section>
+      <section>
+        <h2>これまでの流れ</h2>
+        <p class="lede">印ひとつが homelab に反映された変更 1 件。横位置が時刻（UTC）。</p>
+        {gantt}
+      </section>
+    </div>
 
-  <section>
-    <h2>いま動かしているもの</h2>
-    <ul class="list">{prs}</ul>
-  </section>
+    <div class="col">
+      <section class="card" style="padding:.85rem .95rem">
+        <h2>homelab の今</h2>
+        {health}
+      </section>
 
-  <section>
-    <h2>これからやること</h2>
-    <p class="lede">上から順に着手します。1 タスク = 1 PR。</p>
-    <ul class="list">{queue}</ul>
-    {more}
-  </section>
+      <section class="fb">
+        <h2>気づいたことを書く</h2>
+        <p>殴り書きで構いません。進め方への指摘は憲章に、やってほしいことはタスクとして取り込まれます。
+           読んだら 3 行以内で返信します。</p>
+        <a class="fb__cta" href="{fb_url}">issue #{fb_issue} に書く</a>
+        <span class="fb__meta">最後に読んだ: {fb_read}</span>
+      </section>
 
-  <section>
-    <h2>起動の記録</h2>
-    <ul class="list">{runs}</ul>
-  </section>
+      <section>
+        <h2>最近やったこと</h2>
+        <ul class="projs">{done}</ul>
+      </section>
 
-  <section>
-    <h2>バージョン監視の対象</h2>
-    <p class="lede">上流に新しい版が出ていないか見張っている箇所。「要判断」は自動更新せず必ず人間に渡します。</p>
+      <section>
+        <h2>直近の起動</h2>
+        <ul class="projs">{runs}</ul>
+      </section>
+    </div>
+  </div>
+
+  <details class="detail">
+    <summary>タスクの詳細を開く（{n_total} 件）</summary>
+    <div class="filters" role="group" aria-label="状態で絞り込む">
+      <button type="button" data-f="all" aria-pressed="true">すべて</button>
+      <button type="button" data-f="needs-human" aria-pressed="false">あなた待ち</button>
+      <button type="button" data-f="blocked" aria-pressed="false">詰まり</button>
+      <button type="button" data-f="todo" aria-pressed="false">待ち</button>
+      <button type="button" data-f="in_progress" aria-pressed="false">作業中</button>
+      <button type="button" data-f="done" aria-pressed="false">完了</button>
+    </div>
+    <p class="detail__count" id="dcount"></p>
     <div class="tablewrap">
       <table>
-        <thead><tr><th>対象</th><th>現在</th><th>場所</th><th>更新方針</th></tr></thead>
-        <tbody>{inv}</tbody>
+        <thead><tr><th>ID</th><th>状態</th><th>流れ</th><th>内容</th><th>PR</th></tr></thead>
+        <tbody id="dbody">{detail}</tbody>
       </table>
     </div>
-  </section>
+  </details>
 
   <footer>
     <span>hikuohiku/homelab</span>
-    <a href="https://github.com/hikuohiku/homelab/blob/main/ops/VISION.md">VISION.md</a>
-    <a href="https://github.com/hikuohiku/homelab/blob/main/ops/CHARTER.md">CHARTER.md</a>
+    <a href="https://github.com/hikuohiku/homelab/blob/main/ops/VISION.md">VISION</a>
+    <a href="https://github.com/hikuohiku/homelab/blob/main/ops/CHARTER.md">CHARTER</a>
     <a href="https://github.com/hikuohiku/homelab/tree/main/ops/journal">journal</a>
   </footer>
 </div>
+
+<script>
+(function () {{
+  var btns = Array.prototype.slice.call(document.querySelectorAll('.filters button'));
+  var rows = Array.prototype.slice.call(document.querySelectorAll('#dbody tr'));
+  var count = document.getElementById('dcount');
+  function apply(f) {{
+    var n = 0;
+    rows.forEach(function (r) {{
+      var show = f === 'all' || r.getAttribute('data-status') === f;
+      r.hidden = !show;
+      if (show) n++;
+    }});
+    if (count) count.textContent = n + ' 件を表示';
+  }}
+  btns.forEach(function (b) {{
+    b.addEventListener('click', function () {{
+      btns.forEach(function (o) {{ o.setAttribute('aria-pressed', String(o === b)); }});
+      apply(b.getAttribute('data-f'));
+    }});
+  }});
+  apply('all');
+}})();
+</script>
 """
 
 

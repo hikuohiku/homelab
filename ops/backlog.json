@@ -2,7 +2,7 @@
   "version": 1,
   "next_id": 103,
   "updated": "2026-08-05T14:37:25Z",
-  "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
+  "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
       "id": "T-0001",
@@ -1111,7 +1111,18 @@
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": "run #26: subagent 2件で調査。(1) 発見自体は repo 横断調査の subagent（apps/dex, apps/argocd の値ファイルを実際に Read して確認）。(2) 修正方式は別の subagent に dexidp/dex と argoproj/argo-cd の実ソース（GitHub 上のソースコード、changelogではなく）を直接確認させた。dex の $VAR 展開が staticClients には効かない（idEnv/secretEnv という別フィールドが必要、dexidp/dex#4212 で明示的に未実装と確認された既知のギャップ）という誤りやすい落とし穴を事前に潰せた。ArgoCD 側は `$secret-name:key` 構文と `app.kubernetes.io/part-of=argocd` ラベル要件をソースコード（util/settings/settings.go）で確認済み。着手前に Doppler 登録が必須という順序性（dex の envFrom は Secret 不在だと Pod が起動しないため）が高リスクの核心なので、needs-human とし、手順2以降はこちらの続きの起動で行う"
+      "notes": "run #26: subagent 2件で調査。(1) 発見自体は repo 横断調査の subagent（apps/dex, apps/argocd の値ファイルを実際に Read して確認）。(2) 修正方式は別の subagent に dexidp/dex と argoproj/argo-cd の実ソース（GitHub 上のソースコード、changelogではなく）を直接確認させた。dex の $VAR 展開が staticClients には効かない（idEnv/secretEnv という別フィールドが必要、dexidp/dex#4212 で明示的に未実装と確認された既知のギャップ）という誤りやすい落とし穴を事前に潰せた。ArgoCD 側は `$secret-name:key` 構文と `app.kubernetes.io/part-of=argocd` ラベル要件をソースコード（util/settings/settings.go）で確認済み。着手前に Doppler 登録が必須という順序性（dex の envFrom は Secret 不在だと Pod が起動しないため）が高リスクの核心なので、needs-human とし、手順2以降はこちらの続きの起動で行う",
+      "human_action": {
+        "summary": "Dex↔ArgoCD の OIDC client secret を Doppler 管理に移す",
+        "why": "client secret がリポジトリに平文で、しかも 2 箇所に重複している。漏洩すると ArgoCD への認証を突破されうる。",
+        "steps": [
+          "新しい client secret を生成する: <code>openssl rand -base64 32</code>",
+          "Doppler に登録する（キー名は autopilot が manifest を書くときに確定させます。先に issue #56 で確認してください）",
+          "autopilot が ExternalSecret 経由で参照する manifest を用意します",
+          "反映後、ArgoCD に Google アカウントでログインできることを確認する"
+        ],
+        "links": []
+      }
     },
     {
       "id": "T-0061",
@@ -1167,7 +1178,17 @@
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": "run #27: T-0062 の調査で発見。CHARTER §4（issue #56, 2026-08-05 04:18:44 の運用）に従い、実機確認が要る不確実性を独立した needs-human タスクとして起票した"
+      "notes": "run #27: T-0062 の調査で発見。CHARTER §4（issue #56, 2026-08-05 04:18:44 の運用）に従い、実機確認が要る不確実性を独立した needs-human タスクとして起票した",
+      "human_action": {
+        "summary": "node01 が cgroup v2 で動いているか確認する",
+        "why": "k3s 1.35 への移行（nix flake update 済み）の前提条件。cgroup v1 のままだと移行時に問題が出うる。",
+        "steps": [
+          "node01 で <code>stat -fc %T /sys/fs/cgroup/</code> を実行する",
+          "<code>cgroup2fs</code> と出れば v2、<code>tmpfs</code> なら v1",
+          "結果を issue #56 に貼る"
+        ],
+        "links": []
+      }
     },
     {
       "id": "T-0064",
@@ -1241,7 +1262,30 @@
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": "run #50: ops-health-report で観測。T-0067 未完了のまま T-0068/T-0069/T-0070 のrestic-external-secret.yaml (creationPolicy: Owner) が Doppler に無いキーを参照しており、ExternalSecret が同期できず Secret が作られない状態が続いている。ArgoCD はこれを検知してvaultwarden/coder/immich の3 Application を Degraded と報告する（history: 08-05 11:30 まで全10アプリHealthy → 12:00 vaultwardenのみDegraded (T-0069 #191/#192 merge直後) → 13:00 coder/immichも追加でDegraded (T-0070 #195, T-0068 #196 merge後)、時系列が完全一致）。各アプリ本体（vaultwarden/coder/immich自体のPod）は正常で、Degradedの実体はrestic用のExternalSecretが解決できないことによるものと推定（このクラウドサンドボックスからはkubectl/ArgoCD MCPともに到達できず個々のリソースの健全性までは直接確認できていない）。T-0067（Doppler credential登録）が完了すれば解消される見込み。次回以降、T-0067完了後のrun で3アプリがHealthyに戻ることを確認すること。"
+      "notes": "run #50: ops-health-report で観測。T-0067 未完了のまま T-0068/T-0069/T-0070 のrestic-external-secret.yaml (creationPolicy: Owner) が Doppler に無いキーを参照しており、ExternalSecret が同期できず Secret が作られない状態が続いている。ArgoCD はこれを検知してvaultwarden/coder/immich の3 Application を Degraded と報告する（history: 08-05 11:30 まで全10アプリHealthy → 12:00 vaultwardenのみDegraded (T-0069 #191/#192 merge直後) → 13:00 coder/immichも追加でDegraded (T-0070 #195, T-0068 #196 merge後)、時系列が完全一致）。各アプリ本体（vaultwarden/coder/immich自体のPod）は正常で、Degradedの実体はrestic用のExternalSecretが解決できないことによるものと推定（このクラウドサンドボックスからはkubectl/ArgoCD MCPともに到達できず個々のリソースの健全性までは直接確認できていない）。T-0067（Doppler credential登録）が完了すれば解消される見込み。次回以降、T-0067完了後のrun で3アプリがHealthyに戻ることを確認すること。",
+      "human_action": {
+        "summary": "Backblaze B2 にバケットを作り、鍵を Doppler に登録する",
+        "why": "バックアップの保存先。実装（vaultwarden / coder-postgres / immich の CronJob）は完了済みで、認証情報だけが無い状態。全データ合計 1 GiB 未満なので B2 の無料枠（10 GB）に収まる。",
+        "steps": [
+          "<a href=\"https://www.backblaze.com/sign-up/cloud-storage\">Backblaze B2 にサインアップ</a>（無料枠 10 GB。クレジットカード登録は不要）",
+          "バケットを 1 つ作成する。名前は任意（例 <code>hikuohiku-homelab-restic</code>）。<b>Files in Bucket are: Private</b> を選ぶ",
+          "Application Keys → <b>Add a New Application Key</b>。<b>Allow access to Bucket(s)</b> を作ったバケットに限定し、Type of Access は <b>Read and Write</b>（restic の prune に削除権限が要るため）",
+          "表示される <code>keyID</code> と <code>applicationKey</code> を控える（<b>applicationKey は一度しか表示されません</b>）",
+          "restic のリポジトリパスワードを自分で決める（長いランダム文字列推奨）。<b>これを失うとバックアップを復号できません</b>。1Password 等に必ず保管する",
+          "Doppler に 4 つ登録: <code>doppler secrets set RESTIC_B2_BUCKET B2_ACCOUNT_ID B2_ACCOUNT_KEY RESTIC_PASSWORD --project homelab --config prd</code>",
+          "登録したら issue #56 に「登録した」と一言書く。次の起動で autopilot が疎通を確認し、復元試験（T-0071）まで進めます"
+        ],
+        "links": [
+          {
+            "label": "Backblaze B2 サインアップ",
+            "url": "https://www.backblaze.com/sign-up/cloud-storage"
+          },
+          {
+            "label": "Application Keys の作り方",
+            "url": "https://www.backblaze.com/docs/cloud-storage-create-and-manage-app-keys"
+          }
+        ]
+      }
     },
     {
       "id": "T-0068",
@@ -1374,7 +1418,18 @@
         ".github/workflows/ci.yml"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": null,
+      "human_action": {
+        "summary": "terraform plan を CI で回せるようにする（調査してほしい）",
+        "why": "apps/ の変更は 5 種類の CI ゲートで検証されるが、terraform/ は validate だけで、実際に何が起きるかを事前に知る手段が無い。node01 の削除・再作成を伴う変更が誰にも気づかれずマージされうる。",
+        "steps": [
+          "HCP Terraform（Terraform Cloud）の workspace <code>homelab</code> の実行モードを確認する（Local か Remote か）",
+          "Remote 実行なら、GitHub Actions から plan を投げるための API トークンを発行できるか確認する",
+          "ただし plan には Proxmox（Tailscale 内）への到達も要る可能性がある。到達できなければ CI 化は不可能",
+          "可否と理由を issue #56 に書く。不可能なら「不可能」と分かること自体が成果です"
+        ],
+        "links": []
+      }
     },
     {
       "id": "T-0076",
@@ -1448,7 +1503,24 @@
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": "run #31: issue #56 (05:35:04) の指摘をそのまま起票。判断材料は ops-health-report ブランチの ops/health/latest.json（generated_at: 2026-08-05T05:30:09Z）。T-0066 の上限確定（B2 確定、Hetzner比較不要）にも直結。T-0077（PVC実使用量の取得）と合わせて実施すると、ディスク逼迫の全体像（容量×使用量）が揃う"
+      "notes": "run #31: issue #56 (05:35:04) の指摘をそのまま起票。判断材料は ops-health-report ブランチの ops/health/latest.json（generated_at: 2026-08-05T05:30:09Z）。T-0066 の上限確定（B2 確定、Hetzner比較不要）にも直結。T-0077（PVC実使用量の取得）と合わせて実施すると、ディスク逼迫の全体像（容量×使用量）が揃う",
+      "human_action": {
+        "summary": "node01 の実ディスク容量を確認する（急ぎではありません）",
+        "why": "terraform / docs / CLAUDE.md の 3 箇所が「256 GiB」と書いているのに、実測は 48.9 GiB。ただしアプリのデータ実使用は 1 GiB 未満で逼迫していないため、危険はありません。記録を実態に合わせたいだけです。",
+        "steps": [
+          "node01 に入る（Tailscale 経由 SSH、または Proxmox のコンソール）",
+          "<code>df -h /</code> を実行し、ルートファイルシステムのサイズを見る",
+          "<code>lsblk</code> を実行し、<code>/dev/vda</code> のディスクサイズとパーティションのサイズを見る",
+          "ディスクが 256 GiB でパーティションだけ小さい場合は、<a href=\"https://github.com/hikuohiku/homelab/blob/main/docs/node01-storage.md\">docs/node01-storage.md</a> の手順（growpart → resize2fs）で拡張できる",
+          "結果を issue #56 に貼る。autopilot が記録の食い違いを直します"
+        ],
+        "links": [
+          {
+            "label": "拡張手順 docs/node01-storage.md",
+            "url": "https://github.com/hikuohiku/homelab/blob/main/docs/node01-storage.md"
+          }
+        ]
+      }
     },
     {
       "id": "T-0080",
