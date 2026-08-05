@@ -7,8 +7,9 @@
 #   2. pg_hba.conf に `host all all all scram-sha-256` を追記（初期状態は socket の trust のみで
 #      TCP + パスワード認証が通らないため）
 #   3. 一時サーバー（listen_addresses='' で socket のみ）を起動し、POSTGRES_DB が
-#      POSTGRES_USER と異なる場合のみ createdb（initdb は POSTGRES_USER を初期スーパーユーザーとして
-#      作成済みなので createuser は不要）→ 停止
+#      "postgres" 以外なら createdb（initdb が無条件で作るのは postgres/template0/template1 のみで、
+#      POSTGRES_USER と同名でも自動では作られない。createuser は初期スーパーユーザーとして
+#      initdb 自身が作成済みなので不要）→ 停止
 #   4. 本番と同じ `shared_preload_libraries=vchord.so` を付けて再起動 → CREATE EXTENSION vchord
 #      が通ることを確認（vchord は shared_preload_libraries 有効化後の再起動を経てからでないと
 #      CREATE EXTENSION できない仕様、docs.vectorchord.ai 確認済み）
@@ -98,7 +99,13 @@ spec:
                 BOOT_START_RC=$?
 
                 if [ "$BOOT_START_RC" -eq 0 ]; then
-                  if [ "$POSTGRES_DB" != "$POSTGRES_USER" ]; then
+                  # initdb が無条件で作るデータベースは postgres/template0/template1 のみで、
+                  # POSTGRES_USER と同名のデータベースは作られない（POSTGRES_USER はロールとして
+                  # 作られるだけ）。POSTGRES_DB=POSTGRES_USER=verify の場合に createdb を
+                  # スキップしていたのは誤りで、"database \"verify\" does not exist" で
+                  # extension_rc が失敗していた（run #75 で実測）。postgres という名前のときだけ
+                  # 既存扱いにする
+                  if [ "$POSTGRES_DB" != "postgres" ]; then
                     createdb --username="$POSTGRES_USER" --host=/tmp "$POSTGRES_DB" >>"$LOGFILE" 2>&1
                   fi
                   pg_ctl -D "$PGDATA" -w stop >>"$LOGFILE" 2>&1
