@@ -240,6 +240,52 @@ def put_file(token, repo, branch, path, content_bytes, message):
         raise RuntimeError("{} の書き込みに失敗: {} {}".format(path, status, resp))
 
 
+def get_raw_content(token, repo, path, ref):
+    # Contents API の JSON レスポンスは 1MB を超えると content フィールドを返さない。
+    # raw メディアタイプで直接バイト列を取得すればこの上限を回避できる
+    req = urllib.request.Request(
+        "https://api.github.com/repos/{}/contents/{}?ref={}".format(repo, path, ref),
+        headers={
+            "Authorization": "Bearer " + token,
+            "Accept": "application/vnd.github.raw+json",
+            "User-Agent": "homelab-ops-health-reporter",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            return resp.status, resp.read()
+    except urllib.error.HTTPError as e:
+        return e.code, e.read()
+
+
+def append_line(token, repo, branch, path, line_bytes, message):
+    status, meta = github_request(
+        "GET", "/repos/{}/contents/{}?ref={}".format(repo, path, branch), token
+    )
+    if status == 200 and isinstance(meta, dict):
+        sha = meta.get("sha")
+        raw_status, existing = get_raw_content(token, repo, path, branch)
+        if raw_status != 200:
+            raise RuntimeError("{} の既存内容取得に失敗: {}".format(path, raw_status))
+    elif status == 404:
+        sha, existing = None, b""
+    else:
+        raise RuntimeError("{} のメタデータ取得に失敗: {} {}".format(path, status, meta))
+
+    payload = {
+        "message": message,
+        "content": base64.b64encode(existing + line_bytes).decode(),
+        "branch": branch,
+    }
+    if sha:
+        payload["sha"] = sha
+    status, resp = github_request(
+        "PUT", "/repos/{}/contents/{}".format(repo, path), token, payload
+    )
+    if status not in (200, 201):
+        raise RuntimeError("{} への追記に失敗: {} {}".format(path, status, resp))
+
+
 def main():
     token = os.environ["GITHUB_TOKEN"]
     repo = os.environ.get("GITHUB_REPO", "hikuohiku/homelab")
@@ -261,7 +307,9 @@ def main():
             "(pod_metrics/node_metrics)。PVC の実ディスク使用量は namespace ごとの pvc-usage-reporter "
             "CronJob が ConfigMap に書いた値を pvc_usage として集約（immich/vaultwarden/coder のみ。"
             "Coder workspace ごとの動的 PVC は対象外、T-0078 参照）。RBAC は get/list/(configmaps のみ get) "
-            "で、write 系の verb は含まない。"
+            "で、write 系の verb は含まない。このファイルは最新1点のみで上書きされる。ピーク値の傾向を"
+            "見るには ops/health/history/YYYY-MM-DD.jsonl（1行1回分、このレポートと同じ内容）を辿ること"
+            "（T-0083）。"
         ),
     }
 
@@ -275,6 +323,17 @@ def main():
         "health report {}".format(generated_at),
     )
     print("ops/health/latest.json を {} ブランチへ書き込みました ({})".format(branch, generated_at))
+
+    history_path = "ops/health/history/{}.jsonl".format(generated_at[:10])
+    append_line(
+        token,
+        repo,
+        branch,
+        history_path,
+        (json.dumps(report, ensure_ascii=False) + "\n").encode("utf-8"),
+        "health report history {}".format(generated_at),
+    )
+    print("{} に追記しました ({})".format(history_path, generated_at))
 
 
 if __name__ == "__main__":

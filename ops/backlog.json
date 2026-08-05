@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 83,
-  "updated": "2026-08-05T07:35:00Z",
+  "next_id": 85,
+  "updated": "2026-08-05T07:45:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1504,6 +1504,43 @@
       "created": "2026-08-05",
       "pr": 167,
       "notes": "run #36: inventory.json に pvc-usage-reporter-image（current: 3.12-alpine, mirrors: coder/vaultwarden の2ファイル）を追加し、check_version_sync.py の GROUPS に対応する3ファイルの mirror group を追加した。手元で apps/coder/pvc-usage-cronjob.yaml だけタグを 3.13-alpine に変えて非0終了することを確認済み（変更後は元に戻した）。バージョン更新自体はスコープ外（現行 3.12-alpine のまま、監視の仕組みのみ追加）"
+    },
+    {
+      "id": "T-0083",
+      "domain": "homelab",
+      "title": "ops-health-reporter に latest.json 上書きだけでなく履歴（history/YYYY-MM-DD.jsonl）を残す",
+      "kind": "feature",
+      "risk": "low",
+      "status": "done",
+      "priority": 6,
+      "why": "issue #56 (2026-08-05 07:25:18、構築セッション経由) の指摘。ops/health/latest.json は30分ごとに上書きされる単点観測のため、immich の memory limits (#132/#134 で差し戻し済み) のような『縛る変更』を実測で裏付けるにはピーク値の傾向が要るが、現状は永久に見えない",
+      "dod": "ops-health-reporter が latest.json の書き込みに加えて ops/health/history/YYYY-MM-DD.jsonl に同じレポートを1行追記する。Contents API の1MB制限を回避するため既存内容の取得は raw メディアタイプで行う。手元で report.py の構文確認のみ行い、実際に CronJob が動いて追記できるかは T-0075 と同様に次の起動で ops-health-report ブランチを見て確認する",
+      "refs": [
+        "apps/ops-health-reporter/report.py",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "history 追記処理(append_line/get_raw_content)を report.py に追加。RBAC・トークン権限は既存のまま変更なし（同じ Contents:write スコープで書き込み先のパスが増えるだけ）。手元では構文確認のみ（`python3 -c \"import ast; ast.parse(...)\"`）で、実際に CronJob が動いて履歴を書き込めるかは次の起動で T-0075 と同様に ops-health-report ブランチの ops/health/history/ を見て確認する。ファイルサイズの上限は T-0084 で追跡"
+    },
+    {
+      "id": "T-0084",
+      "domain": "homelab",
+      "title": "ops/health/history/*.jsonl のファイルサイズが GitHub Contents API の上限に近づいていないか確認する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "blocked",
+      "priority": 30,
+      "why": "T-0083 で追加した履歴ファイルは1日ごとに新しいファイルへ切り替わるが、報告内容（Pod 数が多い場合の pod_metrics 等）次第では1日分（30分毎・約48回）の蓄積サイズが GitHub Contents API の実務上の上限（1MB前後、正確な値は未確認）に近づく可能性がある。読み取りは raw メディアタイプで回避済みだが、書き込み（PUT）側の上限は未検証",
+      "dod": "history/*.jsonl が数日分蓄積した後、直近1日分のファイルサイズを確認する（`git show origin/ops-health-report:ops/health/history/YYYY-MM-DD.jsonl | wc -c` 相当）。上限に近い場合は日次を時間帯別ファイルに分割する等の対策を検討する",
+      "blocked_by": "履歴が数日分蓄積するまで確認する意味が無い",
+      "next_review": "2026-08-08",
+      "refs": [
+        "apps/ops-health-reporter/report.py"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "T-0083 の PR に相乗りして起票（残った不確実性の追跡、CHARTER §4）"
     }
   ]
 }
