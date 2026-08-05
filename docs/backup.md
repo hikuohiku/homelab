@@ -214,15 +214,32 @@ vaultwarden にもそのまま当てはまった。同じ `local-path` PVC + res
 
 検証専用の `vaultwarden-restore-verify` PVC/Job は確認が取れたため削除した。
 
-### coder-postgres（未実施）
+### coder-postgres（完了、2026-08-06）
 
-immich/vaultwarden と同じ設計（使い捨て PVC + Job、Replace=true,Force=true sync、
-termination message 経由で結果を受け取る）で、次のタスクとして続ける。CHOWN/FOWNER/
-DAC_OVERRIDE + クリーンアップステップを初回実装から織り込む。coder-postgres は PVC 直接
-ではなく `pg_restore` を使う設計（上記セクション参照）のため、権限まわりの事情が
-immich/vaultwarden と異なる可能性がある（`pg_restore` はネットワーク経由の論理復元であり、
-ファイルシステムの所有者・パーミッション・タイムスタンプ復元を伴わないため、そもそも
-CHOWN/FOWNER/DAC_OVERRIDE が不要な可能性がある。着手時に確かめる）。
+immich/vaultwarden とは異なり、PVC ではなく単一ファイルの `pg_dump -Fc` ダンプを使い回さない
+`emptyDir` へ復元する設計（`apps/coder/restic-restore-verify-job.yaml`、削除済み）。
+「データが読めること」の確認は `pg_restore --list`（TOC 読み取り）と
+`pg_restore -f /dev/null --no-owner --no-privileges`（全データブロックを実際に展開、ライブ
+DB 接続不要）の2段で行った。
+
+| 項目 | 結果 |
+|---|---|
+| restore 結果 | 成功（`restore_rc=0`） |
+| 復元にかかった時間 | **8 秒** |
+| pg_restore TOC 読み取り | `pg_restore_list_rc=0`（1075 エントリ） |
+| pg_restore 全データ展開 | `pg_restore_full_rc=0` |
+
+**教訓**: 着手時の予想（`pg_restore` はネットワーク経由の論理復元でファイルシステムの
+所有者・パーミッション・タイムスタンプ復元を伴わないため CHOWN/FOWNER/DAC_OVERRIDE が
+不要かもしれない）を確かめる前に、immich/vaultwarden との一貫性を優先して3 capability を
+予防的に足した状態で実行し、初回で成功した。実際に不要かどうかの追試はしていない
+（動いているものをわざわざ絞り込む理由が薄いため見送り）。
+
+検証専用の `coder-postgres-restic-restore-verify` Job は確認が取れたため削除した。
+
+**T-0071 は immich・vaultwarden・coder-postgres の3コンポーネント全て完了。**
+これに依存していた T-0023（coder メジャー更新）・T-0027（immich メジャー更新）・T-0029
+（immich postgres/vchord メジャー更新）は `blocked_by` が解消したため `todo` に戻した。
 
 ### 必要な Doppler 登録（T-0067）
 

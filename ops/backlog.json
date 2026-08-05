@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 111,
-  "updated": "2026-08-05T20:20:00Z",
+  "updated": "2026-08-05T21:15:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -425,18 +425,19 @@
       "title": "coder を v2.34.7 → v2.35.3 (stable) に上げる（v2.36.0 mainline は避ける）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "blocked",
+      "status": "todo",
       "priority": 17,
       "why": "T-0005 の調査 (run #6) で判明。stable チャンネルの最新は v2.35.3。mainline の v2.36.0 は OAuth2 動的クライアント登録・login-type 非推奨化・chat model 設定の DB スキーマ変更など breaking change を含むため避ける。coder は autopilot 自身の開発環境をホストしている（ops/inventory.json のコメント）ため、更新に失敗すると足場を失うリスクがある点に注意。run #10 の subagent 調査で risk を medium → high に見直した: v2.34.7→v2.35.3 は実質マイナー1本分（約650コミット）で、`coder server` は起動時に DB migration を自動適用するが coder は down-migration を提供しないため、失敗時のロールバックはイメージタグを戻すだけでは不十分で Postgres のバックアップ復元が必要になる。coder-postgres は immich-postgres と同じく local-path で node01 のディスク上に直接あり（docs/backup.md）、バックアップの存在・復元手順は T-0034（needs-human）が解決するまで未確認。CHARTER §4『データを失いうる変更』に該当するため T-0029 と同様に着手を見送る。加えて v2.35.0/2.35.1 で X-Forwarded-Host の信頼元を CODER_PROXY_TRUSTED_ORIGINS で絞る変更が入っており、Tailscale 経由アクセス（CODER_ACCESS_URL）への影響が未検証",
       "dod": "T-0034 でバックアップの存在・復元手順が確認されてから着手する。apps/coder/deployment.yaml のイメージタグが v2.35.3。ops/inventory.json の current も更新。CODER_PROXY_TRUSTED_ORIGINS の要否を確認し、必要なら合わせて設定する。更新後に coder の Pod が正常に起動することを CI もしくは次回起動での間接確認で追う（このクラウド実行からは k8s に到達できないため、ArgoCD 側の反映確認は現状できない— T-0015 が解決すれば可能になる）",
-      "blocked_by": "T-0071（restic ベースの復元試験）が終わっておらず、coder-postgres のバックアップ健全性が未確認のため着手しない（run #28: T-0034 dropped に伴い張り替え）",
+      "blocked_by": null,
       "refs": [
         "apps/coder/deployment.yaml",
         "ops/inventory.json",
         "docs/backup.md"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": " | run #68: T-0071（restic 復元試験）が3コンポーネント全て完了したため blocked_by を解消し todo に戻した。メジャーバージョン更新であることに変わりはないため、着手時は CHARTER §4「high を戻せる形に落とす」（1 PR 1 コンポーネント、変更点を全部読む）を引き続き適用する。"
     },
     {
       "id": "T-0024",
@@ -516,18 +517,18 @@
       "title": "immich server / machine-learning を v2.6.3 → v3.1.0 に上げる（メジャー更新）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "blocked",
+      "status": "todo",
       "priority": 20,
       "why": "T-0005 の調査 (run #6) で判明。v3.0.0 で non-destructive editing・Workflows・バックグラウンドバックアップ変更・HLS トランスコーディングなど大きな変更がある。immich-server と immich-machine-learning は必ず同一バージョンで揃える（ops/inventory.json の mirrors）。データ移行を伴うため CHARTER §4『データを失いうる変更』に該当し、T-0029 と同じ理由でバックアップ健全性の確認が先",
       "dod": "v2.6.3 から v3.1.0 までの全リリースノートを原文で読み、DB マイグレーションや設定変更の要否を洗い出す。apps/immich/values.yaml の server / machine-learning 両方のタグを同時に v3.1.0 へ更新し、ops/inventory.json の current も両方更新",
-      "blocked_by": "T-0071（restic ベースの復元試験）が終わっておらず、immich のバックアップ健全性が未確認のため着手しない（run #28: T-0034 dropped に伴い張り替え）",
+      "blocked_by": null,
       "refs": [
         "apps/immich/values.yaml",
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
       "pr": null,
-      "notes": "run #12: issue #56 (2026-08-04 22:42:36) の指摘を受け todo → blocked に変更。データ移行を伴う点は T-0029 と同型のため、T-0034 待ちを明示した"
+      "notes": "run #12: issue #56 (2026-08-04 22:42:36) の指摘を受け todo → blocked に変更。データ移行を伴う点は T-0029 と同型のため、T-0034 待ちを明示した | run #68: T-0071（restic 復元試験）が3コンポーネント全て完了したため blocked_by を解消し todo に戻した。メジャーバージョン更新であることに変わりはないため、着手時は CHARTER §4「high を戻せる形に落とす」（1 PR 1 コンポーネント、変更点を全部読む）を引き続き適用する。"
     },
     {
       "id": "T-0028",
@@ -555,17 +556,18 @@
       "title": "immich の postgres (cloudnative-vectorchord) を 16.9-0.4.3 → 16.14-1.1.1 に上げる（vchord 拡張のメジャー更新）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "blocked",
+      "status": "todo",
       "priority": 21,
       "why": "T-0005 の調査 (run #6) で判明。postgres 本体は 16.9→16.14 の minor で問題ないが、vchord 拡張が 0.4.3→1.1.1 とメジャー相当の飛びで、ベクタ DB の実データに影響しうる（ops/inventory.json の policy=manual の理由）",
       "dod": "vchord 0.4→1.x の互換性・移行手順を確認する。CHARTER §4『データを失いうる変更』の手順どおり、着手前に immich のバックアップが実際に存在し復元できることを確認する",
-      "blocked_by": "T-0071（restic ベースの復元試験）が終わっておらず、バックアップの健全性が未確認のため着手しない（run #28: T-0034 dropped に伴い張り替え）",
+      "blocked_by": null,
       "refs": [
         "apps/immich/postgres.yaml",
         "ops/inventory.json"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": " | run #68: T-0071（restic 復元試験）が3コンポーネント全て完了したため blocked_by を解消し todo に戻した。メジャーバージョン更新であることに変わりはないため、着手時は CHARTER §4「high を戻せる形に落とす」（1 PR 1 コンポーネント、変更点を全部読む）を引き続き適用する。"
     },
     {
       "id": "T-0030",
@@ -1316,7 +1318,7 @@
       "title": "restic バックアップの復元試験を実施する（本丸）",
       "kind": "investigate",
       "risk": "low",
-      "status": "in_progress",
+      "status": "done",
       "priority": 41,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針。『試したことのないバックアップは、バックアップではありません』。T-0068〜T-0070 で作った CronJob が実際に復元可能なデータを作れているかを、別 namespace か使い捨て環境に実際に復元して確認する。T-0023/T-0027/T-0029（データを失いうるメジャー更新）はこれが通るまで着手できない（T-0034 dropped に伴い、これらの blocked_by をここに張り替え済み）",
       "dod": "immich / vaultwarden / coder-postgres それぞれについて、restic のバックアップから使い捨て環境（別 namespace 等）に実際に復元し、データが読めることを確認する。**復元にかかった時間を実測して記録する**（PBS 退役判断の材料になる、人間の依頼どおり）。結果を docs/backup.md に記録する",
@@ -1327,7 +1329,7 @@
       ],
       "created": "2026-08-05",
       "pr": 238,
-      "notes": " | run #50: issue #56 (12:48:16) の指摘で、immich がまだほとんど使われていない（332MiB）今のうちに復元試験まで通しておくべきと助言された。T-0068〜T-0070 の実装は完了済みのため blocked_by を T-0067 のみに絞った。T-0067 が片付き次第、最優先で着手する。 | run #53: T-0067 done。ただし T-0103（remoteRef タイポ）修正直後のため、まだ一度も backup が成功した実績が無い。T-0104（検証 Job）の結果を待ってから着手する。 | run #57 (2巡目): substrate が in-cluster 常駐に変わったため『write 権限が要るため実行できない可能性』という懸念は解消（T-0104 と同じ Git→ArgoCD 経路で書き込み不要のまま実行できる） | run #60: T-0104 が done になり blocked_by 解消。immich/coder-postgres/vaultwarden 全3コンポーネントで restic backup 成功が確認できたので着手可能な todo に上げる | run #62: 3コンポーネント同時は1PRとして大きいため immich から着手（run #50 の助言どおり、まだ使用量が少ないうち）。apps/immich/restic-restore-verify-job.yaml で使い捨て PVC (immich-restore-verify) + 一度きりの Job を追加、restic restore latest → ファイル数と DB ダンプの gzip マジックバイト確認 → 結果を /dev/termination-log に書く方式にした（autopilot に pods/log 権限が無いため、get pods で読める terminationMessage 経由で結果を受け取る）。次の起動で Job の Complete/Failed と terminationMessage を確認し、成功していれば docs/backup.md に実測時間を記録した上で vaultwarden/coder-postgres も同じ形で続ける。in_progress のまま、3コンポーネント全部終わってから done にする | run #63: 初回実行（PR #229 merge 後）で restore_rc=1 だったが file_count=82（バックアップ時と同数）・db_dump_gzip_magic_ok=true で、データ自体は正しく復元できているように見えた。原因が termination message からは分からないため、restic restore の標準出力/標準エラーの末尾（最大1500文字）も termination message に含めるよう manifest を更新した（PR未定）。この Job は既にクラスタ上に Failed で存在し Job.spec.template は不変フィールドのため、T-0108 と同じ理由で argocd.argoproj.io/sync-options: Replace=true,Force=true を追加した。次の起動で再実行結果の restore_output_tail を読み、restore_rc=1 の原因を切り分ける。 | run #64: restore_output_tail から原因判明 — securityContext の capabilities.drop:[ALL] で CAP_CHOWN が無く、restic がバックアップ時点の所有者へ lchown できず exit 1 になっていた（データ自体（file_count=82・gzip magic ok）は 正しく復元できていた）。restore コンテナにだけ capabilities.add:[CHOWN] を足す修正を PR で出した（#231 予定）。merge 後の次回実行で restore_rc=0 になるか確認する。 | run #64 続き: CHOWN 追加（#231, merge 済み）を ArgoCD が sync した後、Job を再実行したところ別のエラーで再度失敗（restore_rc=1, file_count=0）。restore_output_tail に `failed to restore timestamp ... operation not permitted` （utimes(2)）。root でも CAP_FOWNER が無いとファイル所有者と不一致なプロセスから タイムスタンプを変更できない。capabilities.add に FOWNER を追加する PR を続けて出す。 | run #64 続き2: FOWNER 追加（#232, merge 済み）後の再実行でまた失敗したが、今度は EACCES（permission denied）で EPERM とは別種。原因は PVC が Job 再実行間で消えず残ること — 前回実行で一部ディレクトリが実際に chown され、通常の DAC 権限ビットがroot（DAC_OVERRIDE 無し）のアクセスを塞いだ。DAC_OVERRIDE を追加し、かつ実行を PVC の残留状態に依存させないよう restore 前に target をクリーンアップするステップを足した PR を続けて出す。 | run #64 完了: DAC_OVERRIDE 追加 + クリーンアップ（#233, merge 済み）後の再実行で restore_rc=0 に成功。file_count=82（一致）、elapsed_seconds=16、DB dump の gzip マジックバイト OK。実測時間・試行錯誤の経緯を docs/backup.md に記録し、検証用の immich-restore-verify PVC/Job を削除する PR を出した。vaultwarden/coder-postgres は 未実施のため in_progress のまま継続（immich で判明した CHOWN/FOWNER/DAC_OVERRIDE + クリーンアップの教訓を初回実装から織り込む）。 | run #65: vaultwarden 分に着手。immich (#231-234) で判明した CHOWN/FOWNER/DAC_OVERRIDE + クリーンアップ + restore_output_tail の教訓を 初回実装から織り込んだ apps/vaultwarden/restic-restore-verify-job.yaml を追加 (#236)。 CI green・merge を待ってから次のイテレーションで restore 結果 (terminationMessage) を確認する。 coder-postgres 分は未実施のため in_progress のまま継続。 | run #66: vaultwarden 分の restore-verify Job を確認したところ初回実行で成功していた（restore_rc=0, elapsed_seconds=9, file_count=4, rsa_key_count=1, db_sqlite_magic_ok=true）。immich で判明した CHOWN/FOWNER/DAC_OVERRIDE + クリーンアップの教訓を初回実装から織り込んだため試行錯誤が不要だった。結果を docs/backup.md に記録し、検証専用の vaultwarden-restore-verify PVC/Job を削除する PR を出した。残るは coder-postgres 分のみ（pg_restore 経由のため権限まわりの事情が異なる可能性がある点に注意）。in_progress のまま継続。 | run #67: coder-postgres 分の restore-verify Job（apps/coder/restic-restore-verify-job.yaml）を追加 (#238, merged)。immich/vaultwarden の教訓（CHOWN/FOWNER/DAC_OVERRIDE）を初回実装から織り込みつつ、単一ファイルの pg_dump ダンプという性質に合わせて emptyDir + pg_restore --list / -f /dev/null による検証に設計を変えた。merge 直後に kubectl で確認したところ ArgoCD の coder Application はまだ旧revision（f6c1237）に同期済みのままで、Job はまだクラスタに存在しない（ArgoCD の次回ポーリング待ち、T-0108 と同型）。次の起動で Job の存在・terminationMessage を確認する。in_progress のまま継続。"
+      "notes": " | run #50: issue #56 (12:48:16) の指摘で、immich がまだほとんど使われていない（332MiB）今のうちに復元試験まで通しておくべきと助言された。T-0068〜T-0070 の実装は完了済みのため blocked_by を T-0067 のみに絞った。T-0067 が片付き次第、最優先で着手する。 | run #53: T-0067 done。ただし T-0103（remoteRef タイポ）修正直後のため、まだ一度も backup が成功した実績が無い。T-0104（検証 Job）の結果を待ってから着手する。 | run #57 (2巡目): substrate が in-cluster 常駐に変わったため『write 権限が要るため実行できない可能性』という懸念は解消（T-0104 と同じ Git→ArgoCD 経路で書き込み不要のまま実行できる） | run #60: T-0104 が done になり blocked_by 解消。immich/coder-postgres/vaultwarden 全3コンポーネントで restic backup 成功が確認できたので着手可能な todo に上げる | run #62: 3コンポーネント同時は1PRとして大きいため immich から着手（run #50 の助言どおり、まだ使用量が少ないうち）。apps/immich/restic-restore-verify-job.yaml で使い捨て PVC (immich-restore-verify) + 一度きりの Job を追加、restic restore latest → ファイル数と DB ダンプの gzip マジックバイト確認 → 結果を /dev/termination-log に書く方式にした（autopilot に pods/log 権限が無いため、get pods で読める terminationMessage 経由で結果を受け取る）。次の起動で Job の Complete/Failed と terminationMessage を確認し、成功していれば docs/backup.md に実測時間を記録した上で vaultwarden/coder-postgres も同じ形で続ける。in_progress のまま、3コンポーネント全部終わってから done にする | run #63: 初回実行（PR #229 merge 後）で restore_rc=1 だったが file_count=82（バックアップ時と同数）・db_dump_gzip_magic_ok=true で、データ自体は正しく復元できているように見えた。原因が termination message からは分からないため、restic restore の標準出力/標準エラーの末尾（最大1500文字）も termination message に含めるよう manifest を更新した（PR未定）。この Job は既にクラスタ上に Failed で存在し Job.spec.template は不変フィールドのため、T-0108 と同じ理由で argocd.argoproj.io/sync-options: Replace=true,Force=true を追加した。次の起動で再実行結果の restore_output_tail を読み、restore_rc=1 の原因を切り分ける。 | run #64: restore_output_tail から原因判明 — securityContext の capabilities.drop:[ALL] で CAP_CHOWN が無く、restic がバックアップ時点の所有者へ lchown できず exit 1 になっていた（データ自体（file_count=82・gzip magic ok）は 正しく復元できていた）。restore コンテナにだけ capabilities.add:[CHOWN] を足す修正を PR で出した（#231 予定）。merge 後の次回実行で restore_rc=0 になるか確認する。 | run #64 続き: CHOWN 追加（#231, merge 済み）を ArgoCD が sync した後、Job を再実行したところ別のエラーで再度失敗（restore_rc=1, file_count=0）。restore_output_tail に `failed to restore timestamp ... operation not permitted` （utimes(2)）。root でも CAP_FOWNER が無いとファイル所有者と不一致なプロセスから タイムスタンプを変更できない。capabilities.add に FOWNER を追加する PR を続けて出す。 | run #64 続き2: FOWNER 追加（#232, merge 済み）後の再実行でまた失敗したが、今度は EACCES（permission denied）で EPERM とは別種。原因は PVC が Job 再実行間で消えず残ること — 前回実行で一部ディレクトリが実際に chown され、通常の DAC 権限ビットがroot（DAC_OVERRIDE 無し）のアクセスを塞いだ。DAC_OVERRIDE を追加し、かつ実行を PVC の残留状態に依存させないよう restore 前に target をクリーンアップするステップを足した PR を続けて出す。 | run #64 完了: DAC_OVERRIDE 追加 + クリーンアップ（#233, merge 済み）後の再実行で restore_rc=0 に成功。file_count=82（一致）、elapsed_seconds=16、DB dump の gzip マジックバイト OK。実測時間・試行錯誤の経緯を docs/backup.md に記録し、検証用の immich-restore-verify PVC/Job を削除する PR を出した。vaultwarden/coder-postgres は 未実施のため in_progress のまま継続（immich で判明した CHOWN/FOWNER/DAC_OVERRIDE + クリーンアップの教訓を初回実装から織り込む）。 | run #65: vaultwarden 分に着手。immich (#231-234) で判明した CHOWN/FOWNER/DAC_OVERRIDE + クリーンアップ + restore_output_tail の教訓を 初回実装から織り込んだ apps/vaultwarden/restic-restore-verify-job.yaml を追加 (#236)。 CI green・merge を待ってから次のイテレーションで restore 結果 (terminationMessage) を確認する。 coder-postgres 分は未実施のため in_progress のまま継続。 | run #66: vaultwarden 分の restore-verify Job を確認したところ初回実行で成功していた（restore_rc=0, elapsed_seconds=9, file_count=4, rsa_key_count=1, db_sqlite_magic_ok=true）。immich で判明した CHOWN/FOWNER/DAC_OVERRIDE + クリーンアップの教訓を初回実装から織り込んだため試行錯誤が不要だった。結果を docs/backup.md に記録し、検証専用の vaultwarden-restore-verify PVC/Job を削除する PR を出した。残るは coder-postgres 分のみ（pg_restore 経由のため権限まわりの事情が異なる可能性がある点に注意）。in_progress のまま継続。 | run #67: coder-postgres 分の restore-verify Job（apps/coder/restic-restore-verify-job.yaml）を追加 (#238, merged)。immich/vaultwarden の教訓（CHOWN/FOWNER/DAC_OVERRIDE）を初回実装から織り込みつつ、単一ファイルの pg_dump ダンプという性質に合わせて emptyDir + pg_restore --list / -f /dev/null による検証に設計を変えた。merge 直後に kubectl で確認したところ ArgoCD の coder Application はまだ旧revision（f6c1237）に同期済みのままで、Job はまだクラスタに存在しない（ArgoCD の次回ポーリング待ち、T-0108 と同型）。次の起動で Job の存在・terminationMessage を確認する。in_progress のまま継続。 | run #68: coder-postgres 分の restore-verify Job（#238 merged）の結果を確認。restore_rc=0, elapsed_seconds=8, pg_restore_list_rc=0（1075 TOC エントリ）, pg_restore_full_rc=0 で、単一ファイルの pg_dump ダンプが正しく復元・展開できることを確認した。CHOWN/FOWNER/DAC_OVERRIDE は予防的に足した状態での成功のため、実際に不要かは未検証のまま。immich・vaultwarden・coder-postgres の3コンポーネント全てで復元試験が完了したため done にする。結果は docs/backup.md に記録、検証用 Job は削除した。T-0023/T-0027/T-0029 の blocked_by（T-0071 未完了）が解消したため、この3タスクを todo に戻した。"
     },
     {
       "id": "T-0072",
