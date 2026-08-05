@@ -195,13 +195,34 @@ restore 前のクリーンアップを常に入れる。
 検証専用の `immich-restore-verify` PVC/Job は確認が取れ次第、削除する PR を別途出す
 （このファイルの冒頭コメントに書いた運用どおり）。
 
-### vaultwarden / coder-postgres（未実施）
+### vaultwarden（完了、2026-08-06）
 
-immich と同じ設計（使い捨て PVC + Job、Replace=true,Force=true sync、termination message
-経由で結果を受け取る）で、次のタスクとして続ける。immich で判明した 3 capability
-（CHOWN/FOWNER/DAC_OVERRIDE）+ クリーンアップステップを初回実装から織り込む想定
-（同じ試行錯誤を繰り返さない）。coder-postgres は PVC 直接ではなく `pg_restore` を使う設計
-（上記セクション参照）のため、権限まわりの事情が immich/vaultwarden と異なる可能性がある。
+immich で判明した 3 capability（CHOWN/FOWNER/DAC_OVERRIDE）+ クリーンアップステップを
+**初回実装から**織り込んだため、試行錯誤なく初回実行で成功した。
+
+| 項目 | 結果 |
+|---|---|
+| restore 結果 | 成功（`restore_rc=0`） |
+| 復元にかかった時間 | **9 秒**（約4.6 MiB、12 files/dirs） |
+| 復元されたファイル数 | 4 |
+| rsa_key*.pem（JWT 署名鍵） | 1 件、復元確認 |
+| db.sqlite3 の整合性 | SQLite フォーマットマジックバイト確認 OK |
+
+**教訓**: immich で判明した権限まわりの教訓（CHOWN/FOWNER/DAC_OVERRIDE + クリーンアップ）は
+vaultwarden にもそのまま当てはまった。同じ `local-path` PVC + restic の組み合わせである限り、
+コンポーネントが変わっても同じ 3 capability で足りると見てよい。
+
+検証専用の `vaultwarden-restore-verify` PVC/Job は確認が取れたため削除した。
+
+### coder-postgres（未実施）
+
+immich/vaultwarden と同じ設計（使い捨て PVC + Job、Replace=true,Force=true sync、
+termination message 経由で結果を受け取る）で、次のタスクとして続ける。CHOWN/FOWNER/
+DAC_OVERRIDE + クリーンアップステップを初回実装から織り込む。coder-postgres は PVC 直接
+ではなく `pg_restore` を使う設計（上記セクション参照）のため、権限まわりの事情が
+immich/vaultwarden と異なる可能性がある（`pg_restore` はネットワーク経由の論理復元であり、
+ファイルシステムの所有者・パーミッション・タイムスタンプ復元を伴わないため、そもそも
+CHOWN/FOWNER/DAC_OVERRIDE が不要な可能性がある。着手時に確かめる）。
 
 ### 必要な Doppler 登録（T-0067）
 
