@@ -12,7 +12,9 @@ metadata:
   namespace: vaultwarden
 spec:
   backoffLimit: 1
-  activeDeadlineSeconds: 1800
+  # T-0097: 初回実行が DeadlineExceeded で失敗したため、restic-backup-cronjob.yaml と同じ理由で
+  # 3600s に揃える（immich 側の既存の実績値）
+  activeDeadlineSeconds: 3600
   template:
     spec:
       automountServiceAccountToken: false
