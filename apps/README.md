@@ -139,10 +139,15 @@ just inject-secrets
 ```
 apps/
 ├── apps.yaml              # App of Apps ルート
-├── kustomization.yaml     # Application 一覧
+├── kustomization.yaml     # Application 一覧（実体はこのファイルの resources を参照）
 ├── argocd/
+├── agent-rbac/
+├── dex/
 ├── external-secrets/
-└── tailscale-operator/
+├── tailscale-operator/
+├── immich/
+├── vaultwarden/
+└── coder/
 ```
 
 各アプリは以下の構造:
