@@ -92,6 +92,16 @@ issue #56 (2026-08-05 04:40:59) で人間から新方針: **PBS は重すぎる�
   流し込める想定）で immich-postgres へ復元する。復元時のバージョン整合（ダンプ生成時の
   immich/postgres バージョンとファイル名の `v{serverVersion}-pg{postgresVersion}` を突き合わせる）
   を事前に確認すること
+- **内蔵ダンプの継続監視**（issue #56, 2026-08-05 12:35:47 のレビュー対応）: 「内蔵の日次 DB
+  ダンプが `UPLOAD_LOCATION/backups/` に落ちている」という T-0068 の前提はソースコードでの
+  確認にとどまり、実機では未検証だった。これが崩れていると写真だけあって DB が無いバックアップ
+  になり、実際に復元するまで気づけない。`apps/immich/pvc-usage-cronjob.yaml`（T-0080 の
+  pvc-usage-reporter、3 namespace 共通スクリプト）に `BACKUP_LISTING_DIR` を設定（immich のみ）
+  し、`backups/` 直下のファイル一覧（name/bytes/mtime）を `pvc-usage-report` ConfigMap の
+  `backup_listing` キーに書き戻すようにした。vaultwarden/coder はこの env を設定しないため
+  スクリプトは共通のまま影響を受けない（`ops/check_pvc_usage_script_sync.py` で3ファイル一致を
+  引き続き検証）。ops-health-report の `pvc_usage`（immich エントリ）を読むたびに
+  `backup_listing.files` の有無と最新 `mtime` を確認すること（`ops/CHARTER.md` §2 に手順追記）
 
 ## coder-postgres の restic バックアップ (T-0070, 実装済み・credential 登録待ち)
 

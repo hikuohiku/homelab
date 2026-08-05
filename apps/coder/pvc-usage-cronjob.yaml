@@ -97,6 +97,31 @@ data:
         return total
 
 
+    def list_backup_files(path):
+        # アプリ内蔵のバックアップ機能（例: immich の日次 DB ダンプ）が実際に生成物を
+        # 落としているかを検証するための、対象ディレクトリ直下のファイル一覧。
+        # BACKUP_LISTING_DIR が設定されているジョブ（immich のみ、T-0068 のレビュー対応）
+        # だけがこの関数を呼ぶ。未設定の namespace（vaultwarden/coder）には影響しない
+        try:
+            entries = []
+            with os.scandir(path) as it:
+                for entry in it:
+                    if not entry.is_file(follow_symlinks=False):
+                        continue
+                    st = entry.stat(follow_symlinks=False)
+                    entries.append({
+                        "name": entry.name,
+                        "bytes": st.st_size,
+                        "mtime": datetime.datetime.fromtimestamp(
+                            st.st_mtime, tz=datetime.timezone.utc
+                        ).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                    })
+        except OSError as e:
+            return {"dir": path, "error": "{}: {}".format(type(e).__name__, e)}
+        entries.sort(key=lambda e: e["mtime"])
+        return {"dir": path, "files": entries}
+
+
     def parse_mounts(spec):
         # "name:/mnt/path,name2:/mnt/path2" 形式
         out = []
@@ -139,6 +164,9 @@ data:
             for pvc_name, mount_path in mounts
         ]
         report = {"generated_at": generated_at, "namespace": NAMESPACE, "usage": usage}
+        backup_listing_dir = os.environ.get("BACKUP_LISTING_DIR")
+        if backup_listing_dir:
+            report["backup_listing"] = list_backup_files(backup_listing_dir)
         put_configmap("pvc-usage-report", {"report.json": json.dumps(report, ensure_ascii=False)})
         print("pvc-usage-report ConfigMap を更新しました ({})".format(generated_at))
 
