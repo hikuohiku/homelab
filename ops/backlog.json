@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 42,
+  "next_id": 44,
   "updated": "2026-08-05T06:20:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
@@ -750,6 +750,42 @@
       "created": "2026-08-05",
       "pr": 114,
       "notes": "run #15: grep で `permissions.ask` / kubectl ask への言及を repo 横断で確認し、Plans.md 以外（CHARTER.md, CLAUDE.md, journal, dashboard/prs.json）は既に現状に即した記述か履歴記録であることを確認した上で Plans.md のみ修正"
+    },
+    {
+      "id": "T-0042",
+      "domain": "homelab",
+      "title": ".github/workflows/release-image.yml の nix-installer-action を @main から固定タグへ変える",
+      "kind": "ci",
+      "risk": "low",
+      "status": "done",
+      "priority": 8,
+      "why": "run #16: CHARTER §3 の調査（backlog todo が 0 件）で発見。`DeterminateSystems/nix-installer-action@main` だけが可変ブランチ参照で、同ファイル内の他の Action（actions/checkout@v4, cachix/cachix-action@v15, softprops/action-gh-release@v2）はすべてタグ pin。T-0001（tailscale k8s-nameserver の floating tag `unstable` を固定した）と同じ形のリスクで、レビュー無しに Action の中身が変わりうる",
+      "dod": "release-image.yml の nix-installer-action が具体的なリリースタグを指す",
+      "refs": [
+        ".github/workflows/release-image.yml"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #16: WebFetch で upstream の releases ページと README を確認。最新は v22。README には『このアクションは Action 自体のバージョンに関わらず常に最新の Determinate Nix をインストールする（固定した Nix バージョンが必要なら determinate-nix-action へ）』とあり、Action 参照の pin と実際にインストールされる Nix バージョンは無関係と判明。ここでの懸念は Nix バージョンではなく Action 自体のコードが `@main` だとレビュー無しに変わりうる点なので、リポジトリの他の Action と同じ慣習（メジャータグ pin）に合わせて `@v22` に固定した。Nix バージョンの固定は別の関心事のため対象外とした"
+    },
+    {
+      "id": "T-0043",
+      "domain": "homelab",
+      "title": ".github/workflows/*.yml の Action バージョンを棚卸しし、監視の要否を判断する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 26,
+      "why": "T-0042 (run #16) で発見。ops/inventory.json はアプリ/インフラのバージョンしか監視しておらず、CI workflow が使う GitHub Actions（actions/checkout, azure/setup-helm, hashicorp/setup-terraform, cachix/install-nix-action, cachix/cachix-action, softprops/action-gh-release 等）は誰も追っていない。T-0042 で見つけた `@main` の floating ref は個別に直したが、他にも同種の問題（メジャータグ pin だが実際は古いメジャー、等）が残っていないか未確認",
+      "dod": "各 workflow の `uses:` 行を洗い出し、(1) floating ref（`@main`/`@master`等ブランチ名）が残っていないか (2) 各メジャータグの最新版から大きく遅れていないか を確認する。継続監視が要ると判断すれば ops/inventory.json に kind: \"github-action\" 相当のエントリとして追加する。この調査自体ではコードを変更しない",
+      "refs": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/direct-push-guard.yml",
+        ".github/workflows/release-image.yml",
+        "ops/inventory.json"
+      ],
+      "created": "2026-08-05",
+      "pr": null
     }
   ]
 }

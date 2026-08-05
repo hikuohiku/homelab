@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T00:35:00Z",
+  "updated": "2026-08-05T00:43:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -203,6 +203,14 @@
       "prs": [
         114
       ]
+    },
+    {
+      "n": 16,
+      "at": "2026-08-05T00:43:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。backlog の todo が 0 件だったため、今回は .github/workflows/*.yml の Action バージョンという新しい角度で調査。release-image.yml の DeterminateSystems/nix-installer-action@main が可変ブランチ参照のまま残っていたのを発見（T-0001 の floating tag と同型のリスク）。upstream README を確認しこの Action の pin が実際にインストールされる Nix バージョンとは無関係と分かった上で、リポジトリの他の Action と揃えて @v22 に固定（T-0042）。他の workflow の Action バージョンは未確認のため T-0043 として起票",
+      "prs": []
     }
   ]
 }
