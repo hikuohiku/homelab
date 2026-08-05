@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 113,
+  "next_id": 114,
   "updated": "2026-08-05T22:19:04Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
@@ -2116,9 +2116,29 @@
           "残っていなければ apps/immich/postgres.yaml の image タグを一時的に 16.14-1.1.1 に戻して再現させ、kubectl logs -n immich <pod> -c postgres でエラーを確認する（PGDATA は 0.4.3 のまま無傷なので安全という前提。違えば教えてほしい）"
         ],
         "links": [
-          {"url": "https://github.com/hikuohiku/homelab/issues/56", "label": "issue #56"}
+          {
+            "url": "https://github.com/hikuohiku/homelab/issues/56",
+            "label": "issue #56"
+          }
         ]
       }
+    },
+    {
+      "id": "T-0113",
+      "domain": "homelab",
+      "title": "CLAUDE.md のディレクトリ構造・Apps 一覧に apps/autopilot/ が抜けている",
+      "kind": "docs",
+      "risk": "low",
+      "status": "done",
+      "priority": 90,
+      "why": "apps/autopilot/（自律運用エージェント自身の Deployment/loop.sh）が §5.5 で substrate として存在するにもかかわらず、CLAUDE.md の Tech Stack Apps 一覧・Directory Structure のどちらにも記載が無かった。run #78 の journal で次に調べる角度として挙げていたドキュメント実態ずれの1件",
+      "dod": "CLAUDE.md の Apps 一覧と Directory Structure に apps/autopilot/ を追加する",
+      "refs": [
+        "CLAUDE.md"
+      ],
+      "created": "2026-08-06",
+      "pr": 260,
+      "notes": ""
     }
   ]
 }
