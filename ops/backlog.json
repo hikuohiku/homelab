@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 110,
+  "next_id": 111,
   "updated": "2026-08-06",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
@@ -2045,7 +2045,28 @@
       ],
       "created": "2026-08-06",
       "pr": 223,
-      "notes": "T-0097 が『T-0108 で activeDeadlineSeconds を緩和したうえで再実行を待つ』として forward-reference していたが実体が起票されていなかった（T-0107 と同じ経緯）。#214 で timeout 緩和は既に着手済みだが、構築セッションの後続指摘（unlock 自動化・verbose 診断・timeout短縮での切り分け）はまだ manifest に反映されていない。次回以降で実装する。 | run #58: manifest 変更を実装した。apps/vaultwarden/restic-backup-verify-job.yaml に restic unlock・--verbose・RESTIC_PROGRESS_FPS=1 を追加し、診断のため activeDeadlineSeconds を 3600→300 に短縮（延ばす方向ではなく早く失敗させて途中経過を見る）。この Job は既にクラスタ上に Failed 状態で存在し Job.spec.template は不変フィールドのため、argocd.argoproj.io/sync-options: Replace=true を追加して ArgoCD が delete+recreate できるようにした。apps/vaultwarden/restic-backup-cronjob.yaml（本番）にも restic unlock のみを追加（timeout は変更しない）。ttlSecondsAfterFinished は元々未設定でログ保持の要件は満たしている。マージ後の実行結果（Complete/Failed）は autopilot が kubectl で自分で追える（Job/Pod の get/list は許可されている）が、--verbose の出力は Pod ログの読み取り権限が無いため見られない。失敗が続く場合は issue #56 で構築セッションにログ確認を依頼する。"
+      "notes": "T-0097 が『T-0108 で activeDeadlineSeconds を緩和したうえで再実行を待つ』として forward-reference していたが実体が起票されていなかった（T-0107 と同じ経緯）。#214 で timeout 緩和は既に着手済みだが、構築セッションの後続指摘（unlock 自動化・verbose 診断・timeout短縮での切り分け）はまだ manifest に反映されていない。次回以降で実装する。 | run #58: manifest 変更を実装した。apps/vaultwarden/restic-backup-verify-job.yaml に restic unlock・--verbose・RESTIC_PROGRESS_FPS=1 を追加し、診断のため activeDeadlineSeconds を 3600→300 に短縮（延ばす方向ではなく早く失敗させて途中経過を見る）。この Job は既にクラスタ上に Failed 状態で存在し Job.spec.template は不変フィールドのため、argocd.argoproj.io/sync-options: Replace=true を追加して ArgoCD が delete+recreate できるようにした。apps/vaultwarden/restic-backup-cronjob.yaml（本番）にも restic unlock のみを追加（timeout は変更しない）。ttlSecondsAfterFinished は元々未設定でログ保持の要件は満たしている。マージ後の実行結果（Complete/Failed）は autopilot が kubectl で自分で追える（Job/Pod の get/list は許可されている）が、--verbose の出力は Pod ログの読み取り権限が無いため見られない。失敗が続く場合は issue #56 で構築セッションにログ確認を依頼する。 | run #59: PR #223 merge 後、ArgoCD の operationState を kubectl で確認したところ Replace=true 単体では Job.spec.selector 等の immutable フィールドを含む置き換えが 'field is immutable' で SyncFailed し、4回リトライしても解消していなかった（2026-08-05 18:43 UTC 確認）。原因は Replace=true が kubectl replace 相当で PUT でも immutable 制約はサーバー側で強制されるため。Force=true を追加し Replace=true,Force=true（kubectl replace --force 相当、delete→create）に変更した。"
+    },
+    {
+      "id": "T-0110",
+      "domain": "homelab",
+      "title": "ops-health-reporter に autopilot 自身（namespace autopilot）の健全性を追加する",
+      "kind": "feature",
+      "risk": "low",
+      "status": "todo",
+      "priority": 15,
+      "why": "常駐化（run #57、CHARTER §5.5）で autopilot は自分自身が CrashLoopBackOff やハングに陥っても報告できない。ops-health-reporter は他コンポーネントの sync/health を見ているが autopilot 自身は対象外。人間から具体的な提案があった（issue #56, 2026-08-05T18:34:45Z）: 'crash より静かな失敗のほうが厄介'。",
+      "dod": "ops-health-reporter（apps/ops-health-reporter/）が ops/health/latest.json に次を含める: (1) autopilot namespace の Deployment の readyReplicas/restartCount、(2) 直近イテレーションの終了コード・終了時刻（可能なら Pod ログから `iteration #N end exit=` を拾う。ops-health-reporter 自身の RBAC で pods/log が読めるか要確認、読めなければ代替指標を検討する）、(3) 最後にイテレーションが完了してからの経過時間。CHARTER §2 に、次の起動が起動直後にこれを見て『前回の自分は正常に終わったか』を確認する手順を追記する。ダッシュボードにも表示する。",
+      "blocked_by": null,
+      "refs": [
+        "apps/ops-health-reporter/",
+        "apps/autopilot/",
+        "ops/CHARTER.md",
+        "ops/dashboard/build.py"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "ops-health-reporter の ServiceAccount の権限（pods/log を含むか）を実装前に確認する必要がある。含まないなら CHARTER §5.5 と同様にログ以外の指標（Deployment restartCount, 最終 successfulJob 的なもの）で代替する。"
     }
   ]
 }
