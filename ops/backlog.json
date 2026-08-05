@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 81,
-  "updated": "2026-08-05T06:35:00Z",
+  "updated": "2026-08-05T06:41:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1452,6 +1452,7 @@
       "priority": 5,
       "why": "T-0077 (run #32) の分割で起票。PVC (immich-library, immich-postgres-data, vaultwarden-data, coder-postgres-data) はそれぞれ別 namespace (immich/vaultwarden/coder) にあり、Pod は自 namespace の PVC しかマウントできないため、既存の cluster-wide な ops-health-reporter CronJob 1 個には収まらない。namespace ごとに小さな CronJob を置き、結果をどう ops-health-reporter 側に集約するか（ConfigMap 経由 read 等）を設計してから実装する必要がある。T-0079（node01 実ディスク容量の食い違い）の裏付けとして も緊急度が高い",
       "dod": "対象 4 PVC の実使用量が ops/health/latest.json（または別ファイル）から読める。namespace ごとの CronJob は読み取り専用マウント (readOnly: true) のみで PVC への書き込み権限を持たない。追加する RBAC は最小限（ConfigMap 経由にするなら該当 namespace 内の configmaps get/list/create/update のみに絞り、cluster-wide にしない）",
+      "blocked_by": "T-0079（node01 の実ディスク容量が df -h/lsblk で確定するまで）。理由は notes の run #33 を参照",
       "refs": [
         "apps/ops-health-reporter/",
         "apps/immich/library-pvc.yaml",
@@ -1460,7 +1461,8 @@
         "apps/coder/postgres.yaml"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": null,
+      "notes": "run #33: 実装前に2つ blocked にした。(1) このタスク自体が既に認識している namespace 分散の課題に加え、既存 Pod（immich-server 等）が `securityContext.fsGroup` を設定している場合、新しい CronJob Pod が同じ PVC を readOnly でマウントしても kubelet がマウント時にボリューム全体へ再帰的な chown を試みることがある（fsGroup が Pod ごとの設定のため、chart のデフォルト値をこのサンドボックスから確認できていない）。immich-library だけで 50Gi あり、ディスクが逼迫している疑いのある状況（T-0079）でこの走査を追加するとディスク I/O 負荷が増え悪化させるリスクがある。(2) 実装しても実機で動作確認する手段が無く（kubectl 不可）、fsGroup の挙動を机上でしか検証できないため、着手前に T-0079 で実際の空き容量の余裕を確認しておきたい。T-0079 の df -h/lsblk 報告が来たら、fsGroup の値を values.yaml 等で明示指定してから実装するか検討する"
     }
   ]
 }
