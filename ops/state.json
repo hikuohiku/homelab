@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T21:54:49Z",
+  "updated": "2026-08-05T22:06:08Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -788,8 +788,12 @@
       "at": "2026-08-05T21:54:49Z",
       "kind": "scheduled",
       "by": "in-cluster autopilot",
-      "summary": "前回の中断（PR #244, T-0029）を拾った。CI 6件全て green・mergeable_state: clean を確認し、「縛る変更」に該当しないこと・T-0071 でリストア確認済みであることから merge した（91243f1）。merge 直後に ArgoCD の immich sync を確認したが、まだ旧 commit のまま反映前だった（ポーリング間隔待ちと判断）。backlog の T-0029 は `done` にはせず `in_progress`（pr:244）のまま、vchord アップグレード Job の成否確認は次回起動に持ち越し。副次的に、この記録更新PR作成時に stale なローカル main から分岐してしまい PR が dirty になった事故があり、原因と対処を CHARTER §4 に追記した。issue #56 に新規フィードバックなし。homelab の健全性（ops-health-report, generated_at 21:30:09Z）は Application 11 件全て Synced/Healthy、autopilot 自身の heartbeat も正常。",
-      "prs": []
+      "summary": "前回の中断（PR #244, T-0029）を拾った。CI 6件全て green・mergeable_state: clean を確認し、「縛る変更」に該当しないこと・T-0071 でリストア確認済みであることから merge した（91243f1）。**merge 後 ArgoCD が同期すると immich-postgres が CrashLoopBackOff に入った**（コンテナ起動自体が失敗、postgres バイナリは一度も実行されていない。manifest の `args: [-c, ...]` のみで `command:` 未指定という形が新イメージの ENTRYPOINT で通らなくなったのが原因と推定）。データは無傷と判断し、CHARTER §9 に従い即座に image タグ・vchord-upgrade-job.yaml・inventory を revert する PR #247 を出して merge した（a43b475）。ArgoCD 再同期後、immich-postgres が Running/Ready に復帰し immich Application が Synced/Healthy に戻ったことを kubectl で確認した（障害発生から復旧確認まで約25分）。backlog の T-0029 は `todo` に戻し、再着手前にイメージの entrypoint 互換性確認を dod に追記。副次的に2つの事故と対処を CHARTER に反映: (1) 記録更新 PR 作成時に stale なローカル main から分岐して PR が dirty になった件（§4 に追記）、(2) revert PR の `allow-delete:` をバッククォートで囲んで CI が fail-closed になった件（§4 に既知の落とし穴として書いてあったのに同じ形で踏んだ。本文修正 + 空コミットで再実行し解消）。issue #56 に新規フィードバックなし。",
+      "prs": [
+        244,
+        246,
+        247
+      ]
     }
   ]
 }
