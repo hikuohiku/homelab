@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T05:10:00Z",
+  "updated": "2026-08-05T05:20:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T04:45:21Z"
+    "last_read": "2026-08-05T04:51:25Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -345,6 +345,17 @@
       "prs": [
         149,
         150
+      ]
+    },
+    {
+      "n": 29,
+      "at": "2026-08-05T05:20:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし（ローカル origin/main の参照キャッシュが古いままだったため git fetch で追従、run #25 と同型）。issue #56 の未読フィードバック1件（04:51:25、構築セッション経由）を反映: (1) T-0011（vaultwarden ADMIN_TOKEN）→ 人間が Doppler の値を Argon2 PHC に差し替え済みと判明、manifest 変更不要のため done（#151, auto-merged）。(2) T-0015（ArgoCD/k8s 健全性の書き戻し）→ GITHUB_HEALTH_REPORTER_TOKEN が Doppler に登録され着手。apps/ops-health-reporter/ に Namespace・RBAC(get/list のみ)・ExternalSecret・CronJob（30分毎、python:3.12-alpine、標準ライブラリのみ）を実装し、k8s API から ArgoCD Application/Pod/PVC/Node の状態を GitHub Contents API 経由で ops-health-report という専用ブランチへ書き戻す仕組みを作った（#153）。CronJob に memory limits と securityContext(runAsNonRoot) を新設したため CHARTER §4 の『縛る変更』クールダウン対象と判断し、この起動では merge していない。作業中に別セッション（T-0073, #152）と next_id の重複（T-0074）が判明し、自分側を T-0075 に採番し直して回避した",
+      "prs": [
+        151,
+        153
       ]
     }
   ]
