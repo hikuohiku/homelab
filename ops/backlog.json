@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 49,
-  "updated": "2026-08-05T01:32:00Z",
+  "next_id": 50,
+  "updated": "2026-08-05T01:23:49Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -720,7 +720,7 @@
       "status": "done",
       "priority": 25,
       "why": "run #14 時点で backlog の todo が 0 件になった（T-0005 由来の個別更新タスクを全て消化）。CHARTER §3 は backlog が空のときに調査タスクを自分で起票することを求めている。T-0005 の調査（run #6, 2026-08-04）から日数が経つと inventory.json の各対象がまた古くなる。T-0012（自己振り返り）と同じ recurring の運用に倣い、T-0005 を初回実施とみなして再調査サイクルに載せる",
-      "dod": "T-0005 と同じ手法（subagent 併用）で ops/inventory.json の全対象の上流最新版を確認し、差分があれば個別の更新タスクを起票する（1 コンポーネント 1 タスク）。この調査自体ではコードを変更しない。実施後は次回の next_review を 1 週間先に更新する",
+      "dod": "T-0005 と同じ手法（subagent 併用）で ops/inventory.json の全対象の上流最新版を確認し、差分があれば個別の更新タスクを起票する（1 コンポーネント 1 タスク）。この調査自体ではコードを変更しない。実施後は次回の next_review を 1 週間先に更新する。**`policy: manual` かつ離散リリースが無い対象（nixpkgs 等）は差分確認の対象外だが、`flake.lock` に埋め込まれた `lastModified` から経過月数を出し、目安（6ヶ月）を超えていたら age だけを理由に needs-human を起票する**（T-0049 run #18 参照。離散リリースが無いことを理由に経年チェックまで除外すると、その対象だけ永久に誰も見なくなり CLAUDE.md #49 と同型の塩漬けが起きる）",
       "recurring": "weekly",
       "last_done": "2026-08-04",
       "next_review": "2026-08-11",
@@ -874,6 +874,25 @@
       "created": "2026-08-05",
       "pr": 122,
       "notes": "run #17: subagent に v2.6.2〜v3.0.2 の release notes を原文確認させた。v3.0.0 の唯一の破壊的変更は Node24 ランタイム（upstream が明示: Node20 互換が要るなら v2.6.2 に留まれと明記）。v3.0.1 は依存更新のみ、v3.0.2 の新機能（既存 draft の再利用、Gitea アセット置換対応等）はこのリポジトリの non-draft/non-prerelease 経路には無関係。tag_name/name/body 等の入力に変更なし。T-0045〜T-0048 で GitHub Actions のメジャー更新棚卸し（T-0043）が完了した"
+    },
+    {
+      "id": "T-0049",
+      "domain": "homelab",
+      "title": "nix/images/proxmox-cloud/flake.lock（nixpkgs 等）を `nix flake update` で最新化してほしい",
+      "kind": "upgrade",
+      "risk": "medium",
+      "status": "needs-human",
+      "priority": 28,
+      "why": "backlog の todo が 0 件だったため CHARTER §3 の調査（run #18）。`ops/inventory.json` の nixpkgs エントリは `policy: manual` かつ『離散リリースが無いので T-0005/T-0040 の対象外』とされているが、これは経年チェックそのものも免除している訳ではなかった。`flake.lock` に埋め込まれた `locked.lastModified` を実際に読むと、4 入力（flake-parts, nixpkgs, nixpkgs-lib, sops-nix）とも 2025-11〜12 更新止まりで、今日時点で約 8 ヶ月放置されている。離散リリースが無いことを理由に誰も経年を見ていなかっただけで、CLAUDE.md の Maintenance 節にある vaultwarden 放置（#49）と同型のリスク（気づかれないまま塩漬けになる）に該当する",
+      "dod": "`nix/images/proxmox-cloud` で `nix flake update` を実行し、更新後の `flake.lock` をコミットする。CI（`nix flake check`）が green であることを確認する。configuration.nix / k3s-manifests.nix が参照する NixOS モジュールオプションに 8 ヶ月分の破壊的変更が無いか目視で確認する（nixos-unstable のリリースノート相当は無いため、`nixpkgs` の変更ログではなく実際に使っているオプション — `proxmox.cloudInit`, `services.cloud-init`, `services.k3s` 相当, `sops` 等 — の evaluation が通ることで代用可）。実機（node01）へは自動反映されない（CLAUDE.md: NixOS イメージのビルド・入れ替えは手動運用）ため、イメージの再ビルド・差し替え自体は別途人間の判断でよい",
+      "needs_human_reason": "`nix flake update` は provider/dependency のロックハッシュ（narHash）を実際に nix を実行して計算する必要があり、autopilot のクラウドサンドボックスには nix が無い（CHARTER §5.2、T-0030 の terraform lock と同型の制約）。手で `.lock` の JSON を編集してハッシュを捏造することはできないので、nix が使える環境（人間の対話セッション等）で `nix flake update` を実行し、結果の `flake.lock` をコミットしてほしい。破壊的変更の洗い出しは実行後に自分（次にこの needs-human を拾う起動）が diff を見て引き続き担当する",
+      "refs": [
+        "nix/images/proxmox-cloud/flake.lock",
+        "ops/inventory.json"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #18: flake.lock の `locked.lastModified`（unix epoch）を4入力とも確認し、2025-11-21〜2025-12-12 止まりと判明。T-0040 の DoD に『manual policy かつ離散リリース無しの対象も経年チェックだけは行う』を追記し、今後は自動的に再検出されるようにした"
     }
   ]
 }
