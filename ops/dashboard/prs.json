@@ -2,6 +2,27 @@
   "open": [],
   "merged": [
     {
+      "number": 258,
+      "title": "revert(immich): postgres 16.14-1.1.1 化を revert する (T-0029, CrashLoopBackOff)",
+      "url": "https://github.com/hikuohiku/homelab/pull/258",
+      "mergedAt": "2026-08-05T23:34:16Z",
+      "headRefName": "autopilot/T-0029-rollback-crashloop"
+    },
+    {
+      "number": 257,
+      "title": "feat(immich): postgres を16.14-1.1.1に上げinitdbブートストラップを組み込む (T-0029)",
+      "url": "https://github.com/hikuohiku/homelab/pull/257",
+      "mergedAt": "2026-08-05T23:22:16Z",
+      "headRefName": "autopilot/T-0029-postgres-bootstrap-integration"
+    },
+    {
+      "number": 256,
+      "title": "chore(ops): run #73-75 の journal/state/CHARTER を記録する",
+      "url": "https://github.com/hikuohiku/homelab/pull/256",
+      "mergedAt": "2026-08-05T23:11:57Z",
+      "headRefName": "autopilot/T-0111-run75-wrapup"
+    },
+    {
       "number": 255,
       "title": "chore(immich): T-0111 完了、検証用 Job/PVC を削除し T-0029 を再開可能にする",
       "url": "https://github.com/hikuohiku/homelab/pull/255",
@@ -399,27 +420,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/195",
       "mergedAt": "2026-08-05T12:28:53Z",
       "headRefName": "autopilot/T-0070-coder-postgres-restic-backup"
-    },
-    {
-      "number": 194,
-      "title": "ops: run #48 の記録更新（journal・state・PRキャッシュ、T-0095 id重複の再発防止）",
-      "url": "https://github.com/hikuohiku/homelab/pull/194",
-      "mergedAt": "2026-08-05T12:03:09Z",
-      "headRefName": "autopilot/run48-record"
-    },
-    {
-      "number": 189,
-      "title": "docs: apps/README.md の使われていない旧ブートストラップ手順を削除する (T-0095)",
-      "url": "https://github.com/hikuohiku/homelab/pull/189",
-      "mergedAt": "2026-08-05T11:55:33Z",
-      "headRefName": "autopilot/T-0095-apps-readme-dead-bootstrap"
-    },
-    {
-      "number": 192,
-      "title": "fix: vaultwarden backupのsqlite-snapshotをapk依存からpython標準ライブラリへ (T-0069 follow-up)",
-      "url": "https://github.com/hikuohiku/homelab/pull/192",
-      "mergedAt": "2026-08-05T11:54:12Z",
-      "headRefName": "autopilot/T-0069-followup-drop-apk-dep"
     }
   ]
 }
