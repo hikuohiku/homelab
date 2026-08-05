@@ -2,6 +2,55 @@
   "open": [],
   "merged": [
     {
+      "number": 255,
+      "title": "chore(immich): T-0111 完了、検証用 Job/PVC を削除し T-0029 を再開可能にする",
+      "url": "https://github.com/hikuohiku/homelab/pull/255",
+      "mergedAt": "2026-08-05T23:07:06Z",
+      "headRefName": "autopilot/T-0111-cleanup-verify-job"
+    },
+    {
+      "number": 254,
+      "title": "fix(immich): T-0111 検証 Job の createdb スキップ条件を修正",
+      "url": "https://github.com/hikuohiku/homelab/pull/254",
+      "mergedAt": "2026-08-05T23:01:31Z",
+      "headRefName": "autopilot/T-0111-createdb-condition-fix"
+    },
+    {
+      "number": 253,
+      "title": "fix(immich): T-0111 検証 Job で毎回 PGDATA を空にしてから initdb する",
+      "url": "https://github.com/hikuohiku/homelab/pull/253",
+      "mergedAt": "2026-08-05T22:57:43Z",
+      "headRefName": "autopilot/T-0111-clean-pgdata-each-run"
+    },
+    {
+      "number": 252,
+      "title": "fix(immich): T-0111 検証 Job に ArgoCD Force+Replace sync-option を付与",
+      "url": "https://github.com/hikuohiku/homelab/pull/252",
+      "mergedAt": "2026-08-05T22:52:32Z",
+      "headRefName": "autopilot/T-0111-job-replace-sync-option"
+    },
+    {
+      "number": 251,
+      "title": "fix(immich): T-0111 検証 Job の unix socket ディレクトリ不足を修正",
+      "url": "https://github.com/hikuohiku/homelab/pull/251",
+      "mergedAt": "2026-08-05T22:41:13Z",
+      "headRefName": "autopilot/T-0111-socket-dir-fix"
+    },
+    {
+      "number": 250,
+      "title": "feat(immich): T-0111 postgres 手動 initdb ブートストラップの検証 Job (16.14-1.1.1)",
+      "url": "https://github.com/hikuohiku/homelab/pull/250",
+      "mergedAt": "2026-08-05T22:36:31Z",
+      "headRefName": "autopilot/T-0111-postgres-bootstrap-verify"
+    },
+    {
+      "number": 249,
+      "title": "chore(ops): T-0029 の再着手前提を調べ、initdb ブートストラップ消失を T-0111 として起票する（run #73）",
+      "url": "https://github.com/hikuohiku/homelab/pull/249",
+      "mergedAt": "2026-08-05T22:21:21Z",
+      "headRefName": "autopilot/T-0111-records"
+    },
+    {
       "number": 248,
       "title": "chore(ops): T-0029 の障害・revert・復旧確認を記録する（run #72）",
       "url": "https://github.com/hikuohiku/homelab/pull/248",
@@ -371,55 +420,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/192",
       "mergedAt": "2026-08-05T11:54:12Z",
       "headRefName": "autopilot/T-0069-followup-drop-apk-dep"
-    },
-    {
-      "number": 191,
-      "title": "feat: vaultwarden用restic backup CronJobを追加 (T-0069)",
-      "url": "https://github.com/hikuohiku/homelab/pull/191",
-      "mergedAt": "2026-08-05T11:41:15Z",
-      "headRefName": "autopilot/T-0069-vaultwarden-restic-backup"
-    },
-    {
-      "number": 190,
-      "title": "CHARTER: blocked/needs-humanをタスク全体でなく部分で見る (T-0095)",
-      "url": "https://github.com/hikuohiku/homelab/pull/190",
-      "mergedAt": "2026-08-05T11:32:44Z",
-      "headRefName": "autopilot/T-0095-blocked-granularity"
-    },
-    {
-      "number": 188,
-      "title": "ops: run #47 の記録更新（PR番号反映・journal・state・PRキャッシュ）",
-      "url": "https://github.com/hikuohiku/homelab/pull/188",
-      "mergedAt": "2026-08-05T11:23:58Z",
-      "headRefName": "autopilot/run47-record"
-    },
-    {
-      "number": 187,
-      "title": "docs: apps/README.md の ArgoCD Application 出力例を実態に合わせる (T-0094)",
-      "url": "https://github.com/hikuohiku/homelab/pull/187",
-      "mergedAt": "2026-08-05T10:29:02Z",
-      "headRefName": "autopilot/T-0094-apps-readme-app-list"
-    },
-    {
-      "number": 186,
-      "title": "docs: CLAUDE.md の autopilot 定期実行間隔記述を実態に合わせる (T-0093)",
-      "url": "https://github.com/hikuohiku/homelab/pull/186",
-      "mergedAt": "2026-08-05T09:29:57Z",
-      "headRefName": "autopilot/T-0093-claude-md-schedule-interval"
-    },
-    {
-      "number": 183,
-      "title": "docs: README.md の insecure 手順を実態に合わせる (T-0092)",
-      "url": "https://github.com/hikuohiku/homelab/pull/183",
-      "mergedAt": "2026-08-05T09:25:25Z",
-      "headRefName": "autopilot/T-0092-readme-insecure-fix"
-    },
-    {
-      "number": 182,
-      "title": "ops: T-0091 の PR 番号反映、PR キャッシュ最新化 (run #43)",
-      "url": "https://github.com/hikuohiku/homelab/pull/182",
-      "mergedAt": "2026-08-05T09:04:43Z",
-      "headRefName": "autopilot/run43-pr-numbers"
     }
   ]
 }

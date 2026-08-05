@@ -794,6 +794,40 @@
         246,
         247
       ]
+    },
+    {
+      "n": 73,
+      "at": "2026-08-05T22:19:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "T-0029 (immich postgres メジャー更新) 再着手前提の調査。ops-health-report が immich Degraded/immich-postgres CrashLoopBackOff を示していたが、これは直前の revert (PR #247) が ArgoCD に反映される過渡期の断面と kubectl で直接確認し、新規インシデントではないと判断。subagent に GHCR の実イメージ config を直接照合させ、cloudnative-vectorchord 16.10-1.0.0 以降が CloudNativePG operand 系イメージに切り替わり initdb ブートストラップが無いことを確定。T-0029 を blocked のまま、前提条件を T-0111 として起票した（記録は #249 で merge、manifest は今回変更なし）",
+      "prs": [
+        249
+      ]
+    },
+    {
+      "n": 74,
+      "at": "2026-08-05T22:32:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "T-0111 の DoD 候補 (a) に着手。immich-postgres の initdb ブートストラップを使い捨て PVC/Job で手動再現する apps/immich/postgres-bootstrap-verify-job.yaml を新設（PR #250）。CI green を確認したが、Job 実行結果の確認は次回起動に持ち越し、PR は open のまま終了",
+      "prs": [
+        250
+      ]
+    },
+    {
+      "n": 75,
+      "at": "2026-08-05T22:41:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断: PR #250（T-0111, run #74 が open のまま終了）を拾い、CI green・issue #56 に新しい異議が無いことを確認して merge。issue #56 に新規フィードバックなし。検証 Job を実行→失敗→原因特定→修正PRの直列サイクルを4回繰り返し完遂: (1) unix socket ディレクトリ不足 (#251)、(2) Job.spec.template が immutable で ArgoCD sync が固まる問題を Force=true,Replace=true で解消 (#252、T-0108でも既出だった教訓をCHARTER §4に明記)、(3) PVC 再利用時に前回のPG_VERSION残存でテスト本体がスキップされる不具合を修正 (#253)、(4) createdb 実行条件の誤り（POSTGRES_USERと同名DBはinitdbが自動生成しない）を修正 (#254)。最終的にJobが成功（vchord_version=1.1.1）したことをkubectlで確認し、T-0111を done、検証用PVC/Jobを削除するPR（#255、allow-delete明記）をmerge・ArgoCD削除確認まで見届けた。T-0029のblocked_byを解除しtodoに戻した。副産物としてCHARTER §4の kubectl不使用の記述が§5.5移行後は古くなっていた点も修正",
+      "prs": [
+        251,
+        252,
+        253,
+        254,
+        255
+      ]
     }
   ]
 }
