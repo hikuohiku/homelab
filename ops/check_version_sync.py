@@ -21,6 +21,20 @@ def read(path: str) -> str:
     return (ROOT / path).read_text()
 
 
+def extract_image_tag_all(path: str, image_prefix: str) -> str:
+    """`<image_prefix><tag>` を全箇所拾い、ファイル内で全て一致することを確認して返す。
+    1 ファイルに同じイメージが複数回（例: backup CronJob と retention CronJob）出てくる
+    場合でも、ファイル内の割れをそのまま見逃さない（extract_all_action_tags と同じ考え方）。"""
+    text = read(path)
+    matches = re.findall(rf"{re.escape(image_prefix)}(\S+)", text)
+    if not matches:
+        raise ValueError(f"{path}: {image_prefix} が見つからない")
+    uniq = sorted(set(matches))
+    if len(uniq) > 1:
+        raise ValueError(f"{path}: {image_prefix} のタグがファイル内で不一致 ({uniq})")
+    return uniq[0]
+
+
 def extract_yaml_top_level_block(path: str, top_key: str) -> str:
     """トップレベルキー（0-indent の `<top_key>:`）から、次のトップレベルキーまたは末尾までの
     範囲をブロックとして返す。同じファイル内に複数の image/tag ペアがあっても、無関係な
@@ -271,6 +285,20 @@ GROUPS = [
             )),
             ("apps/coder/restic-backup-cronjob.yaml", lambda: extract_image_tag(
                 "apps/coder/restic-backup-cronjob.yaml", "image: postgres:"
+            )),
+        ],
+    },
+    {
+        "name": "restic/restic backup CronJob image tag (T-0098, inventory: vaultwarden-restic-image/coder-postgres-restic-image/immich-restic-image)",
+        "targets": [
+            ("apps/vaultwarden/restic-backup-cronjob.yaml", lambda: extract_image_tag_all(
+                "apps/vaultwarden/restic-backup-cronjob.yaml", "image: restic/restic:"
+            )),
+            ("apps/coder/restic-backup-cronjob.yaml", lambda: extract_image_tag_all(
+                "apps/coder/restic-backup-cronjob.yaml", "image: restic/restic:"
+            )),
+            ("apps/immich/restic-backup-cronjob.yaml", lambda: extract_image_tag_all(
+                "apps/immich/restic-backup-cronjob.yaml", "image: restic/restic:"
             )),
         ],
     },

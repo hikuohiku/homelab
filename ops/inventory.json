@@ -352,7 +352,7 @@
       "match": "restic/restic:",
       "upstream": "github:restic/restic",
       "policy": "auto",
-      "note": "T-0069 で新設。同一ファイル内に vaultwarden-restic-backup（バックアップ）と vaultwarden-restic-retention（forget/prune）の2箇所で使用しており、check_version_sync.py の GROUPS には未登録（T-0098 で追う。手動更新時は2箇所とも揃えること）。T-0070/T-0068 で apps/coder/restic-backup-cronjob.yaml・apps/immich/restic-backup-cronjob.yaml にも同じタグを採用したためファイル間でも重複しているが、こちらも T-0098 の対象外（未登録）",
+      "note": "T-0069 で新設。同一ファイル内に vaultwarden-restic-backup（バックアップ）と vaultwarden-restic-retention（forget/prune）の2箇所で使用。T-0070/T-0068 で apps/coder/restic-backup-cronjob.yaml・apps/immich/restic-backup-cronjob.yaml にも同じタグを採用しファイル間でも重複していたが、T-0098 (run #49) で check_version_sync.py の GROUPS にファイル内・ファイル間の両方を1つの GROUP としてまとめて登録済み（extract_image_tag_all で各ファイル内の一致を検証したうえで3ファイル間の一致も検証する）。手動更新時は3ファイル×2箇所＝6箇所とも揃えること",
       "observability_impact": "vaultwarden の restic バックアップ・retention CronJob が使用。壊れるとバックアップが取れなくなるが vaultwarden 本体の可用性には影響しない"
     },
     {
@@ -364,7 +364,7 @@
       "match": "restic/restic:",
       "upstream": "github:restic/restic",
       "policy": "auto",
-      "note": "T-0070 で新設。vaultwarden-restic-image と同じタグ (0.19.1) を使う設計。同一ファイル内に coder-restic-backup と coder-restic-retention の2箇所、かつ vaultwarden-restic-image / immich-restic-image ともファイル間で重複しており、check_version_sync.py の GROUPS には未登録（T-0098 の対象を拡張して追う）",
+      "note": "T-0070 で新設。vaultwarden-restic-image と同じタグ (0.19.1) を使う設計。同一ファイル内に coder-restic-backup と coder-restic-retention の2箇所、かつ vaultwarden-restic-image / immich-restic-image ともファイル間で重複しているが、T-0098 (run #49) で check_version_sync.py の GROUPS に登録済み（vaultwarden-restic-image の note 参照）",
       "observability_impact": "coder-postgres の restic バックアップ・retention CronJob が使用。壊れるとバックアップが取れなくなるが coder 本体の可用性には影響しない"
     },
     {
@@ -376,7 +376,7 @@
       "match": "restic/restic:",
       "upstream": "github:restic/restic",
       "policy": "auto",
-      "note": "T-0068 で新設。vaultwarden-restic-image / coder-postgres-restic-image と同じタグ (0.19.1) を使う設計。同一ファイル内に immich-restic-backup と immich-restic-retention の2箇所、かつ他2ファイルともファイル間で重複しており、check_version_sync.py の GROUPS には未登録（T-0098 の対象を拡張して追う）",
+      "note": "T-0068 で新設。vaultwarden-restic-image / coder-postgres-restic-image と同じタグ (0.19.1) を使う設計。同一ファイル内に immich-restic-backup と immich-restic-retention の2箇所、かつ他2ファイルともファイル間で重複しているが、T-0098 (run #49) で check_version_sync.py の GROUPS に登録済み（vaultwarden-restic-image の note 参照）",
       "observability_impact": "immich の restic バックアップ・retention CronJob が使用。壊れるとバックアップが取れなくなるが immich 本体の可用性には影響しない"
     }
   ]
