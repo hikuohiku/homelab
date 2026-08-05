@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T16:20:00Z",
+  "updated": "2026-08-05T17:28:54Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T16:12:29Z"
+    "last_read": "2026-08-05T17:14:24Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -620,6 +620,18 @@
       "by": "cloud routine",
       "summary": "同じ cron から並行して起動していた別セッション（run #54 として先に #209 を merge）と、issue #56 の同じフィードバックを同時に処理してしまい、内容が完全重複した PR #210 を作成・push 後に発覚。#210 は base 乖離で dirty になっており、merge すると backlog.json に T-0100/T-0105/T-0106 の重複エントリを作る危険があったため merge せず close した（run #13/#44/#46 と同型の重複）。#209 の方が T-0068/T-0101 の done 化まで含み内容が広いため、origin/main への追加反映は不要と判断。PR キャッシュ（ops/dashboard/prs.json）に #209 を追加し、run #54 の記録に漏れていた pr 番号（#209）も補完した",
       "prs": []
+    },
+    {
+      "n": 56,
+      "at": "2026-08-05T17:19:51Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 の未読7件（自分の返信2件を除く5件）を反映: T-0105 done（構築セッションが重複 credential を自ら削除）、T-0060 needs-human→todo（Doppler 登録完了）でこの起動で実装まで完遂（apps/dex・apps/argocd の OIDC client secret を Doppler 経由の ExternalSecret に切り替え、#215）。T-0099 done（coder-postgres backup 検証 Job Complete）。T-0074 は HCP Terraform がLocal 実行モードだったという前提訂正を反映し方式変更。構築セッションが初めて terraform plan を実行した結果、proxmox_download_file.nixos_image に 1 to add が出て node01 VM が再作成されうる危険な差分を発見（Proxmox 証明書の SAN 不一致で本物か誤検知か未確定）、T-0107 として最優先の needs-human タスクを新規起票し apply 前の警告を明記（#213）。vaultwarden の restic backup 検証 Job が DeadlineExceeded で失敗したとの報告を受け activeDeadlineSeconds を 1800→3600 に緩和（#214）。重複起動検知の heartbeat 案を採用と判断し T-0108 として起票（実装は次回以降）。",
+      "prs": [
+        213,
+        214,
+        215
+      ]
     }
   ]
 }
