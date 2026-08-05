@@ -43,6 +43,39 @@ issue #56 (2026-08-05 04:40:59) で人間から新方針: **PBS は重すぎる�
 | `coder-postgres-data` | Coder 制御プレーン（ユーザー・workspace・監査ログ） | T-0070 |
 | `coder-<workspace-id>-home`（動的作成、`apps/coder/templates/personal/main.tf`） | workspace ごとの `/home/coder`（dotfiles・ghq clone 等） | **未起票**。T-0070 の対象外（別 PVC 群）のため、別途タスク化が必要 |
 
+## vaultwarden の restic バックアップ (T-0069, 実装済み・credential 登録待ち)
+
+`apps/vaultwarden/restic-backup-cronjob.yaml` に2つの CronJob を実装した。
+
+- **`vaultwarden-restic-backup`**（毎日 03:40 UTC）: `/data` を直接 restic に渡すと
+  `db.sqlite3-wal`/`-shm` と本体の不整合を持ち込む（vaultwarden 公式 wiki の注意）ため、
+  initContainer で SQLite の Online Backup API（`sqlite3 -readonly db.sqlite3 ".backup ..."`。
+  稼働中でも一貫性のあるコピーが取れる）を使い db.sqlite3 だけ一貫コピーしてから、
+  本体コンテナが「PVC（db.sqlite3系・icon_cache を除く）+ 一貫コピー済み db.sqlite3」の
+  2 パスをまとめて1スナップショットにする。`rsa_key*.pem`（JWT 署名鍵、失うと全セッション
+  無効化）・`attachments/`・`config.json` は PVC 側からそのまま含まれる
+- **`vaultwarden-restic-retention`**（毎週日曜 04:00 UTC）: `restic forget --keep-daily 7
+  --keep-weekly 4 --keep-monthly 6 --prune`
+- 保存先は Backblaze B2（`b2:<bucket>:vaultwarden`）。immich（T-0068）・coder-postgres
+  （T-0070）も同じ bucket・同じ credential でパス末尾だけ変える設計にした
+- **復元時の注意**: 復元前に vaultwarden コンテナを止め、既存の `db.sqlite3-wal`/`db.sqlite3-shm`
+  を削除してから復元後の `db.sqlite3` を配置すること（stale な WAL が残ると起動時に不整合を起こしうる）
+
+### 必要な Doppler 登録（T-0067）
+
+`apps/vaultwarden/restic-external-secret.yaml` が参照するキー。immich/coder-postgres 実装時も
+同じキーを使い回す想定（バケットを分けたい場合は別途相談）。
+
+| Doppler キー | 内容 |
+|---|---|
+| `RESTIC_PASSWORD` | restic リポジトリの暗号化パスワード（新規に決めて登録） |
+| `RESTIC_B2_BUCKET` | Backblaze B2 のバケット名 |
+| `RESTIC_B2_ACCOUNT_ID` | B2 application key ID（**append-only** キーを推奨。node01 が乗っ取られてもバックアップを消せないように） |
+| `RESTIC_B2_ACCOUNT_KEY` | 同上 application key |
+
+登録後、`ops-health-report`（`pod_issues`）で `vaultwarden-restic-backup` CronJob の Job が
+Failed になっていないことを確認できれば実際に動作したとみなせる（T-0097）。
+
 ## わかっていること（repo から）
 
 - PBS (Proxmox Backup Server) VM が `qemu/112` として稼働中。手動管理

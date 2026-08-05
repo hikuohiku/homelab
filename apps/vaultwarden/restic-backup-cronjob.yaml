@@ -1,0 +1,190 @@
+# vaultwarden データ (SQLite DB + attachments + rsa鍵 + config.json) を restic で
+# Backblaze B2 へバックアップする (T-0069)。
+#
+# DB は稼働中の Pod に write されうるため、`/data` の PVC をそのまま restic に渡すと
+# db.sqlite3-wal/-shm と本体の不整合を持ち込む (vaultwarden 公式 wiki が明記)。
+# そのため initContainer で SQLite の Online Backup API (`sqlite3 .backup`, VACUUM INTO と
+# 同じ仕組みで稼働中でも一貫性のあるコピーが取れる) を使い、db.sqlite3 だけ emptyDir へ
+# 一貫コピーしてから、本体の restic-backup コンテナが「PVC (db.sqlite3系とicon_cacheを除く) +
+# 一貫コピー済みdb.sqlite3」の2パスをまとめて1スナップショットにする。
+# 参考: https://github.com/dani-garcia/vaultwarden/wiki/Backing-up-your-vault
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vaultwarden-restic-backup
+  namespace: vaultwarden
+spec:
+  schedule: "40 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          initContainers:
+            - name: sqlite-snapshot
+              image: alpine:3.22.5
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  apk add --no-cache sqlite >/dev/null
+                  sqlite3 -readonly "$SRC_DB" ".backup '$DST_DB'"
+              env:
+                - name: SRC_DB
+                  value: /mnt/vaultwarden-data/db.sqlite3
+                - name: DST_DB
+                  value: /staging/db.sqlite3
+              # PVC は vaultwarden コンテナの fsGroup/runAsUser (1000) で書かれており、
+              # このジョブは所有権に関わらず正しく読む必要があるため pvc-usage-cronjob.yaml
+              # (T-0080) と同じ最小権限パターンを使う: 読み取り専用の権限チェック回避のみ許可し
+              # フルの root 権限は持たせない。書き込みは readOnly: true でも構造的に禁止している
+              securityContext:
+                runAsUser: 0
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                  add: ["DAC_READ_SEARCH"]
+              # apk add でパッケージ一覧を取得する程度のためメモリ上限は不要な負荷をかけない値に
+              # 留める。CPU limit は超過しても throttle で回復するため縛る変更には該当しない
+              # (memory limit は実測なしで新設しない、CHARTER §4)
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 64Mi
+                limits:
+                  cpu: 500m
+              volumeMounts:
+                - name: vaultwarden-data
+                  mountPath: /mnt/vaultwarden-data
+                  readOnly: true
+                - name: staging
+                  mountPath: /staging
+          containers:
+            - name: restic-backup
+              image: restic/restic:0.19.1
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  restic snapshots >/dev/null 2>&1 || restic init
+                  restic backup /mnt/vaultwarden-data /staging/db.sqlite3 \
+                    --exclude db.sqlite3 --exclude db.sqlite3-wal --exclude db.sqlite3-shm \
+                    --exclude icon_cache
+              env:
+                - name: RESTIC_B2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: vaultwarden-restic-credentials
+                      key: RESTIC_B2_BUCKET
+                # bucket 名の後ろの "vaultwarden" がリポジトリパスの区切り。immich/coder-postgres
+                # は同じ bucket ・同じ credential で末尾だけ変えて使う想定 (T-0068/T-0070)
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):vaultwarden"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: vaultwarden-restic-credentials
+                      key: RESTIC_PASSWORD
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: vaultwarden-restic-credentials
+                      key: B2_ACCOUNT_ID
+                - name: B2_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: vaultwarden-restic-credentials
+                      key: B2_ACCOUNT_KEY
+              securityContext:
+                runAsUser: 0
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                  add: ["DAC_READ_SEARCH"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+              volumeMounts:
+                - name: vaultwarden-data
+                  mountPath: /mnt/vaultwarden-data
+                  readOnly: true
+                - name: staging
+                  mountPath: /staging
+                  readOnly: true
+          volumes:
+            - name: vaultwarden-data
+              persistentVolumeClaim:
+                claimName: vaultwarden-data
+                readOnly: true
+            - name: staging
+              emptyDir: {}
+---
+# 週次で古い世代を刈る (restic forget --prune)。PVC には触れないため readOnly マウント不要。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vaultwarden-restic-retention
+  namespace: vaultwarden
+spec:
+  schedule: "0 4 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          containers:
+            - name: restic-forget
+              image: restic/restic:0.19.1
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  restic snapshots >/dev/null 2>&1 || { echo "repository not initialized yet, skipping"; exit 0; }
+                  restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+              env:
+                - name: RESTIC_B2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: vaultwarden-restic-credentials
+                      key: RESTIC_B2_BUCKET
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):vaultwarden"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: vaultwarden-restic-credentials
+                      key: RESTIC_PASSWORD
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: vaultwarden-restic-credentials
+                      key: B2_ACCOUNT_ID
+                - name: B2_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: vaultwarden-restic-credentials
+                      key: B2_ACCOUNT_KEY
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
