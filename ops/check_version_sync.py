@@ -188,6 +188,20 @@ GROUPS = [
             )),
         ],
     },
+    {
+        "name": "pvc-usage-reporter python image tag (T-0082, inventory: pvc-usage-reporter-image)",
+        "targets": [
+            ("apps/immich/pvc-usage-cronjob.yaml", lambda: extract_image_tag(
+                "apps/immich/pvc-usage-cronjob.yaml", "image: python:"
+            )),
+            ("apps/coder/pvc-usage-cronjob.yaml", lambda: extract_image_tag(
+                "apps/coder/pvc-usage-cronjob.yaml", "image: python:"
+            )),
+            ("apps/vaultwarden/pvc-usage-cronjob.yaml", lambda: extract_image_tag(
+                "apps/vaultwarden/pvc-usage-cronjob.yaml", "image: python:"
+            )),
+        ],
+    },
 ]
 
 
