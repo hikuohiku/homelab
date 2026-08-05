@@ -928,7 +928,7 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 126,
       "notes": "run #20: PAIRS を GROUPS（targets: [(path, fn), ...] を N 件受け付け、先頭を canonical として全件比較）に一般化。busybox は 3 ファイルとも extract_image_tag（単純な prefix 直後の値）、immich-server/machine-learning は同一ファイル内の 2 ブロックを新設の extract_yaml_top_level_block（0-indent のトップレベルキーで区切る、nix 側の brace 境界と同じ考え方）+ extract_tag_in_block で構造的に分離、actions/checkout は extract_all_action_tags で 1 ファイル内の全 `uses:` 出現を集めてファイル内不一致も検出できるようにした。4 グループとも意図的に値をずらして exit 1 になることを確認済み（busybox 3 ファイル中 1 つ、immich machine-learning のみ、ci.yml 内 1 箇所のみ、の 3 パターン）。手元で `python3 ops/check_version_sync.py` が exit 0 で通ることも確認済み（stdlib のみ、CHARTER §5.2 のサンドボックスでも検証可能）"
     }
   ]
