@@ -46,7 +46,7 @@ spec:
               mountPath: /var/lib/postgresql/data
       containers:
         - name: postgres
-          image: ghcr.io/tensorchord/cloudnative-vectorchord:16.9-0.4.3
+          image: ghcr.io/tensorchord/cloudnative-vectorchord:16.14-1.1.1
           # このイメージは CloudNativePG operand イメージ (postgres-containers)
           # を継承しており、ベースの Debian postgres ユーザー (UID/GID 999) に
           # usermod -u 26 postgres で UID のみ 26 に変更している (GID は 999 のまま)。

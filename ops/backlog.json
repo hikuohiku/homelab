@@ -556,7 +556,7 @@
       "title": "immich の postgres (cloudnative-vectorchord) を 16.9-0.4.3 → 16.14-1.1.1 に上げる（vchord 拡張のメジャー更新）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "todo",
+      "status": "in_progress",
       "priority": 21,
       "why": "T-0005 の調査 (run #6) で判明。postgres 本体は 16.9→16.14 の minor で問題ないが、vchord 拡張が 0.4.3→1.1.1 とメジャー相当の飛びで、ベクタ DB の実データに影響しうる（ops/inventory.json の policy=manual の理由）",
       "dod": "vchord 0.4→1.x の互換性・移行手順を確認する。CHARTER §4『データを失いうる変更』の手順どおり、着手前に immich のバックアップが実際に存在し復元できることを確認する",
@@ -567,7 +567,7 @@
       ],
       "created": "2026-08-04",
       "pr": null,
-      "notes": " | run #68: T-0071（restic 復元試験）が3コンポーネント全て完了したため blocked_by を解消し todo に戻した。メジャーバージョン更新であることに変わりはないため、着手時は CHARTER §4「high を戻せる形に落とす」（1 PR 1 コンポーネント、変更点を全部読む）を引き続き適用する。"
+      "notes": " | run #68: T-0071（restic 復元試験）が3コンポーネント全て完了したため blocked_by を解消し todo に戻した。メジャーバージョン更新であることに変わりはないため、着手時は CHARTER §4「high を戻せる形に落とす」（1 PR 1 コンポーネント、変更点を全部読む）を引き続き適用する。 | run #70: subagent に VectorChord 0.4.3→1.1.1 の release notes / immich 公式ドキュメント / immich PR #23845 を一次情報源で確認させた。ベアなイメージタグ差し替えだけでは不十分で、`ALTER EXTENSION vchord UPDATE;`（sql/upgrade/ の連鎖スクリプトを1コマンドで適用、immich公式も手動作業と明記）と、オンディスク形式が変わるインデックスの REINDEX が別途必要と判明。postgres.yaml の image タグ更新と同じ PR で `apps/immich/vchord-upgrade-job.yaml`（ALTER EXTENSION UPDATE→バージョン確認→vchord系インデックスを動的検出しREINDEX、接続リトライ付きで Deployment の Recreate ロールアウトと順序非依存に設計）を追加した。戻し方: ALTER EXTENSION UPDATE は単一トランザクションでアトミック、失敗時は image タグを16.9-0.4.3 に戻せば catalog と .so の整合が復元する。REINDEX 個別失敗はテーブル本体データに触れないため再実行で復旧可。T-0071 でバックアップ復元は確認済み。CI green を確認のうえ、high risk のため縛る変更同様に慎重を期し、Job の termination-log 結果を次回起動でkubectl get pod 経由で確認してから最終的に done とする。"
     },
     {
       "id": "T-0030",
