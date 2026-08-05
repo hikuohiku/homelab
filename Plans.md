@@ -56,4 +56,7 @@ Proxmox LXC で手動運用中のサービスを k8s (ArgoCD) へ移行する。
 | M1 | vaultwarden を k8s 移行（手書き manifest） | apps/vaultwarden/ 作成・登録 / Doppler `VAULTWARDEN_ADMIN_TOKEN` 登録 / 旧 LXC tailscale 退避 / /data 移行 / 検証 | - | 完了 [PR #47]（ciphers 781 件移行・ログイン確認済み・旧 LXC 100 破棄済み） |
 | M2 | syncthing を k8s 移行 | 後回し（P2P 特性のため移行可否検討が未了。ディスク容量は 2026-08-04 の node01 拡張（256 GiB, 空き 223 GiB）で解消済み） | - | 保留 |
 
-> 補足: k8s への書き込み操作（移行時の scale/cp/exec 等）に伴い、`.claude/settings.json` の `permissions.ask` に `Bash(kubectl:*)` を追加し、kubectl は人間レビュー（ask）付きで実行する方針に変更（CLAUDE.md 反映済み）。
+> 補足: k8s への書き込み操作（移行時の scale/cp/exec 等）は kubectl CLI で行う方針（CLAUDE.md 反映済み）。
+> 当初は `.claude/settings.json` の `permissions.ask` で毎回人間の承認を求めていたが、autopilot の
+> ヘッドレス実行では誰も承認できず起動が丸ごと無駄になるため、`ask` ルールは全廃した（`ops/CHARTER.md`
+> §5.1）。現在の歯止めは「変更は Git → CI → ArgoCD を通す」という経路そのもの。
