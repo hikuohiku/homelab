@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 59,
-  "updated": "2026-08-05T02:52:00Z",
+  "next_id": 60,
+  "updated": "2026-08-05T03:50:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1056,6 +1056,23 @@
       "created": "2026-08-05",
       "pr": 137,
       "notes": "run #24: coder-postgres は公式 postgres イメージが UID/GID 999 で postgres ユーザーを作る (docker-library/postgres Dockerfile の groupadd/useradd --uid=999/--gid=999) ことを WebFetch で確認し、runAsUser/runAsGroup: 999 を設定（既存の chown 999:999 と一致）。immich-postgres (cloudnative-vectorchord) は subagent に Dockerfile 2本 (tensorchord/cloudnative-vectorchord と ベースの cloudnative-pg/postgres-containers) を直接確認させ、Debian の postgres ユーザー (UID/GID 999) に usermod -u 26 postgres で UID のみ 26 に変更（GID は 999 のまま）と判明。既存コメント (UID 26 / GID 999) と一致したため runAsUser: 26 / runAsGroup: 999 を設定。両ファイルとも allowPrivilegeEscalation: false / seccompProfile: RuntimeDefault も vaultwarden/coder に倣って追加。実イメージの /etc/passwd 直接確認はできなかった（docker daemon 不在、レジストリ blob 取得も proxy 制約で失敗）が、ビルドソース2段の裏取りで確度は十分と判断した。実際に Pod が起動することはこのサンドボックスから確認できない（クラスタ非到達）ため、異常の兆候があれば最優先で拾うこと"
+    },
+    {
+      "id": "T-0059",
+      "domain": "homelab",
+      "title": "ops/inventory.json の各対象に『落ちると何を観測できなくなるか』を持たせる",
+      "kind": "feature",
+      "risk": "low",
+      "status": "todo",
+      "priority": 30,
+      "why": "issue #56 (2026-08-05 03:26:49) の提案。T-0058 (#137, coder-postgres の securityContext) のレビューで、coder-postgres が起動しなくなると Coder が落ち、人間と構築セッションがこの homelab を観測する経路自体が失われる（CHARTER §4 の『自分自身の観測・操作経路』該当）という判定を、autopilot は毎回その場で考えて引いていた。この判定を都度考えるのではなく ops/inventory.json 側にデータとして持たせれば、該当判定を機械的に引ける",
+      "dod": "ops/inventory.json の各対象（少なくとも coder / coder-postgres / tailscale-operator / argocd / dex / external-secrets 等、CHARTER §4 で名指しされている観測・操作経路）に、落ちたときに何が観測・操作できなくなるかを示すフィールドを追加する。PR を作るときにこのフィールドを見れば『到達性を失いうる変更』該当かどうかを機械的に判定できる形にする（自動チェックまでは求めない、まずは判断材料として持たせるだけでよい）",
+      "refs": [
+        "ops/inventory.json",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-05",
+      "pr": null
     }
   ]
 }
