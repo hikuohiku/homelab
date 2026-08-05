@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-05T06:30:04Z",
+  "generated_at": "2026-08-05T07:00:04Z",
   "applications": [
     {
       "name": "agent-rbac",
@@ -202,5 +202,333 @@
       "memoryPressure": "False"
     }
   ],
-  "notes": "実使用量（ディスク/メモリの実消費）は metrics-server / kubelet stats 依存のため未収集。RBAC は get/list のみ、write 系の verb は含まない。"
+  "pod_metrics": [
+    {
+      "namespace": "argocd",
+      "name": "argocd-application-controller-0",
+      "containers": [
+        {
+          "name": "application-controller",
+          "cpu": "1716271n",
+          "memory": "192696Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "argocd",
+      "name": "argocd-applicationset-controller-85ddf4b49b-nclkw",
+      "containers": [
+        {
+          "name": "applicationset-controller",
+          "cpu": "257170n",
+          "memory": "28280Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "argocd",
+      "name": "argocd-dex-server-5d9c7d5d9f-f6sdz",
+      "containers": [
+        {
+          "name": "dex-server",
+          "cpu": "23838n",
+          "memory": "27252Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "argocd",
+      "name": "argocd-notifications-controller-78bcc778c8-l7c6l",
+      "containers": [
+        {
+          "name": "notifications-controller",
+          "cpu": "151360n",
+          "memory": "22420Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "argocd",
+      "name": "argocd-redis-88d84b6bb-dmm4z",
+      "containers": [
+        {
+          "name": "redis",
+          "cpu": "4357178n",
+          "memory": "23272Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "argocd",
+      "name": "argocd-repo-server-c546cd6b-zxrlx",
+      "containers": [
+        {
+          "name": "repo-server",
+          "cpu": "952742n",
+          "memory": "50196Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "argocd",
+      "name": "argocd-server-6f84d668bf-d6w8r",
+      "containers": [
+        {
+          "name": "server",
+          "cpu": "345929n",
+          "memory": "32324Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "coder",
+      "name": "coder-0cd09458-ec4b-4b17-9039-f4e4f5927305-5464597c97-plwvh",
+      "containers": [
+        {
+          "name": "dev",
+          "cpu": "39647204n",
+          "memory": "3944804Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "coder",
+      "name": "coder-6786659cb6-6pm9f",
+      "containers": [
+        {
+          "name": "coder",
+          "cpu": "10910234n",
+          "memory": "100152Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "coder",
+      "name": "coder-postgres-658d5774b8-fqqgm",
+      "containers": [
+        {
+          "name": "postgres",
+          "cpu": "28483203n",
+          "memory": "56024Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "dex",
+      "name": "dex-779494ff4f-s9t4g",
+      "containers": [
+        {
+          "name": "dex",
+          "cpu": "172710n",
+          "memory": "10540Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "external-secrets",
+      "name": "external-secrets-77675ffd8b-n7xkg",
+      "containers": [
+        {
+          "name": "external-secrets",
+          "cpu": "484100n",
+          "memory": "31968Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "external-secrets",
+      "name": "external-secrets-cert-controller-6b4fc548f4-4p2vf",
+      "containers": [
+        {
+          "name": "cert-controller",
+          "cpu": "461810n",
+          "memory": "51764Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "external-secrets",
+      "name": "external-secrets-webhook-bdb8b6b86-5g47f",
+      "containers": [
+        {
+          "name": "webhook",
+          "cpu": "286830n",
+          "memory": "26880Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "immich",
+      "name": "immich-machine-learning-d949cd4c-vk8dm",
+      "containers": [
+        {
+          "name": "main",
+          "cpu": "1865813n",
+          "memory": "236424Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "immich",
+      "name": "immich-postgres-76d48f667b-n8chj",
+      "containers": [
+        {
+          "name": "postgres",
+          "cpu": "27884651n",
+          "memory": "24160Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "immich",
+      "name": "immich-server-6d759f5896-rxvjz",
+      "containers": [
+        {
+          "name": "main",
+          "cpu": "1373045n",
+          "memory": "443688Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "immich",
+      "name": "immich-valkey-5b4ff95b84-lwrcn",
+      "containers": [
+        {
+          "name": "main",
+          "cpu": "5889870n",
+          "memory": "5488Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "kube-system",
+      "name": "coredns-557cc8c59-fgmdt",
+      "containers": [
+        {
+          "name": "coredns",
+          "cpu": "1636181n",
+          "memory": "23744Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "kube-system",
+      "name": "local-path-provisioner-578895bd58-k6p8x",
+      "containers": [
+        {
+          "name": "local-path-provisioner",
+          "cpu": "44859n",
+          "memory": "12800Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "kube-system",
+      "name": "metrics-server-7b9c9c4b9c-t5n7b",
+      "containers": [
+        {
+          "name": "metrics-server",
+          "cpu": "3511027n",
+          "memory": "33444Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "nameserver-cc5c8477d-f42w4",
+      "containers": [
+        {
+          "name": "nameserver",
+          "cpu": "91986n",
+          "memory": "5200Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "operator-7c75d4665f-4n2zt",
+      "containers": [
+        {
+          "name": "operator",
+          "cpu": "565514n",
+          "memory": "28428Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-argocd-xcz9d-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "1946050n",
+          "memory": "25456Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-coder-9cngn-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "8460357n",
+          "memory": "48280Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-dex-9plnb-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "2197345n",
+          "memory": "28312Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-immich-6d7wg-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "2480845n",
+          "memory": "28944Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-vaultwarden-kgx98-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "3857967n",
+          "memory": "37684Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "vaultwarden",
+      "name": "vaultwarden-7bdd5659c6-hx2pd",
+      "containers": [
+        {
+          "name": "vaultwarden",
+          "cpu": "158302n",
+          "memory": "62108Ki"
+        }
+      ]
+    }
+  ],
+  "node_metrics": [
+    {
+      "name": "nixos",
+      "cpu": "536677901n",
+      "memory": "7306072Ki"
+    }
+  ],
+  "notes": "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 (pod_metrics/node_metrics)。PVC の実ディスク使用量（du 相当）は別 CronJob 化が必要なため 未収集（T-0080）。RBAC は get/list のみ、write 系の verb は含まない。"
 }
