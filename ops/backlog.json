@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 91,
-  "updated": "2026-08-05T08:42:00Z",
+  "next_id": 94,
+  "updated": "2026-08-05T08:55:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1653,6 +1653,59 @@
       "created": "2026-08-05",
       "notes": "ops/inventory.json に gha-setup-helm-version (v3.16.4) / kustomize-binary (v5.8.1) を追加。ops/check_version_sync.py に extract_yaml_job_block（2-indent のジョブ境界でブロックを絞る）と、それを使う extract_helm_setup_version / extract_kustomize_download_version を追加し、GROUPS に manifests job / manifest-diff job の2箇所ずつを検証する2グループを追加。手元でこの2グループそれぞれ片方の値だけをずらして exit 1 になること、元に戻すと exit 0 に戻ることを確認済み（DoD 達成）。ci.yml 自体は変更していない",
       "pr": 178
+    },
+    {
+      "id": "T-0091",
+      "domain": "homelab",
+      "title": "CI の terraform_version (1.15.0) が required_version の範囲内で最新パッチ 1.15.8 より8パッチ遅れている",
+      "kind": "ci",
+      "risk": "low",
+      "status": "done",
+      "priority": 20,
+      "why": "run #43 の subagent 調査で発見。.github/workflows/ci.yml の hashicorp/setup-terraform ステップが terraform_version: 1.15.0 を固定指定しているが、terraform/proxmox/providers.tf の required_version は \"~> 1.15\" という範囲指定のため 1.15.0 のままでも CI 上は違反にならず、上流が 1.15.8 まで進んでいることに誰も気づけない状態だった。ops/inventory.json にも terraform バイナリ自体を追跡するエントリが無かった（T-0043〜T-0048/T-0090 は GitHub Actions と CI 内バイナリのカバレッジを広げてきたが terraform 本体は抜けていた）",
+      "dod": "1.15.0→1.15.8 の CHANGELOG を全文確認し breaking change の有無を判断する。ci.yml の terraform_version を 1.15.8 に更新。ops/inventory.json に terraform バイナリを追跡する新エントリを追加（policy: auto）",
+      "refs": [
+        ".github/workflows/ci.yml",
+        "terraform/proxmox/providers.tf",
+        "ops/inventory.json"
+      ],
+      "created": "2026-08-05",
+      "notes": "GitHub Releases (v1.15.8, 2026-07-08) と CHANGELOG.md の 1.15.1〜1.15.8 区間を WebFetch で原文確認。breaking change 無し。terraform validate に関する変更は『backend block の検証を追加→1.15.1 で一部撤回』のみで、このリポジトリの backend (Terraform Cloud, cloud{} ブロック) には影響しない。fmt/init への影響も出力整形のみ。ci.yml を 1.15.8 に更新し、ops/inventory.json に terraform-binary エントリを新設した",
+      "pr": null
+    },
+    {
+      "id": "T-0092",
+      "domain": "homelab",
+      "title": "README.md のトラブルシューティングが存在しない providers.tf の insecure フィールドを参照している",
+      "kind": "docs",
+      "risk": "low",
+      "status": "todo",
+      "priority": 40,
+      "why": "run #43 の subagent 調査で発見。README.md:268 に『自己署名証明書を許可する場合: providers.tf の insecure = false を insecure = true に変更』とあるが、実際の terraform/proxmox/providers.tf の provider \"proxmox\" ブロックには endpoint / api_token / ssh {} しかなく insecure 属性自体が存在しない（false との明記も無い）。bpg/proxmox provider が insecure という provider 引数を実際にサポートしているか一次ソース（provider ドキュメント）で確認した上で、サポートしているなら『追加する』という正しい手順に、廃止/非対応なら現状の正しい対処法に書き換える",
+      "dod": "bpg/proxmox provider のドキュメント（Terraform Registry または GitHub リポジトリ）で insecure 引数の現状を確認。README.md の該当箇所を実態に合わせて書き換える（値を変更ではなく追加する手順であること、または別の対処法であることを明記）",
+      "refs": [
+        "README.md",
+        "terraform/proxmox/providers.tf"
+      ],
+      "created": "2026-08-05",
+      "pr": null
+    },
+    {
+      "id": "T-0093",
+      "domain": "homelab",
+      "title": "CLAUDE.md が autopilot の定期実行間隔を『3時間ごと』と書いているが実際は毎時（ops/state.json 参照）",
+      "kind": "docs",
+      "risk": "low",
+      "status": "todo",
+      "priority": 40,
+      "why": "run #43 の subagent 調査で発見。CLAUDE.md:70『クラウドの定期実行（3 時間ごと）が独立セッションを起こし...』は、ops/state.json の routines[0] (cron: \"19 * * * * (UTC)\", cron_human: \"1 時間ごと（毎時 19 分）\") と食い違っている。state.json の note に『立ち上げ期は頻度を上げて安定性を見る。落ち着いたら間隔を空ける』とあり、この値は今後も変わりうるため、CLAUDE.md に具体的な間隔を固定で書くのではなく ops/state.json の routines を単一の情報源として指し示す書き方に直す",
+      "dod": "CLAUDE.md の該当箇所を、具体的な時間を決め打ちせず ops/state.json の routines を参照する記述に書き換える（もしくは現在の実値『毎時』に修正した上で、変更されたら state.json 側で追随する運用であることを明記する）",
+      "refs": [
+        "CLAUDE.md",
+        "ops/state.json"
+      ],
+      "created": "2026-08-05",
+      "pr": null
     }
   ]
 }
