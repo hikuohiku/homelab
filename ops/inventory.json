@@ -58,7 +58,7 @@
       "match": "version:",
       "upstream": "github:tailscale/tailscale",
       "policy": "auto",
-      "note": "到達性の根幹。壊すとクラスタに届かなくなる。T-0024 で 1.90.9→1.98.9 に更新（#100）。k8s-nameserver（同ファイル群内の別エントリ）と同じ tailscale/tailscale@vX.Y.Z タグから揃えて更新すること。実機確認済み（2026-08-05、人間が Tailscale 経由の名前解決を確認。issue #56 04:18:44）",
+      "note": "到達性の根幹。壊すとクラスタに届かなくなる。T-0024 で 1.90.9→1.98.9 に更新（#100）。k8s-nameserver（同ファイル群内の別エントリ）と同じ tailscale/tailscale@vX.Y.Z タグから揃えて更新すること。実機確認済み（2026-08-05、人間が Tailscale 経由の名前解決を確認。issue #56 04:18:44）。訂正（2026-08-05 run #41）: 上流調査 subagent が v1.98.9→v1.102.2 への更新余地ありと報告したが、実際には ghcr.io/Docker Hub の tags API を直接確認したところ k8s-operator 系の配布物（chart 相当のコンテナイメージ）は v1.98.9 より新しい stable タグが存在しない（tailscale/tailscale 本体の git tag は v1.102.2 まであるが k8s-operator 一式のリリースはまだ切られていない）。次回はイメージタグの実在確認を先に行うこと（chart index 自体は pkgs.tailscale.com/artifacthub.io ともにこのサンドボックスから到達不可のため、ghcr.io/Docker Hub の該当イメージタグの存在で代替確認する）",
       "observability_impact": "壊れると Tailscale 経由の到達性（人間・autopilot 自身がこの homelab に触れる唯一の経路）そのものが失われる。復旧に homelab への到達自体が要るため、壊れている間は自分で直せない可能性がある"
     },
     {
@@ -160,7 +160,7 @@
       "match": "k8s-nameserver",
       "upstream": "github:tailscale/tailscale",
       "policy": "auto",
-      "note": "T-0025 で unstable-v1.91.150 → v1.98.9 に更新（#100）。訂正: T-0001/T-0005 時点（chart 1.90.9）では stable 相当のタグは無く unstable-vX.Y.Z のスナップショットのみだったが、chart 1.92 系以降は tailscale/tailscale の release tag と同じ非 floating な vX.Y.Z タグが ghcr.io / Docker Hub 両方に存在する。今後の更新は unstable-* に戻さず、tailscale-operator-chart と同じ vX.Y.Z で揃える。実機確認済み（2026-08-05、人間が Tailscale 経由の DNS 解決を確認。issue #56 04:18:44。#100 の PR 本文に残っていた「残った不確実性」2点のうちこちらは解消、admissionregistration.k8s.io/v1 対応の点は未使用機能のため実害なしのまま）",
+      "note": "T-0025 で unstable-v1.91.150 → v1.98.9 に更新（#100）。訂正: T-0001/T-0005 時点（chart 1.90.9）では stable 相当のタグは無く unstable-vX.Y.Z のスナップショットのみだったが、chart 1.92 系以降は tailscale/tailscale の release tag と同じ非 floating な vX.Y.Z タグが ghcr.io / Docker Hub 両方に存在する。今後の更新は unstable-* に戻さず、tailscale-operator-chart と同じ vX.Y.Z で揃える。実機確認済み（2026-08-05、人間が Tailscale 経由の DNS 解決を確認。issue #56 04:18:44。#100 の PR 本文に残っていた「残った不確実性」2点のうちこちらは解消、admissionregistration.k8s.io/v1 対応の点は未使用機能のため実害なしのまま）。2026-08-05 run #41: v1.102.2 相当への更新を調査したが ghcr.io/Docker Hub いずれにも v1.98.9 より新しい tailscale/k8s-nameserver タグが無く、現時点では更新できない（tailscale-operator-chart の note を参照）",
       "observability_impact": "tailscale-operator-chart と同じ到達性の一部（tailnet 内の MagicDNS 名前解決）。壊れると名前解決経由のアクセスが失われる（IP 直指定は影響を受けない可能性がある）"
     },
     {

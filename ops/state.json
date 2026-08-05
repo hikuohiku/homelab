@@ -469,6 +469,14 @@
       "prs": [
         172
       ]
+    },
+    {
+      "n": 41,
+      "at": "2026-08-05T08:29:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "前回の中断: run #40 が journal のみ書いて state.json の runs 追記・last_read 更新をしないまま終了していたのを埋め合わせ（#173, auto-merged）。issue #56 に新規フィードバックなし。ops-health-report で ArgoCD 全10アプリ Synced/Healthy を確認（ただし T-0086 反映前の観測のため T-0087 は次回に持ち越し）。backlog の todo が0件のため、run #39/#40 が残した調査候補（tailscale-operator chart/k8s-nameserver を v1.98.9→v1.102.2 に揃える件）に着手。subagent が ghcr.io/Docker Hub の tags API を直接確認した結果、tailscale/tailscale 本体の git tag は v1.102.2 まであるが k8s-operator 系配布物（chart 元イメージ、k8s-nameserver イメージ）は v1.98.9 より新しい stable タグが存在せず、更新先自体が無いと判明。run #39/#40 の前提が誤りだったと訂正し、ops/inventory.json の該当2エントリに記録した（テンプレート/CRD差分は事前確認済みで、将来タグが出れば即着手できる）",
+      "prs": []
     }
   ]
 }
