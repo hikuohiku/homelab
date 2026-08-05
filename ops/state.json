@@ -6,7 +6,7 @@
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T13:40:17Z"
+    "last_read": "2026-08-05T15:31:59Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -582,6 +582,14 @@
       "prs": [
         200
       ]
+    },
+    {
+      "n": 52,
+      "at": "2026-08-05T15:31:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし（孤児ブランチ6件は main との内容重複を確認済みで回収不要、既知）。issue #56 の未読1件（15:11:28、構築セッション経由）を反映: ダッシュボード再設計（#202、既に別セッションが完遂・merge済み）に伴う新しい規約2点を確認。(1) needs-human タスクへの human_action 必須化 → 現行5件（T-0060/T-0063/T-0067/T-0074/T-0079）は全て run #48 で書き込み済みと確認、追加対応なし。(2) 件数をダッシュボードのみで数える → 了解し以後徹底する旨を返信。build.py の新版で prs.json キャッシュを最新化し再ビルド、同じ Artifact URL に再公開した。ops-health-report (15:00:04Z) は coder/immich/vaultwarden が引き続き Degraded（T-0067 未完了による ExternalSecret 未同期、既知・実害なし）で変化なし。T-0101（immich backup_listing 確認）は pvc-usage-reporter の次回実行（18:05 UTC）待ちのため todo のまま持ち越し。backlog に他の todo が無いため新規タスクは起票せず、記録のみで終える",
+      "prs": []
     }
   ]
 }
