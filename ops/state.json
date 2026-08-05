@@ -364,9 +364,10 @@
       "at": "2026-08-05T05:50:00Z",
       "kind": "scheduled",
       "by": "cloud routine",
-      "summary": "前回の中断: open PR 2件（#152 他セッション T-0073、#153 自分 T-0015 cooldown 中）を拾った。issue #56 に新しい異議が無いことを確認して #153 を merge（CI green）。#152 は main が先行しコンフリクトしていたため origin/main へ rebase・push し、別セッション側が先に merge した。issue #56 の未読フィードバック2件を反映: (1) クールダウンと直列化の規則衝突の指摘を受け、CHARTER §4 に『クールダウン中の PR には ops/ 記録を相乗りさせない』を追記。(2) #153 のレビュー（PVC 実使用量・コンテナ実メモリ/CPU が取れていない指摘）を T-0077 として起票（#156）。続けて T-0065（IaC 完全性の棚卸し）を subagent 調査で完遂: ArgoCD/dex/external-secrets/tailscale-operator は無状態と確認、Coder の workspace ごとの動的 PVC（`coder-<workspace-id>-home`）が backup 対象から抜けていたと判明し T-0078 として起票、docs/backup.md を更新",
+      "summary": "前回の中断: open PR 2件（#152 他セッション T-0073、#153 自分 T-0015 cooldown 中）を拾った。issue #56 に新しい異議が無いことを確認して #153 を merge（CI green）。#152 は main が先行しコンフリクトしていたため origin/main へ rebase・push し、別セッション側が先に merge した。issue #56 の未読フィードバック2件を反映: (1) クールダウンと直列化の規則衝突の指摘を受け、CHARTER §4 に『クールダウン中の PR には ops/ 記録を相乗りさせない』を追記。(2) #153 のレビュー（PVC 実使用量・コンテナ実メモリ/CPU が取れていない指摘）を T-0077 として起票（#156）。続けて T-0065（IaC 完全性の棚卸し）を subagent 調査で完遂: ArgoCD/dex/external-secrets/tailscale-operator は無状態と確認、Coder の workspace ごとの動的 PVC（`coder-<workspace-id>-home`）が backup 対象から抜けていたと判明し T-0078 として起票、docs/backup.md を更新（#157）",
       "prs": [
-        156
+        156,
+        157
       ]
     }
   ]

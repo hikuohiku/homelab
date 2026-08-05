@@ -1202,7 +1202,7 @@
         "apps/"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 157,
       "notes": "run #30: subagent に repo 横断調査を投げた。PVC を持つのは immich/vaultwarden/coder-postgres/immich-postgres の4アプリのみ（immich の valkey/machine-learning persistence はキャッシュ用途で再現可能なため対象外）。ArgoCD/dex/external-secrets/tailscale-operator は PVC/StatefulSet を一切持たず resync で完全復元可能と確認（『持っていないことの確認』完了）。ArgoCD 自身の RBAC/OIDC/アカウント宣言は values.yaml に git 管理され再現可能（admin ローカルアカウントの有効化制御のみ repo に無いが実害は薄い、Dex OIDC が主経路）。**新規発見**: `apps/coder/templates/personal/main.tf` が Coder の Terraform プロビジョナー経由で workspace ごとに `coder-<workspace-id>-home` PVC を動的作成しており（`apps/coder/*.yaml` の静的マニフェストには現れない）、これが Git/Doppler に無い5つ目の実データ対象と判明。docs/backup.md に追記し、backup CronJob 化を T-0078 として起票した"
     },
     {
