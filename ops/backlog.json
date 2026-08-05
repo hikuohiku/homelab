@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 105,
-  "updated": "2026-08-05T16:20:00Z",
+  "next_id": 107,
+  "updated": "2026-08-05T16:35:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -1808,7 +1808,8 @@
         "docs/backup.md"
       ],
       "created": "2026-08-05",
-      "pr": 191
+      "pr": 191,
+      "notes": " | run #54: 兄弟タスク T-0100（immich）は構築セッション経由で成功確認済み。本タスクはまだ Job のログを誰も確認できていないため blocked のまま。issue #56 で構築セッションに確認を依頼した"
     },
     {
       "id": "T-0098",
@@ -1837,7 +1838,7 @@
       "title": "T-0068（immich restic backup）が実際に成功しているか確認する",
       "kind": "investigate",
       "risk": "low",
-      "status": "blocked",
+      "status": "done",
       "priority": 41,
       "why": "T-0068 は manifest 実装のみで、実際に restic push が成功するかは T-0067 の credential 登録が終わるまで検証できない（このクラウドサンドボックスは k8s Job のログを見られない）。T-0097（vaultwarden 版）/T-0099（coder-postgres 版）と同型",
       "dod": "T-0067 の Doppler 登録後、次回以降の起動で ops-health-report の pod_issues に `immich-restic-backup`/`immich-restic-retention` の CronJob の Job が Failed で出ていないかを確認する。あわせて `immich-restic-backup` が想定どおり immich 自身の日次DBダンプ完了後（02:45 UTC）に走っていることも確認する。問題なければ docs/backup.md に成功日時を記録して done にする。継続的に失敗するなら症状を記録し、原因調査を新規タスクとして起票する",
@@ -1847,7 +1848,8 @@
         "docs/backup.md"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": null,
+      "notes": " | run #54: issue #56 (16:12:29、構築セッション経由) で restic-backup-verify-job.yaml の immich Job が29秒で Complete し、`restic backup` が成功したことを実測で確認（B2 に snapshot c57eb36c、155.7MiB 保存）。`restic ls` で backups/ ディレクトリに immich 内蔵の日次DBダンプが14世代（欠けなし、最新は当日02:00 UTC分）含まれていることも確認済みで、T-0101 が懸念していた『DBダンプが無いバックアップ』ではないと判明。done とする"
     },
     {
       "id": "T-0101",
@@ -1883,7 +1885,8 @@
         "docs/backup.md"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": null,
+      "notes": " | run #54: 兄弟タスク T-0100（immich）は構築セッション経由で成功確認済み。本タスクはまだ Job のログを誰も確認できていないため blocked のまま。issue #56 で構築セッションに確認を依頼した"
     },
     {
       "id": "T-0102",
@@ -1929,7 +1932,7 @@
       "title": "一度きりの検証用 Job で vaultwarden/coder-postgres/immich の restic backup を即時検証する",
       "kind": "investigate",
       "risk": "medium",
-      "status": "todo",
+      "status": "in_progress",
       "priority": 5,
       "why": "issue #56（構築セッション、2026-08-05 15:49:52）の提案。T-0069/T-0070/T-0068 の CronJob は次回実行が明朝（vaultwarden 03:40 / coder-postgres 03:10 / immich 02:45 UTC）で、T-0103 の修正が実際に反映されて restic backup が成功するかをそれまで確認できない。CronJob の jobTemplate と同じ内容の一度きりの Job を追加すれば ArgoCD sync 直後に1回だけ走り、待たずに確認できる。人間の方針（『試したことのないバックアップは、バックアップではありません』）に沿って T-0071（復元試験）へできるだけ早く進むための前段",
       "dod": "apps/{vaultwarden,coder,immich}/restic-backup-verify-job.yaml が ArgoCD で同期され、3つの Job が Complete になる。restic のリポジトリ初期化（`restic init`）が成功し B2 にオブジェクトが作られたことを、次回以降の起動で ops-health-report の pod_issues（Job が Failed で出ていないか）と、可能なら構築セッションに issue #56 経由でログ確認を依頼して確認する。成功が確認できたら T-0097/T-0099/T-0100 を done にし、この Job 3つを削除する PR を出す（CronJob 自体は変更しない、以後は schedule どおりに動く）",
@@ -1940,7 +1943,46 @@
       ],
       "created": "2026-08-05",
       "pr": 207,
-      "notes": "run #53: risk を medium とした理由: 実データを外部（B2）へ初めて書き込む操作だが、ソース側（PVC/DB）には読み取り専用でしか触れず（restic backup は非破壊）、Job はいつでも削除できる。CronJob の jobTemplate をそのままコピーしただけで新しいロジックは無いため『縛る変更』（CHARTER §4）には該当しない。ロールバック手順: Job 3つを削除する PR を出せば良い。B2 側に作られたオブジェクトは残るが、追加コストは実質ゼロ（無料枠 10GB 以内）で害はない。CI green を確認し即マージした（#207）。副次的な確認: T-0103 (#205) merge 直後（16:00:04Z）の ops-health-report で vaultwarden/coder/immich が既に Synced/Healthy に戻っていることを確認した——ExternalSecret の同期自体は Job の実行を待たずに直った（remoteRef 修正だけで解決する話だったため、これは想定どおり）。Job 自体（初回の実際の B2 書き込み）が成功したかどうかは、この Job が #207 merge 後に ArgoCD で同期されるのを待つ必要があり、この run の時点ではまだ反映前のため確認できていない。次回以降の起動で ops-health-report の pod_issues を確認すること"
+      "notes": "run #53: risk を medium とした理由: 実データを外部（B2）へ初めて書き込む操作だが、ソース側（PVC/DB）には読み取り専用でしか触れず（restic backup は非破壊）、Job はいつでも削除できる。CronJob の jobTemplate をそのままコピーしただけで新しいロジックは無いため『縛る変更』（CHARTER §4）には該当しない。ロールバック手順: Job 3つを削除する PR を出せば良い。B2 側に作られたオブジェクトは残るが、追加コストは実質ゼロ（無料枠 10GB 以内）で害はない。CI green を確認し即マージした（#207）。副次的な確認: T-0103 (#205) merge 直後（16:00:04Z）の ops-health-report で vaultwarden/coder/immich が既に Synced/Healthy に戻っていることを確認した——ExternalSecret の同期自体は Job の実行を待たずに直った（remoteRef 修正だけで解決する話だったため、これは想定どおり）。Job 自体（初回の実際の B2 書き込み）が成功したかどうかは、この Job が #207 merge 後に ArgoCD で同期されるのを待つ必要があり、この run の時点ではまだ反映前のため確認できていない。次回以降の起動で ops-health-report の pod_issues を確認すること | run #54: immich の Job は Complete・restic backup 成功を構築セッション経由で確認済み（T-0100 参照）。vaultwarden/coder-postgres の Job 結果はまだ未確認のため、issue #56 に確認を依頼した。3つとも確認でき次第、T-0097/T-0099 を done にし、この Job 3つ（restic-backup-verify-job.yaml）を削除する PR を出す"
+    },
+    {
+      "id": "T-0105",
+      "domain": "homelab",
+      "title": "Doppler の B2 認証情報が重複している（RESTIC_B2_ACCOUNT_ID/KEY を削除する）",
+      "kind": "chore",
+      "risk": "low",
+      "status": "needs-human",
+      "priority": 42,
+      "why": "issue #56 (2026-08-05 15:56:14, 15:58:54) の指摘。#205（T-0103, run #53）で manifest の remoteRef.key を Doppler の既存キー名 `B2_ACCOUNT_ID`/`B2_ACCOUNT_KEY`（プレフィックス無し）に揃えて修正・merge したのと同時刻に、構築セッションが同じ Degraded を逆方向に直そうとして `RESTIC_B2_ACCOUNT_ID`/`RESTIC_B2_ACCOUNT_KEY`（プレフィックス付き、manifest の元の期待値）を新規に Doppler へ追加していた。結果的に両方が揃って動いているが、同じ値が2つの名前でDoppler に存在する冗長な状態が残っている",
+      "dod": "Doppler (homelab/prd) から `RESTIC_B2_ACCOUNT_ID` / `RESTIC_B2_ACCOUNT_KEY` の2エントリを削除する。`B2_ACCOUNT_ID` / `B2_ACCOUNT_KEY`（プレフィックス無し）側は残す——現在の manifest (apps/{vaultwarden,coder,immich}/restic-external-secret.yaml) が実際に参照しているのはこちらで、かつ構築セッションが新規に追加したプレフィックス付きの方が『他で使われていないと確認済み』な分だけ削除の安全性が高い（プレフィックス無し側は元々あったキーで、他用途との共用有無が未確認のため触らない）。削除後、3 namespace の ExternalSecret が SecretSynced のままであることを確認する",
+      "needs_human_reason": "Doppler (homelab/prd) の secret 削除は autopilot の credential では実行できない物理的な制約がある。削除対象は dod に明記した `RESTIC_B2_ACCOUNT_ID` / `RESTIC_B2_ACCOUNT_KEY` の2キーのみ。構築セッションが issue #56 で削除を代行できると申し出ているので、そちらに任せてもよい",
+      "refs": [
+        "apps/vaultwarden/restic-external-secret.yaml",
+        "apps/coder/restic-external-secret.yaml",
+        "apps/immich/restic-external-secret.yaml"
+      ],
+      "created": "2026-08-05",
+      "pr": null
+    },
+    {
+      "id": "T-0106",
+      "domain": "homelab",
+      "title": "restic backup 用の B2 application key を append-only（削除権限なし）に分離する",
+      "kind": "security",
+      "risk": "medium",
+      "status": "needs-human",
+      "priority": 60,
+      "why": "issue #56 (2026-08-05 16:02:29) の指摘。構築セッションが Coder ワークスペースから restic を直接実行して B2 への往復（init/backup/snapshots/forget --prune）を検証した際、`forget --prune` が実際に B2 上のオブジェクトを削除できることが確認された。つまり現在の B2_ACCOUNT_ID/B2_ACCOUNT_KEY には削除権限があり、node01 が乗っ取られた場合バックアップ自体も消される。『バックアップがある』と『バックアップが守られている』は別の話",
+      "dod": "retention（forget --prune、週次）専用の削除可能キーと、日次 backup 専用の append-only （writeFiles のみ、deleteFiles 不可）キーに分離する。B2 の application key は capabilities を指定して発行できる（writeFiles はあるが deleteFiles を含まないケーパビリティセットを選ぶ）。日次 CronJob（backup のみ）と週次 retention（forget --prune）で異なる Secret を参照するよう manifest を分ける。credential 発行は human_action で依頼し、キー名は実装時にこちらで決めて human_action.steps に反映する",
+      "needs_human_reason": "新しい B2 application key（append-only capability）の発行が要る。credential の発行はエージェントから手が届かない。manifest 側の設計・実装は先に進められる",
+      "blocked_by": "T-0071（復元試験が優先。復元試験にはフル権限の現行キーで支障ない）",
+      "refs": [
+        "apps/vaultwarden/restic-backup-cronjob.yaml",
+        "apps/coder/restic-backup-cronjob.yaml",
+        "apps/immich/restic-backup-cronjob.yaml"
+      ],
+      "created": "2026-08-05",
+      "pr": null
     }
   ]
 }
