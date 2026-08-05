@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T08:10:00Z",
+  "updated": "2026-08-05T08:42:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -476,6 +476,14 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "前回の中断: run #40 が journal のみ書いて state.json の runs 追記・last_read 更新をしないまま終了していたのを埋め合わせ（#173, auto-merged）。issue #56 に新規フィードバックなし。ops-health-report で ArgoCD 全10アプリ Synced/Healthy を確認（ただし T-0086 反映前の観測のため T-0087 は次回に持ち越し）。backlog の todo が0件のため、run #39/#40 が残した調査候補（tailscale-operator chart/k8s-nameserver を v1.98.9→v1.102.2 に揃える件）に着手。subagent が ghcr.io/Docker Hub の tags API を直接確認した結果、tailscale/tailscale 本体の git tag は v1.102.2 まであるが k8s-operator 系配布物（chart 元イメージ、k8s-nameserver イメージ）は v1.98.9 より新しい stable タグが存在せず、更新先自体が無いと判明。run #39/#40 の前提が誤りだったと訂正し、ops/inventory.json の該当2エントリに記録した（テンプレート/CRD差分は事前確認済みで、将来タグが出れば即着手できる）",
+      "prs": []
+    },
+    {
+      "n": 42,
+      "at": "2026-08-05T08:42:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし（last_read 以降新規コメント0件、全64件を機械的に確認）。ops-health-report (generated_at 08:30:04Z、#171 merge 後) で immich アプリ Synced/Healthy かつ pod_issues に immich-server/machine-learning が出現しないことを確認し T-0087 を done に。backlog の todo が0件だったため subagent に調査を投げ3件発見: T-0088（ops/inventory.json の tf-provider-proxmox.current が 0.89.1 のまま古く、実際の pin (providers.tf) は 0.111.1 と一致していなかった、即完遂）、T-0089（CLAUDE.md の Apps 一覧・ディレクトリ構造が nextcloud/ 記載のまま immich/coder/vaultwarden 等5ディレクトリ未記載、この起動内で直列に着手予定）、T-0090（ci.yml の kustomize/azure-setup-helm バイナリ版が監視対象外、次回以降の todo）",
       "prs": []
     }
   ]
