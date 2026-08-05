@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T02:19:00Z",
+  "updated": "2026-08-05T03:10:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -267,6 +267,16 @@
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし（最新は自分自身の返信）。backlog の todo が 0 件だったため run #20 が journal に残した調査候補（CLAUDE.md/CHARTER.md の `secrets/` ディレクトリ記述が実態とずれている）を拾った。find で実測し、SOPS 暗号化データは `nix/images/proxmox-cloud/secrets.yaml` という単一ファイルのみでトップレベルの `secrets/` は存在しないと確認。T-0052 として起票・完遂し、CLAUDE.md と ops/CHARTER.md §5 の該当行を実在パスに書き換えた",
       "prs": [
         128
+      ]
+    },
+    {
+      "n": 22,
+      "at": "2026-08-05T03:10:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "前回の中断（PR #128, T-0052）がオープンのまま残っていたのを拾い、auto-merge 有効化・購読して merge を見届けた。issue #56 に未読フィードバックなし。backlog の todo が 0 件だったため subagent に新しい調査観点探しを投げ、terraform/proxmox/vm-nixos.tf で node01 の静的 IP が ip_config と output の2箇所に独立したリテラルとして書かれている重複を発見。T-0053 として起票・完遂し、locals に一本化した（#129, auto-merge）",
+      "prs": [
+        129
       ]
     }
   ]
