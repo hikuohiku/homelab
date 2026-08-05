@@ -6,10 +6,7 @@ metadata:
   labels:
     app: autopilot
 spec:
-  # 0 で入れる。AUTOPILOT_GITHUB_TOKEN が Doppler に入り ExternalSecret が Ready に
-  # なってから 1 にする。先に 1 にすると Secret 待ちの Pod が延々 Pending のまま残り、
-  # health-reporter とダッシュボードに「壊れているアプリ」として出続けるため。
-  replicas: 0
+  replicas: 1
   # 2 つ動くと同じタスクで別々のブランチ・PR を作り、ops/ の記録が必ずコンフリクトする
   # （CHARTER §2 の直列化ルールは 1 プロセス内でしか効かない）。RollingUpdate だと
   # 更新中に新旧が一時的に重なるため Recreate にして、常に高々 1 つに保つ
