@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T19:35:00Z",
+  "updated": "2026-08-05T20:25:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -698,6 +698,19 @@
       "by": "in-cluster autopilot",
       "summary": "immich-restic-restore-verify Job の初回実行結果を確認: restore_rc=1 で Failed だったが file_count=82・db_dump_gzip_magic_ok=true で一見データは正しく復元できていた。原因を切り分けるため、restic restore の出力を termination message に含めるよう修正し、Job.spec.template の immutable 制約に対応する sync-options も追加した。",
       "prs": []
+    },
+    {
+      "n": 64,
+      "at": "2026-08-05T19:48:16Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "T-0071（immich の restic 復元試験）完遂。restore_output_tail の診断から securityContext.capabilities に CHOWN/FOWNER/DAC_OVERRIDE の3段階の権限不足を切り分け、restore前クリーンアップも追加して restore_rc=0（elapsed 16秒, file_count=82一致, DB dump整合性OK）を達成。結果をdocs/backup.mdに記録し検証用リソースを削除。allow-delete行をバッククォートで囲むとCI正規表現に一致しない落とし穴を発見しCHARTERに記録。vaultwarden/coder-postgres分は次回に持ち越し（T-0071はin_progress継続）",
+      "prs": [
+        231,
+        232,
+        233,
+        234
+      ]
     }
   ]
 }

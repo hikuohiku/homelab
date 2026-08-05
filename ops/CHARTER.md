@@ -331,6 +331,14 @@ Application は読めない**）、restic/B2 の直接操作、node01 のファ�
   意図的にオブジェクトを消す PR では本文に `allow-delete: <Kind>/<namespace>/<name>` を明記する。
   **この検証は「データを失いうる変更」の判断材料の 1 つであって、バックアップの健全性確認の代わりにはならない**
   （T-0029/T-0023 のように DB のメジャー更新でスキーマが壊れるケースは render の差分には出ない）
+  - **`allow-delete:` 行は Markdown 装飾（バッククォート等）で囲まない。** `ops/check_manifest_deletions.py`
+    の正規表現は `^allow-delete:` を行頭一致で要求しており、` `` allow-delete: ... `` ` のように
+    バッククォートで囲むと一致せず CI が fail-closed で落ちる（issue #56 は関与せず、T-0071/#234 で
+    自分のミスとして発見・修正した実例）。地の文としてそのまま書く
+  - **PR 本文だけ直しても CI は自動で再実行されない。** `ci.yml` の `on: pull_request` は `types` を
+    指定していないため既定の `opened`/`synchronize`/`reopened` のみが対象で、`edited`（本文の PATCH）は
+    含まれない。本文の `allow-delete` 誤記を直した後は `git commit --allow-empty` 等で新しい commit を
+    push し `synchronize` を発火させないと、古い本文のまま実行された失敗結果が残り続ける
 - **「評価が通る」と「上げてよい」は別。pin を上げるときは、その pin が間接的に何を決めているかまで辿る。**
   issue #56（2026-08-05 04:24:40）の指摘。T-0049（`nix flake update` による `flake.lock` 更新、#146）は
   `nix flake check` が green だったが、`configuration.nix` が `services.k3s` のバージョンを pin していない
