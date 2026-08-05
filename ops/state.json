@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T02:52:00Z",
+  "updated": "2026-08-05T03:30:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T01:32:24Z"
+    "last_read": "2026-08-05T02:55:16Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -288,6 +288,18 @@
       "prs": [
         131,
         132
+      ]
+    },
+    {
+      "n": 24,
+      "at": "2026-08-05T03:10:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。backlog の todo が 0 件だったため subagent に新しい調査観点探しを投げ、3件発見・直列に完遂: T-0056（README.md の Terraform ファイル構成・前提バージョンの実態ずれ、#135）、T-0057（apps/README.md のディレクトリ構造図が5アプリのみで実際の8アプリに追随していない、#136）、T-0058（coder-postgres/immich-postgres の postgres コンテナにコンテナレベル securityContext が丸ごと無い、公式イメージ・cloudnative-vectorchord のベースイメージの Dockerfile を裏取りして UID/GID を確認したうえで追加、#137）。ラップアップ中に issue #56 の未読フィードバック2件（02:50:59, 02:55:16）を発見: #132（immich memory limits）が実測の裏付けなく OOMKill 条件を持ち込んでいたとの指摘（#134 で memory limits のみ revert 済み、requests+CPU limits は残置）と、『縛る変更のクールダウン』の提案。CHARTER §4 に『縛る変更には実測か裏付けが要る』として反映し（一次ソースで裏付けられる値は対象外とスコープを絞った）、T-0058 は公式Dockerfileで裏付け済みのため revert 不要と issue #56 に返信した",
+      "prs": [
+        135,
+        136,
+        137
       ]
     }
   ]
