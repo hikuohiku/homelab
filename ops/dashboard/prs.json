@@ -1,6 +1,49 @@
 {
-  "open": [],
+  "open": [
+    {
+      "number": 152,
+      "title": "docs: terraform plan の CI 化を調査する (T-0073)",
+      "url": "https://github.com/hikuohiku/homelab/pull/152",
+      "isDraft": false,
+      "createdAt": "2026-08-05T05:07:23Z",
+      "statusCheckRollup": [
+        {
+          "conclusion": "PENDING"
+        }
+      ],
+      "headRefName": "autopilot/T-0073-terraform-plan-ci-feasibility",
+      "autoMergeRequest": null
+    },
+    {
+      "number": 153,
+      "title": "T-0015: ArgoCD/k8s の健全性を homelab から repo へ書き戻す CronJob を追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/153",
+      "isDraft": false,
+      "createdAt": "2026-08-05T05:10:53Z",
+      "statusCheckRollup": [
+        {
+          "conclusion": "PENDING"
+        }
+      ],
+      "headRefName": "autopilot/T-0015-ops-health-reporter",
+      "autoMergeRequest": null
+    }
+  ],
   "merged": [
+    {
+      "number": 151,
+      "title": "T-0011: vaultwarden ADMIN_TOKEN の Argon2 PHC 化を完了扱いにする",
+      "url": "https://github.com/hikuohiku/homelab/pull/151",
+      "mergedAt": "2026-08-05T05:06:53Z",
+      "headRefName": "autopilot/T-0011-vaultwarden-admin-token-done"
+    },
+    {
+      "number": 150,
+      "title": "ops: run #28 の記録をまとめる（T-0064 merge、backup 方針転換の反映）",
+      "url": "https://github.com/hikuohiku/homelab/pull/150",
+      "mergedAt": "2026-08-05T04:59:11Z",
+      "headRefName": "autopilot/run28-wrapup"
+    },
     {
       "number": 149,
       "title": "T-0064: proxmox_virtual_environment_download_file を proxmox_download_file に改名",
@@ -406,20 +449,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/91",
       "mergedAt": "2026-08-04T21:34:45Z",
       "headRefName": "autopilot/t-0020-busybox-patch"
-    },
-    {
-      "number": 90,
-      "title": "T-0019: immich の valkey を 9.1-alpine → 9.1.1-alpine に上げる",
-      "url": "https://github.com/hikuohiku/homelab/pull/90",
-      "mergedAt": "2026-08-04T21:32:13Z",
-      "headRefName": "autopilot/t-0019-immich-valkey-patch"
-    },
-    {
-      "number": 89,
-      "title": "T-0016: ダッシュボードの PR 一覧を gh CLI 非依存にする",
-      "url": "https://github.com/hikuohiku/homelab/pull/89",
-      "mergedAt": "2026-08-04T21:29:16Z",
-      "headRefName": "autopilot/t-0016-dashboard-pr-list-mcp"
     }
   ]
 }
