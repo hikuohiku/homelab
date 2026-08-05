@@ -828,6 +828,24 @@
         254,
         255
       ]
+    },
+    {
+      "n": 76,
+      "at": "2026-08-05T23:21:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "journal 未記載のまま終了していたため run #77 が事後に要点のみ復元。T-0111 で確立した initdb ブートストラップ手順を apps/immich/postgres.yaml 本体の initContainer として組み込み、image を 16.14-1.1.1 に上げ command: [\"postgres\"] を明示（PR #257、人間が直接 merge）。merge 後の kubectl 確認（DoD で要求）を行わないまま起動終了、実際には CrashLoopBackOff していた（run #77 参照）",
+      "prs": [
+        257
+      ]
+    },
+    {
+      "n": 77,
+      "at": "2026-08-05T23:31:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断: なし（run #76 の journal 欠落を検知）。issue #56 に新規フィードバックなし。backlog todo (T-0029) 着手前の kubectl 確認で immich-postgres が CrashLoopBackOff（PR #257 由来）と判明、init-bootstrap initContainer は正常終了で main container の postgres プロセスが起動直後に exit code 1。pods/log 権限が無く原因未確認のため CHARTER §9 に従い即座に revert（PR作成中）。T-0112 として構築セッションへのログ確認依頼を needs-human で起票し T-0029 の blocked_by とした",
+      "prs": []
     }
   ]
 }
