@@ -55,7 +55,7 @@ resource "proxmox_virtual_environment_vm" "node01" {
     interface    = "virtio0"
     size         = 256
     file_format  = "raw"
-    import_from  = proxmox_virtual_environment_download_file.nixos_image.id
+    import_from  = proxmox_download_file.nixos_image.id
   }
 
   initialization {
@@ -79,13 +79,13 @@ resource "proxmox_virtual_environment_vm" "node01" {
 
   # Ensure image is downloaded before VM creation
   depends_on = [
-    proxmox_virtual_environment_download_file.nixos_image
+    proxmox_download_file.nixos_image
   ]
 
   # Recreate VM when the base image changes
   lifecycle {
     replace_triggered_by = [
-      proxmox_virtual_environment_download_file.nixos_image.id
+      proxmox_download_file.nixos_image.id
     ]
   }
 }

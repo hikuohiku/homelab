@@ -5,7 +5,12 @@
 # Uses qcow2 with internal compression (no external zst).
 # content_type="import" allows direct import into VMs.
 
-resource "proxmox_virtual_environment_download_file" "nixos_image" {
+moved {
+  from = proxmox_virtual_environment_download_file.nixos_image
+  to   = proxmox_download_file.nixos_image
+}
+
+resource "proxmox_download_file" "nixos_image" {
   content_type = "import"
   datastore_id = "local"
   node_name    = var.proxmox_node
