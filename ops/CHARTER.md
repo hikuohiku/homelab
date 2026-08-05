@@ -44,6 +44,16 @@ VISION が「何になろうとしているか」、この CHARTER が「どう�
 イベントは順不同で届きうるので、次の判断がその PR の状態に依存するなら届いたイベントを鵜呑みにせず
 一度 `get_status` で裏を取る。
 
+**homelab の実際の健全性を読む（T-0015/T-0075 で確立）**: `ops-health-reporter` CronJob（`apps/ops-health-reporter/`）が
+30 分毎にクラスタ内から ArgoCD の sync/health・異常 Pod・PVC・Node の状態を集め、`ops-health-report` という
+main とは別のブランチの `ops/health/latest.json` に書き戻している。手順3（backlog/journal を読む）と
+同じタイミングで `git fetch origin ops-health-report && git show origin/ops-health-report:ops/health/latest.json`
+を実行し、`generated_at` が直近（30〜60分以内）であることと、`applications` が全て `Synced`/`Healthy` か、
+`pod_issues` に見慣れない異常が無いかを確認する。auto-merge した変更が実際に反映されて健全かを、
+クラスタに直接到達できないこのクラウドサンドボックスからでも確認できる（T-0010 が求めていた経路）。
+ブランチが無い・`generated_at` が古い場合は CronJob 側の異常を疑い、調査タスクを起票する。
+PVC は `capacity`/`requested`（宣言値）のみで実使用量は含まない（T-0077 で追加予定）。
+
 **時間が尽きたら途中で止めてよい。** ただし止まる前に、その時点までの内容で PR を作るか、
 作りかけのブランチを push しておく。ブランチ名は必ず `autopilot/` で始める。
 **次の起動は「オープン PR と `autopilot/*` ブランチ」から中断を拾う。** これが唯一の引き継ぎ経路なので、
