@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T02:10:00Z",
+  "updated": "2026-08-05T01:58:51Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -247,6 +247,16 @@
       "summary": "前回の中断: run17-wrapup ブランチが残っていたが #123 として既にマージ済みと main で確認し、拾い直しは不要だった。issue #56 の未読フィードバック2件を反映。01:08:27: 前回指摘（ブランチ削除）が実行不能だったという訂正を受け、『指摘を受けたら自分の環境で実行可能かも確かめる』を CHARTER §6 に追記。01:18:49（本命）: release-image.yml は workflow_dispatch 専用で CI が一度も実行せず、T-0042/T-0044/T-0047/T-0048 の Action 更新は changelog 要約のみで『動作確認』とは言えないという指摘。T-0050 として起票・即完遂（当初 T-0049 として着手したが、同時に走っていた別セッションが T-0049（nixpkgs flake.lock、#124）を先にマージしたため rebase 時に採番し直した）。subagent に4つの Action の実ソース・action.yml・changelog を原文確認させた結果、release-image.yml が実際に渡す input に対して全て安全と確定（cachix-action は authToken 無しでは push を一切行わないため T-0047 の懸念は発火しない）。revert は不要と判断し、CHARTER §5.4 に release-image.yml の CI 非カバレッジと今後の確認手順を明文化した",
       "prs": [
         125
+      ]
+    },
+    {
+      "n": 20,
+      "at": "2026-08-05T01:51:30Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。backlog の todo が 0 件だったため subagent に新しい調査観点探しを投げ、ops/check_version_sync.py が ops/inventory.json の mirrors 宣言（4件）のうち argo-cd の1件しか検証しておらず、busybox/immich-server・machine-learning/actions/checkout を片方だけ更新した PR が CI green のまま素通りしうる状態を発見。T-0051 として起票・完遂した（#126, auto-merge）。PAIRS（2者間限定）を GROUPS（N者間）に一般化し、YAML の同一ファイル内ブロックをトップレベルキーで区切る extract_yaml_top_level_block、1ファイル内の複数出現を検証する extract_all_action_tags を新設。4グループとも意図的に値をずらして exit 1 になることを確認済み。副次的に CLAUDE.md/CHARTER.md が実在しない secrets/ ディレクトリを参照している drift も見つけたが低リスクのため今回は見送り、次回調査の候補として journal に記録した",
+      "prs": [
+        126
       ]
     }
   ]
