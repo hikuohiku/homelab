@@ -236,6 +236,9 @@ GROUPS = [
             ("apps/vaultwarden/pvc-usage-cronjob.yaml", lambda: extract_image_tag(
                 "apps/vaultwarden/pvc-usage-cronjob.yaml", "image: python:"
             )),
+            ("apps/vaultwarden/restic-backup-cronjob.yaml", lambda: extract_image_tag(
+                "apps/vaultwarden/restic-backup-cronjob.yaml", "image: python:"
+            )),
         ],
     },
     {

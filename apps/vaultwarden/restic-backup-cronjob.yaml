@@ -3,11 +3,48 @@
 #
 # DB は稼働中の Pod に write されうるため、`/data` の PVC をそのまま restic に渡すと
 # db.sqlite3-wal/-shm と本体の不整合を持ち込む (vaultwarden 公式 wiki が明記)。
-# そのため initContainer で SQLite の Online Backup API (`sqlite3 .backup`, VACUUM INTO と
-# 同じ仕組みで稼働中でも一貫性のあるコピーが取れる) を使い、db.sqlite3 だけ emptyDir へ
+# そのため initContainer で SQLite の Online Backup API (Python 標準ライブラリの
+# sqlite3.Connection.backup()。CLI の `.backup`/vaultwarden 内蔵の VACUUM INTO と同じ
+# 仕組みで稼働中でも一貫性のあるコピーが取れる) を使い、db.sqlite3 だけ emptyDir へ
 # 一貫コピーしてから、本体の restic-backup コンテナが「PVC (db.sqlite3系とicon_cacheを除く) +
 # 一貫コピー済みdb.sqlite3」の2パスをまとめて1スナップショットにする。
+# python:3.12-alpine は標準ライブラリの sqlite3 モジュールを同梱しており、apk 等での
+# パッケージ追加インストールが不要（ネットワーク先のパッケージリポジトリに依存しない）。
 # 参考: https://github.com/dani-garcia/vaultwarden/wiki/Backing-up-your-vault
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vaultwarden-restic-sqlite-backup-script
+  namespace: vaultwarden
+data:
+  sqlite_backup.py: |
+    """SQLite Online Backup API (sqlite3.Connection.backup) で db.sqlite3 を一貫コピーする。
+
+    読み取り専用でマウントした PVC 上の db.sqlite3 から、稼働中でも安全に
+    (WAL/-shm との不整合を起こさずに) 別ディレクトリへ一貫性のあるコピーを作る。
+    標準ライブラリの sqlite3 モジュールのみで動く。
+    """
+
+    import os
+    import sqlite3
+
+    SRC_DB = os.environ["SRC_DB"]
+    DST_DB = os.environ["DST_DB"]
+
+
+    def main():
+        src = sqlite3.connect("file:{}?mode=ro".format(SRC_DB), uri=True)
+        dst = sqlite3.connect(DST_DB)
+        with dst:
+            src.backup(dst)
+        dst.close()
+        src.close()
+        print("backup complete: {} -> {}".format(SRC_DB, DST_DB))
+
+
+    if __name__ == "__main__":
+        main()
+---
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -28,19 +65,15 @@ spec:
           restartPolicy: Never
           initContainers:
             - name: sqlite-snapshot
-              image: alpine:3.22.5
-              command:
-                - sh
-                - -c
-                - |
-                  set -eu
-                  apk add --no-cache sqlite >/dev/null
-                  sqlite3 -readonly "$SRC_DB" ".backup '$DST_DB'"
+              image: python:3.12-alpine
+              command: ["python", "/scripts/sqlite_backup.py"]
               env:
                 - name: SRC_DB
                   value: /mnt/vaultwarden-data/db.sqlite3
                 - name: DST_DB
                   value: /staging/db.sqlite3
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
               # PVC は vaultwarden コンテナの fsGroup/runAsUser (1000) で書かれており、
               # このジョブは所有権に関わらず正しく読む必要があるため pvc-usage-cronjob.yaml
               # (T-0080) と同じ最小権限パターンを使う: 読み取り専用の権限チェック回避のみ許可し
@@ -51,16 +84,19 @@ spec:
                 capabilities:
                   drop: ["ALL"]
                   add: ["DAC_READ_SEARCH"]
-              # apk add でパッケージ一覧を取得する程度のためメモリ上限は不要な負荷をかけない値に
-              # 留める。CPU limit は超過しても throttle で回復するため縛る変更には該当しない
-              # (memory limit は実測なしで新設しない、CHARTER §4)
+              # pvc-usage-cronjob.yaml (T-0080) と同じ資源クラス（標準ライブラリのみで軽量な
+              # 読み取り処理）のため同じ値を流用。memory limit も既承認のこの値をそのまま使う
               resources:
                 requests:
-                  cpu: 20m
-                  memory: 64Mi
+                  cpu: 10m
+                  memory: 32Mi
                 limits:
-                  cpu: 500m
+                  cpu: 300m
+                  memory: 256Mi
               volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
                 - name: vaultwarden-data
                   mountPath: /mnt/vaultwarden-data
                   readOnly: true
@@ -123,6 +159,9 @@ spec:
                   mountPath: /staging
                   readOnly: true
           volumes:
+            - name: script
+              configMap:
+                name: vaultwarden-restic-sqlite-backup-script
             - name: vaultwarden-data
               persistentVolumeClaim:
                 claimName: vaultwarden-data

@@ -49,11 +49,18 @@ issue #56 (2026-08-05 04:40:59) で人間から新方針: **PBS は重すぎる�
 
 - **`vaultwarden-restic-backup`**（毎日 03:40 UTC）: `/data` を直接 restic に渡すと
   `db.sqlite3-wal`/`-shm` と本体の不整合を持ち込む（vaultwarden 公式 wiki の注意）ため、
-  initContainer で SQLite の Online Backup API（`sqlite3 -readonly db.sqlite3 ".backup ..."`。
-  稼働中でも一貫性のあるコピーが取れる）を使い db.sqlite3 だけ一貫コピーしてから、
+  initContainer で SQLite の Online Backup API（Python 標準ライブラリの
+  `sqlite3.Connection.backup()`。CLI の `.backup`/vaultwarden 内蔵の `VACUUM INTO` と同じ
+  仕組みで稼働中でも一貫性のあるコピーが取れる）を使い db.sqlite3 だけ一貫コピーしてから、
   本体コンテナが「PVC（db.sqlite3系・icon_cache を除く）+ 一貫コピー済み db.sqlite3」の
   2 パスをまとめて1スナップショットにする。`rsa_key*.pem`（JWT 署名鍵、失うと全セッション
-  無効化）・`attachments/`・`config.json` は PVC 側からそのまま含まれる
+  無効化）・`attachments/`・`config.json` は PVC 側からそのまま含まれる。initContainer は
+  `python:3.12-alpine`（このリポジトリで既に監視対象の image。pvc-usage-reporter と共用）を
+  使い、apk 等でのパッケージ追加インストールは行わない（構築セッションのレビューを受け、
+  当初案の `alpine` + `apk add sqlite` はネットワーク先のパッケージリポジトリへの到達に
+  毎回依存してしまうため置き換えた。vaultwarden 内蔵の `/vaultwarden backup` コマンドは
+  ソース確認の結果 `db.sqlite3` と同じディレクトリにしか出力できず読み取り専用マウントと
+  両立しないため不採用）
 - **`vaultwarden-restic-retention`**（毎週日曜 04:00 UTC）: `restic forget --keep-daily 7
   --keep-weekly 4 --keep-monthly 6 --prune`
 - 保存先は Backblaze B2（`b2:<bucket>:vaultwarden`）。immich（T-0068）・coder-postgres
