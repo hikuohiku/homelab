@@ -56,10 +56,18 @@ spec:
             # リバースプロキシとして自 Pod から backend へ接続するため、デフォルト設定では
             # 全クライアントが同一の proxy pod IP に見えてしまう (T-0032)。Tailscale 側は
             # X-Forwarded-For に実クライアントの tailnet peer アドレスを載せて送っているため、
-            # IP_HEADER で明示的に読ませる。IP_HEADER_TRUSTED_PROXIES は既定の "local" のままでよい
-            # (直接の peer である proxy pod の IP は CNI のプライベートアドレスのため自動的に信頼される)
+            # IP_HEADER で明示的に読ませる
             - name: IP_HEADER
               value: "X-Forwarded-For"
+            # IP_HEADER_TRUSTED_PROXIES の既定 "local" は private アドレス全体（10/8, 172.16/12,
+            # 192.168/16 等）を信頼するため、クラスタ内部の別 namespace の Pod からでも
+            # X-Forwarded-For を詐称できてしまう (T-0038)。この k3s クラスタの pod CIDR は
+            # 10.42.0.0/16 固定（--cluster-cidr 未指定、デフォルト flannel。service CIDR が
+            # 10.43.0.0/16 であることは ts-nameserver-fixed.yaml の clusterIP で確認済みで、
+            # k3s のデフォルト組は pod=10.42.0.0/16 / service=10.43.0.0/16）。実際に信頼すべき
+            # 送信元（tailscale-operator の Ingress proxy Pod）はこの範囲に収まるため、ここへ絞る
+            - name: IP_HEADER_TRUSTED_PROXIES
+              value: "10.42.0.0/16"
             # WebSocket 通知 (リアルタイム同期) は 1.x 系で HTTP ポートに統合済みのため
             # 別ポート/別 env (WEBSOCKET_ENABLED) は不要。Ingress も 80 だけで完結する。
             - name: ADMIN_TOKEN

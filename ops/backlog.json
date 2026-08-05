@@ -683,7 +683,7 @@
       "title": "vaultwarden の IP_HEADER_TRUSTED_PROXIES を Tailscale proxy Pod の IP レンジに絞る",
       "kind": "security",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 30,
       "why": "T-0032 (#107) の残余リスク。issue #56 (2026-08-04 23:39:21) の指摘。IP_HEADER_TRUSTED_PROXIES が既定の `local` のままだと、クラスタ内部から vaultwarden に直接到達できる主体が X-Forwarded-For を任意に詐称でき、ログイン試行のレート制限（ブルートフォース保護）の帰属がずれうる。変更前（IP_HEADER 未設定で X-Real-IP を見ていた頃）も同じ条件だったため、この変更が状況を悪化させたわけではない",
       "dod": "IP_HEADER_TRUSTED_PROXIES を Tailscale proxy Pod の実 IP レンジ（Pod CIDR、または proxy Pod の Service ClusterIP）に絞る。絞った結果、正規の Tailscale Ingress 経由アクセスがレート制限で誤って弾かれないことを確認する（PR 本文に確認方法を明記）",
@@ -691,7 +691,8 @@
         "apps/vaultwarden/deployment.yaml"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": 111,
+      "notes": "run #14: subagent に dani-garcia/vaultwarden の実ソース（tag 1.37.1、このリポジトリの pin と一致）を確認させた。`IP_HEADER_TRUSTED_PROXIES` は 1.37.0 で追加された実在の設定でカンマ区切りの IP/CIDR を受け付ける（`local` は private アドレス全体を信頼、`all` は誰でも信頼）。この k3s クラスタは `--cluster-cidr` を指定していないデフォルト flannel 構成で、service CIDR が 10.43.0.0/16（ts-nameserver-fixed.yaml の clusterIP で確認済み）と k3s のデフォルト組であることから pod CIDR は 10.42.0.0/16 と判断した。`IP_HEADER_TRUSTED_PROXIES=10.42.0.0/16` を設定し、`local`（10/8, 172.16/12, 192.168/16 全体を信頼）から pod CIDR 単体への絞り込みとした。誤って絞りすぎた場合の失敗方向は「信頼されず IP_HEADER が無視されレート制限が proxy pod IP に付く」という以前と同じ安全側の挙動であり、正規アクセスを弾く方向には倒れない"
     }
   ]
 }
