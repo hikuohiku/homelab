@@ -667,7 +667,9 @@
       "kind": "scheduled",
       "by": "in-cluster autopilot",
       "summary": "前回の中断: PR #225（run #59, T-0108 の Force=true 修正）が既に merge 済みと git log で確認。kubectl で vaultwarden-restic-backup-verify Job が Complete（2026-08-05T18:49:46Z 完了）になったことを確認し、immich/coder-postgres と合わせ3コンポーネントとも restic backup 成功が確認できたため T-0097/T-0104/T-0108 を done に更新。T-0104 の DoD どおり検証用 Job 3つ（apps/{vaultwarden,coder,immich}/restic-backup-verify-job.yaml）を削除する PR を出した。T-0071（restic 復元試験）の blocked_by（T-0104）を解除し todo に戻した。issue #56 に新規の人間フィードバックなし（last_read 以降の唯一のコメントは run #59 自身の投稿）",
-      "prs": []
+      "prs": [
+        226
+      ]
     }
   ]
 }
