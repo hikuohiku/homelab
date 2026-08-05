@@ -236,6 +236,9 @@ GROUPS = [
             (".github/workflows/release-image.yml", lambda: extract_all_action_tags(
                 ".github/workflows/release-image.yml", "actions/checkout"
             )),
+            (".github/workflows/build-autopilot-image.yml", lambda: extract_all_action_tags(
+                ".github/workflows/build-autopilot-image.yml", "actions/checkout"
+            )),
         ],
     },
     {

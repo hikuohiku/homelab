@@ -215,11 +215,12 @@
       "match": "actions/checkout@",
       "mirrors": [
         ".github/workflows/direct-push-guard.yml",
-        ".github/workflows/release-image.yml"
+        ".github/workflows/release-image.yml",
+        ".github/workflows/build-autopilot-image.yml"
       ],
       "upstream": "github:actions/checkout",
       "policy": "auto",
-      "note": "T-0043/T-0044 で発見・v4→v7 に更新済み (run #16)。CI 全 job で使用",
+      "note": "T-0043/T-0044 で発見・v4→v7 に更新済み (run #16)。CI 全 job で使用。T-0114 (run #80) で build-autopilot-image.yml も同じ actions/checkout@v7 を使っているにもかかわらず mirrors・check_version_sync.py 双方から漏れていたと判明し追加（値の乖離は無かった。検出網の穴のみ）",
       "observability_impact": "CI 全 job が使用。壊れると CI（kustomize build / terraform validate / ops state validate / manifest-diff / nix flake check）が動かなくなり、autopilot の auto-merge の安全性の根拠（ruleset の必須チェック）が機能しなくなる"
     },
     {
