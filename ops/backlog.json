@@ -539,7 +539,7 @@
       "priority": 19,
       "why": "T-0005 の調査 (run #6) で判明。9→10 で server.additionalApplications/additionalProjects が別 chart (argocd-apps) に分離、redis-ha の selector-label immutability により手動 Pod 削除が必要になる場合があるなど breaking change を含む。ArgoCD 自身なので壊れると全アプリのデプロイ経路が止まる（ops/inventory.json の policy=manual の理由そのもの）",
       "dod": "9.1.6 から 10.2.3 までの全リリースノートを原文で読む。apps/argocd/kustomization.yaml と nix/images/proxmox-cloud/k3s-manifests.nix（T-0002 の二重管理、ops/check_version_sync.py が同時更新を検証する）の両方を同時に更新。CHARTER §4『到達性を失いうる変更（ArgoCD 自身）』の手順に従い、壊れたときの復旧手順を PR に明記する。policy=manual のため実装は用意できても最終判断は人間に委ねる必要があるか、この時点で再検討する",
-      "blocked_by": "ArgoCD 自身の破壊的更新。失敗すると revert を適用する経路（ArgoCD）ごと失われ、復旧にクラスタへの直接操作が要る。autopilot のクラウドサンドボックスは Tailscale 経由でクラスタに到達できないため、人間が起きていて Tailscale 経由でクラスタに触れる時間帯にのみ着手すべき（issue #56, 2026-08-04 22:42:36）。autopilot はその時間帯かどうかを判定する手段を持たないため、当面 blocked のままにし、着手可否の判断自体を人間からのフィードバックか、到達性確認の仕組み（T-0015）が整うのを待つ",
+      "blocked_by": "ArgoCD 自身の破壊的更新。失敗すると revert を適用する経路（ArgoCD）ごと失われる。run #57 の substrate 移行（issue #56, 2026-08-05 18:32:03 の棚卸し依頼）で前提を訂正: autopilot は現在クラスタ内 Pod として常駐しており『到達できない』は成り立たない。ただし autopilot の ClusterRole (`autopilot-reader`) は get/list のみで書き込み動詞が無く、構築セッションの kubectl も同じく読み取りのみ（§5.5）。ArgoCD が壊れると git revert しても ArgoCD 自身の self-heal に頼るしかなく、それが機能しない場合の直接復旧（kubectl apply/rollback）はどちらの主体にも書き込み権限が無く実行できない。加えて autopilot 自身も ArgoCD 経由でデプロイされているため、ArgoCD が壊れると自分自身を巻き込みうる（issue #56 指摘）。復旧経路を持てるのは Tailscale 経由で書き込み可能な kubeconfig を持つ人間だけであり、この点は substrate 移行後も変わらない。着手するには (a) 緊急復旧専用の書き込み権限を新設する設計を先に固める、(b) 人間が Tailscale 経由で対応できる時間帯の判断を委ねる、のいずれかが要る。当面 blocked のまま",
       "refs": [
         "apps/argocd/kustomization.yaml",
         "nix/images/proxmox-cloud/k3s-manifests.nix",
@@ -1320,14 +1320,14 @@
       "priority": 41,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針。『試したことのないバックアップは、バックアップではありません』。T-0068〜T-0070 で作った CronJob が実際に復元可能なデータを作れているかを、別 namespace か使い捨て環境に実際に復元して確認する。T-0023/T-0027/T-0029（データを失いうるメジャー更新）はこれが通るまで着手できない（T-0034 dropped に伴い、これらの blocked_by をここに張り替え済み）",
       "dod": "immich / vaultwarden / coder-postgres それぞれについて、restic のバックアップから使い捨て環境（別 namespace 等）に実際に復元し、データが読めることを確認する。**復元にかかった時間を実測して記録する**（PBS 退役判断の材料になる、人間の依頼どおり）。結果を docs/backup.md に記録する",
-      "needs_human_reason": "復元試験にはクラスタへの到達（別 namespace の作成、restic restore コマンドの実行）が要る。autopilot のクラウドサンドボックスは到達できない（CHARTER §5.2）。ただし実装（CronJob の manifest、restic restore の手順書）自体はブロックされずに進められるため blocked のままにし、needs-human への切り替えは T-0068〜T-0070 が終わってから判断する",
+      "needs_human_reason": "run #57 の substrate 移行（issue #56, 2026-08-05 18:32:03 の棚卸し依頼）で前提を訂正: 『クラスタへの到達』を理由に needs-human 化する必要は無い。T-0104 が示した手法（restore-verify Job を manifest として git に宣言し ArgoCD に apply させ、autopilot は kubectl get job の Complete/Failed だけを read-only で確認する）がそのまま restic restore にも使える——別 namespace の作成も restic restore コマンドの実行も、autopilot 自身の kubectl 書き込み権限は不要で、Git 経由の ArgoCD 適用で完結する。データの整合性確認（ファイル数・チェックサム等）も Job 内のスクリプトに埋め込んで exit code で判定させれば、autopilot に無い pods/log 権限も不要。したがって T-0104 完了後は autopilot 自身が実装から完了確認まで完結でき、人間の手作業は不要と見込まれる。念のため復元にかかった時間の実測（DoD）が Job のログでしか取れない場合のみ、構築セッション（restic/B2 直接操作が可能、§5.5）に issue #56 経由で確認を頼む",
       "blocked_by": "T-0104（一度きりの検証 Job で restic backup 自体が成功することを先に確認する。T-0067 は完了済み）",
       "refs": [
         "docs/backup.md"
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": " | run #50: issue #56 (12:48:16) の指摘で、immich がまだほとんど使われていない（332MiB）今のうちに復元試験まで通しておくべきと助言された。T-0068〜T-0070 の実装は完了済みのため blocked_by を T-0067 のみに絞った。T-0067 が片付き次第、最優先で着手する。 | run #53: T-0067 done。ただし T-0103（remoteRef タイポ）修正直後のため、まだ一度も backup が成功した実績が無い。T-0104（検証 Job）の結果を待ってから着手する。復元試験自体（別 namespace の作成、restic restore の実行）は write 権限が要るため、構築セッションの現状（`agent-reader`、view 相当）では足りない可能性がある点に注意"
+      "notes": " | run #50: issue #56 (12:48:16) の指摘で、immich がまだほとんど使われていない（332MiB）今のうちに復元試験まで通しておくべきと助言された。T-0068〜T-0070 の実装は完了済みのため blocked_by を T-0067 のみに絞った。T-0067 が片付き次第、最優先で着手する。 | run #53: T-0067 done。ただし T-0103（remoteRef タイポ）修正直後のため、まだ一度も backup が成功した実績が無い。T-0104（検証 Job）の結果を待ってから着手する。 | run #57 (2巡目): substrate が in-cluster 常駐に変わったため『write 権限が要るため実行できない可能性』という懸念は解消（T-0104 と同じ Git→ArgoCD 経路で書き込み不要のまま実行できる）"
     },
     {
       "id": "T-0072",

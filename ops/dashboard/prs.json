@@ -1,23 +1,27 @@
 {
-  "open": [
-    {
-      "number": 216,
-      "title": "ops: T-0107/T-0108 の起票漏れを埋め、run #56 の記録を追加",
-      "url": "https://github.com/hikuohiku/homelab/pull/216",
-      "isDraft": false,
-      "createdAt": "2026-08-05T17:29:46Z",
-      "statusCheckRollup": [
-        {
-          "conclusion": "SUCCESS"
-        }
-      ],
-      "headRefName": "autopilot/T-0107-T-0108-node01-tls-and-vaultwarden-deadline",
-      "autoMergeRequest": {
-        "enabledAt": "true"
-      }
-    }
-  ],
+  "open": [],
   "merged": [
+    {
+      "number": 223,
+      "title": "fix(vaultwarden): restic backup verify Job のハング切り分け診断を追加 (T-0108)",
+      "url": "https://github.com/hikuohiku/homelab/pull/223",
+      "mergedAt": "2026-08-05T18:36:27Z",
+      "headRefName": "autopilot/T-0108-vaultwarden-restic-diagnostics"
+    },
+    {
+      "number": 222,
+      "title": "fix(autopilot): repo の権限設定を効かせ、ログを逐次出す",
+      "url": "https://github.com/hikuohiku/homelab/pull/222",
+      "mergedAt": "2026-08-05T18:18:37Z",
+      "headRefName": "autopilot/loop-visibility"
+    },
+    {
+      "number": 221,
+      "title": "ops: クラスタ内 substrate の事実を CHARTER に記録し、T-0107/T-0108 起票漏れを埋める",
+      "url": "https://github.com/hikuohiku/homelab/pull/221",
+      "mergedAt": "2026-08-05T18:18:27Z",
+      "headRefName": "autopilot/T-0107-T-0108-substrate-charter-update"
+    },
     {
       "number": 220,
       "title": "feat(autopilot): クラスタ内 autopilot を起動する",
@@ -416,27 +420,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/156",
       "mergedAt": "2026-08-05T05:27:17Z",
       "headRefName": "autopilot/run30-feedback"
-    },
-    {
-      "number": 152,
-      "title": "docs: terraform plan の CI 化を調査する (T-0073)",
-      "url": "https://github.com/hikuohiku/homelab/pull/152",
-      "mergedAt": "2026-08-05T05:23:45Z",
-      "headRefName": "autopilot/T-0073-terraform-plan-ci-feasibility"
-    },
-    {
-      "number": 153,
-      "title": "T-0015: ArgoCD/k8s の健全性を homelab から repo へ書き戻す CronJob を追加",
-      "url": "https://github.com/hikuohiku/homelab/pull/153",
-      "mergedAt": "2026-08-05T05:21:50Z",
-      "headRefName": "autopilot/T-0015-ops-health-reporter"
-    },
-    {
-      "number": 154,
-      "title": "ops: run #29 の記録をまとめ、ダッシュボードを再生成する",
-      "url": "https://github.com/hikuohiku/homelab/pull/154",
-      "mergedAt": "2026-08-05T05:16:19Z",
-      "headRefName": "autopilot/run29-wrapup"
     }
   ]
 }
