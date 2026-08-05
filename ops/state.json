@@ -677,7 +677,9 @@
       "kind": "scheduled",
       "by": "in-cluster autopilot",
       "summary": "前回の中断: PR #226（T-0104, restic backup verify Job 3つの削除）が open のまま残っていた。CI の manifest deletion guard 失敗の原因（PR本文のallow-delete行がバックティックで囲まれ正規表現に一致しなかった）を特定し、本文修正→close/reopen→CI green→merge。issue #56 に新規の人間フィードバックなし（last_readは既にPR#226で最新まで進んでいた）。T-0110（autopilot自身の健全性監視、priority 15）に着手し、ops-health-reporterにautopilot namespaceのDeployment/Pod状態と心拍ログ（iteration開始/終了、生ログは含めない）を追加するPRを出した。",
-      "prs": []
+      "prs": [
+        227
+      ]
     }
   ]
 }
