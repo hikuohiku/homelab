@@ -76,12 +76,12 @@
       "id": "coder",
       "kind": "image",
       "name": "ghcr.io/coder/coder",
-      "current": "v2.34.7",
+      "current": "v2.35.3",
       "file": "apps/coder/deployment.yaml",
       "match": "coder/coder:",
       "upstream": "github:coder/coder",
       "policy": "auto",
-      "note": "autopilot 自身の開発環境をホストしている。更新中に自分の足場が消えないよう注意",
+      "note": "autopilot 自身の開発環境をホストしている。更新中に自分の足場が消えないよう注意。stable チャンネルを追う（mainline の v2.36.0 系は避ける）。v2.34.7→v2.35.3 は DB migration 追加なし（000001〜000500 で完全一致、T-0023 で file listing diff により確認済み）",
       "observability_impact": "壊れると Coder（人間・構築セッションがこの homelab で作業する開発環境）が使えなくなる。人間と構築セッションがこの homelab を観測・操作する経路の一つが失われる（CHARTER §4, issue #56 2026-08-04 21:38:00）"
     },
     {

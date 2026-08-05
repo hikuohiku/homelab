@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 111,
-  "updated": "2026-08-05T21:15:00Z",
+  "updated": "2026-08-05T21:10:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -425,7 +425,7 @@
       "title": "coder を v2.34.7 → v2.35.3 (stable) に上げる（v2.36.0 mainline は避ける）",
       "kind": "upgrade",
       "risk": "high",
-      "status": "todo",
+      "status": "done",
       "priority": 17,
       "why": "T-0005 の調査 (run #6) で判明。stable チャンネルの最新は v2.35.3。mainline の v2.36.0 は OAuth2 動的クライアント登録・login-type 非推奨化・chat model 設定の DB スキーマ変更など breaking change を含むため避ける。coder は autopilot 自身の開発環境をホストしている（ops/inventory.json のコメント）ため、更新に失敗すると足場を失うリスクがある点に注意。run #10 の subagent 調査で risk を medium → high に見直した: v2.34.7→v2.35.3 は実質マイナー1本分（約650コミット）で、`coder server` は起動時に DB migration を自動適用するが coder は down-migration を提供しないため、失敗時のロールバックはイメージタグを戻すだけでは不十分で Postgres のバックアップ復元が必要になる。coder-postgres は immich-postgres と同じく local-path で node01 のディスク上に直接あり（docs/backup.md）、バックアップの存在・復元手順は T-0034（needs-human）が解決するまで未確認。CHARTER §4『データを失いうる変更』に該当するため T-0029 と同様に着手を見送る。加えて v2.35.0/2.35.1 で X-Forwarded-Host の信頼元を CODER_PROXY_TRUSTED_ORIGINS で絞る変更が入っており、Tailscale 経由アクセス（CODER_ACCESS_URL）への影響が未検証",
       "dod": "T-0034 でバックアップの存在・復元手順が確認されてから着手する。apps/coder/deployment.yaml のイメージタグが v2.35.3。ops/inventory.json の current も更新。CODER_PROXY_TRUSTED_ORIGINS の要否を確認し、必要なら合わせて設定する。更新後に coder の Pod が正常に起動することを CI もしくは次回起動での間接確認で追う（このクラウド実行からは k8s に到達できないため、ArgoCD 側の反映確認は現状できない— T-0015 が解決すれば可能になる）",
@@ -436,8 +436,8 @@
         "docs/backup.md"
       ],
       "created": "2026-08-04",
-      "pr": null,
-      "notes": " | run #68: T-0071（restic 復元試験）が3コンポーネント全て完了したため blocked_by を解消し todo に戻した。メジャーバージョン更新であることに変わりはないため、着手時は CHARTER §4「high を戻せる形に落とす」（1 PR 1 コンポーネント、変更点を全部読む）を引き続き適用する。"
+      "pr": 241,
+      "notes": " | run #68: T-0071（restic 復元試験）が3コンポーネント全て完了したため blocked_by を解消し todo に戻した。メジャーバージョン更新であることに変わりはないため、着手時は CHARTER §4「high を戻せる形に落とす」（1 PR 1 コンポーネント、変更点を全部読む）を引き続き適用する。 | run #68 続き: subagent に v2.34.7〜v2.35.3 の GitHub Release 本文原文と `coderd/database/migrations/` のファイル一覧を直接照合させた。結論: (1) v2.34.7 と v2.35.3 の間で DB migration ファイルは 000001〜000500 で完全一致（新規 migration 無し）。当初懸念していた『起動時の自動 migration が不可逆』というリスクはこの区間には実際には存在しなかった（v2.36.0 mainline 固有の migration 000554 と混同していた）。(2) CODER_PROXY_TRUSTED_ORIGINS は既存の環境変数で、v2.35 系での変更は『ワイルドカードサブドメインの workspace app ルーティングにのみ効く X-Forwarded-Host 検証の強制』。fail-open（未設定でも Host ヘッダにフォールバックするだけでログイン等はブロックされない）で、当リポジトリは `CODER_WILDCARD_ACCESS_URL` を使っておらずワイルドカードルーティング非対応のため無関係と確認、追加設定不要。(3) OIDC 関連の breaking change も Coder 側に OIDC 設定が無いため無関係。(4) /healthz・GitHub provider フラグ・DERP relay 関連の挙動は変更なし。apps/coder/deployment.yaml のタグを v2.35.3 に更新、ops/inventory.json の current・note も更新。ロールバック: migration 差分が無いため git revert のみで安全に戻せる（Postgres スキーマは不変のまま）。Coder は人間・構築セッションがこの homelab を観測・操作する経路の一つ（CHARTER §4）だが、autopilot 自身の GitHub API 経由の運用・kubectl ClusterRole 経由の read には依存していないため、更新失敗時も autopilot 自身の動作は継続できる。ArgoCD sync 後の Pod 起動確認は次回起動の ops-health-report で行う。"
     },
     {
       "id": "T-0024",
