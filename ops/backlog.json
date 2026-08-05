@@ -1025,7 +1025,7 @@
       "title": "apps/README.md のディレクトリ構造図をアプリ追加に追随させる",
       "kind": "docs",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 8,
       "why": "run #24: subagent の調査で発見。apps/README.md の『ディレクトリ構造』節が apps.yaml/kustomization.yaml/argocd/external-secrets/tailscale-operator の5項目のみを挙げているが、実際の apps/kustomization.yaml には agent-rbac/dex/immich/vaultwarden/coder も登録済みで計8アプリある",
       "dod": "apps/README.md のディレクトリ構造図が apps/kustomization.yaml の resources と一致する（または『詳細は kustomization.yaml 参照』に置き換える）",
@@ -1033,7 +1033,8 @@
         "apps/README.md",
         "apps/kustomization.yaml"
       ],
-      "created": "2026-08-05"
+      "created": "2026-08-05",
+      "notes": "run #24: apps/kustomization.yaml の resources（8件: argocd, agent-rbac, dex, external-secrets, tailscale-operator, immich, vaultwarden, coder）を確認し、apps/README.md のディレクトリ構造図を一致させた"
     },
     {
       "id": "T-0058",
