@@ -437,6 +437,31 @@ def render_detail(tasks):
     return "".join(rows)
 
 
+
+def render_now(prs, health, runs, cadence_min):
+    """いま何が動いているか。ページ内 JS で経過時間を刻む。"""
+    items = []
+    for p in prs:
+        tone, label = ci_state(p)
+        items.append(f'<li class="now__row now__row--{tone}"><span class="now__k">PR #{p["number"]}</span>'
+                     f'<span class="now__v">{E(p["title"][:44])}</span>'
+                     f'{chip(label, tone)}</li>')
+    jobs = (health or {}).get("running_jobs") or []
+    for j in jobs:
+        items.append(f'<li class="now__row now__row--sig"><span class="now__k">Job</span>'
+                     f'<span class="now__v">{E(str(j))}</span>{chip("実行中", "sig")}</li>')
+    if not items:
+        items.append('<li class="now__row now__row--idle"><span class="now__v">'
+                     'GitHub 上で動いているものはありません</span></li>')
+    last = runs[-1] if runs else {}
+    return (f'<ul class="now">{"".join(items)}</ul>'
+            f'<p class="now__meta">'
+            f'<span>最終起動 <b data-since="{E(str(last.get("at","")))}">—</b></span>'
+            f'<span>次の定期起動まで <b id="nextrun">—</b></span>'
+            f'<span>この画面は <b data-since="{datetime.now(timezone.utc).isoformat()}">—</b>の情報</span>'
+            f'</p>')
+
+
 def build() -> str:
     state = load("state.json", {}) or {}
     backlog = load("backlog.json", {"tasks": []}) or {"tasks": []}
@@ -464,6 +489,7 @@ def build() -> str:
     except Exception:  # noqa: BLE001
         pass
 
+    now_html = render_now(prs, health, runs, 60)
     stale_html = (f'<p class="stale">PR 一覧を取得できませんでした。表示は'
                   f'{E(rel_time(STALE.get("at")))}のキャッシュです。</p>') if STALE else ""
 
@@ -491,7 +517,7 @@ def build() -> str:
         detail=render_detail(tasks), runs=runs_html, done=done_html,
         fb_url=E(fb.get("url") or "https://github.com/hikuohiku/homelab/issues"),
         fb_issue=E(str(fb.get("issue") or "?")), fb_read=E(rel_time(fb.get("last_read"))),
-        stale=stale_html,
+        stale=stale_html, now=now_html,
     )
 
 
@@ -550,6 +576,20 @@ body {{ background:var(--ground); color:var(--ink); font-family:var(--sans); lin
 .wrap {{ max-width:1180px; margin:0 auto; padding:2rem 1.1rem 4rem;
   display:flex; flex-direction:column; gap:1.5rem; }}
 a {{ color:var(--sig); }}
+.nowbox {{ background:var(--surface); border:1px solid var(--sig); border-radius:var(--r);
+  padding:.8rem .95rem; }}
+.now {{ display:flex; flex-direction:column; gap:.3rem; margin-top:.5rem; }}
+.now__row {{ display:flex; align-items:center; gap:.5rem; font-size:.85rem;
+  padding:.3rem .5rem; border-radius:var(--r); background:var(--surface2);
+  border-left:3px solid var(--idle); }}
+.now__row--ok{{border-left-color:var(--ok)}} .now__row--warn{{border-left-color:var(--warn)}}
+.now__row--crit{{border-left-color:var(--crit)}} .now__row--sig{{border-left-color:var(--sig)}}
+.now__row--idle {{ color:var(--muted); }}
+.now__k {{ font-family:var(--mono); font-size:.75rem; color:var(--muted); white-space:nowrap; }}
+.now__v {{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }}
+.now__meta {{ display:flex; flex-wrap:wrap; gap:.3rem 1.2rem; margin-top:.6rem;
+  font-size:.78rem; color:var(--muted); font-family:var(--mono); }}
+.now__meta b {{ color:var(--ink); font-weight:600; }}
 .mast {{ border-bottom:2px solid var(--ink); padding-bottom:.85rem;
   display:flex; flex-wrap:wrap; align-items:baseline; gap:.5rem 1rem; }}
 .mast h1 {{ font-family:var(--serif); font-size:clamp(1.45rem,3vw,1.95rem); font-weight:600;
@@ -739,6 +779,11 @@ footer {{ color:var(--muted); font-size:.75rem; font-family:var(--mono);
       <span class="stat__l">これまでの起動</span></div>
   </div>
 
+  <section class="nowbox">
+    <h2>いま動いているもの</h2>
+    {now}
+  </section>
+
   <div class="cols">
     <div class="col">
       <section>
@@ -840,6 +885,35 @@ footer {{ color:var(--muted); font-size:.75rem; font-family:var(--mono);
     }});
   }});
   apply('all');
+}})();
+
+// 経過時間と次回起動までを 1 秒ごとに更新する（データは静的だが、鮮度は生きた表示にする）
+(function () {{
+  function fmt(sec) {{
+    if (sec < 0) sec = 0;
+    if (sec < 60) return Math.floor(sec) + ' 秒';
+    if (sec < 3600) return Math.floor(sec / 60) + ' 分';
+    return Math.floor(sec / 3600) + ' 時間 ' + Math.floor((sec % 3600) / 60) + ' 分';
+  }}
+  var els = Array.prototype.slice.call(document.querySelectorAll('[data-since]'));
+  var next = document.getElementById('nextrun');
+  function tick() {{
+    var now = Date.now();
+    els.forEach(function (el) {{
+      var t = Date.parse(el.getAttribute('data-since'));
+      if (isNaN(t)) {{ el.textContent = '—'; return; }}
+      el.textContent = fmt((now - t) / 1000) + '前';
+    }});
+    if (next) {{
+      var d = new Date(now);
+      var mins = d.getUTCMinutes(), secs = d.getUTCSeconds();
+      var until = ((19 - mins + 60) % 60) * 60 - secs;
+      if (until <= 0) until += 3600;
+      next.textContent = fmt(until);
+    }}
+  }}
+  tick();
+  setInterval(tick, 1000);
 }})();
 </script>
 """
