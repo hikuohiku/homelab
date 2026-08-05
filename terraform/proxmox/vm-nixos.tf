@@ -25,6 +25,11 @@ resource "proxmox_virtual_environment_file" "node01_cloud_init" {
 }
 
 
+locals {
+  # node01 の静的 IP。ip_config と output の2箇所で同じ事実を書かないための単一情報源
+  node01_ip = "192.168.0.129"
+}
+
 resource "proxmox_virtual_environment_vm" "node01" {
   name      = "node01"
   node_name = var.proxmox_node
@@ -58,7 +63,7 @@ resource "proxmox_virtual_environment_vm" "node01" {
 
     ip_config {
       ipv4 {
-        address = "192.168.0.129/24"
+        address = "${local.node01_ip}/24"
         gateway = "192.168.0.1"
       }
     }
@@ -86,5 +91,5 @@ resource "proxmox_virtual_environment_vm" "node01" {
 }
 
 output "node01_ip" {
-  value = "192.168.0.129"
+  value = local.node01_ip
 }

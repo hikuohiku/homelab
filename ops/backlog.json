@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 53,
-  "updated": "2026-08-05T02:19:00Z",
+  "next_id": 54,
+  "updated": "2026-08-05T03:10:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -948,6 +948,23 @@
       "created": "2026-08-05",
       "pr": 128,
       "notes": "run #21: find で secrets 関連ファイルを実測（`.sops.yaml` はリポジトリルート、暗号化データは `nix/images/proxmox-cloud/secrets.yaml` の 1 ファイルのみ。apps/*/*-external-secret.yaml は ExternalSecret リソースであり SOPS 暗号化ではないため対象外）。CLAUDE.md の該当行を実際のパスに書き換え、CHARTER §5 の該当行も同様に修正した"
+    },
+    {
+      "id": "T-0053",
+      "domain": "homelab",
+      "title": "terraform/proxmox/vm-nixos.tf の node01 静的 IP の二重記述を locals で一本化する",
+      "kind": "refactor",
+      "risk": "low",
+      "status": "done",
+      "priority": 8,
+      "why": "backlog の todo が 0 件だったため CHARTER §3 の調査（subagent 併用、run #22）で発見。`192.168.0.129` が `ip_config.ipv4.address` と `output \"node01_ip\"` の2箇所に独立したリテラルとして書かれていた。CHARTER §1 の『健全』の定義そのもの（同じ事実が2箇所に書かれていない）に反する。`terraform fmt`/`validate` はこの種の文字列重複を検出しない",
+      "dod": "IP アドレスの実体が `locals.node01_ip` の1箇所のみになり、`ip_config.ipv4.address` と `output` の両方がそれを参照する。値そのものは変更しない（純粋なリファクタ）",
+      "refs": [
+        "terraform/proxmox/vm-nixos.tf"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #22: subagent に新しい調査観点探しを投げ、terraform/proxmox/vm-nixos.tf 内の IP 重複を発見（リポジトリ全体を grep し他にこの IP を参照する箇所が無いことも確認済み）。`locals { node01_ip = \"192.168.0.129\" }` を追加し、`ip_config.ipv4.address = \"${local.node01_ip}/24\"` と `output \"node01_ip\" { value = local.node01_ip }` に置き換えた。値は不変のため CI (`terraform fmt -check`/`validate`) で挙動が変わらないことを確認できる想定"
     }
   ]
 }
