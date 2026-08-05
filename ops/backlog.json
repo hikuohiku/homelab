@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 76,
+  "next_id": 78,
   "updated": "2026-08-05T05:10:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
@@ -261,7 +261,7 @@
       "title": "ArgoCD/k8s の健全性を homelab 側から repo に書き戻す経路を作る（T-0010 の解決策）",
       "kind": "feature",
       "risk": "medium",
-      "status": "in_progress",
+      "status": "done",
       "priority": 11,
       "why": "issue #56 (2026-08-04 19:12:21) で設計方向のフィードバックを受けた。クラウドから homelab へは到達できないが、逆にクラスタ内 CronJob が状態を repo へ push する方向なら到達性の制約を回避できる。medium リスクの auto-merge を続ける以上、効いたかを確認する経路が要る",
       "dod": "クラスタ内 CronJob が ArgoCD Application ごとの sync/health 状態、Pod 異常、ディスク空きなどを集めて repo（専用ブランチ or 状態報告用 issue）に書き戻す。autopilot が起動のたびにそれを読み、直前の auto-merge 後に異常が無いか確認できる。manifest は apps/ に置くだけで良く、クラスタ credential は不要。書き戻し用の GitHub token は Doppler → External Secrets 経由",
@@ -271,7 +271,7 @@
       ],
       "created": "2026-08-04",
       "pr": 153,
-      "notes": "T-0010 を置き換える形の具体案。run #29: issue #56 (04:51:25、構築セッション経由) で GITHUB_HEALTH_REPORTER_TOKEN が Doppler に登録されたと判明し着手。apps/ops-health-reporter/ に Namespace・ServiceAccount・ClusterRole(get/list のみ)・ClusterRoleBinding・ExternalSecret・CronJob（30分毎, python:3.12-alpine, 標準ライブラリのみ）を実装した。スクリプトは k8s API (Application CRD / Pods / PVC / Nodes) を SA トークンで直接読み、GitHub Contents API で ops-health-report ブランチ (main と別、専用) の ops/health/latest.json を作成・更新する。CronJob に memory limits (256Mi) と securityContext (runAsNonRoot/runAsUser: 65534) を新設したため CHARTER §4 の『縛る変更』クールダウンの対象と判断し、この起動では merge しない（PR #153 open のまま）。DoD のうち『autopilot が起動のたびにそれを読む』は未実施 — CronJob が実際に動作し書き込めることを確認してから CHARTER §2 に読む手順を追加する（T-0075）。実使用量（ディスク/メモリ）は metrics-server 依存のため今回のスコープ外とし、応答スクリプトの notes フィールドに明記した"
+      "notes": "T-0010 を置き換える形の具体案。run #29: issue #56 (04:51:25、構築セッション経由) で GITHUB_HEALTH_REPORTER_TOKEN が Doppler に登録されたと判明し着手。apps/ops-health-reporter/ に Namespace・ServiceAccount・ClusterRole(get/list のみ)・ClusterRoleBinding・ExternalSecret・CronJob（30分毎, python:3.12-alpine, 標準ライブラリのみ）を実装した。スクリプトは k8s API (Application CRD / Pods / PVC / Nodes) を SA トークンで直接読み、GitHub Contents API で ops-health-report ブランチ (main と別、専用) の ops/health/latest.json を作成・更新する。CronJob に memory limits (256Mi) と securityContext (runAsNonRoot/runAsUser: 65534) を新設したため CHARTER §4 の『縛る変更』クールダウンの対象と判断し当初の起動では merge しなかったが、構築セッションのレビュー（issue #56 05:12:43、設計は健全と評価）を経て #153 が merge された（merged_by: hikuohiku、この run 内ではあるが別主体のレビュー・判断による）。DoD のうち『autopilot が起動のたびにそれを読む』は未実施のため CHARTER §2 に読む手順を追加する作業が残っている（T-0075）。PVC の実使用量・コンテナの実メモリ/CPU 使用量は取得しておらず、追加の観点として T-0076/T-0077 を起票した（issue #56 05:12:43 の提案）"
     },
     {
       "id": "T-0075",
@@ -283,10 +283,44 @@
       "priority": 12,
       "why": "T-0015 (#153) で実装した CronJob は python:3.12-alpine の runAsUser: 65534 での起動可否、GITHUB_HEALTH_REPORTER_TOKEN の Contents:write 権限での branch 作成可否、node01 から api.github.com への到達性のいずれもこのクラウドサンドボックスからは検証できず未確認のまま",
       "dod": "`git fetch origin ops-health-report` (または `git ls-remote origin ops-health-report`) でブランチの存在と `ops/health/latest.json` の `generated_at` が直近であることを確認する。存在すれば CHARTER §2 に『書き戻された状態を読む』手順を追加し（issue #56 の 04:51:25 コメントが依頼した内容）、存在しない・古いままなら CronJob の失敗を疑い調査する（このクラウドサンドボックスから Pod ログは見られないため、症状を記録した上で needs-human に切り替える判断も検討する）",
-      "blocked_by": "T-0015（#153）が merge され、CronJob のスケジュール（30分毎）が最低 1〜2 回まわる時間が経ってから確認する",
+      "blocked_by": "T-0015（#153, merge 済み）の CronJob のスケジュール（30分毎）が最低 1〜2 回まわる時間が経ってから確認する",
       "refs": [
         "apps/ops-health-reporter/",
         "ops/CHARTER.md"
+      ],
+      "created": "2026-08-05",
+      "pr": null
+    },
+    {
+      "id": "T-0076",
+      "domain": "homelab",
+      "title": "PVC の実使用量を read-only マウント + du で取得する CronJob を追加する（ops-health-reporter を補完）",
+      "kind": "feature",
+      "risk": "low",
+      "status": "todo",
+      "priority": 13,
+      "why": "issue #56 (2026-08-05 05:12:43) の指摘。T-0015 (#153) の ops-health-reporter は PVC オブジェクトの capacity（宣言値）しか取れず、実使用量が分からない。T-0066（immich ライブラリの実サイズ測定）や、いずれ resource limits を実測で裏付けたいときに必要なデータが永久に手に入らない",
+      "dod": "対象 PVC（immich library, vaultwarden data, coder-postgres, immich-postgres 等）を `readOnly: true` でマウントする小さな CronJob を追加し、`du -sb` の結果を ops-health-reporter と同じ書き戻し経路（ops-health-report ブランチ）に書く。追加の RBAC は不要（同一ノードなら RWO PVC を複数 Pod が同時マウント可能）。書き込み事故が起きない（read-only マウント）ことを manifest 上で確認する",
+      "refs": [
+        "apps/ops-health-reporter/",
+        "apps/immich/library-pvc.yaml"
+      ],
+      "created": "2026-08-05",
+      "pr": null
+    },
+    {
+      "id": "T-0077",
+      "domain": "homelab",
+      "title": "metrics-server を使ってコンテナの実メモリ/CPU 使用量を ops-health-reporter に追加する",
+      "kind": "feature",
+      "risk": "low",
+      "status": "todo",
+      "priority": 13,
+      "why": "issue #56 (2026-08-05 05:12:43) の指摘。#132 で差し戻した immich の memory limits のように、実測の裏付けなしに『縛る変更』を提案してしまう事例が再発しうる。k3s は既定で metrics-server を同梱しており（--disable traefik のみ無効化、metrics-server は無効化していない）、`nodes/proxy` のような広い権限を取らずに `metrics.k8s.io` の read 権限だけで済む",
+      "dod": "この k3s クラスタに metrics-server が実際に動いているか（apps/ 管理外のため kustomize では見えない、CronJob 自身が `metrics.k8s.io/v1beta1` への GET で確認できる）を確認したうえで、ops-health-reporter の ClusterRole に `metrics.k8s.io` の `pods`/`nodes` に対する get/list を追加し、レポートにコンテナ単位の実メモリ/CPU 使用量を含める",
+      "refs": [
+        "apps/ops-health-reporter/rbac.yaml",
+        "apps/ops-health-reporter/report.py"
       ],
       "created": "2026-08-05",
       "pr": null
