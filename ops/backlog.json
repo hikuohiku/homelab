@@ -186,7 +186,7 @@
       "title": "vaultwarden の ADMIN_TOKEN を Argon2 ハッシュ化する（Doppler への登録をお願いしたい）",
       "kind": "security",
       "risk": "high",
-      "status": "needs-human",
+      "status": "done",
       "priority": 11,
       "why": "Maintenance.md 2026-08-03 の持ち越し。Argon2 PHC 形式へのハッシュ化が見送られたまま",
       "dod": "ADMIN_TOKEN が Argon2 PHC ハッシュとして保存されている、または admin パネル自体が無効化されている",
@@ -196,7 +196,8 @@
         "apps/vaultwarden/"
       ],
       "created": "2026-08-04",
-      "pr": null
+      "pr": null,
+      "notes": "run #29: issue #56 (2026-08-05 04:51:25、構築セッション経由) で人間が Doppler の VAULTWARDEN_ADMIN_TOKEN を Argon2 PHC 文字列に差し替えたと報告。apps/vaultwarden/admin-token-external-secret.yaml は既に同じキーを参照しており vaultwarden 側も PHC 形式を自動判別するため manifest 変更は不要。PR を伴わないタスク完了のため pr は null のまま。反映後に /admin へログインできるかの実機確認は人間側に残った（Maintenance.md に記載）"
     },
     {
       "id": "T-0012",
