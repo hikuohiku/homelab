@@ -1792,7 +1792,7 @@
       "title": "restic/restic イメージタグの重複を check_version_sync.py の監視対象に追加する",
       "kind": "ci",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 45,
       "why": "T-0069 (#191) で apps/vaultwarden/restic-backup-cronjob.yaml に restic/restic:0.19.1 が2箇所（backup と retention の CronJob）独立して書かれた。T-0090/T-0082 と同型のドリフトパターンで、片方だけ更新した PR が CI green のまま素通りしうる。T-0070/T-0068 (run #49) で apps/coder/restic-backup-cronjob.yaml・apps/immich/restic-backup-cronjob.yaml にも同じタグの CronJob が2つずつ追加され、ファイル間（vaultwarden ⇔ coder-postgres ⇔ immich）でも同じ重複が生じている。対象はこの6箇所（3ファイル×backup/retentionの2つずつ）に拡張する",
       "dod": "ops/check_version_sync.py の GROUPS に apps/vaultwarden/restic-backup-cronjob.yaml・apps/coder/restic-backup-cronjob.yaml・apps/immich/restic-backup-cronjob.yaml、それぞれ内部の2出現（backup/retention）を1つの GROUP として追加する（ops/inventory.json の vaultwarden-restic-image / coder-postgres-restic-image / immich-restic-image エントリの note も『未登録』の記述を削除して更新する）。意図的に値をずらして CI が exit 1 になることを確認する",
@@ -1804,6 +1804,7 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-05",
+      "notes": "run #49: extract_all_action_tags と同じ考え方の extract_image_tag_all を新設（1ファイル内の複数出現が全て一致することを検証したうえで値を返す）。3ファイル（vaultwarden/coder/immich の restic-backup-cronjob.yaml）を1つの GROUP にまとめ、ファイル内・ファイル間の両方の不一致を検出できることを確認した: (1) vaultwarden ファイル内で backup/retention の2箇所だけ値をずらす→ファイル内不一致で exit 1、(2) coder ファイル全体を別バージョンにずらす→ファイル間不一致で exit 1。いずれも復元後 exit 0 に戻ることを確認。ops/inventory.json の3エントリの note から『未登録』の記述を削除して更新した",
       "pr": null
     },
     {
