@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 39,
-  "updated": "2026-08-05T00:20:00Z",
+  "next_id": 40,
+  "updated": "2026-08-05T00:30:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -693,6 +693,23 @@
       "created": "2026-08-05",
       "pr": 111,
       "notes": "run #14: subagent に dani-garcia/vaultwarden の実ソース（tag 1.37.1、このリポジトリの pin と一致）を確認させた。`IP_HEADER_TRUSTED_PROXIES` は 1.37.0 で追加された実在の設定でカンマ区切りの IP/CIDR を受け付ける（`local` は private アドレス全体を信頼、`all` は誰でも信頼）。この k3s クラスタは `--cluster-cidr` を指定していないデフォルト flannel 構成で、service CIDR が 10.43.0.0/16（ts-nameserver-fixed.yaml の clusterIP で確認済み）と k3s のデフォルト組であることから pod CIDR は 10.42.0.0/16 と判断した。`IP_HEADER_TRUSTED_PROXIES=10.42.0.0/16` を設定し、`local`（10/8, 172.16/12, 192.168/16 全体を信頼）から pod CIDR 単体への絞り込みとした。誤って絞りすぎた場合の失敗方向は「信頼されず IP_HEADER が無視されレート制限が proxy pod IP に付く」という以前と同じ安全側の挙動であり、正規アクセスを弾く方向には倒れない"
+    },
+    {
+      "id": "T-0039",
+      "domain": "homelab",
+      "title": "Maintenance.md の持ち越し記録を T-0031 revert / T-0038 完遂の実態に合わせる",
+      "kind": "docs",
+      "risk": "low",
+      "status": "done",
+      "priority": 8,
+      "why": "CHARTER §3 のドキュメント整合性チェック（run #14）で発見。Maintenance.md 2026-08-03 の持ち越し項目が「icon 無効化で解消（2026-08-05）」「IP_HEADER 設定で解消」と書かれたままで、その後の T-0031 revert（#110）・T-0038（#111）を反映していなかった",
+      "dod": "Maintenance.md の該当 2 項目が現在の backlog の状態（T-0031 dropped、T-0038 done）と一致する",
+      "refs": [
+        "Maintenance.md"
+      ],
+      "created": "2026-08-05",
+      "pr": 112,
+      "notes": "run #14: icon 側は「見送り（revert）」に、レート制限側は T-0038（IP_HEADER_TRUSTED_PROXIES を pod CIDR に絞った旨）を追記した"
     }
   ]
 }
