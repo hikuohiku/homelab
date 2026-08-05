@@ -84,6 +84,19 @@ PVC 実使用量・コンテナ/ノードの実メモリ・CPU 使用量は `pvc
 
 `ops/backlog.json` から `status: "todo"` を `priority` 昇順で取る。同順位ならリスクが低い方から。
 
+**`blocked`/`needs-human` は「タスク全体」ではなく「タスクのどの部分か」で見る**（issue #56,
+2026-08-05 10:29:40 の指摘）。credential 待ちで丸ごと止めたタスクでも、詰まっているのは大抵
+「最後の一歩」（実行・認証・実機確認）だけで、manifest の設計・記述は credential が届く前から
+進められる。「credential が無いから何もできない」と丸ごと止めない。
+
+- manifest（CronJob・ExternalSecret 等）は先に書く。ExternalSecret が参照する Doppler のキー名は
+  実装時にこちらで決め、`needs_human_reason` に「このキー名でこの値を登録してほしい」と具体的に書く
+  （T-0030/T-0049 で「調査は自分、実行は人間」の分割が機能した実例と同型）
+- CI（`kustomize build` / `manifest-diff`）で manifest の妥当性は検証できる。値が届く前でも
+  構造が壊れていないことは確認できる
+- 実行・確認だけを `needs-human`/`blocked` の対象として残し、設計・記述が終わった分は `done`/`todo`
+  に進めて引き継ぎを明確にする
+
 backlog が空、または全部 `blocked` のときは**調査タスクを自分で起票する**。空回りするのではなく、次にやるべきことを探すのが仕事。探し方の例:
 
 - `ops/inventory.json` の監視対象に上流の新しいリリースが出ていないか
