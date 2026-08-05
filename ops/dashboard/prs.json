@@ -1,432 +1,70 @@
 {
   "open": [],
   "merged": [
-    {
-      "number": 116,
-      "title": "ci: actions/checkout を v4 → v7 に上げる (T-0044)",
-      "url": "https://github.com/hikuohiku/homelab/pull/116",
-      "mergedAt": "2026-08-05T00:51:08Z",
-      "headRefName": "autopilot/T-0044-checkout-v7"
-    },
-    {
-      "number": 115,
-      "title": "ci: nix-installer-action の floating ref を固定する (T-0042)",
-      "url": "https://github.com/hikuohiku/homelab/pull/115",
-      "mergedAt": "2026-08-05T00:46:53Z",
-      "headRefName": "autopilot/T-0042-pin-nix-installer-action"
-    },
-    {
-      "number": 114,
-      "title": "docs: Plans.md の kubectl ask 前提の記述を実態に合わせる (T-0041)",
-      "url": "https://github.com/hikuohiku/homelab/pull/114",
-      "mergedAt": "2026-08-05T00:24:50Z",
-      "headRefName": "autopilot/T-0041-plans-md-ask-drift"
-    },
-    {
-      "number": 113,
-      "title": "ops: run #14 の記録をまとめ、ダッシュボードを再生成する",
-      "url": "https://github.com/hikuohiku/homelab/pull/113",
-      "mergedAt": "2026-08-05T00:16:51Z",
-      "headRefName": "autopilot/run14-wrapup"
-    },
-    {
-      "number": 112,
-      "title": "Maintenance.md: T-0031 revert / T-0038 完遂を反映 (T-0039)",
-      "url": "https://github.com/hikuohiku/homelab/pull/112",
-      "mergedAt": "2026-08-05T00:11:46Z",
-      "headRefName": "autopilot/T-0039-maintenance-doc-sync"
-    },
-    {
-      "number": 111,
-      "title": "vaultwarden: IP_HEADER_TRUSTED_PROXIES を pod CIDR に絞る (T-0038)",
-      "url": "https://github.com/hikuohiku/homelab/pull/111",
-      "mergedAt": "2026-08-05T00:09:28Z",
-      "headRefName": "autopilot/T-0038-vaultwarden-trusted-proxies"
-    },
-    {
-      "number": 110,
-      "title": "vaultwarden: icon 取得の無効化を revert する (T-0031)",
-      "url": "https://github.com/hikuohiku/homelab/pull/110",
-      "mergedAt": "2026-08-05T00:05:54Z",
-      "headRefName": "autopilot/T-0031-revert-icon-download"
-    },
-    {
-      "number": 109,
-      "title": "issue #56 のフィードバック4件を反映",
-      "url": "https://github.com/hikuohiku/homelab/pull/109",
-      "mergedAt": "2026-08-05T00:04:19Z",
-      "headRefName": "autopilot/feedback-round14"
-    },
-    {
-      "number": 108,
-      "title": "ops: run #13 の記録をまとめ、ダッシュボードを再生成する",
-      "url": "https://github.com/hikuohiku/homelab/pull/108",
-      "mergedAt": "2026-08-04T23:44:38Z",
-      "headRefName": "autopilot/run13-wrapup"
-    },
-    {
-      "number": 107,
-      "title": "vaultwarden: IP_HEADER=X-Forwarded-For を設定し Tailscale 経由のレート制限誤発火を防ぐ (T-0032)",
-      "url": "https://github.com/hikuohiku/homelab/pull/107",
-      "mergedAt": "2026-08-04T23:38:46Z",
-      "headRefName": "autopilot/t0032-vaultwarden-ip-header"
-    },
-    {
-      "number": 106,
-      "title": "external-secrets chart を 1.3.2 → 2.8.0 に上げる (T-0037)",
-      "url": "https://github.com/hikuohiku/homelab/pull/106",
-      "mergedAt": "2026-08-04T23:35:52Z",
-      "headRefName": "autopilot/t0037-external-secrets-2.8.0"
-    },
-    {
-      "number": 104,
-      "title": "vaultwarden: icon 取得タイムアウトを DISABLE_ICON_DOWNLOAD で無効化する (T-0031)",
-      "url": "https://github.com/hikuohiku/homelab/pull/104",
-      "mergedAt": "2026-08-04T23:31:42Z",
-      "headRefName": "autopilot/t0031-vaultwarden-disable-icon"
-    },
-    {
-      "number": 103,
-      "title": "ops: run #12 の記録をまとめ、ダッシュボードを再生成する",
-      "url": "https://github.com/hikuohiku/homelab/pull/103",
-      "mergedAt": "2026-08-04T23:09:47Z",
-      "headRefName": "autopilot/run12-wrapup"
-    },
-    {
-      "number": 102,
-      "title": "external-secrets chart を 1.1.1 → 1.3.2 に上げる (T-0026)",
-      "url": "https://github.com/hikuohiku/homelab/pull/102",
-      "mergedAt": "2026-08-04T23:08:09Z",
-      "headRefName": "autopilot/run12-feedback-t0026"
-    },
-    {
-      "number": 101,
-      "title": "ops: run #11 の記録をまとめ、ダッシュボードを再生成する",
-      "url": "https://github.com/hikuohiku/homelab/pull/101",
-      "mergedAt": "2026-08-04T22:42:03Z",
-      "headRefName": "autopilot/run-11-wrapup"
-    },
-    {
-      "number": 100,
-      "title": "upgrade(tailscale): operator chart 1.90.9→1.98.9、k8s-nameserver を v1.98.9 に揃える (T-0024, T-0025)",
-      "url": "https://github.com/hikuohiku/homelab/pull/100",
-      "mergedAt": "2026-08-04T22:40:28Z",
-      "headRefName": "autopilot/T-0024-T-0025-tailscale-upgrade"
-    },
-    {
-      "number": 99,
-      "title": "ops: run #11 のダッシュボード PR キャッシュを最新化する",
-      "url": "https://github.com/hikuohiku/homelab/pull/99",
-      "mergedAt": "2026-08-04T22:32:56Z",
-      "headRefName": "autopilot/run-11-dashboard-cache"
-    },
-    {
-      "number": 98,
-      "title": "ci: apps/ render の意図しないオブジェクト削除を検出するジョブを追加 (T-0036)",
-      "url": "https://github.com/hikuohiku/homelab/pull/98",
-      "mergedAt": "2026-08-04T22:26:27Z",
-      "headRefName": "autopilot/T-0036-manifest-deletion-guard"
-    },
-    {
-      "number": 97,
-      "title": "T-0012: 自己振り返りを実施し、run #10 の記録をまとめる",
-      "url": "https://github.com/hikuohiku/homelab/pull/97",
-      "mergedAt": "2026-08-04T22:12:24Z",
-      "headRefName": "autopilot/t-0012-weekly-review"
-    },
-    {
-      "number": 96,
-      "title": "T-0023: coder v2.35.3 更新のリスクを見直し、blocked にする",
-      "url": "https://github.com/hikuohiku/homelab/pull/96",
-      "mergedAt": "2026-08-04T22:08:47Z",
-      "headRefName": "autopilot/t-0023-coder-v2.35.3"
-    },
-    {
-      "number": 95,
-      "title": "T-0022: immich Helm chart を 0.12.0 → 0.13.1 に上げる",
-      "url": "https://github.com/hikuohiku/homelab/pull/95",
-      "mergedAt": "2026-08-04T22:03:02Z",
-      "headRefName": "autopilot/t-0022-immich-chart-0.13.1"
-    },
-    {
-      "number": 94,
-      "title": "CHARTER: 到達性の定義に自分自身の観測・操作経路を含める",
-      "url": "https://github.com/hikuohiku/homelab/pull/94",
-      "mergedAt": "2026-08-04T21:58:14Z",
-      "headRefName": "autopilot/feedback-56-observation-path"
-    },
-    {
-      "number": 93,
-      "title": "ops: run #9 の記録をまとめ、ダッシュボードを再生成する",
-      "url": "https://github.com/hikuohiku/homelab/pull/93",
-      "mergedAt": "2026-08-04T21:39:28Z",
-      "headRefName": "autopilot/run-9-wrapup"
-    },
-    {
-      "number": 92,
-      "title": "T-0021: coder-postgres を 17.5 → 17.10 に上げる",
-      "url": "https://github.com/hikuohiku/homelab/pull/92",
-      "mergedAt": "2026-08-04T21:37:02Z",
-      "headRefName": "autopilot/t-0021-coder-postgres-patch"
-    },
-    {
-      "number": 91,
-      "title": "T-0020: busybox を 1.37 → 1.38.0 に上げる",
-      "url": "https://github.com/hikuohiku/homelab/pull/91",
-      "mergedAt": "2026-08-04T21:34:45Z",
-      "headRefName": "autopilot/t-0020-busybox-patch"
-    },
-    {
-      "number": 90,
-      "title": "T-0019: immich の valkey を 9.1-alpine → 9.1.1-alpine に上げる",
-      "url": "https://github.com/hikuohiku/homelab/pull/90",
-      "mergedAt": "2026-08-04T21:32:13Z",
-      "headRefName": "autopilot/t-0019-immich-valkey-patch"
-    },
-    {
-      "number": 89,
-      "title": "T-0016: ダッシュボードの PR 一覧を gh CLI 非依存にする",
-      "url": "https://github.com/hikuohiku/homelab/pull/89",
-      "mergedAt": "2026-08-04T21:29:16Z",
-      "headRefName": "autopilot/t-0016-dashboard-pr-list-mcp"
-    },
-    {
-      "number": 88,
-      "title": "T-0035: ops/dashboard/index.html を Git 管理から外す",
-      "url": "https://github.com/hikuohiku/homelab/pull/88",
-      "mergedAt": "2026-08-04T21:24:41Z",
-      "headRefName": "autopilot/t-0035-dashboard-html-untrack"
-    },
-    {
-      "number": 87,
-      "title": "PBS バックアップ体制を棚卸しする (T-0013)",
-      "url": "https://github.com/hikuohiku/homelab/pull/87",
-      "mergedAt": "2026-08-04T21:13:05Z",
-      "headRefName": "autopilot/t-0013-pbs-backup-inventory"
-    },
-    {
-      "number": 86,
-      "title": "weekly-maintenance と CHARTER の役割を分ける (T-0009)",
-      "url": "https://github.com/hikuohiku/homelab/pull/86",
-      "mergedAt": "2026-08-04T21:08:55Z",
-      "headRefName": "autopilot/t-0009-weekly-maintenance-charter-roles"
-    },
-    {
-      "number": 85,
-      "title": "CI に nix flake check を追加する (T-0008)",
-      "url": "https://github.com/hikuohiku/homelab/pull/85",
-      "mergedAt": "2026-08-04T21:05:33Z",
-      "headRefName": "autopilot/t-0008-nix-flake-check-ci"
-    },
-    {
-      "number": 84,
-      "title": "ops/validate.py: git のコンフリクトマーカー残留を検出する (T-0033)",
-      "url": "https://github.com/hikuohiku/homelab/pull/84",
-      "mergedAt": "2026-08-04T20:54:36Z",
-      "headRefName": "autopilot/t-0033-conflict-marker-detection"
-    },
-    {
-      "number": 83,
-      "title": "fix(ops): ダッシュボードの数字が嘘をつかないようにする",
-      "url": "https://github.com/hikuohiku/homelab/pull/83",
-      "mergedAt": "2026-08-04T20:50:52Z",
-      "headRefName": "autopilot/fix-dashboard-numbers"
-    },
-    {
-      "number": 82,
-      "title": "ops: run #7 の記録をまとめ、ダッシュボードを再生成する",
-      "url": "https://github.com/hikuohiku/homelab/pull/82",
-      "mergedAt": "2026-08-04T20:34:49Z",
-      "headRefName": "autopilot/run-7-wrapup"
-    },
-    {
-      "number": 81,
-      "title": "T-0007: Maintenance.md の持ち越し課題を backlog に取り込む",
-      "url": "https://github.com/hikuohiku/homelab/pull/81",
-      "mergedAt": "2026-08-04T20:33:11Z",
-      "headRefName": "autopilot/T-0007-maintenance-backlog"
-    },
-    {
-      "number": 80,
-      "title": "T-0006: Plans.md の syncthing 移行(M2) の保留理由を実態に合わせる",
-      "url": "https://github.com/hikuohiku/homelab/pull/80",
-      "mergedAt": "2026-08-04T20:28:44Z",
-      "headRefName": "autopilot/T-0006-plans-md-syncthing-status"
-    },
-    {
-      "number": 79,
-      "title": "T-0018: dex chart を 0.24.0 → 0.24.1 に上げる",
-      "url": "https://github.com/hikuohiku/homelab/pull/79",
-      "mergedAt": "2026-08-04T20:22:07Z",
-      "headRefName": "autopilot/T-0018-dex-chart-patch"
-    },
-    {
-      "number": 78,
-      "title": "T-0005: inventory.json 全対象の上流バージョンを調査し、更新タスクを起票する",
-      "url": "https://github.com/hikuohiku/homelab/pull/78",
-      "mergedAt": "2026-08-04T20:19:22Z",
-      "headRefName": "autopilot/T-0005-inventory-upstream-survey"
-    },
-    {
-      "number": 77,
-      "title": "T-0017: check_version_sync.py の pyyaml 依存を除去し nix 抽出を構造化する",
-      "url": "https://github.com/hikuohiku/homelab/pull/77",
-      "mergedAt": "2026-08-04T20:07:23Z",
-      "headRefName": "autopilot/T-0017-check-version-sync-stdlib"
-    },
-    {
-      "number": 76,
-      "title": "ops: run #5 の記録をまとめ、ダッシュボードを再生成する",
-      "url": "https://github.com/hikuohiku/homelab/pull/76",
-      "mergedAt": "2026-08-04T20:00:20Z",
-      "headRefName": "autopilot/run5-wrapup"
-    },
-    {
-      "number": 75,
-      "title": "fix(apps): busybox の initContainer バージョンを 1.37 に統一する (T-0003)",
-      "url": "https://github.com/hikuohiku/homelab/pull/75",
-      "mergedAt": "2026-08-04T19:59:07Z",
-      "headRefName": "autopilot/T-0003-busybox-version-sync"
-    },
-    {
-      "number": 74,
-      "title": "fix(argocd): chart バージョンの二重管理に CI 検出を追加する (T-0002)",
-      "url": "https://github.com/hikuohiku/homelab/pull/74",
-      "mergedAt": "2026-08-04T19:57:49Z",
-      "headRefName": "autopilot/T-0002-argocd-version-sync"
-    },
-    {
-      "number": 73,
-      "title": "ops: このクラウドサンドボックスのツール有無を CHARTER に記録する",
-      "url": "https://github.com/hikuohiku/homelab/pull/73",
-      "mergedAt": "2026-08-04T19:56:23Z",
-      "headRefName": "autopilot/feedback-tool-availability"
-    },
-    {
-      "number": 72,
-      "title": "fix(ops): PR 一覧がキャッシュのときダッシュボードに明示する",
-      "url": "https://github.com/hikuohiku/homelab/pull/72",
-      "mergedAt": "2026-08-04T19:42:31Z",
-      "headRefName": "autopilot/dashboard-stale-warning"
-    },
-    {
-      "number": 71,
-      "title": "fix(tailscale): k8s-nameserver の floating tag unstable を固定する",
-      "url": "https://github.com/hikuohiku/homelab/pull/71",
-      "mergedAt": "2026-08-04T19:40:33Z",
-      "headRefName": "autopilot/T-0001-pin-tailscale-nameserver"
-    },
-    {
-      "number": 70,
-      "title": "fix(ci): direct-push-guard のレビュー指摘3点を修正",
-      "url": "https://github.com/hikuohiku/homelab/pull/70",
-      "mergedAt": "2026-08-04T19:34:27Z",
-      "headRefName": "autopilot/T-0014-fix-direct-push-guard-review"
-    },
-    {
-      "number": 69,
-      "title": "fix(ops): ダッシュボードに起動間隔が出ない退行を直す",
-      "url": "https://github.com/hikuohiku/homelab/pull/69",
-      "mergedAt": "2026-08-04T19:26:25Z",
-      "headRefName": "autopilot/fix-dashboard-cadence"
-    },
-    {
-      "number": 68,
-      "title": "fix(terraform): .terraform.lock.hcl から未宣言の tailscale provider を除去する",
-      "url": "https://github.com/hikuohiku/homelab/pull/68",
-      "mergedAt": "2026-08-04T19:25:17Z",
-      "headRefName": "autopilot/T-0004-tf-lock-cleanup"
-    },
-    {
-      "number": 67,
-      "title": "ci: main への直 push を検知する direct-push-guard を追加する",
-      "url": "https://github.com/hikuohiku/homelab/pull/67",
-      "mergedAt": "2026-08-04T19:23:22Z",
-      "headRefName": "autopilot/T-0014-direct-push-guard"
-    },
-    {
-      "number": 66,
-      "title": "ops: 「workflow 本文が失われた」という記録の誤りを訂正する",
-      "url": "https://github.com/hikuohiku/homelab/pull/66",
-      "mergedAt": "2026-08-04T19:11:18Z",
-      "headRefName": "autopilot/fix-journal-correction"
-    },
-    {
-      "number": 65,
-      "title": "ops: workflows 権限の付与を受けて T-0014 のブロックを解除する",
-      "url": "https://github.com/hikuohiku/homelab/pull/65",
-      "mergedAt": "2026-08-04T19:07:42Z",
-      "headRefName": "autopilot/unblock-t0014"
-    },
-    {
-      "number": 64,
-      "title": "ops: T-0014 の pr 番号を記録する (#63)",
-      "url": "https://github.com/hikuohiku/homelab/pull/64",
-      "mergedAt": "2026-08-04T19:04:54Z",
-      "headRefName": "autopilot/T-0014-record-pr"
-    },
-    {
-      "number": 63,
-      "title": "ops: issue #56 のフィードバックを反映、T-0014 を needs-human に",
-      "url": "https://github.com/hikuohiku/homelab/pull/63",
-      "mergedAt": "2026-08-04T19:03:50Z",
-      "headRefName": "autopilot/T-0014-direct-push-guard"
-    },
-    {
-      "number": 62,
-      "title": "fix: permissions.ask を全廃する",
-      "url": "https://github.com/hikuohiku/homelab/pull/62",
-      "mergedAt": "2026-08-04T18:54:48Z",
-      "headRefName": "autopilot/drop-ask-rules"
-    },
-    {
-      "number": 61,
-      "title": "fix(ops): 権限プロンプトで起動が消えるのを防ぐ",
-      "url": "https://github.com/hikuohiku/homelab/pull/61",
-      "mergedAt": "2026-08-04T18:51:52Z",
-      "headRefName": "autopilot/no-ask-commands"
-    },
-    {
-      "number": 60,
-      "title": "ops: 定期実行を 1 時間ごとに変更し、run #1 の記録を残す",
-      "url": "https://github.com/hikuohiku/homelab/pull/60",
-      "mergedAt": "2026-08-04T18:46:44Z",
-      "headRefName": "autopilot/hourly"
-    },
-    {
-      "number": 59,
-      "title": "fix(ops): main への直 push を廃し、記録も PR に載せる",
-      "url": "https://github.com/hikuohiku/homelab/pull/59",
-      "mergedAt": "2026-08-04T18:45:09Z",
-      "headRefName": "autopilot/pr-only"
-    },
-    {
-      "number": 58,
-      "title": "feat(ops): 判断を人間に渡さない方針へ憲章を改める",
-      "url": "https://github.com/hikuohiku/homelab/pull/58",
-      "mergedAt": "2026-08-04T18:32:23Z",
-      "headRefName": "autopilot/no-human-judgment"
-    },
-    {
-      "number": 57,
-      "title": "feat(ops): homelab を自律運用する autopilot の器を作る",
-      "url": "https://github.com/hikuohiku/homelab/pull/57",
-      "mergedAt": "2026-08-04T18:23:14Z",
-      "headRefName": "autopilot/bootstrap"
-    },
-    {
-      "number": 55,
-      "title": "fix(coder): secure workspace SSH key before clone",
-      "url": "https://github.com/hikuohiku/homelab/pull/55",
-      "mergedAt": "2026-08-04T16:25:20Z",
-      "headRefName": "coder-template-ssh-key-mode"
-    },
-    {
-      "number": 54,
-      "title": "fix(coder): clone private skills over SSH",
-      "url": "https://github.com/hikuohiku/homelab/pull/54",
-      "mergedAt": "2026-08-04T16:18:12Z",
-      "headRefName": "coder-template-skills-bootstrap"
-    }
+    {"number": 122, "title": "ci: softprops/action-gh-release を v2 → v3 に上げる (T-0048)", "url": "https://github.com/hikuohiku/homelab/pull/122", "mergedAt": "2026-08-05T01:18:03Z", "headRefName": "autopilot/T-0048-gh-release-v3"},
+    {"number": 121, "title": "ci: cachix/cachix-action を v15 → v17 に上げる (T-0047)", "url": "https://github.com/hikuohiku/homelab/pull/121", "mergedAt": "2026-08-05T01:16:31Z", "headRefName": "autopilot/T-0047-cachix-action-v17"},
+    {"number": 120, "title": "ci: hashicorp/setup-terraform を v3 → v4 に上げる (T-0046)", "url": "https://github.com/hikuohiku/homelab/pull/120", "mergedAt": "2026-08-05T01:15:07Z", "headRefName": "autopilot/T-0046-setup-terraform-v4"},
+    {"number": 119, "title": "ci: azure/setup-helm を v4 → v5 に上げる (T-0045)", "url": "https://github.com/hikuohiku/homelab/pull/119", "mergedAt": "2026-08-05T01:13:46Z", "headRefName": "autopilot/T-0045-setup-helm-v5"},
+    {"number": 118, "title": "ops: GitHub Actions を inventory.json の監視対象に追加する (T-0043)", "url": "https://github.com/hikuohiku/homelab/pull/118", "mergedAt": "2026-08-05T01:11:31Z", "headRefName": "autopilot/T-0043-github-actions-inventory"},
+    {"number": 117, "title": "ops: run #16 の PR キャッシュを最新化する", "url": "https://github.com/hikuohiku/homelab/pull/117", "mergedAt": "2026-08-05T00:52:49Z", "headRefName": "autopilot/run16-wrapup"},
+    {"number": 116, "title": "ci: actions/checkout を v4 → v7 に上げる (T-0044)", "url": "https://github.com/hikuohiku/homelab/pull/116", "mergedAt": "2026-08-05T00:51:08Z", "headRefName": "autopilot/T-0044-checkout-v7"},
+    {"number": 115, "title": "ci: nix-installer-action の floating ref を固定する (T-0042)", "url": "https://github.com/hikuohiku/homelab/pull/115", "mergedAt": "2026-08-05T00:46:53Z", "headRefName": "autopilot/T-0042-pin-nix-installer-action"},
+    {"number": 114, "title": "docs: Plans.md の kubectl ask 前提の記述を実態に合わせる (T-0041)", "url": "https://github.com/hikuohiku/homelab/pull/114", "mergedAt": "2026-08-05T00:24:50Z", "headRefName": "autopilot/T-0041-plans-md-ask-drift"},
+    {"number": 113, "title": "ops: run #14 の記録をまとめ、ダッシュボードを再生成する", "url": "https://github.com/hikuohiku/homelab/pull/113", "mergedAt": "2026-08-05T00:16:51Z", "headRefName": "autopilot/run14-wrapup"},
+    {"number": 112, "title": "Maintenance.md: T-0031 revert / T-0038 完遂を反映 (T-0039)", "url": "https://github.com/hikuohiku/homelab/pull/112", "mergedAt": "2026-08-05T00:11:46Z", "headRefName": "autopilot/T-0039-maintenance-doc-sync"},
+    {"number": 111, "title": "vaultwarden: IP_HEADER_TRUSTED_PROXIES を pod CIDR に絞る (T-0038)", "url": "https://github.com/hikuohiku/homelab/pull/111", "mergedAt": "2026-08-05T00:09:28Z", "headRefName": "autopilot/T-0038-vaultwarden-trusted-proxies"},
+    {"number": 110, "title": "vaultwarden: icon 取得の無効化を revert する (T-0031)", "url": "https://github.com/hikuohiku/homelab/pull/110", "mergedAt": "2026-08-05T00:05:54Z", "headRefName": "autopilot/T-0031-revert-icon-download"},
+    {"number": 109, "title": "issue #56 のフィードバック4件を反映", "url": "https://github.com/hikuohiku/homelab/pull/109", "mergedAt": "2026-08-05T00:04:19Z", "headRefName": "autopilot/feedback-round14"},
+    {"number": 108, "title": "ops: run #13 の記録をまとめ、ダッシュボードを再生成する", "url": "https://github.com/hikuohiku/homelab/pull/108", "mergedAt": "2026-08-04T23:44:38Z", "headRefName": "autopilot/run13-wrapup"},
+    {"number": 107, "title": "vaultwarden: IP_HEADER=X-Forwarded-For を設定し Tailscale 経由のレート制限誤発火を防ぐ (T-0032)", "url": "https://github.com/hikuohiku/homelab/pull/107", "mergedAt": "2026-08-04T23:38:46Z", "headRefName": "autopilot/t0032-vaultwarden-ip-header"},
+    {"number": 106, "title": "external-secrets chart を 1.3.2 → 2.8.0 に上げる (T-0037)", "url": "https://github.com/hikuohiku/homelab/pull/106", "mergedAt": "2026-08-04T23:35:52Z", "headRefName": "autopilot/t0037-external-secrets-2.8.0"},
+    {"number": 104, "title": "vaultwarden: icon 取得タイムアウトを DISABLE_ICON_DOWNLOAD で無効化する (T-0031)", "url": "https://github.com/hikuohiku/homelab/pull/104", "mergedAt": "2026-08-04T23:31:42Z", "headRefName": "autopilot/t0031-vaultwarden-disable-icon"},
+    {"number": 103, "title": "ops: run #12 の記録をまとめ、ダッシュボードを再生成する", "url": "https://github.com/hikuohiku/homelab/pull/103", "mergedAt": "2026-08-04T23:09:47Z", "headRefName": "autopilot/run12-wrapup"},
+    {"number": 102, "title": "external-secrets chart を 1.1.1 → 1.3.2 に上げる (T-0026)", "url": "https://github.com/hikuohiku/homelab/pull/102", "mergedAt": "2026-08-04T23:08:09Z", "headRefName": "autopilot/run12-feedback-t0026"},
+    {"number": 101, "title": "ops: run #11 の記録をまとめ、ダッシュボードを再生成する", "url": "https://github.com/hikuohiku/homelab/pull/101", "mergedAt": "2026-08-04T22:42:03Z", "headRefName": "autopilot/run-11-wrapup"},
+    {"number": 100, "title": "upgrade(tailscale): operator chart 1.90.9→1.98.9、k8s-nameserver を v1.98.9 に揃える (T-0024, T-0025)", "url": "https://github.com/hikuohiku/homelab/pull/100", "mergedAt": "2026-08-04T22:40:28Z", "headRefName": "autopilot/T-0024-T-0025-tailscale-upgrade"},
+    {"number": 99, "title": "ops: run #11 のダッシュボード PR キャッシュを最新化する", "url": "https://github.com/hikuohiku/homelab/pull/99", "mergedAt": "2026-08-04T22:32:56Z", "headRefName": "autopilot/run-11-dashboard-cache"},
+    {"number": 98, "title": "ci: apps/ render の意図しないオブジェクト削除を検出するジョブを追加 (T-0036)", "url": "https://github.com/hikuohiku/homelab/pull/98", "mergedAt": "2026-08-04T22:26:27Z", "headRefName": "autopilot/T-0036-manifest-deletion-guard"},
+    {"number": 97, "title": "T-0012: 自己振り返りを実施し、run #10 の記録をまとめる", "url": "https://github.com/hikuohiku/homelab/pull/97", "mergedAt": "2026-08-04T22:12:24Z", "headRefName": "autopilot/t-0012-weekly-review"},
+    {"number": 96, "title": "T-0023: coder v2.35.3 更新のリスクを見直し、blocked にする", "url": "https://github.com/hikuohiku/homelab/pull/96", "mergedAt": "2026-08-04T22:08:47Z", "headRefName": "autopilot/t-0023-coder-v2.35.3"},
+    {"number": 95, "title": "T-0022: immich Helm chart を 0.12.0 → 0.13.1 に上げる", "url": "https://github.com/hikuohiku/homelab/pull/95", "mergedAt": "2026-08-04T22:03:02Z", "headRefName": "autopilot/t-0022-immich-chart-0.13.1"},
+    {"number": 94, "title": "CHARTER: 到達性の定義に自分自身の観測・操作経路を含める", "url": "https://github.com/hikuohiku/homelab/pull/94", "mergedAt": "2026-08-04T21:58:14Z", "headRefName": "autopilot/feedback-56-observation-path"},
+    {"number": 93, "title": "ops: run #9 の記録をまとめ、ダッシュボードを再生成する", "url": "https://github.com/hikuohiku/homelab/pull/93", "mergedAt": "2026-08-04T21:39:28Z", "headRefName": "autopilot/run-9-wrapup"},
+    {"number": 92, "title": "T-0021: coder-postgres を 17.5 → 17.10 に上げる", "url": "https://github.com/hikuohiku/homelab/pull/92", "mergedAt": "2026-08-04T21:37:02Z", "headRefName": "autopilot/t-0021-coder-postgres-patch"},
+    {"number": 91, "title": "T-0020: busybox を 1.37 → 1.38.0 に上げる", "url": "https://github.com/hikuohiku/homelab/pull/91", "mergedAt": "2026-08-04T21:34:45Z", "headRefName": "autopilot/t-0020-busybox-patch"},
+    {"number": 90, "title": "T-0019: immich の valkey を 9.1-alpine → 9.1.1-alpine に上げる", "url": "https://github.com/hikuohiku/homelab/pull/90", "mergedAt": "2026-08-04T21:32:13Z", "headRefName": "autopilot/t-0019-immich-valkey-patch"},
+    {"number": 89, "title": "T-0016: ダッシュボードの PR 一覧を gh CLI 非依存にする", "url": "https://github.com/hikuohiku/homelab/pull/89", "mergedAt": "2026-08-04T21:29:16Z", "headRefName": "autopilot/t-0016-dashboard-pr-list-mcp"},
+    {"number": 88, "title": "T-0035: ops/dashboard/index.html を Git 管理から外す", "url": "https://github.com/hikuohiku/homelab/pull/88", "mergedAt": "2026-08-04T21:24:41Z", "headRefName": "autopilot/t-0035-dashboard-html-untrack"},
+    {"number": 87, "title": "PBS バックアップ体制を棚卸しする (T-0013)", "url": "https://github.com/hikuohiku/homelab/pull/87", "mergedAt": "2026-08-04T21:13:05Z", "headRefName": "autopilot/t-0013-pbs-backup-inventory"},
+    {"number": 86, "title": "weekly-maintenance と CHARTER の役割を分ける (T-0009)", "url": "https://github.com/hikuohiku/homelab/pull/86", "mergedAt": "2026-08-04T21:08:55Z", "headRefName": "autopilot/t-0009-weekly-maintenance-charter-roles"},
+    {"number": 85, "title": "CI に nix flake check を追加する (T-0008)", "url": "https://github.com/hikuohiku/homelab/pull/85", "mergedAt": "2026-08-04T21:05:33Z", "headRefName": "autopilot/t-0008-nix-flake-check-ci"},
+    {"number": 84, "title": "ops/validate.py: git のコンフリクトマーカー残留を検出する (T-0033)", "url": "https://github.com/hikuohiku/homelab/pull/84", "mergedAt": "2026-08-04T20:54:36Z", "headRefName": "autopilot/t-0033-conflict-marker-detection"},
+    {"number": 83, "title": "fix(ops): ダッシュボードの数字が嘘をつかないようにする", "url": "https://github.com/hikuohiku/homelab/pull/83", "mergedAt": "2026-08-04T20:50:52Z", "headRefName": "autopilot/fix-dashboard-numbers"},
+    {"number": 82, "title": "ops: run #7 の記録をまとめ、ダッシュボードを再生成する", "url": "https://github.com/hikuohiku/homelab/pull/82", "mergedAt": "2026-08-04T20:34:49Z", "headRefName": "autopilot/run-7-wrapup"},
+    {"number": 81, "title": "T-0007: Maintenance.md の持ち越し課題を backlog に取り込む", "url": "https://github.com/hikuohiku/homelab/pull/81", "mergedAt": "2026-08-04T20:33:11Z", "headRefName": "autopilot/T-0007-maintenance-backlog"},
+    {"number": 80, "title": "T-0006: Plans.md の syncthing 移行(M2) の保留理由を実態に合わせる", "url": "https://github.com/hikuohiku/homelab/pull/80", "mergedAt": "2026-08-04T20:28:44Z", "headRefName": "autopilot/T-0006-plans-md-syncthing-status"},
+    {"number": 79, "title": "T-0018: dex chart を 0.24.0 → 0.24.1 に上げる", "url": "https://github.com/hikuohiku/homelab/pull/79", "mergedAt": "2026-08-04T20:22:07Z", "headRefName": "autopilot/T-0018-dex-chart-patch"},
+    {"number": 78, "title": "T-0005: inventory.json 全対象の上流バージョンを調査し、更新タスクを起票する", "url": "https://github.com/hikuohiku/homelab/pull/78", "mergedAt": "2026-08-04T20:19:22Z", "headRefName": "autopilot/T-0005-inventory-upstream-survey"},
+    {"number": 77, "title": "T-0017: check_version_sync.py の pyyaml 依存を除去し nix 抽出を構造化する", "url": "https://github.com/hikuohiku/homelab/pull/77", "mergedAt": "2026-08-04T20:07:23Z", "headRefName": "autopilot/T-0017-check-version-sync-stdlib"},
+    {"number": 76, "title": "ops: run #5 の記録をまとめ、ダッシュボードを再生成する", "url": "https://github.com/hikuohiku/homelab/pull/76", "mergedAt": "2026-08-04T20:00:20Z", "headRefName": "autopilot/run5-wrapup"},
+    {"number": 75, "title": "fix(apps): busybox の initContainer バージョンを 1.37 に統一する (T-0003)", "url": "https://github.com/hikuohiku/homelab/pull/75", "mergedAt": "2026-08-04T19:59:07Z", "headRefName": "autopilot/T-0003-busybox-version-sync"},
+    {"number": 74, "title": "fix(argocd): chart バージョンの二重管理に CI 検出を追加する (T-0002)", "url": "https://github.com/hikuohiku/homelab/pull/74", "mergedAt": "2026-08-04T19:57:49Z", "headRefName": "autopilot/T-0002-argocd-version-sync"},
+    {"number": 73, "title": "ops: このクラウドサンドボックスのツール有無を CHARTER に記録する", "url": "https://github.com/hikuohiku/homelab/pull/73", "mergedAt": "2026-08-04T19:56:23Z", "headRefName": "autopilot/feedback-tool-availability"},
+    {"number": 72, "title": "fix(ops): PR 一覧がキャッシュのときダッシュボードに明示する", "url": "https://github.com/hikuohiku/homelab/pull/72", "mergedAt": "2026-08-04T19:42:31Z", "headRefName": "autopilot/dashboard-stale-warning"},
+    {"number": 71, "title": "fix(tailscale): k8s-nameserver の floating tag unstable を固定する", "url": "https://github.com/hikuohiku/homelab/pull/71", "mergedAt": "2026-08-04T19:40:33Z", "headRefName": "autopilot/T-0001-pin-tailscale-nameserver"},
+    {"number": 70, "title": "fix(ci): direct-push-guard のレビュー指摘3点を修正", "url": "https://github.com/hikuohiku/homelab/pull/70", "mergedAt": "2026-08-04T19:34:27Z", "headRefName": "autopilot/T-0014-fix-direct-push-guard-review"},
+    {"number": 69, "title": "fix(ops): ダッシュボードに起動間隔が出ない退行を直す", "url": "https://github.com/hikuohiku/homelab/pull/69", "mergedAt": "2026-08-04T19:26:25Z", "headRefName": "autopilot/fix-dashboard-cadence"},
+    {"number": 68, "title": "fix(terraform): .terraform.lock.hcl から未宣言の tailscale provider を除去する", "url": "https://github.com/hikuohiku/homelab/pull/68", "mergedAt": "2026-08-04T19:25:17Z", "headRefName": "autopilot/T-0004-tf-lock-cleanup"},
+    {"number": 67, "title": "ci: main への直 push を検知する direct-push-guard を追加する", "url": "https://github.com/hikuohiku/homelab/pull/67", "mergedAt": "2026-08-04T19:23:22Z", "headRefName": "autopilot/T-0014-direct-push-guard"},
+    {"number": 66, "title": "ops: 「workflow 本文が失われた」という記録の誤りを訂正する", "url": "https://github.com/hikuohiku/homelab/pull/66", "mergedAt": "2026-08-04T19:11:18Z", "headRefName": "autopilot/fix-journal-correction"},
+    {"number": 65, "title": "ops: workflows 権限の付与を受けて T-0014 のブロックを解除する", "url": "https://github.com/hikuohiku/homelab/pull/65", "mergedAt": "2026-08-04T19:07:42Z", "headRefName": "autopilot/unblock-t0014"},
+    {"number": 64, "title": "ops: T-0014 の pr 番号を記録する (#63)", "url": "https://github.com/hikuohiku/homelab/pull/64", "mergedAt": "2026-08-04T19:04:54Z", "headRefName": "autopilot/T-0014-record-pr"},
+    {"number": 63, "title": "ops: issue #56 のフィードバックを反映、T-0014 を needs-human に", "url": "https://github.com/hikuohiku/homelab/pull/63", "mergedAt": "2026-08-04T19:03:50Z", "headRefName": "autopilot/T-0014-direct-push-guard"},
+    {"number": 62, "title": "fix: permissions.ask を全廃する", "url": "https://github.com/hikuohiku/homelab/pull/62", "mergedAt": "2026-08-04T18:54:48Z", "headRefName": "autopilot/drop-ask-rules"},
+    {"number": 61, "title": "fix(ops): 権限プロンプトで起動が消えるのを防ぐ", "url": "https://github.com/hikuohiku/homelab/pull/61", "mergedAt": "2026-08-04T18:51:52Z", "headRefName": "autopilot/no-ask-commands"},
+    {"number": 60, "title": "ops: 定期実行を 1 時間ごとに変更し、run #1 の記録を残す", "url": "https://github.com/hikuohiku/homelab/pull/60", "mergedAt": "2026-08-04T18:46:44Z", "headRefName": "autopilot/hourly"},
+    {"number": 59, "title": "fix(ops): main への直 push を廃し、記録も PR に載せる", "url": "https://github.com/hikuohiku/homelab/pull/59", "mergedAt": "2026-08-04T18:45:09Z", "headRefName": "autopilot/pr-only"},
+    {"number": 58, "title": "feat(ops): 判断を人間に渡さない方針へ憲章を改める", "url": "https://github.com/hikuohiku/homelab/pull/58", "mergedAt": "2026-08-04T18:32:23Z", "headRefName": "autopilot/no-human-judgment"},
+    {"number": 57, "title": "feat(ops): homelab を自律運用する autopilot の器を作る", "url": "https://github.com/hikuohiku/homelab/pull/57", "mergedAt": "2026-08-04T18:23:14Z", "headRefName": "autopilot/bootstrap"}
   ]
 }
