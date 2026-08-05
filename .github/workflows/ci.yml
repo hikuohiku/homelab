@@ -26,7 +26,7 @@ jobs:
 
       - uses: azure/setup-helm@v5
         with:
-          version: v3.16.4
+          version: v3.21.3
 
       - name: Install kustomize
         run: |
@@ -98,7 +98,7 @@ jobs:
 
       - uses: azure/setup-helm@v5
         with:
-          version: v3.16.4
+          version: v3.21.3
 
       - name: Install kustomize
         run: |
