@@ -711,6 +711,16 @@
         233,
         234
       ]
+    },
+    {
+      "n": 65,
+      "at": "2026-08-05T20:25:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "T-0071 の vaultwarden 分に着手。immich 分（#231-234, 完了済み）で判明した CHOWN/FOWNER/DAC_OVERRIDE + restore前クリーンアップ + restore_output_tail の教訓を初回実装から織り込んだ apps/vaultwarden/restic-restore-verify-job.yaml を追加 (#236)。coder-postgres 分は未実施のため T-0071 は in_progress のまま継続",
+      "prs": [
+        236
+      ]
     }
   ]
 }
