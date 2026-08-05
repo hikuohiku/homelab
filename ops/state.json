@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T05:45:00Z",
+  "updated": "2026-08-05T05:58:50Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T05:16:46Z"
+    "last_read": "2026-08-05T05:56:49Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -369,6 +369,14 @@
         156,
         157
       ]
+    },
+    {
+      "n": 31,
+      "at": "2026-08-05T05:58:50Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし（#159 は構築セッションが既に自力で作成・merge 済みで main に反映確認済み）。issue #56 の未読フィードバック2件を反映: (1) 05:35:04（重要）ops-health-report の実測で node01 の ephemeral-storage capacity が 48.9GiB しか無いと判明、terraform/docs/CLAUDE.md が前提とする 256GiB と食い違う。PVC requested 合計 215Gi（immich-library 単体 50Gi）が既に実ディスクを超えており local-path 特性上ディスク逼迫で全データ同時破損のリスクがあるため、T-0079（needs-human, priority 1）として起票し人間に df -h/lsblk での実機確認を依頼。ドキュメントは実態未確定のため書き換えず。T-0066 は上限確定（immich ライブラリは物理的に49GiB上限、保存先はBackblaze B2で確定）を notes に反映。T-0077（PVC実使用量取得）の priority を 36→5 に引き上げ。(2) 05:56:49: #155→#158 の作り直しで CHARTER の8行(cooldown/直列化対処)が一時的に main から漏れていた件（構築セッションが #159 で復旧済み）を受け、CHARTER §4 に『PR を作り直すときは git diff で旧ブランチとの差分ゼロを確認する』『新しい規則を足すときは既存規則との前提衝突を1行考える』の2点を追記",
+      "prs": []
     }
   ]
 }
