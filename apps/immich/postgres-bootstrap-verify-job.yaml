@@ -73,12 +73,13 @@ spec:
               : > "$LOGFILE"
               START=$(date +%s)
 
-              if [ -s "$PGDATA/PG_VERSION" ]; then
-                INITDB_RC=99
-              else
-                initdb --username="$POSTGRES_USER" --pwfile=<(printf '%s\n' "$POSTGRES_PASSWORD") $POSTGRES_INITDB_ARGS -D "$PGDATA" >>"$LOGFILE" 2>&1
-                INITDB_RC=$?
-              fi
+              # PVC は Job の再作成（Force=true,Replace=true）をまたいで残る。前回の実行で PGDATA が
+              # 部分的に作られた状態（initdb 済みだが未起動、等）だと再現性のあるテストにならないため、
+              # 毎回 PGDATA を空にしてから initdb から通す（run #75 で PG_VERSION 残存により
+              # 「initdb をスキップしたら以降の起動テストも素通りする」不具合を実際に踏んだ）。
+              rm -rf "${PGDATA:?}"/* >>"$LOGFILE" 2>&1
+              initdb --username="$POSTGRES_USER" --pwfile=<(printf '%s\n' "$POSTGRES_PASSWORD") $POSTGRES_INITDB_ARGS -D "$PGDATA" >>"$LOGFILE" 2>&1
+              INITDB_RC=$?
 
               BOOT_START_RC=1
               START_RC=1
