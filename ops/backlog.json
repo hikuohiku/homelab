@@ -989,7 +989,7 @@
       "title": "immich (server / machine-learning / valkey) に CPU/メモリの requests・limits を設定する",
       "kind": "refactor",
       "risk": "medium",
-      "status": "todo",
+      "status": "done",
       "priority": 20,
       "why": "run #23: subagent の調査で発見。この repo の手書き Deployment（vaultwarden, coder, coder-postgres, immich-postgres）と argocd の Helm values はすべて resources.requests/limits を設定しているが、apps/immich/values.yaml だけ controllers.main（server）・machine-learning.controllers.main・valkey.controllers.main のいずれも resources ブロックが無い。node01 は 4c/11.7GiB の単一ノードで、他コンポーネントの requests 合計は約 700m/1.2GiB（vaultwarden 50m/128Mi + coder-postgres 50m/128Mi + coder 100m/256Mi + argocd server/controller/repoServer 400m/448Mi + immich-postgres 100m/256Mi）に留まり、まだ十分な余地がある。とくに immich-machine-learning は CLIP 等のモデルをロードするため、requests/limits が無いと単一ノード上の他 Pod（vaultwarden や coder 含む、自分や人間の観測経路も同居している）を無制限に圧迫しうる",
       "dod": "apps/immich/values.yaml の controllers.main（immich-server）・machine-learning.controllers.main・valkey.controllers.main に requests/limits を追加する。既存コンポーネント（coder の実装コメントが参考になる: requests は保証したい最低限、limits は他 Pod を圧迫しない上限）に倣い、node01 の総容量（4c/11.7GiB）に対して既存 requests 合計＋追加分が安全に収まることを PR 本文に書く。kustomize build --enable-helm apps/immich が CI で green であること（このサンドボックスには kustomize が無いため手元検証は不可、CHARTER §5.2）",
@@ -998,7 +998,8 @@
         "apps/coder/deployment.yaml"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": null,
+      "notes": "run #23: immich-server（requests 150m/256Mi, limits 1500m/2Gi）・valkey（requests 25m/32Mi, limits 250m/256Mi）・machine-learning（requests 200m/512Mi, limits 2000m/3Gi）に resources を追加。既存コンポーネントの requests 合計（約700m/1.2GiB）に今回の追加分（約375m/800Mi）を足しても node01 の 4c/11.7GiB に対して余裕があることを確認。immich chart（bjw-s app-template ベース）自体はデフォルトで resources を設定していないことを WebFetch で確認済み（controllers.<name>.containers.main.resources が正しいキー、既存の image/env と同じ階層）。limits 合計は既存分と合わせても memory 側で概ね9GiB程度に収まり、全コンポーネントが同時に上限まで張り付く想定はしていない"
     }
   ]
 }
