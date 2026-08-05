@@ -147,7 +147,8 @@ apps/
 ├── tailscale-operator/
 ├── immich/
 ├── vaultwarden/
-└── coder/
+├── coder/
+└── ops-health-reporter/
 ```
 
 各アプリは以下の構造:

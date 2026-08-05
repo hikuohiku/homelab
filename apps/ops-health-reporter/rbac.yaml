@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ops-health-reporter
+  namespace: ops-health-reporter
+---
+# autopilot (クラウドサンドボックス) が読める場所に、クラスタの状態を書き戻すための
+# 読み取り専用ロール。get/list のみで write 系動詞は一切含まない。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ops-health-reporter-reader
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "persistentvolumeclaims", "nodes"]
+    verbs: ["get", "list"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ops-health-reporter-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: ops-health-reporter-reader
+subjects:
+  - kind: ServiceAccount
+    name: ops-health-reporter
+    namespace: ops-health-reporter

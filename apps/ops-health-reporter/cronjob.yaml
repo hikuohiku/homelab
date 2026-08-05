@@ -1,0 +1,72 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ops-health-reporter
+  namespace: ops-health-reporter
+spec:
+  # autopilot は1時間ごとに起動するため、それより短い周期でクラスタ側の状態を先に
+  # 更新しておく。前回実行が長引いても重ならないよう concurrencyPolicy: Forbid にする
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          serviceAccountName: ops-health-reporter
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: report
+              image: python:3.12-alpine
+              command: ["python", "/scripts/report.py"]
+              env:
+                - name: GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: github-health-reporter-token
+                      key: token
+                - name: GITHUB_REPO
+                  value: hikuohiku/homelab
+                - name: REPORT_BRANCH
+                  value: ops-health-report
+                - name: BASE_BRANCH
+                  value: main
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              # このジョブが実際に使うメモリは JSON を組み立てて HTTP でやり取りする程度で
+              # 数十MB規模に収まる見込み。256Mi は実測ではなく「暴走しても他 Pod を巻き込まない」
+              # 目的の緩い上限（CHARTER §4「縛る変更には実測か裏付けが要る」— 実使用量に張り付いた
+              # 値ではないため、OOMKill を誘発するリスクは低いと判断した）
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: script
+              configMap:
+                name: ops-health-reporter-script
+            - name: tmp
+              emptyDir: {}
