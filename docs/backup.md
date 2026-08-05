@@ -43,6 +43,24 @@ issue #56 (2026-08-05 04:40:59) で人間から新方針: **PBS は重すぎる�
 | `coder-postgres-data` | Coder 制御プレーン（ユーザー・workspace・監査ログ） | T-0070（実装済み・credential 登録待ち） |
 | `coder-<workspace-id>-home`（動的作成、`apps/coder/templates/personal/main.tf`） | workspace ごとの `/home/coder`（dotfiles・ghq clone 等） | **未起票**。T-0070 の対象外（別 PVC 群）のため、別途タスク化が必要 |
 
+## 実サイズの実測 (T-0066, run #50)
+
+T-0080（`pvc-usage-reporter`）が稼働したことで、当初 needs-human だった実サイズ測定は human の
+手を借りずに完了した。`ops/health/latest.json` の `pvc_usage`（2026-08-05T12:30:04Z 時点）:
+
+| PVC | 実使用量 |
+|---|---|
+| `immich-library` | 約 332 MiB |
+| `immich-postgres-data` | 約 302 MiB |
+| `vaultwarden-data` | 約 4.6 MiB |
+| `coder-postgres-data` | 小さい（immich と同程度以下） |
+
+**合計 1 GiB 未満。** T-0066 の why で懸念していた「300GB か 1TB か」という規模の想定は的外れで、
+node01 の実ディスク容量（約48.9GiB、T-0079）の 2% にも満たない。T-0067（restic 保存先アカウント）の
+判断はこれで確定する: **Backblaze B2 の無料枠（10GB）に収まり、月額コストは実質ゼロ。** Hetzner Storage
+Box との比較検討は不要。宣言値（PVC の `requested`）と実測値は 2 桁近く乖離しており、判断は実測が
+入るまで宣言値に依存すべきではない。
+
 ## vaultwarden の restic バックアップ (T-0069, 実装済み・credential 登録待ち)
 
 `apps/vaultwarden/restic-backup-cronjob.yaml` に2つの CronJob を実装した。
