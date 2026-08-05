@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T10:30:00Z",
+  "updated": "2026-08-05T11:57:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -532,9 +532,11 @@
       "at": "2026-08-05T10:27:00Z",
       "kind": "scheduled",
       "by": "cloud routine",
-      "summary": "オープン PR・autopilot ブランチとも無く中断なし（run #46 が残した孤児ブランチ autopilot/T-0088-tailscale-1.102.2 は main との diff ゼロと確認、回収不要）。issue #56 に未読フィードバックなし。ops-health-report で ArgoCD 全10アプリ Synced/Healthy、pvc_usage の実使用量はいずれも小さく（immich-library 348MB 等）T-0079 の逼迫はまだ実害化していない。backlog の todo が0件だったため subagent に調査を投げ3件発見: T-0094（apps/README.md の ArgoCD Application 出力例が10件中4件のみ、完遂・#187）、T-0095（同ファイルの旧ブートストラップ手順が実行すると失敗する状態のまま案内されている、todo）、T-0096（ドキュメントの `just <recipe>` 参照を CI で検証する仕組みが無い、todo）",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし（run #46 が残した孤児ブランチ autopilot/T-0088-tailscale-1.102.2 は main との diff ゼロと確認、回収不要）。issue #56 に未読フィードバックなし。ops-health-report で ArgoCD 全10アプリ Synced/Healthy、pvc_usage の実使用量はいずれも小さく（immich-library 348MB 等）T-0079 の逼迫はまだ実害化していない。backlog の todo が0件だったため subagent に調査を投げ3件発見: T-0094（apps/README.md の ArgoCD Application 出力例が10件中4件のみ、完遂・#187）、T-0095（同ファイルの旧ブートストラップ手順が実行すると失敗する状態のまま案内されている、完遂・#189）、T-0096（ドキュメントの `just <recipe>` 参照を CI で検証する仕組みが無い、todo）。作業中、backlog.json の編集で status キーを重複させる自分のミスに気づき修正。並行して別セッションが T-0069（vaultwarden restic backup）を完遂し T-0097/T-0098 を新規起票",
       "prs": [
-        187
+        187,
+        188,
+        189
       ]
     }
   ]
