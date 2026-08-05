@@ -477,9 +477,12 @@ upstream リポジトリのファイル（例: `deploy/crds/bundle.yaml` のよ�
     **この substrate ではまだ実行して確かめていない**。確かめるまでは「CI green を待って
     `merge` を直接呼ぶ」（ポーリングになるが、この pod は 2 分間隔でループが回るので次の
     イテレーションが拾える）で代替してよい
-  - ブランチ削除: `DELETE /repos/.../git/refs/heads/<branch>` が使えるか未確認
-    （旧サンドボックスは 403 だった。API 到達性自体が変わったので、この制約も
-    再検証の余地がある。**孤児ブランチの掃除を試すときに合わせて確認する**）
+  - ブランチ削除: **この substrate では `DELETE /repos/.../git/refs/heads/<branch>` が使える**
+    （2026-08-06 run #57 実測、close 済み PR #216 のブランチ削除で 204 を確認）。旧サンドボックスの
+    403 は substrate 固有の制約だった。§4 の「マージ済み PR のブランチは GitHub が自動削除するが
+    close だけでは残る」対応を、この substrate では今後実際に実行できる。旧サンドボックス時代に
+    残った孤児ブランチ（`git branch -r` で確認できるもの）の掃除は、内容が main と重複している
+    ことを確認できたものから順に削除してよい
 - **`kubectl` が実際に動く。** in-cluster ServiceAccount `autopilot` + 専用 ClusterRole
   `autopilot-reader`（`apps/autopilot/rbac.yaml`）で、`get`/`list` のみ・書き込み動詞は無し。
   読めるもの: `pods`/`persistentvolumeclaims`/`nodes`/`namespaces`/`events`、
