@@ -1166,7 +1166,7 @@
         "terraform/proxmox/nixos-image.tf"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 149,
       "notes": "run #27: #145（T-0030 の実行部分、人間が直接 terraform init -upgrade して merge）の PR 本文の依頼により起票。subagent に bpg/proxmox provider の実ソース（fwprovider/nodes/resource_download_file_short.go, fwprovider/migration/migration.go）と ADR-007（docs/adr/007-resource-type-name-migration.md）を直接確認させた。結論: `proxmox_download_file` は別実装ではなく `downloadFileResource` を embed した alias で、スキーマ・ID・状態形状は完全に同一。provider は Terraform Plugin Framework の `ResourceWithMoveState`（`MoveState` フック、`migration.PrefixMoveState` で raw state をそのままコピー）を実装済みで、`moved` ブロック（Terraform >= 1.8、このリポジトリの `required_version = ~> 1.15` は満たす）による cross-type move が provider 公式の移行手段であり `terraform state mv` は不要と確認。これに基づき `.tf` を編集済み（PR 参照）。`replace_triggered_by` 経由で node01 VM に波及するリスクがあるため risk=high としたが、**autopilot は terraform apply を一度も実行しない**（CHARTER §5）ため、この PR が main に merge されること自体は実インフラに一切影響しない。実際に危険なのは人間が `terraform apply` を実行する瞬間であり、その手前に必ず `terraform plan` を見る人間のレビューが挟まる。したがって『戻せる形に落とす』（CHARTER §4）は満たしていると判断し、CI green を確認したうえで自分の判断で merge する。PR 本文に『plan は moved のみ・0 changes になるはずで、それ以外（replace/destroy）が出たら apply せず調査してほしい』という具体的な確認事項を明記する"
     }
   ]
