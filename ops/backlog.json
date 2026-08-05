@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 49,
-  "updated": "2026-08-05T01:25:00Z",
+  "updated": "2026-08-05T01:29:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -847,7 +847,7 @@
       "title": "cachix/cachix-action を v15 → v17 に上げる",
       "kind": "ci",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 27,
       "why": "T-0043 (run #16) の調査で判明。現在 v15、最新は v17（2 メジャー遅れ）。v16/v17 は Node 24 移行と daemon hook のハードニングが主な変更点。cachix push 用の認証設定 (name: hikuohiku) への影響は release note を精査して確認する",
       "dod": "ci.yml (nix flake check job) の cachix/cachix-action@v15 が v17 になり CI が green。cachix への push（あれば）が引き続き成功することを確認",
@@ -855,7 +855,8 @@
         ".github/workflows/ci.yml"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": 121,
+      "notes": "run #17: 使用箇所は ci.yml ではなく .github/workflows/release-image.yml の Nix イメージビルド job（workflow_dispatch 手動実行のみ）だった。subagent に release notes を原文確認させた。破壊的変更は Node24 ランタイムのみ。v17 でエラー伝播の修正（push 失敗が握り潰されず CI 失敗として顕在化する）が入っており、これまでの隠れた push 失敗が次回の手動実行で表面化する可能性がある（互換性の破壊ではなく検知強化）。name: hikuohiku の認証設定自体への影響は無い。次回 workflow_dispatch 実行時に push が成功することを確認する"
     },
     {
       "id": "T-0048",
