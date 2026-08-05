@@ -6,7 +6,7 @@
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T02:55:16Z"
+    "last_read": "2026-08-05T03:45:46Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -301,6 +301,14 @@
         136,
         137
       ]
+    },
+    {
+      "n": 25,
+      "at": "2026-08-05T03:50:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "前回の中断: ローカル main が origin から 121 コミット遅れて古いキャッシュのまま残っていたため checkout -B で追従（作業喪失なし）。オープン PR・autopilot ブランチとも無く中断なし。issue #56 の未読3件を反映: (1) 縛る変更は作成した起動の中で merge しない cooldown を CHARTER §4 の firm rule 化（実測の裏付け有無に関わらず対象）、(2) get_comments のページネーションの罠（perPage 未指定だと全件取れない）を自分でも実測し CHARTER §6 に明記、(3) judgment table 提案を T-0059 として起票。backlog の todo は T-0059 のみで今回は着手せず次回に回した",
+      "prs": []
     }
   ]
 }
