@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: autopilot
+  namespace: autopilot
+---
+# クラスタの状態を読むためのロール。**書き込み動詞は一切含めない**
+# （CHARTER §5「クラスタへの書き込み操作」は禁止。変更は必ず Git 経由で ArgoCD に反映させる。
+# 権限を持たせなければ、エージェントが誤って直接適用する経路そのものが存在しなくなる）。
+#
+# 組み込みの `view` ClusterRole を参照する案（apps/agent-rbac/clusterrolebinding.yaml の形）
+# ではなく専用 ClusterRole を作った理由:
+#
+#   1. `view` には cluster-scoped の nodes が含まれず、argoproj.io の Application も
+#      含まれない（argo-cd chart の `createAggregateRoles` は有効にしていないため
+#      `aggregate-to-view` ラベル付きロールが存在しない）。autopilot が最も見たい
+#      「ArgoCD の sync/health」「Node の状態」がどちらも欠ける
+#   2. 逆に `view` は全 namespace の ConfigMap 等を無条件で読める。必要な範囲より広い
+#   3. 同じ判断を ops-health-reporter (apps/ops-health-reporter/rbac.yaml) で既にしている。
+#      読む対象が同じなので、ルールもそちらに揃える
+#
+# なお autopilot の一次情報源は ops-health-reporter が書き戻す ops-health-report ブランチ
+# （CHARTER §2）で、この API 直読みはその補助。ブランチが古いときの原因切り分けに使う。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: autopilot-reader
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "persistentvolumeclaims", "nodes", "namespaces", "events"]
+    verbs: ["get", "list"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["cronjobs", "jobs"]
+    verbs: ["get", "list"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list"]
+  - apiGroups: ["external-secrets.io"]
+    resources: ["externalsecrets", "clustersecretstores"]
+    verbs: ["get", "list"]
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["pods", "nodes"]
+    verbs: ["get", "list"]
+  # Secret は意図的に含めない。ExternalSecret の同期状態（status）は上の
+  # externalsecrets で読めるので、値そのものを読む必要は無い
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: autopilot-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: autopilot-reader
+subjects:
+  - kind: ServiceAccount
+    name: autopilot
+    namespace: autopilot

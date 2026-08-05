@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autopilot
+  namespace: autopilot
+  labels:
+    app: autopilot
+spec:
+  # 0 で入れる。AUTOPILOT_GITHUB_TOKEN が Doppler に入り ExternalSecret が Ready に
+  # なってから 1 にする。先に 1 にすると Secret 待ちの Pod が延々 Pending のまま残り、
+  # health-reporter とダッシュボードに「壊れているアプリ」として出続けるため。
+  replicas: 0
+  # 2 つ動くと同じタスクで別々のブランチ・PR を作り、ops/ の記録が必ずコンフリクトする
+  # （CHARTER §2 の直列化ルールは 1 プロセス内でしか効かない）。RollingUpdate だと
+  # 更新中に新旧が一時的に重なるため Recreate にして、常に高々 1 つに保つ
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: autopilot
+  template:
+    metadata:
+      labels:
+        app: autopilot
+    spec:
+      serviceAccountName: autopilot
+      # 走行中のイテレーションが SIGTERM を受けてから降りるまでの猶予。
+      # loop.sh は trap で即座に降りるが、claude 側の後始末を少し待つ
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        # 非 root で動かす。UID/GID はイメージ側 (ghcr.io/hikuohiku/homelab-autopilot)
+        # の非 root ユーザーに合わせる想定。fsGroup を同じ値にすることで、作業用の
+        # emptyDir（git clone 先・HOME・npm キャッシュ）に書き込めるようにする
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: autopilot
+          # タグはイメージのビルド経路が固まった時点で差し替えるプレースホルダ。
+          # ghcr の package が private の場合は imagePullSecrets が別途要る
+          image: ghcr.io/hikuohiku/homelab-autopilot@sha256:1ef41f711651af72fea996ba95c0e0a6e9171f4e6f5579325f54fed1605938a8
+          command: ["sh", "/config/loop.sh"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            # readOnlyRootFilesystem は付けない。claude CLI / npm / git が
+            # ルートFS のどこに書くかを実測できていない段階で有効にすると、
+            # 起動しない条件を根拠なく持ち込むことになる（CHARTER §4「縛る変更には
+            # 実測か裏付けが要る」）。書き込みが必要な場所が特定できたら、
+            # そこを emptyDir に寄せた上で有効化する
+            readOnlyRootFilesystem: false
+          env:
+            # --- Doppler 由来 (external-secret.yaml) ---
+            - name: CLAUDE_CODE_OAUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: autopilot-credentials
+                  key: CLAUDE_CODE_OAUTH_TOKEN
+            - name: AUTOPILOT_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: autopilot-credentials
+                  key: AUTOPILOT_GITHUB_TOKEN
+            # --- git のコミット著者 ---
+            # 人間のコミットと autopilot のコミットを履歴上で区別できるようにする。
+            # committer 側も明示しないと git が UID からの推測に失敗して commit できない
+            - name: GIT_AUTHOR_NAME
+              value: homelab-autopilot
+            - name: GIT_AUTHOR_EMAIL
+              value: autopilot@users.noreply.github.com
+            - name: GIT_COMMITTER_NAME
+              value: homelab-autopilot
+            - name: GIT_COMMITTER_EMAIL
+              value: autopilot@users.noreply.github.com
+            # --- ループの挙動 (loop.sh) ---
+            - name: INTERVAL_SECONDS
+              value: "120"
+            - name: ITERATION_TIMEOUT_SECONDS
+              value: "3600"
+            - name: WORKDIR
+              value: /work
+            # HOME・npm キャッシュを emptyDir 配下に寄せる。非 root で動かすため
+            # イメージ既定のホーム (/root 等) には書けない
+            - name: HOME
+              value: /work/home
+            - name: NPM_CONFIG_CACHE
+              value: /work/.npm
+          resources:
+            # requests のみ。**memory の limits は設定しない**（CHARTER §4）。
+            # このコンテナが実際にどれだけ使うかは一度も実測できておらず、
+            # 根拠のない limit を置くと OOMKill で回復不能に落ちる（CPU の throttle と違い
+            # 戻らない）。requests はスケジューリングの目安として置くだけで、
+            # 超過しても kill されない。実測が取れてから limits を検討する
+            requests:
+              cpu: 100m
+              memory: 512Mi
+              # git clone + npm キャッシュ + claude の作業ファイル分の目安
+              ephemeral-storage: 1Gi
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: work
+              mountPath: /work
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # loop.sh と prompt.md。prompt.md は毎イテレーション読み直されるので、
+        # ConfigMap の更新が Pod 再起動なしで次の周回から効く
+        - name: config
+          configMap:
+            name: autopilot-config
+        # 作業ディレクトリ（git clone 先・HOME）。PVC にしないのは、状態を持たない
+        # ことが引き継ぎの前提だから — 中断は origin 側の PR / autopilot/* ブランチ
+        # から拾う（CHARTER §2）ので、Pod が作り直されてローカルが消えても困らない
+        - name: work
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
