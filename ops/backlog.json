@@ -1577,7 +1577,7 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 171,
       "notes": "run #39: subagent に v2.6.3→v2.7.5 の全中間リリース(v2.7.0〜v2.7.5)を原文確認させた。env var・values.yaml キー・ストレージテンプレート形式の破壊的変更は無し（v2.7.1 はサーバー起動が壊れた欠陥リリースだが v2.7.2 で修正済み、v2.7.5 まで一直線に上げれば影響なし）。immich-chart (0.13.1) はこのリポジトリが image.tag を明示的に上書きしている構造のため chart 側のバージョンとは独立、変更不要と再確認。valkey (9.1.1-alpine) は対象外で変更なし。postgres は self-hosted cloudnative-vectorchord で immich チャート管理外のため無関係。残った不確実性（v2.7.0/2.7.1 の一時的な ML numpy クラッシュが node01 の CPU で再発しないか）は T-0087 として post-deploy 確認タスクを起票した"
     },
     {
