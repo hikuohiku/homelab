@@ -2,6 +2,41 @@
   "open": [],
   "merged": [
     {
+      "number": 234,
+      "title": "docs(backup): immich の restic 復元試験の成功を記録し、検証用リソースを削除する (T-0071)",
+      "url": "https://github.com/hikuohiku/homelab/pull/234",
+      "mergedAt": "2026-08-05T20:15:43Z",
+      "headRefName": "autopilot/T-0071-immich-restore-cleanup"
+    },
+    {
+      "number": 233,
+      "title": "fix(immich): restic restore-verify Job に CAP_DAC_OVERRIDE を足し、target を毎回クリーンアップする (T-0071)",
+      "url": "https://github.com/hikuohiku/homelab/pull/233",
+      "mergedAt": "2026-08-05T20:05:10Z",
+      "headRefName": "autopilot/T-0071-immich-restore-cap-simplify"
+    },
+    {
+      "number": 232,
+      "title": "fix(immich): restic restore-verify Job に CAP_FOWNER も足してタイムスタンプ復元エラーを解消する (T-0071)",
+      "url": "https://github.com/hikuohiku/homelab/pull/232",
+      "mergedAt": "2026-08-05T19:58:40Z",
+      "headRefName": "autopilot/T-0071-immich-restore-fowner-fix"
+    },
+    {
+      "number": 231,
+      "title": "fix(immich): restic restore-verify Job に CAP_CHOWN を足して所有者復元エラーを解消する (T-0071)",
+      "url": "https://github.com/hikuohiku/homelab/pull/231",
+      "mergedAt": "2026-08-05T19:50:17Z",
+      "headRefName": "autopilot/T-0071-immich-restore-chown-fix"
+    },
+    {
+      "number": 230,
+      "title": "fix(immich): restic restore-verify Job に diagnostic 出力を追加する (T-0071)",
+      "url": "https://github.com/hikuohiku/homelab/pull/230",
+      "mergedAt": "2026-08-05T19:42:03Z",
+      "headRefName": "autopilot/T-0071-immich-restore-diagnose"
+    },
+    {
       "number": 229,
       "title": "feat(immich): restic 復元試験用の使い捨て Job を追加する (T-0071)",
       "url": "https://github.com/hikuohiku/homelab/pull/229",
@@ -385,41 +420,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/167",
       "mergedAt": "2026-08-05T07:26:09Z",
       "headRefName": "autopilot/T-0082-pvc-usage-reporter-image-inventory"
-    },
-    {
-      "number": 166,
-      "title": "ci: pvc-usage-reporter の埋め込みスクリプト3ファイルの一致を検証する (T-0081)",
-      "url": "https://github.com/hikuohiku/homelab/pull/166",
-      "mergedAt": "2026-08-05T07:09:53Z",
-      "headRefName": "autopilot/T-0081-pvc-usage-script-sync"
-    },
-    {
-      "number": 165,
-      "title": "run #35: T-0080 完遂の記録更新",
-      "url": "https://github.com/hikuohiku/homelab/pull/165",
-      "mergedAt": "2026-08-05T07:03:37Z",
-      "headRefName": "autopilot/T-0080-records-2"
-    },
-    {
-      "number": 163,
-      "title": "PVC の実使用量を計測する namespace 別 CronJob を追加 (T-0080)",
-      "url": "https://github.com/hikuohiku/homelab/pull/163",
-      "mergedAt": "2026-08-05T06:59:02Z",
-      "headRefName": "autopilot/T-0080-pvc-usage"
-    },
-    {
-      "number": 164,
-      "title": "run #34: T-0080 の並行セッション調整反映、記録更新",
-      "url": "https://github.com/hikuohiku/homelab/pull/164",
-      "mergedAt": "2026-08-05T06:37:26Z",
-      "headRefName": "autopilot/T-0080-records"
-    },
-    {
-      "number": 162,
-      "title": "ops: T-0080 に fsGroup 再帰 chown リスクを追記 (run #33)",
-      "url": "https://github.com/hikuohiku/homelab/pull/162",
-      "mergedAt": "2026-08-05T06:33:03Z",
-      "headRefName": "autopilot/T-0080-fsgroup-risk-note"
     }
   ]
 }
