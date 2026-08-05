@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 62,
-  "updated": "2026-08-05T04:21:00Z",
+  "next_id": 65,
+  "updated": "2026-08-05T04:40:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -555,7 +555,7 @@
       "title": "terraform bpg/proxmox provider の pin (0.89.1) を見直す（現在 v0.111.1 まで進んでいる）",
       "kind": "investigate",
       "risk": "medium",
-      "status": "needs-human",
+      "status": "done",
       "priority": 25,
       "why": "T-0005 の調査 (run #6) で判明。約 22 リリース分の差。意図的な完全一致 pin（理由コメントあり）なので、まず pin した理由が今も成り立つか確認するのが先。v0.109.0 のリリースノートに VM agent の IP 待機設定まわりの breaking change の言及がある",
       "dod": "providers.tf の pin 理由コメントを再確認し、今も成り立つか判断する。上げる場合は 0.89.1 から v0.111.1 までのリリースノートを原文で読み、breaking change を洗い出す。terraform apply は autopilot が実行できないため、実際の反映は人間の作業になる旨を PR に明記する",
@@ -565,8 +565,8 @@
         "terraform/proxmox/.terraform.lock.hcl"
       ],
       "created": "2026-08-04",
-      "pr": null,
-      "notes": "run #13: subagent に `.tf` ファイル全体（3 リソースタイプのみ使用: download_file, file, virtual_environment_vm）と v0.89.2〜v0.111.1 の CHANGELOG.md / upgrade guide を原文で照合させた。**結論: v0.111.1 への一段更新で安全、.tf ファイルの変更は不要。** 懸念されていた v0.109.0 の `agent.wait_for_ip` 反転（enabled→disabled）は、このリポジトリが `agent.wait_for_ip` を一切設定しておらず（`agent.enabled` のみ使用）、IP 出力（`node01_ip`）もハードコードされた文字列で `ipv4_addresses` を参照していないため無関係と確認。他の breaking change（network_device.enabled 非推奨、LXC cpu.units、VM/container 名の DNS 検証等）もすべて未使用のリソース/属性。providers.tf 冒頭のコメント（`完全一致 pin は nix 管理の terraform と噛み合わないため範囲指定`）は `required_version`（terraform 本体）についての説明で、`bpg/proxmox` provider の pin 理由コメントは別途存在しない（浅いクローンのため元コミットの経緯も確認できず）。terraform 本体が無いため lock file の regenerate ができず、version 変更だけでは CI が落ちる（`.terraform.lock.hcl` はハッシュの手書き生成ができない）ため needs-human とした"
+      "pr": 145,
+      "notes": "run #13: subagent に `.tf` ファイル全体（3 リソースタイプのみ使用: download_file, file, virtual_environment_vm）と v0.89.2〜v0.111.1 の CHANGELOG.md / upgrade guide を原文で照合させた。**結論: v0.111.1 への一段更新で安全、.tf ファイルの変更は不要。** 懸念されていた v0.109.0 の `agent.wait_for_ip` 反転（enabled→disabled）は、このリポジトリが `agent.wait_for_ip` を一切設定しておらず（`agent.enabled` のみ使用）、IP 出力（`node01_ip`）もハードコードされた文字列で `ipv4_addresses` を参照していないため無関係と確認。他の breaking change（network_device.enabled 非推奨、LXC cpu.units、VM/container 名の DNS 検証等）もすべて未使用のリソース/属性。providers.tf 冒頭のコメント（`完全一致 pin は nix 管理の terraform と噛み合わないため範囲指定`）は `required_version`（terraform 本体）についての説明で、`bpg/proxmox` provider の pin 理由コメントは別途存在しない（浅いクローンのため元コミットの経緯も確認できず）。terraform 本体が無いため lock file の regenerate ができず、version 変更だけでは CI が落ちる（`.terraform.lock.hcl` はハッシュの手書き生成ができない）ため needs-human とした | run #27: 人間が直接 `terraform init -upgrade` を実行し #145 として merge した。`providers.tf` を 0.111.1 に、`.terraform.lock.hcl` を再生成し、`terraform validate` が成功することを確認済み。副産物として `proxmox_virtual_environment_download_file` が v1.0 で削除予定という新しい非推奨警告が出るようになったと判明。state 移行を伴うため PR には含めず「issue #56 経由で別タスクとして起票させる」と PR 本文に明記されていたため T-0064 として起票した"
     },
     {
       "id": "T-0031",
@@ -881,7 +881,7 @@
       "title": "nix/images/proxmox-cloud/flake.lock（nixpkgs 等）を `nix flake update` で最新化してほしい",
       "kind": "upgrade",
       "risk": "medium",
-      "status": "needs-human",
+      "status": "done",
       "priority": 28,
       "why": "backlog の todo が 0 件だったため CHARTER §3 の調査（run #18）。`ops/inventory.json` の nixpkgs エントリは `policy: manual` かつ『離散リリースが無いので T-0005/T-0040 の対象外』とされているが、これは経年チェックそのものも免除している訳ではなかった。`flake.lock` に埋め込まれた `locked.lastModified` を実際に読むと、4 入力（flake-parts, nixpkgs, nixpkgs-lib, sops-nix）とも 2025-11〜12 更新止まりで、今日時点で約 8 ヶ月放置されている。離散リリースが無いことを理由に誰も経年を見ていなかっただけで、CLAUDE.md の Maintenance 節にある vaultwarden 放置（#49）と同型のリスク（気づかれないまま塩漬けになる）に該当する",
       "dod": "`nix/images/proxmox-cloud` で `nix flake update` を実行し、更新後の `flake.lock` をコミットする。CI（`nix flake check`）が green であることを確認する。configuration.nix / k3s-manifests.nix が参照する NixOS モジュールオプションに 8 ヶ月分の破壊的変更が無いか目視で確認する（nixos-unstable のリリースノート相当は無いため、`nixpkgs` の変更ログではなく実際に使っているオプション — `proxmox.cloudInit`, `services.cloud-init`, `services.k3s` 相当, `sops` 等 — の evaluation が通ることで代用可）。実機（node01）へは自動反映されない（CLAUDE.md: NixOS イメージのビルド・入れ替えは手動運用）ため、イメージの再ビルド・差し替え自体は別途人間の判断でよい",
@@ -891,8 +891,8 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-05",
-      "pr": null,
-      "notes": "run #18: flake.lock の `locked.lastModified`（unix epoch）を4入力とも確認し、2025-11-21〜2025-12-12 止まりと判明。T-0040 の DoD に『manual policy かつ離散リリース無しの対象も経年チェックだけは行う』を追記し、今後は自動的に再検出されるようにした"
+      "pr": 146,
+      "notes": "run #18: flake.lock の `locked.lastModified`（unix epoch）を4入力とも確認し、2025-11-21〜2025-12-12 止まりと判明。T-0040 の DoD に『manual policy かつ離散リリース無しの対象も経年チェックだけは行う』を追記し、今後は自動的に再検出されるようにした | run #27: 人間が直接 `nix flake update` を実行し #146 として merge した（needs-human の引き継ぎ経路を経ず、人間がこの起動の前に直接対応）。nixpkgs 2025-12-08→2026-08-04 ほか3入力を更新、`nix flake check --no-build` が green であることを確認済み。副作用として `services.k3s` が 1.34.2+k3s1 → 1.35.6+k3s1 に上がることが判明（configuration.nix が k3s バージョンを pin していないため）。この bump 自体は次のイメージリリース（人間の手動操作、release-image workflow → terraform apply）まで実インフラに影響しない。PR 本文で人間からの依頼どおり、影響確認を T-0062 として起票した"
     },
     {
       "id": "T-0050",
@@ -1113,6 +1113,61 @@
       "created": "2026-08-05",
       "pr": 147,
       "notes": "run #27: (1) CHARTER §7.2『時刻表記』を新設。journal 見出し例を JST に更新、dashboard/build.py に JST = timezone(timedelta(hours=9)) を定義し generated/ガント目盛り/ツールチップを JST 表示に変更（rel_time() は相対表示のため対象外、変更なし）。(2) CHARTER §4 に『残った不確実性は同じ PR で backlog にも needs-human タスクとして起票する』運用を追記。(3) #100 の実機確認結果（DNS 解決 OK）を tailscale-operator-chart / k8s-nameserver の note に追記。#100 の PR 本文にあったもう1点（admissionregistration.k8s.io/v1）は未使用機能のため実害なしのまま据え置き、新規タスクは起票していない（人間の報告で既に決着済みのため）"
+    },
+    {
+      "id": "T-0062",
+      "domain": "homelab",
+      "title": "k3s 1.34.2 → 1.35.6（nixpkgs flake.lock 更新 #146 に伴う）の非推奨/削除APIが apps/ に影響しないか確認する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "done",
+      "priority": 15,
+      "why": "PR #146（人間が直接実施した nixpkgs flake.lock 更新）で、configuration.nix が services.k3s のバージョンを pin していないため、次のイメージリリース時に k3s が 1.34.2→1.35.6 のマイナー更新として反映されることが判明した。PR 本文で人間から『判断材料は別タスクとして起票させる』と明記されていたため、apps/ 配下の manifest が 1.35 の非推奨/削除 API に影響を受けないか確認する。この PR #146 単体は実インフラに影響しない（イメージ再ビルド・terraform apply は別途人間の判断）",
+      "dod": "k8s 1.34→1.35 の deprecation guide / release notes を原文で確認し、apps/ 配下で使用中の apiVersion/kind・feature-gate 依存フィールドと照合する。影響があれば個別の修正タスクを起票する。影響がなければ結論を journal/backlog に記録する。このタスク自体は manifest を変更しない（調査のみ）",
+      "refs": [
+        "apps/",
+        "nix/images/proxmox-cloud/configuration.nix",
+        "nix/images/proxmox-cloud/k3s-manifests.nix"
+      ],
+      "created": "2026-08-05",
+      "pr": 148,
+      "notes": "run #27: subagent に k8s 1.35 の公式リリースノート・deprecation guide の原文確認と、apps/ 全 8 アプリ・nix/images/proxmox-cloud の全 manifest とのクロスチェックを実施させた。結論: apps/ 配下で使われている apiVersion/kind（v1, apps/v1, rbac.authorization.k8s.io/v1, networking.k8s.io/v1, external-secrets.io/v1, tailscale.com/v1alpha1, argoproj.io/v1alpha1, helm.cattle.io/v1 等）はいずれも 1.35 の削除対象と無関係で、manifest 側の変更は不要。1.35 で唯一の破壊的変更は cgroup v1 サポート除去（KEP-5573、kubelet がノード起動時に cgroup v1 なら起動を拒否）で、これはノード/OS レベルの話であり manifest には現れない。nix/ 配下に cgroup ドライバ/バージョンの明示指定が無く NixOS/systemd の既定（v2 のはず）に暗黙依存しているため、実機確認が要る点のみ T-0063（needs-human）として切り出した。副次的な forward note（1.35 が containerd 1.x サポートの最終版、次のホップ k3s 1.36 で containerd 2.x が必須になる）は ops/inventory.json の nixpkgs エントリに記録した"
+    },
+    {
+      "id": "T-0063",
+      "domain": "homelab",
+      "title": "node01 が cgroup v2 で動いているか実機で確認してほしい（k3s 1.35 移行の前提条件）",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "needs-human",
+      "priority": 15,
+      "why": "T-0062 の調査で判明。k8s 1.35 の kubelet は cgroup v1 のノードで起動を拒否する破壊的変更が入っている（KEP-5573, failCgroupV1 既定 true）。nix/ 配下に cgroup ドライバ/バージョンの明示的な指定が無く、NixOS/systemd の既定（v2 のはず）に暗黙依存している。次に NixOS イメージを再ビルド・適用して k3s が 1.35 系に上がったとき、もし node01 が何らかの理由で cgroup v1 のままだと kubelet がまったく起動せずクラスタ全断になる（軟着陸できる警告ではなくハード失敗）",
+      "dod": "node01 で `stat -fc %T /sys/fs/cgroup`（`cgroup2fs` であること）または `mount | grep cgroup2` を実行し、cgroup v2 であることを確認する。確認結果を journal か docs/node01-storage.md 相当の場所に記録する。v1 だった場合は、イメージ更新前に cgroup v2 への切り替え手順を別途検討する",
+      "needs_human_reason": "node01 への到達（Tailscale 経由の SSH や Proxmox コンソール）が必要で、autopilot のクラウドサンドボックスは homelab 実機に到達できない（CHARTER §5.2）",
+      "refs": [
+        "nix/images/proxmox-cloud/configuration.nix"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #27: T-0062 の調査で発見。CHARTER §4（issue #56, 2026-08-05 04:18:44 の運用）に従い、実機確認が要る不確実性を独立した needs-human タスクとして起票した"
+    },
+    {
+      "id": "T-0064",
+      "domain": "homelab",
+      "title": "terraform: proxmox_virtual_environment_download_file → proxmox_download_file へのリソース改名に対応する（v1.0で削除予定の非推奨警告）",
+      "kind": "refactor",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 30,
+      "why": "T-0030（#145, bpg/proxmox provider 0.89.1→0.111.1 更新）で新たに出るようになった非推奨警告。`proxmox_virtual_environment_download_file` は `proxmox_download_file` に改名され、旧リソース名は provider v1.0 で削除される予定。terraform/proxmox/vm-nixos.tf と terraform/proxmox/nixos-image.tf の2ファイルで使用中。リソースアドレスの変更を伴うため `moved` ブロックか `terraform state mv` による state 移行が必要で、#145 の PR 本文で人間から明示的に『issue #56 経由で別タスクとして起票させる』と依頼された",
+      "dod": "bpg/proxmox provider が新旧リソース間の state migration をどう扱うか（`moved` ブロックでのリソースタイプ変更をサポートしているか、provider の実ソース/CHANGELOG/upgrade guide で確認する）を調べる。安全に移行できる方法が分かれば `.tf` に反映し、`terraform validate`（CI, `-backend=false`）で構文エラーが無いことを確認する。**実際の state migration の反映確認（`terraform plan`/`apply`）は autopilot のサンドボックスに terraform CLI が無く実行できないため、反映確認は人間の作業になる旨を PR 本文に明記する**（T-0030 と同型の制約）",
+      "refs": [
+        "terraform/proxmox/vm-nixos.tf",
+        "terraform/proxmox/nixos-image.tf"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #27: #145（T-0030 の実行部分、人間が直接 terraform init -upgrade して merge）の PR 本文の依頼により起票"
     }
   ]
 }

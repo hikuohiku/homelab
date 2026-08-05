@@ -183,7 +183,7 @@
       "match": "nixpkgs",
       "upstream": "github:NixOS/nixpkgs",
       "policy": "manual",
-      "note": "unstable 追従。更新は NixOS イメージの再ビルド + node01 の入れ替えを伴うので人間へ"
+      "note": "unstable 追従。更新は NixOS イメージの再ビルド + node01 の入れ替えを伴うので人間へ。2026-08-05: 人間が nix flake update を実行（2025-12-08→2026-08-04、#146）。configuration.nix が services.k3s のバージョンを pin していないため、この更新が次のイメージリリース時に k3s 1.34.2→1.35.6 のマイナー更新として反映される。影響確認は T-0062（apps/ の manifest には影響なしと確認済み、node01 の cgroup v2 確認のみ T-0063 needs-human として残る）。次のホップ（k3s 1.36 系）では containerd 2.x が必須になる（1.35 が containerd 1.x をサポートする最終版）ため、その時点で改めて確認が要る"
     },
     {
       "id": "tf-provider-proxmox",
