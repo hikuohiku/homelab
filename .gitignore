@@ -34,8 +34,10 @@ terraform.rc
 
 result
 
-# Secrets (not tracked in git)
-secrets/
+# SOPS 暗号化データは nix/images/proxmox-cloud/secrets.yaml の単一ファイルで、
+# 意図的に git 管理されている（トップレベルの secrets/ ディレクトリは存在しない。
+# T-0052, CLAUDE.md 参照）。以前ここにあった `secrets/` エントリは実在しないパスを
+# 無効に ignore していただけだったため削除した（T-0054）
 apps/*/charts/
 
 # direnv (credentials via Doppler)
