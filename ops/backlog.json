@@ -1168,27 +1168,16 @@
       "title": "node01 が cgroup v2 で動いているか実機で確認してほしい（k3s 1.35 移行の前提条件）",
       "kind": "investigate",
       "risk": "low",
-      "status": "needs-human",
+      "status": "done",
       "priority": 15,
       "why": "T-0062 の調査で判明。k8s 1.35 の kubelet は cgroup v1 のノードで起動を拒否する破壊的変更が入っている（KEP-5573, failCgroupV1 既定 true）。nix/ 配下に cgroup ドライバ/バージョンの明示的な指定が無く、NixOS/systemd の既定（v2 のはず）に暗黙依存している。次に NixOS イメージを再ビルド・適用して k3s が 1.35 系に上がったとき、もし node01 が何らかの理由で cgroup v1 のままだと kubelet がまったく起動せずクラスタ全断になる（軟着陸できる警告ではなくハード失敗）",
       "dod": "node01 で `stat -fc %T /sys/fs/cgroup`（`cgroup2fs` であること）または `mount | grep cgroup2` を実行し、cgroup v2 であることを確認する。確認結果を journal か docs/node01-storage.md 相当の場所に記録する。v1 だった場合は、イメージ更新前に cgroup v2 への切り替え手順を別途検討する",
-      "needs_human_reason": "node01 への到達（Tailscale 経由の SSH や Proxmox コンソール）が必要で、autopilot のクラウドサンドボックスは homelab 実機に到達できない（CHARTER §5.2）",
       "refs": [
         "nix/images/proxmox-cloud/configuration.nix"
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": "run #27: T-0062 の調査で発見。CHARTER §4（issue #56, 2026-08-05 04:18:44 の運用）に従い、実機確認が要る不確実性を独立した needs-human タスクとして起票した",
-      "human_action": {
-        "summary": "node01 が cgroup v2 で動いているか確認する",
-        "why": "k3s 1.35 への移行（nix flake update 済み）の前提条件。cgroup v1 のままだと移行時に問題が出うる。",
-        "steps": [
-          "node01 で <code>stat -fc %T /sys/fs/cgroup/</code> を実行する",
-          "<code>cgroup2fs</code> と出れば v2、<code>tmpfs</code> なら v1",
-          "結果を issue #56 に貼る"
-        ],
-        "links": []
-      }
+      "notes": "run #27: T-0062 の調査で発見。CHARTER §4（issue #56, 2026-08-05 04:18:44 の運用）に従い、実機確認が要る不確実性を独立した needs-human タスクとして起票した | run #53: issue #56（構築セッション、2026-08-05 15:45:04）が Coder ワークスペース（node01 上の Pod）から `stat -fc '%T' /sys/fs/cgroup/` を実行し `cgroup2fs` を確認。node01 は cgroup v2 で動作しており、k3s 1.35 移行の前提条件を満たしている。done とする"
     },
     {
       "id": "T-0064",
@@ -1250,11 +1239,10 @@
       "title": "restic の保存先（Backblaze B2 等）アカウントと append-only credential を用意してほしい",
       "kind": "feature",
       "risk": "low",
-      "status": "needs-human",
+      "status": "done",
       "priority": 36,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針。restic ベースのバックアップに保存先が要る。構築セッションの調査では Backblaze B2（$2.09/300GB・復元エグレス無料枠あり）を推奨、ライブラリが 1TB に近いなら Hetzner Storage Box（固定 €3.20）が逆転する（T-0066 の実測結果で確定する）",
       "dod": "T-0066 の実測結果を踏まえて保存先を確定し、アカウントを作成、restic リポジトリ用の append-only なアプリケーションキー（node01 が乗っ取られてもバックアップを消せないように）を発行し、Doppler の homelab/prd に登録する。登録先キー名は実装時（T-0068〜T-0070）にこちらで backlog へ追記する",
-      "needs_human_reason": "外部サービスのアカウント作成とコストが動く契約、および credential の発行・Doppler への登録。CHARTER §4『人間に渡してよいもの』の『権限・認証の手作業』『コストや契約が動くもの』に該当し、エージェントからは手が届かない。T-0069 (#191) で実装した ExternalSecret が参照するキー名が確定したので、以下をそのまま Doppler の homelab/prd に登録してほしい: `RESTIC_PASSWORD`（暗号化パスワード、新規に生成して登録）/ `RESTIC_B2_BUCKET`（B2 バケット名）/ `RESTIC_B2_ACCOUNT_ID` / `RESTIC_B2_ACCOUNT_KEY`（B2 application key、append-only 推奨）。詳細は docs/backup.md 参照 【run #50 追記】実サイズが判明（T-0066 done、docs/backup.md 参照）: 全データ合計 1GiB 未満。Backblaze B2 の無料枠（10GB）に収まり、月額コストは実質ゼロと見込める。Hetzner との比較検討は不要。",
       "blocked_by": "T-0066（保存先の選定に実サイズが要る）",
       "refs": [
         "docs/backup.md",
@@ -1262,30 +1250,7 @@
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": "run #50: ops-health-report で観測。T-0067 未完了のまま T-0068/T-0069/T-0070 のrestic-external-secret.yaml (creationPolicy: Owner) が Doppler に無いキーを参照しており、ExternalSecret が同期できず Secret が作られない状態が続いている。ArgoCD はこれを検知してvaultwarden/coder/immich の3 Application を Degraded と報告する（history: 08-05 11:30 まで全10アプリHealthy → 12:00 vaultwardenのみDegraded (T-0069 #191/#192 merge直後) → 13:00 coder/immichも追加でDegraded (T-0070 #195, T-0068 #196 merge後)、時系列が完全一致）。各アプリ本体（vaultwarden/coder/immich自体のPod）は正常で、Degradedの実体はrestic用のExternalSecretが解決できないことによるものと推定（このクラウドサンドボックスからはkubectl/ArgoCD MCPともに到達できず個々のリソースの健全性までは直接確認できていない）。T-0067（Doppler credential登録）が完了すれば解消される見込み。次回以降、T-0067完了後のrun で3アプリがHealthyに戻ることを確認すること。",
-      "human_action": {
-        "summary": "Backblaze B2 にバケットを作り、鍵を Doppler に登録する",
-        "why": "バックアップの保存先。実装（vaultwarden / coder-postgres / immich の CronJob）は完了済みで、認証情報だけが無い状態。全データ合計 1 GiB 未満なので B2 の無料枠（10 GB）に収まる。",
-        "steps": [
-          "<a href=\"https://www.backblaze.com/sign-up/cloud-storage\">Backblaze B2 にサインアップ</a>（無料枠 10 GB。クレジットカード登録は不要）",
-          "バケットを 1 つ作成する。名前は任意（例 <code>hikuohiku-homelab-restic</code>）。<b>Files in Bucket are: Private</b> を選ぶ",
-          "Application Keys → <b>Add a New Application Key</b>。<b>Allow access to Bucket(s)</b> を作ったバケットに限定し、Type of Access は <b>Read and Write</b>（restic の prune に削除権限が要るため）",
-          "表示される <code>keyID</code> と <code>applicationKey</code> を控える（<b>applicationKey は一度しか表示されません</b>）",
-          "restic のリポジトリパスワードを自分で決める（長いランダム文字列推奨）。<b>これを失うとバックアップを復号できません</b>。1Password 等に必ず保管する",
-          "Doppler に 4 つ登録: <code>doppler secrets set RESTIC_B2_BUCKET B2_ACCOUNT_ID B2_ACCOUNT_KEY RESTIC_PASSWORD --project homelab --config prd</code>",
-          "登録したら issue #56 に「登録した」と一言書く。次の起動で autopilot が疎通を確認し、復元試験（T-0071）まで進めます"
-        ],
-        "links": [
-          {
-            "label": "Backblaze B2 サインアップ",
-            "url": "https://www.backblaze.com/sign-up/cloud-storage"
-          },
-          {
-            "label": "Application Keys の作り方",
-            "url": "https://www.backblaze.com/docs/cloud-storage-create-and-manage-app-keys"
-          }
-        ]
-      }
+      "notes": "run #50: ops-health-report で観測。T-0067 未完了のまま T-0068/T-0069/T-0070 のrestic-external-secret.yaml (creationPolicy: Owner) が Doppler に無いキーを参照しており、ExternalSecret が同期できず Secret が作られない状態が続いている。ArgoCD はこれを検知してvaultwarden/coder/immich の3 Application を Degraded と報告する（history: 08-05 11:30 まで全10アプリHealthy → 12:00 vaultwardenのみDegraded (T-0069 #191/#192 merge直後) → 13:00 coder/immichも追加でDegraded (T-0070 #195, T-0068 #196 merge後)、時系列が完全一致）。各アプリ本体（vaultwarden/coder/immich自体のPod）は正常で、Degradedの実体はrestic用のExternalSecretが解決できないことによるものと推定（このクラウドサンドボックスからはkubectl/ArgoCD MCPともに到達できず個々のリソースの健全性までは直接確認できていない）。T-0067（Doppler credential登録）が完了すれば解消される見込み。次回以降、T-0067完了後のrun で3アプリがHealthyに戻ることを確認すること。 | run #53: issue #56（構築セッション、2026-08-05 15:47:44）が人間による Doppler 登録（RESTIC_B2_BUCKET/RESTIC_PASSWORD/B2_ACCOUNT_ID/B2_ACCOUNT_KEY の4件）を実際に B2 API を叩いて確認した。ただし run #50 時点で推測していた『Degraded の原因は T-0067 未完了』は誤りで、実際は T-0103（同一起動で先に修正・merge済み）の remoteRef タイポが原因だった。T-0067 自体（credential の用意）は完了しているため done とする。ExternalSecret が実際に Synced に戻るかは T-0103 の反映を待って次回以降確認する"
     },
     {
       "id": "T-0068",
@@ -1491,11 +1456,10 @@
       "title": "node01 の実ディスク容量がドキュメント記載（256GiB）と health report の実測（48.9GiB）で食い違っている件を確認してほしい",
       "kind": "investigate",
       "risk": "high",
-      "status": "needs-human",
+      "status": "dropped",
       "priority": 30,
       "why": "issue #56 (2026-08-05 05:35:04, 構築セッション経由)。ops-health-report ブランチ (generated_at: 2026-08-05T05:30:09Z) が報告する node の allocatable/capacity ephemeral-storage は 51250152Ki（≈48.9GiB）。一方 `terraform/proxmox/vm-nixos.tf` の `size = 256`（GiB）、`docs/node01-storage.md`（『2026-08-04 に 50GiB→256GiB へ拡張した』）、`CLAUDE.md`（『node01 の root disk は 256 GiB』）は全て 256GiB を前提にしている。**PVC requested 合計は 215Gi（immich-library 単体で 50Gi）で、実測どおり 48.9GiB しか無いなら既に定義上のオーバーコミット状態。** local-path は実ディスクを予約しないため、使用量が実容量に達した時点で node 上の全データ（immich 写真・vaultwarden シークレット・coder workspace・両 postgres）が同時に破損しうる。system Pod（argocd/coredns/local-path-provisioner/metrics-server 等）の restarts が軒並み 19 回で揃っており、手動で行った growpart/resize2fs がノード再起動の過程で失われた可能性がある 【run #50 追記】T-0080 (pvc-usage-reporter) の実測により、実データ使用量は全 PVC 合計で1GiB未満（48.9GiBの2%未満）と判明した。当面の逼迫・データ同時破損の切迫感は無い。ただし『256GiB のはずが 48.9GiB しか見えていない』という記述と実測の食い違い自体は解消していないため、確認は引き続き必要（緊急ではないが記述整合性のために確認したい）。",
       "dod": "人間が node01 で `df -h /` と `lsblk` を実行し、(1) パーティション/ファイルシステムの実サイズ、(2) 256GiB へ拡張したはずの領域が実際に root ファイルシステムまで反映されているか、を確認する。結果を踏まえて次のいずれかに分岐する: (a) 実ディスクが本当に48.9GiB程度しか無い→ growpart/resize2fs をやり直すか、terraform の size を実態に合わせて修正し、215Gi分のPVC要求をどう減らす/どこに逃がすかを検討する新タスクを起票する (b) kubelet 側の ephemeral-storage 計算が古い/誤り（再起動で直る等）→ health report 側の実装かCronJobの再起動を疑う。**autopilot 側では docs/terraform を先に『直さない』**（構築セッションの助言どおり、実態が未確定のうちにドキュメントだけ書き換えると誤った事実が固定化する）",
-      "needs_human_reason": "node01 の実機（Proxmox ホストまたは NixOS 本体）で `df -h` / `lsblk` を実行してほしい。Tailscale 越しに到達できる人間の環境でしか実行できず、autopilot のクラウドサンドボックスは物理的に到達できない（CHARTER §5.2）。【run #50 追記】急ぎではない: 実データ使用量は1GiB未満（T-0080実測）で当面のディスク逼迫リスクは無いと分かっている。記述（terraform/docs/CLAUDE.md の256GiB）を実態に合わせたいので、手が空いたときに `df -h`/`lsblk` の結果を教えてほしい、という位置づけ",
       "refs": [
         "terraform/proxmox/vm-nixos.tf",
         "docs/node01-storage.md",
@@ -1503,24 +1467,7 @@
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": "run #31: issue #56 (05:35:04) の指摘をそのまま起票。判断材料は ops-health-report ブランチの ops/health/latest.json（generated_at: 2026-08-05T05:30:09Z）。T-0066 の上限確定（B2 確定、Hetzner比較不要）にも直結。T-0077（PVC実使用量の取得）と合わせて実施すると、ディスク逼迫の全体像（容量×使用量）が揃う",
-      "human_action": {
-        "summary": "node01 の実ディスク容量を確認する（急ぎではありません）",
-        "why": "terraform / docs / CLAUDE.md の 3 箇所が「256 GiB」と書いているのに、実測は 48.9 GiB。ただしアプリのデータ実使用は 1 GiB 未満で逼迫していないため、危険はありません。記録を実態に合わせたいだけです。",
-        "steps": [
-          "node01 に入る（Tailscale 経由 SSH、または Proxmox のコンソール）",
-          "<code>df -h /</code> を実行し、ルートファイルシステムのサイズを見る",
-          "<code>lsblk</code> を実行し、<code>/dev/vda</code> のディスクサイズとパーティションのサイズを見る",
-          "ディスクが 256 GiB でパーティションだけ小さい場合は、<a href=\"https://github.com/hikuohiku/homelab/blob/main/docs/node01-storage.md\">docs/node01-storage.md</a> の手順（growpart → resize2fs）で拡張できる",
-          "結果を issue #56 に貼る。autopilot が記録の食い違いを直します"
-        ],
-        "links": [
-          {
-            "label": "拡張手順 docs/node01-storage.md",
-            "url": "https://github.com/hikuohiku/homelab/blob/main/docs/node01-storage.md"
-          }
-        ]
-      }
+      "notes": "run #31: issue #56 (05:35:04) の指摘をそのまま起票。判断材料は ops-health-report ブランチの ops/health/latest.json（generated_at: 2026-08-05T05:30:09Z）。T-0066 の上限確定（B2 確定、Hetzner比較不要）にも直結。T-0077（PVC実使用量の取得）と合わせて実施すると、ディスク逼迫の全体像（容量×使用量）が揃う | run #53: issue #56（構築セッション、2026-08-05 15:45:04）が Coder ワークスペース（node01 上の Pod）から `df -h /home/coder` を実行し `/dev/vda3 252G 43G 200G 18%` を確認。**ドキュメント（terraform 256GiB / docs / CLAUDE.md）は正しく、実態と一致していた。** 構築セッション自身が『ephemeral-storage という kubelet のメトリクス名を、ルートファイルシステムの容量だと読み違えた』と訂正を報告した（ephemeral-storage は kubelet がノード上の一時ストレージ監視用に計算する値で、ルートFSサイズと同義ではない）。dropped とする。理由: 記録側の誤りではなく、観測値の読み違いだった。再発防止として apps/ops-health-reporter/report.py の notes フィールドに ephemeral-storage の注記を追加する（同一 PR）"
     },
     {
       "id": "T-0080",
@@ -1973,8 +1920,8 @@
         "docs/backup.md"
       ],
       "created": "2026-08-05",
-      "pr": null,
-      "notes": "run #53: issue #56 の指摘（T-0067 完了報告）を反映する過程で、依頼した2工程（Doppler 登録キー名の確定と、manifest 側のキー名）を実際に突き合わせて初めて発見した。CHARTER §4『縛る変更には実測か裏付けが要る』の逆パターンとして、『裏付けを取ったつもりが実装側の転記ミスを見落とす』ケースが起きうると分かった。secretKey（k8s Secret 内のキー名、コンテナ側の環境変数名と一致させる用）と remoteRef.key（Doppler 側のキー名）を混同しやすい構造で、コメントヘッダーの記述と実際の remoteRef.key がズレていても CI（kustomize build）はこれを検出できない（構文的には正しい YAML なので）。CI で検出できない領域だったため実測（今回は構築セッションによる Doppler API 直接確認）が唯一の発見経路だった"
+      "pr": 205,
+      "notes": "run #53: issue #56 の指摘（T-0067 完了報告）を反映する過程で、依頼した2工程（Doppler 登録キー名の確定と、manifest 側のキー名）を実際に突き合わせて初めて発見した。CHARTER §4『縛る変更には実測か裏付けが要る』の逆パターンとして、『裏付けを取ったつもりが実装側の転記ミスを見落とす』ケースが起きうると分かった。secretKey（k8s Secret 内のキー名、コンテナ側の環境変数名と一致させる用）と remoteRef.key（Doppler 側のキー名）を混同しやすい構造で、コメントヘッダーの記述と実際の remoteRef.key がズレていても CI（kustomize build）はこれを検出できない（構文的には正しい YAML なので）。CI で検出できない領域だったため実測（今回は構築セッションによる Doppler API 直接確認）が唯一の発見経路だった。CI green（6件success）を確認し即マージした（#205）"
     }
   ]
 }
