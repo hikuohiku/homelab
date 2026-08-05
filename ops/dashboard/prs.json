@@ -1,6 +1,26 @@
 {
-  "open": [],
+  "open": [
+    {
+      "number": 226,
+      "title": "chore(backup): restic backup 検証用 Job 3つを削除する (T-0104)",
+      "url": "https://github.com/hikuohiku/homelab/pull/226",
+      "isDraft": false,
+      "createdAt": "2026-08-05T18:57:41Z",
+      "statusCheckRollup": [
+        {"conclusion": "PENDING"}
+      ],
+      "headRefName": "autopilot/T-0104-remove-verify-jobs",
+      "autoMergeRequest": null
+    }
+  ],
   "merged": [
+    {
+      "number": 225,
+      "title": "fix(vaultwarden): restic verify Job の ArgoCD 再作成が失敗していたのを修正 (T-0108)",
+      "url": "https://github.com/hikuohiku/homelab/pull/225",
+      "mergedAt": "2026-08-05T18:49:17Z",
+      "headRefName": "autopilot/T-0108-argocd-force-replace"
+    },
     {
       "number": 224,
       "title": "ops: run #58 の記録更新（T-0028/T-0071 前提訂正）",
@@ -413,13 +433,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/158",
       "mergedAt": "2026-08-05T05:39:41Z",
       "headRefName": "autopilot/T-0075-health-reporter-confirmed"
-    },
-    {
-      "number": 157,
-      "title": "T-0065: IaC 完全性の棚卸し — node01 揮発時の未カバー領域を確認",
-      "url": "https://github.com/hikuohiku/homelab/pull/157",
-      "mergedAt": "2026-08-05T05:34:05Z",
-      "headRefName": "autopilot/T-0065-iac-completeness"
     }
   ]
 }
