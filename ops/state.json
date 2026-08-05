@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T21:20:00Z",
+  "updated": "2026-08-05T21:54:49Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -772,6 +772,24 @@
       "prs": [
         242
       ]
+    },
+    {
+      "n": 71,
+      "at": "2026-08-05T21:41:20Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回起動が PR #242 を merge した（4aa7426）のを受け T-0027 完了、続けて T-0029（immich postgres/vchord メジャー更新）に着手。subagent に VectorChord 0.4.3→1.1.1 の release notes・immich 公式ドキュメント・immich 本体 PR #23845 を一次情報源で確認させ、ベアなイメージタグ差し替えだけでは不十分で `ALTER EXTENSION vchord UPDATE;` とオンディスク形式が変わるインデックスの REINDEX が別途必要と判明。`apps/immich/postgres.yaml` のイメージタグ更新と同じ PR に `apps/immich/vchord-upgrade-job.yaml`（ALTER EXTENSION UPDATE→バージョン確認→REINDEX、接続リトライ付き）を追加し PR #244 を作成した（CI green 確認・merge は次回起動に持ち越し）。この起動は ops/state.json への記録を残さないまま終了していたため、run #72 が journal を基に事後追記した。",
+      "prs": [
+        244
+      ]
+    },
+    {
+      "n": 72,
+      "at": "2026-08-05T21:54:49Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断（PR #244, T-0029）を拾った。CI 6件全て green・mergeable_state: clean を確認し、「縛る変更」に該当しないこと・T-0071 でリストア確認済みであることから merge した（91243f1）。merge 直後に ArgoCD の immich sync を確認したが、まだ旧 commit のまま反映前だった（ポーリング間隔待ちと判断）。backlog の T-0029 は `done` にはせず `in_progress`（pr:244）のまま、vchord アップグレード Job の成否確認は次回起動に持ち越し。副次的に、この記録更新PR作成時に stale なローカル main から分岐してしまい PR が dirty になった事故があり、原因と対処を CHARTER §4 に追記した。issue #56 に新規フィードバックなし。homelab の健全性（ops-health-report, generated_at 21:30:09Z）は Application 11 件全て Synced/Healthy、autopilot 自身の heartbeat も正常。",
+      "prs": []
     }
   ]
 }
