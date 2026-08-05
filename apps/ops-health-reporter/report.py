@@ -9,6 +9,7 @@ import base64
 import datetime
 import json
 import os
+import re
 import ssl
 import urllib.error
 import urllib.request
@@ -29,6 +30,15 @@ def k8s_get(path):
     )
     with urllib.request.urlopen(req, context=SSL_CTX, timeout=15) as resp:
         return json.load(resp)
+
+
+def k8s_get_text(path):
+    # /log エンドポイントはプレーンテキストを返す（JSON ではない）
+    req = urllib.request.Request(
+        K8S_BASE + path, headers={"Authorization": "Bearer " + SA_TOKEN}
+    )
+    with urllib.request.urlopen(req, context=SSL_CTX, timeout=15) as resp:
+        return resp.read().decode("utf-8", errors="replace")
 
 
 def collect(fn):
@@ -178,6 +188,100 @@ def collect_nodes():
     return out
 
 
+# loop.sh (apps/autopilot/loop.sh) の log() が書く心拍行だけを抜き出す正規表現。
+# ここにマッチした行から取り出した値（timestamp/iteration/exit_code/elapsed_seconds）
+# だけを report に載せる。生ログはこの関数の外に一切出さない — claude の出力を
+# git 管理のブランチにそのまま持ち出す経路を作らないため（T-0110）。
+# exit=124 (timeout) の行は "exit=124 (timed out after Ns) elapsed=Ns" と exit code の後に
+# 括弧書きが挟まるので、その部分を任意にして両方の形式を通す
+HEARTBEAT_RE = re.compile(
+    r"^\[autopilot\] (\S+) iteration #(\d+) (?:start|end exit=(-?\d+)(?: \([^)]*\))? elapsed=(\d+)s)"
+)
+
+
+def parse_heartbeat(raw_log):
+    last_start = None
+    last_end = None
+    for line in raw_log.splitlines():
+        m = HEARTBEAT_RE.match(line.strip())
+        if not m:
+            continue
+        ts, iteration, exit_code, elapsed = m.groups()
+        if exit_code is None:
+            last_start = {"timestamp": ts, "iteration": int(iteration)}
+        else:
+            last_end = {
+                "timestamp": ts,
+                "iteration": int(iteration),
+                "exit_code": int(exit_code),
+                "elapsed_seconds": int(elapsed),
+            }
+    return {"last_start": last_start, "last_end": last_end}
+
+
+AUTOPILOT_NAMESPACE = "autopilot"
+
+
+def collect_autopilot_health():
+    result = {}
+
+    try:
+        dep = k8s_get(
+            "/apis/apps/v1/namespaces/{}/deployments/autopilot".format(AUTOPILOT_NAMESPACE)
+        )
+        status = dep.get("status", {})
+        result["deployment"] = {
+            "replicas": status.get("replicas", 0),
+            "readyReplicas": status.get("readyReplicas", 0),
+            "unavailableReplicas": status.get("unavailableReplicas", 0),
+        }
+    except Exception as e:  # noqa: BLE001
+        result["deployment"] = {"error": "{}: {}".format(type(e).__name__, e)}
+
+    pod_name = None
+    try:
+        pods = k8s_get(
+            "/api/v1/namespaces/{}/pods?labelSelector=app%3Dautopilot".format(
+                AUTOPILOT_NAMESPACE
+            )
+        )
+        items = pods.get("items", [])
+        pod_list = []
+        for item in items:
+            meta = item.get("metadata", {})
+            pstatus = item.get("status", {})
+            cs = (pstatus.get("containerStatuses") or [{}])[0]
+            pod_list.append(
+                {
+                    "name": meta.get("name"),
+                    "phase": pstatus.get("phase"),
+                    "restartCount": cs.get("restartCount"),
+                }
+            )
+        result["pods"] = pod_list
+        running = [i for i in items if i.get("status", {}).get("phase") == "Running"]
+        pick = running[0] if running else (items[0] if items else None)
+        if pick:
+            pod_name = pick.get("metadata", {}).get("name")
+    except Exception as e:  # noqa: BLE001
+        result["pods"] = {"error": "{}: {}".format(type(e).__name__, e)}
+
+    if pod_name:
+        try:
+            raw = k8s_get_text(
+                "/api/v1/namespaces/{}/pods/{}/log?tailLines=200".format(
+                    AUTOPILOT_NAMESPACE, pod_name
+                )
+            )
+            result["heartbeat"] = parse_heartbeat(raw)
+        except Exception as e:  # noqa: BLE001
+            result["heartbeat"] = {"error": "{}: {}".format(type(e).__name__, e)}
+    else:
+        result["heartbeat"] = {"error": "app=autopilot の pod が見つからない"}
+
+    return result
+
+
 def github_request(method, path, token, body=None):
     url = "https://api.github.com" + path
     data = json.dumps(body).encode() if body is not None else None
@@ -302,6 +406,7 @@ def main():
         "pod_metrics": collect(collect_pod_metrics),
         "node_metrics": collect(collect_node_metrics),
         "pvc_usage": collect(collect_pvc_usage),
+        "autopilot": collect(collect_autopilot_health),
         "notes": (
             "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 "
             "(pod_metrics/node_metrics)。PVC の実ディスク使用量は namespace ごとの pvc-usage-reporter "
@@ -313,6 +418,10 @@ def main():
             "監視用に計算する値であり、ルートファイルシステムの全体サイズとは別物（node01 の root "
             "ファイルシステムは実際には約252GiBあるが、この値は約48.9GiBしか出ない）。ディスク容量の "
             "確認にこの値を使わないこと（T-0079, issue #56 2026-08-05 15:45:04 参照）。"
+            " autopilot キーは autopilot 自身（namespace autopilot）の健全性。"
+            "heartbeat.last_end が無い/古い、または exit_code が非 0 なら前回のイテレーションが"
+            "異常終了またはハング中の疑い（T-0110）。pods/log は autopilot namespace に閉じた"
+            "Role でのみ許可し、心拍行だけを正規表現で抽出している。生ログはここに含まれない。"
         ),
     }
 

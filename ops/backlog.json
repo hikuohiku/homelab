@@ -2052,7 +2052,7 @@
       "title": "ops-health-reporter に autopilot 自身（namespace autopilot）の健全性を追加する",
       "kind": "feature",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 15,
       "why": "常駐化（run #57、CHARTER §5.5）で autopilot は自分自身が CrashLoopBackOff やハングに陥っても報告できない。ops-health-reporter は他コンポーネントの sync/health を見ているが autopilot 自身は対象外。人間から具体的な提案があった（issue #56, 2026-08-05T18:34:45Z）: 'crash より静かな失敗のほうが厄介'。",
       "dod": "ops-health-reporter（apps/ops-health-reporter/）が ops/health/latest.json に次を含める: (1) autopilot namespace の Deployment の readyReplicas/restartCount、(2) 直近イテレーションの終了コード・終了時刻（可能なら Pod ログから `iteration #N end exit=` を拾う。ops-health-reporter 自身の RBAC で pods/log が読めるか要確認、読めなければ代替指標を検討する）、(3) 最後にイテレーションが完了してからの経過時間。CHARTER §2 に、次の起動が起動直後にこれを見て『前回の自分は正常に終わったか』を確認する手順を追記する。ダッシュボードにも表示する。",
@@ -2065,7 +2065,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "ops-health-reporter の ServiceAccount の権限（pods/log を含むか）を実装前に確認する必要がある。含まないなら CHARTER §5.5 と同様にログ以外の指標（Deployment restartCount, 最終 successfulJob 的なもの）で代替する。"
+      "notes": "ops-health-reporter の ServiceAccount の権限（pods/log を含むか）を実装前に確認する必要がある。含まないなら CHARTER §5.5 と同様にログ以外の指標（Deployment restartCount, 最終 successfulJob 的なもの）で代替する。 | run #60: 実装した。report.py に collect_autopilot_health() を追加し、ops/health/latest.json の autopilot キーに (1) Deployment の readyReplicas/replicas/unavailableReplicas、(2) namespace autopilot の pod restartCount/phase、(3) 直近イテレーションの心拍（loop.sh の \"iteration #N start/end exit=... elapsed=...\" 行を正規表現で抽出、生ログは含めない）を追加した。pods/log の読み取りは ops-health-reporter-reader のような cluster-wide ClusterRole ではなく、autopilot namespace に閉じた新規 Role/RoleBinding のみに絞った（他 namespace のログを読む経路を新設しないため）。CHARTER §2 に、次の起動がこの autopilot キーで前回の自分の終了状態を確認する手順を追記した。ダッシュボード (render_autopilot_self) にも反映した。ops-health-reporter Application の destination.namespace（ops-health-reporter）と異なる namespace（autopilot）へ namespaced resource を作る構成のため、既定の AppProject（default、customize無し）の permissive destinations に依存している——次回起動で Application の sync/health を kubectl で確認すること。"
     }
   ]
 }
