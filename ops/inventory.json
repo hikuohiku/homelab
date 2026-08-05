@@ -9,7 +9,9 @@
       "current": "9.1.6",
       "file": "apps/argocd/kustomization.yaml",
       "match": "version:",
-      "mirrors": ["nix/images/proxmox-cloud/k3s-manifests.nix"],
+      "mirrors": [
+        "nix/images/proxmox-cloud/k3s-manifests.nix"
+      ],
       "upstream": "github:argoproj/argo-helm",
       "release_prefix": "argo-cd-",
       "policy": "manual",
@@ -93,7 +95,9 @@
       "match": "image: postgres:",
       "upstream": "dockerhub:library/postgres",
       "policy": "auto",
-      "mirrors": ["apps/coder/restic-backup-cronjob.yaml"],
+      "mirrors": [
+        "apps/coder/restic-backup-cronjob.yaml"
+      ],
       "note": "メジャー更新 (17→18) はデータ移行が要るので必ず人間へ。T-0070 で restic-backup-cronjob.yaml の pg-dump initContainer にも同じイメージを採用（pg_dump はサーバと同バージョンのクライアントを使うのが安全なため）したため mirrors に追加。check_version_sync.py の GROUPS にも対応するエントリを追加済み",
       "observability_impact": "coder の DB。壊れると Coder が起動できず、coder と同じ影響（開発環境・観測経路の喪失）が出る（T-0058, issue #56 2026-08-05 03:26:49）"
     },
@@ -104,7 +108,9 @@
       "current": "v3.1.0",
       "file": "apps/immich/values.yaml",
       "match": "immich-app/immich-server",
-      "mirrors": ["apps/immich/values.yaml (machine-learning も同バージョン)"],
+      "mirrors": [
+        "apps/immich/values.yaml (machine-learning も同バージョン)"
+      ],
       "upstream": "github:immich-app/immich",
       "policy": "auto",
       "note": "server と machine-learning は必ず同一バージョンで揃える"
@@ -138,7 +144,7 @@
       "match": "vectorchord",
       "upstream": "github:tensorchord/VectorChord-images",
       "policy": "manual",
-      "note": "Immich のベクタ DB。データを持つため拡張のメジャー更新は自動追随せず、都度 CHARTER §4 の高リスク手順（バックアップ復元確認 + ALTER EXTENSION UPDATE/REINDEX を伴う専用 Job）を踏む（T-0029）。16.14-1.1.1 は #244 で一度 merge したが immich-postgres が CrashLoopBackOff（コンテナ起動時に `exec: \"-c\": executable file not found in $PATH`）になり #247 で revert した（run #72 続き）。run #73 で GHCR の実イメージ config を確認し根本原因を確定: 2025-11-12 のベースイメージ変更（`postgresql:$CNPG_TAG-bookworm` → `-system-bookworm`）で `16.10-1.0.0` 以降（`16.14-1.1.1` を含む）は docker-library 系 postgres（`ENTRYPOINT docker-entrypoint.sh` / `CMD postgres`）ではなく CloudNativePG operand 系イメージ（ENTRYPOINT 無し、`CMD bash`）に切り替わっており、`docker-entrypoint.sh` 自体が同梱されなくなった。`command: [\"postgres\"]` を明示すれば既存の初期化済み PGDATA に対する起動は通る見込みだが、**initdb によるブートストラップ機能が丸ごと無くなっている**ため、PVC を新規作成し直す（災害復旧）シナリオでは `postgres` コマンドだけでは空の PGDATA を初期化できず起動しない。T-0071 で確立した復元手順（immich-library PVC 復元後、稼働中の immich-postgres へ psql でダンプを流し込む）はこの『稼働中の postgres』を新規 PVC 上でどう用意するかに暗黙に依存しており、16.10-1.0.0 系以降ではこの前提が崩れる。T-0111（initdb 相当のブートストラップ経路を用意する）が解決してから再着手する"
+      "note": "Immich のベクタ DB。データを持つため拡張のメジャー更新は自動追随せず、都度 CHARTER §4 の高リスク手順（バックアップ復元確認 + ALTER EXTENSION UPDATE/REINDEX を伴う専用 Job）を踏む（T-0029）。16.14-1.1.1 は #244 で一度 merge したが immich-postgres が CrashLoopBackOff（コンテナ起動時に `exec: \"-c\": executable file not found in $PATH`）になり #247 で revert した（run #72 続き）。run #73 で GHCR の実イメージ config を確認し根本原因を確定: 2025-11-12 のベースイメージ変更（`postgresql:$CNPG_TAG-bookworm` → `-system-bookworm`）で `16.10-1.0.0` 以降（`16.14-1.1.1` を含む）は docker-library 系 postgres（`ENTRYPOINT docker-entrypoint.sh` / `CMD postgres`）ではなく CloudNativePG operand 系イメージ（ENTRYPOINT 無し、`CMD bash`）に切り替わっており、`docker-entrypoint.sh` 自体が同梱されなくなった。`command: [\"postgres\"]` を明示すれば既存の初期化済み PGDATA に対する起動は通る見込みだが、**initdb によるブートストラップ機能が丸ごと無くなっている**ため、PVC を新規作成し直す（災害復旧）シナリオでは `postgres` コマンドだけでは空の PGDATA を初期化できず起動しない。T-0071 で確立した復元手順（immich-library PVC 復元後、稼働中の immich-postgres へ psql でダンプを流し込む）はこの『稼働中の postgres』を新規 PVC 上でどう用意するかに暗黙に依存しており、16.10-1.0.0 系以降ではこの前提が崩れる。T-0111（initdb 相当のブートストラップ経路を用意する）が解決してから再着手する T-0111（run #75, #250-#254）で initdb ブートストラップ経路（unix_socket_directories=/tmp を明示 → createdb → shared_preload_libraries=vchord.so で再起動 → CREATE EXTENSION）を使い捨て PVC/Job で検証・確立済み。T-0029 の blocked_by は解除したが、postgres.yaml 本体にこの手順を組み込むところまでは未実装"
     },
     {
       "id": "busybox",
@@ -147,7 +153,10 @@
       "current": "1.38.0",
       "file": "apps/vaultwarden/deployment.yaml",
       "match": "busybox:",
-      "mirrors": ["apps/coder/postgres.yaml", "apps/immich/postgres.yaml"],
+      "mirrors": [
+        "apps/coder/postgres.yaml",
+        "apps/immich/postgres.yaml"
+      ],
       "upstream": "dockerhub:library/busybox",
       "policy": "auto",
       "note": "T-0003 で 1.36/1.37 の割れを 1.37 に統一済み (2026-08-04)"
@@ -204,7 +213,10 @@
       "current": "v7",
       "file": ".github/workflows/ci.yml",
       "match": "actions/checkout@",
-      "mirrors": [".github/workflows/direct-push-guard.yml", ".github/workflows/release-image.yml"],
+      "mirrors": [
+        ".github/workflows/direct-push-guard.yml",
+        ".github/workflows/release-image.yml"
+      ],
       "upstream": "github:actions/checkout",
       "policy": "auto",
       "note": "T-0043/T-0044 で発見・v4→v7 に更新済み (run #16)。CI 全 job で使用",
@@ -301,7 +313,11 @@
       "current": "3.12-alpine",
       "file": "apps/immich/pvc-usage-cronjob.yaml",
       "match": "image: python:",
-      "mirrors": ["apps/coder/pvc-usage-cronjob.yaml", "apps/vaultwarden/pvc-usage-cronjob.yaml", "apps/vaultwarden/restic-backup-cronjob.yaml"],
+      "mirrors": [
+        "apps/coder/pvc-usage-cronjob.yaml",
+        "apps/vaultwarden/pvc-usage-cronjob.yaml",
+        "apps/vaultwarden/restic-backup-cronjob.yaml"
+      ],
       "upstream": "dockerhub:library/python",
       "policy": "auto",
       "note": "T-0080 (#163) で新設。3 namespace (immich/vaultwarden/coder) に同じタグを持つ同型 CronJob をコピーして配置しているため、ops-health-reporter-image と同様に揃えて更新すること（T-0082）。T-0069 (run #48) で apps/vaultwarden/restic-backup-cronjob.yaml の sqlite-snapshot initContainer にも同じイメージを採用（apk での実行時パッケージ追加を避けるため。標準ライブラリの sqlite3 モジュールを使う）したため4箇所目として追加。check_version_sync.py の GROUPS にも同じファイルを追加済み",
