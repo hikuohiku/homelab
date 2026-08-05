@@ -163,6 +163,16 @@ backlog が空、または全部 `blocked` のときは**調査タスクを自�
   拾い直す原因になる（issue #56, 2026-08-04 23:59:38。#105 close 時にブランチを消し忘れ、
   既に #106 で main に入っている T-0037 を中断中と誤認しかけた）。§2 の中断検知でブランチを
   見つけたら、存在だけでなく **main に同内容が既に入っていないか** も確認してから着手する
+- **新しいブランチを切る前に、ローカル `main` が `origin/main` と同じ commit か確認する。**
+  `git fetch` はリモート追跡ブランチ（`origin/main`）を更新するだけで、ローカル `main` の HEAD は
+  動かさない。`git checkout -b <new-branch>` を実行するとその時点のローカル `main` から分岐する
+  ため、`git fetch` 直後でも stale なローカル `main` から分岐してしまうことがある（run #72 の実例。
+  直前の起動が作った PR を merge した直後に別ブランチを切ったところ、ローカル `main` が merge 前の
+  ままだったため、その merge コミットに含まれていた `ops/backlog.json`/`ops/journal/*.md` の運用記録
+  更新と自分の更新が競合し、新しい PR が `mergeable_state: dirty` になった）。
+  `git log -1 --format=%H main` と `git log -1 --format=%H origin/main` を比較し、一致していなければ
+  `git checkout main && git reset --hard origin/main`（ローカル `main` はどうせ origin の写しなので
+  巻き戻しても失うものはない）してから新しいブランチを切る
 - **PR を別 PR で置き換えるとき（レビュー指摘・DIRTY・重複の作り直し）は、置き換え後に
   `git diff <新ブランチ>...<旧ブランチ>` が空であることを確認する。** ブランチ単位の存在確認
   （直前の項目）だけでは、内容の一部が引き継がれず消えるケースを検出できない（issue #56,
