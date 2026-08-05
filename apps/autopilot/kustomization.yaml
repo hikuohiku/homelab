@@ -1,0 +1,25 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - external-secret.yaml
+  - deployment.yaml
+
+configMapGenerator:
+  - name: autopilot-config
+    namespace: autopilot
+    files:
+      - loop.sh
+      - prompt.md
+
+generatorOptions:
+  # 名前にハッシュを付けない（ops-health-reporter と同じ）。ハッシュを付けると
+  # スクリプトを直すたびに ConfigMap 名が変わり、CI の manifest-diff が
+  # 「オブジェクトが消えた」と判定して毎回 allow-delete の明記を要求する
+  # （ops/check_manifest_deletions.py）。
+  # 代わりに prompt.md は loop.sh が毎イテレーション読み直す作りにしてあり、
+  # プロンプトの変更は Pod 再起動なしで反映される。loop.sh 自体を変えたときだけ
+  # Pod の作り直しが要る
+  disableNameSuffixHash: true

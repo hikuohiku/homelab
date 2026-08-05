@@ -1,0 +1,6 @@
+# autopilot 常駐サービス専用の namespace。ops-health-reporter と同じく、
+# 1 コンポーネント = 1 namespace で他アプリと権限・リソースを混ぜない。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: autopilot
