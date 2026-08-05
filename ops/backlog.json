@@ -1641,7 +1641,7 @@
       "title": ".github/workflows/ci.yml の kustomize/azure-setup-helm バイナリ版が inventory.json / check_version_sync.py の監視対象に入っていない",
       "kind": "ci",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 30,
       "why": "run #42 の subagent 調査で発見。ci.yml の manifests job と manifest-diff job の両方に azure/setup-helm (version: v3.16.4) と kustomize (v5.8.1、curl でダウンロード) が独立に2箇所ずつ書かれている。T-0042〜T-0048 は `uses: foo@vX` 形式の GitHub Actions のみを棚卸し対象にしており、これらはバイナリのバージョン文字列のため対象外だった。check_version_sync.py の GROUPS にも該当エントリが無く、2箇所の値がずれても CI は検出できない。ずれると manifests job と manifest-diff job で異なる kustomize/helm バージョンがレンダリングに使われ、T-0036 の削除検出（manifest-diff）がツールバージョン差分由来の偽陽性/偽陰性を出しうる",
       "dod": "ops/inventory.json に azure/setup-helm と kustomize の2エントリを追加（policy: auto）。ops/check_version_sync.py の GROUPS に、ci.yml 内の2箇所ずつの出現を検証する2グループを追加（既存の actions/checkout グループと同じパターン）。意図的に値をずらして CI (ops job) が exit 1 になることを確認する",
@@ -1651,7 +1651,8 @@
         "ops/check_version_sync.py"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "notes": "ops/inventory.json に gha-setup-helm-version (v3.16.4) / kustomize-binary (v5.8.1) を追加。ops/check_version_sync.py に extract_yaml_job_block（2-indent のジョブ境界でブロックを絞る）と、それを使う extract_helm_setup_version / extract_kustomize_download_version を追加し、GROUPS に manifests job / manifest-diff job の2箇所ずつを検証する2グループを追加。手元でこの2グループそれぞれ片方の値だけをずらして exit 1 になること、元に戻すと exit 0 に戻ることを確認済み（DoD 達成）。ci.yml 自体は変更していない",
+      "pr": 178
     }
   ]
 }
