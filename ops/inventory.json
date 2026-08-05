@@ -341,6 +341,30 @@
       "policy": "auto",
       "note": "terraform job がインストールする terraform バイナリ本体のバージョン。terraform/proxmox/providers.tf の required_version (\"~> 1.15\") の範囲内で揃える。T-0091 (run #43) で発見時点 1.15.0 が最新 1.15.8 より8パッチ遅れていた（required_version の範囲は満たすため CI は気づけない）ことを機に新設。CHANGELOG 全文確認（1.15.1〜1.15.8）で breaking change 無し、fmt/validate/init への影響も軽微（backend block validation の追加→撤回、ログ整形のみ）と確認済み",
       "observability_impact": "terraform validate job が使用。壊れると terraform validate の CI が動かなくなる"
+    },
+    {
+      "id": "vaultwarden-restic-image",
+      "kind": "image",
+      "name": "restic/restic (backup CronJob)",
+      "current": "0.19.1",
+      "file": "apps/vaultwarden/restic-backup-cronjob.yaml",
+      "match": "restic/restic:",
+      "upstream": "github:restic/restic",
+      "policy": "auto",
+      "note": "T-0069 で新設。同一ファイル内に vaultwarden-restic-backup（バックアップ）と vaultwarden-restic-retention（forget/prune）の2箇所で使用しており、check_version_sync.py の GROUPS には未登録（T-0098 で追う。手動更新時は2箇所とも揃えること）",
+      "observability_impact": "vaultwarden の restic バックアップ・retention CronJob が使用。壊れるとバックアップが取れなくなるが vaultwarden 本体の可用性には影響しない"
+    },
+    {
+      "id": "vaultwarden-restic-sqlite-alpine",
+      "kind": "image",
+      "name": "alpine (restic backup CronJob の sqlite-snapshot initContainer)",
+      "current": "3.22.5",
+      "file": "apps/vaultwarden/restic-backup-cronjob.yaml",
+      "match": "alpine:",
+      "upstream": "dockerhub:library/alpine",
+      "policy": "auto",
+      "note": "T-0069 で新設。sqlite3 CLI を apk で都度インストールして db.sqlite3 の一貫バックアップを取る initContainer 用",
+      "observability_impact": "vaultwarden の restic バックアップ CronJob が使用。壊れるとバックアップが取れなくなるが vaultwarden 本体の可用性には影響しない"
     }
   ]
 }
