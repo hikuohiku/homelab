@@ -139,6 +139,25 @@ def collect_node_metrics():
     return out
 
 
+PVC_USAGE_NAMESPACES = ["immich", "vaultwarden", "coder"]
+
+
+def collect_pvc_usage():
+    out = []
+    for ns in PVC_USAGE_NAMESPACES:
+        try:
+            data = k8s_get(
+                "/api/v1/namespaces/{}/configmaps/pvc-usage-report".format(ns)
+            )
+            report = json.loads(data.get("data", {}).get("report.json", "{}"))
+            out.append(report)
+        except Exception as e:  # noqa: BLE001 — namespace 側の CronJob が
+            # まだ1回も走っていない（ConfigMap 未作成）場合を含め、他 namespace の
+            # 収集を止めない
+            out.append({"namespace": ns, "error": "{}: {}".format(type(e).__name__, e)})
+    return out
+
+
 def collect_nodes():
     data = k8s_get("/api/v1/nodes")
     out = []
@@ -236,10 +255,13 @@ def main():
         "nodes": collect(collect_nodes),
         "pod_metrics": collect(collect_pod_metrics),
         "node_metrics": collect(collect_node_metrics),
+        "pvc_usage": collect(collect_pvc_usage),
         "notes": (
             "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 "
-            "(pod_metrics/node_metrics)。PVC の実ディスク使用量（du 相当）は別 CronJob 化が必要なため "
-            "未収集（T-0080）。RBAC は get/list のみ、write 系の verb は含まない。"
+            "(pod_metrics/node_metrics)。PVC の実ディスク使用量は namespace ごとの pvc-usage-reporter "
+            "CronJob が ConfigMap に書いた値を pvc_usage として集約（immich/vaultwarden/coder のみ。"
+            "Coder workspace ごとの動的 PVC は対象外、T-0078 参照）。RBAC は get/list/(configmaps のみ get) "
+            "で、write 系の verb は含まない。"
         ),
     }
 
