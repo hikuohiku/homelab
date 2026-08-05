@@ -2086,8 +2086,8 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #74: apps/immich/postgres-bootstrap-verify-job.yaml を追加。空の使い捨て PVC に対し 16.14-1.1.1 で initdb を手動実行（docker-entrypoint.sh 相当を再現: initdb --pwfile → pg_hba.conf に host scram-sha-256 追記 → 一時サーバーで createdb → shared_preload_libraries=vchord.so で再起動 → CREATE EXTENSION vchord）を検証する。事前調査は subagent が GHCR の実イメージレイヤーを直接展開して binary PATH・UID(26)/GID(999)・auth 挙動・vchord 拡張作成順序を裏取り済み。結果は次回起動で kubectl get pod -n immich -l job-name=immich-postgres-bootstrap-verify 経由の termination-log で確認する。"
+      "pr": 250,
+      "notes": "run #74: apps/immich/postgres-bootstrap-verify-job.yaml を追加。空の使い捨て PVC に対し 16.14-1.1.1 で initdb を手動実行（docker-entrypoint.sh 相当を再現: initdb --pwfile → pg_hba.conf に host scram-sha-256 追記 → 一時サーバーで createdb → shared_preload_libraries=vchord.so で再起動 → CREATE EXTENSION vchord）を検証する。事前調査は subagent が GHCR の実イメージレイヤーを直接展開して binary PATH・UID(26)/GID(999)・auth 挙動・vchord 拡張作成順序を裏取り済み。結果は次回起動で kubectl get pod -n immich -l job-name=immich-postgres-bootstrap-verify 経由の termination-log で確認する。 run #75: PR #250 merge・ArgoCD sync 後に Job を実行したところ初回は失敗（initdb_rc=0 だが boot_start_rc=1: pg_ctl start が \"could not create lock file /var/run/postgresql/.s.PGSQL.5432.lock: Permission denied\" で失敗）。docker-entrypoint.sh を経由しないため /var/run/postgresql が存在せず、既定の unix socket パスに書き込めないのが原因と特定。unix_socket_directories=/tmp を pg_ctl の両起動に指定する修正版を同一ブランチ/PRで用意し、再実行結果を次回確認する。"
     }
   ]
 }
