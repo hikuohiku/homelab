@@ -305,6 +305,30 @@
       "policy": "auto",
       "note": "T-0080 (#163) で新設。3 namespace (immich/vaultwarden/coder) に同じタグを持つ同型 CronJob をコピーして配置しているため、ops-health-reporter-image と同様に 3 箇所とも揃えて更新すること（T-0082）",
       "observability_impact": "壊れるとその namespace の PVC 実使用量が pvc-usage-report ConfigMap に書き戻されなくなり、ops-health-reporter が集約する pvc_usage が古いまま止まる。読み取り専用 CronJob であり、壊れても homelab 本体の到達性・稼働には影響しない"
+    },
+    {
+      "id": "gha-setup-helm-version",
+      "kind": "binary",
+      "name": "helm (azure/setup-helm version input)",
+      "current": "v3.16.4",
+      "file": ".github/workflows/ci.yml",
+      "match": "version: v3.16.4",
+      "upstream": "github:helm/helm",
+      "policy": "auto",
+      "note": "azure/setup-helm@v5 の `with: version:` が指定する helm バイナリ本体のバージョン。gha-azure-setup-helm（Action 自体の pin, uses: azure/setup-helm@vX）とは別物。ci.yml の manifests job と manifest-diff job の2箇所に独立して書かれている（T-0090。ops/check_version_sync.py の GROUPS で内部一致を検証）",
+      "observability_impact": "kustomize build job (--enable-helm) と manifest-diff job が使用。2箇所がずれると job ごとに異なる helm バージョンでレンダリングされ、T-0036 の削除検出（manifest-diff）がツールバージョン差分由来の偽陽性/偽陰性を出しうる"
+    },
+    {
+      "id": "kustomize-binary",
+      "kind": "binary",
+      "name": "kustomize",
+      "current": "v5.8.1",
+      "file": ".github/workflows/ci.yml",
+      "match": "kustomize%2Fv5.8.1",
+      "upstream": "github:kubernetes-sigs/kustomize",
+      "policy": "auto",
+      "note": "manifests job と manifest-diff job が GitHub Releases から curl で直接ダウンロードしている kustomize バイナリのバージョン。GitHub Action ではないため gha-* エントリとは別扱い。2箇所に独立して書かれている（T-0090。ops/check_version_sync.py の GROUPS で内部一致を検証）",
+      "observability_impact": "kustomize build job と manifest-diff job が使用。2箇所がずれると job ごとに異なる kustomize バージョンでレンダリングされ、T-0036 の削除検出（manifest-diff）がツールバージョン差分由来の偽陽性/偽陰性を出しうる"
     }
   ]
 }

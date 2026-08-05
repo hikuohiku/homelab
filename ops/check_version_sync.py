@@ -55,6 +55,42 @@ def extract_tag_in_block(path: str, top_key: str) -> str:
     return v.group(1)
 
 
+def extract_yaml_job_block(path: str, job_name: str) -> str:
+    """`jobs:` 配下のトップレベルジョブ（2-indent の `<job_name>:`）から、次の同 indent の
+    ジョブ名または末尾までの範囲をブロックとして返す。`extract_yaml_top_level_block` と同じ
+    「構造で範囲を決める」考え方を、0-indent ではなく 2-indent のジョブ境界に適用したもの。
+    """
+    text = read(path)
+    job_re = re.compile(rf"^  {re.escape(job_name)}:\s*$", re.MULTILINE)
+    m = job_re.search(text)
+    if not m:
+        raise ValueError(f"{path}: ジョブ {job_name}: が見つからない")
+    next_job_re = re.compile(r"^  \S.*:\s*$", re.MULTILINE)
+    n = next_job_re.search(text, m.end())
+    end = n.start() if n else len(text)
+    return text[m.end() : end]
+
+
+def extract_helm_setup_version(path: str, job_name: str) -> str:
+    """指定したジョブ内の `azure/setup-helm@vX` ステップが `with: version:` で指定する
+    helm バイナリのバージョンを拾う（T-0090。Action 自体の pin とは別物）。"""
+    block = extract_yaml_job_block(path, job_name)
+    m = re.search(r"azure/setup-helm@\S+\s*\n\s*with:\s*\n\s*version:\s*(\S+)", block)
+    if not m:
+        raise ValueError(f"{path}: ジョブ {job_name} 内に azure/setup-helm の version: が見つからない")
+    return m.group(1)
+
+
+def extract_kustomize_download_version(path: str, job_name: str) -> str:
+    """指定したジョブ内で curl ダウンロードしている kustomize バイナリのバージョンを拾う
+    （T-0090。GitHub Action ではなく GitHub Releases から直接ダウンロードしている）。"""
+    block = extract_yaml_job_block(path, job_name)
+    m = re.search(r"kustomize%2Fv(\S+?)/kustomize_v\S+?_linux_amd64\.tar\.gz", block)
+    if not m:
+        raise ValueError(f"{path}: ジョブ {job_name} 内に kustomize ダウンロード URL の version が見つからない")
+    return m.group(1)
+
+
 def extract_all_action_tags(path: str, action_name: str) -> str:
     """`uses: <action_name>@<tag>` を全箇所拾い、ファイル内で全て一致することを確認して返す。
     1 ファイルに同じ Action が複数回 (`uses:`) 出てくる場合（例: ci.yml の複数 job）でも、
@@ -199,6 +235,28 @@ GROUPS = [
             )),
             ("apps/vaultwarden/pvc-usage-cronjob.yaml", lambda: extract_image_tag(
                 "apps/vaultwarden/pvc-usage-cronjob.yaml", "image: python:"
+            )),
+        ],
+    },
+    {
+        "name": "azure/setup-helm version input (T-0090, inventory: gha-setup-helm-version)",
+        "targets": [
+            (".github/workflows/ci.yml (manifests job)", lambda: extract_helm_setup_version(
+                ".github/workflows/ci.yml", "manifests"
+            )),
+            (".github/workflows/ci.yml (manifest-diff job)", lambda: extract_helm_setup_version(
+                ".github/workflows/ci.yml", "manifest-diff"
+            )),
+        ],
+    },
+    {
+        "name": "kustomize binary version (T-0090, inventory: kustomize-binary)",
+        "targets": [
+            (".github/workflows/ci.yml (manifests job)", lambda: extract_kustomize_download_version(
+                ".github/workflows/ci.yml", "manifests"
+            )),
+            (".github/workflows/ci.yml (manifest-diff job)", lambda: extract_kustomize_download_version(
+                ".github/workflows/ci.yml", "manifest-diff"
             )),
         ],
     },
