@@ -114,13 +114,33 @@ def rel_time(iso: str | None) -> str:
 
 # ---------------------------------------------------------------- rendering
 
+# 大きい粒度の「流れ」。kind から導く（タスクに stream があればそれを優先）。
+# 色は dataviz 参照パレットの先頭 6 スロットを固定順で使用（light/dark とも検証済み）。
+# light の一部が 3:1 未満のため、識別は必ず可視ラベルで担保する（色だけに頼らない）。
+STREAMS = [
+    ("kiki",   "器をつくる",   ("meta", "feature"),        "#2a78d6", "#3987e5"),
+    ("kenshou", "検証を固める", ("ci",),                    "#eb6834", "#d95926"),
+    ("tsuijuu", "版に追従する", ("upgrade",),               "#1baf7a", "#199e70"),
+    ("seiri",  "食い違いを直す", ("refactor", "docs"),       "#eda100", "#c98500"),
+    ("anzen",  "安全を上げる",  ("security",),              "#e87ba4", "#d55181"),
+    ("chousa", "観測して探す",  ("investigate",),           "#008300", "#008300"),
+]
+KIND_TO_STREAM = {k: s[0] for s in STREAMS for k in s[2]}
+STREAM_BY_ID = {s[0]: s for s in STREAMS}
+OTHER_STREAM = ("other", "運用記録", (), "#6a7382", "#8e97a7")
+
+
+def stream_of(task: dict) -> str:
+    return task.get("stream") or KIND_TO_STREAM.get(task.get("kind", ""), "other")
+
+
 RISK_LABEL = {"low": "低", "medium": "中", "high": "高"}
 STATUS_META = {
     # status: (表示名, 意味色)
     "todo": ("待ち", "idle"),
     "in_progress": ("作業中", "sig"),
     "blocked": ("詰まり", "warn"),
-    "needs-human": ("要判断", "crit"),
+    "needs-human": ("要対応", "crit"),
     "done": ("完了", "ok"),
     "dropped": ("取り下げ", "idle"),
 }
@@ -179,6 +199,116 @@ def done_row(p: dict) -> str:
         <a class="done__title" href="{E(p['url'])}">{E(p['title'])}</a>
         <span class="done__meta">#{p['number']} · {E(rel_time(p.get('mergedAt')))}</span>
       </li>"""
+
+
+
+def render_streams(tasks: list[dict]) -> str:
+    """ストリームごとの現在地。色は識別（点）、状態は意味色（帯）に分けて担う。"""
+    order = ["todo", "in_progress", "blocked", "needs-human", "done", "dropped"]
+    rows = []
+    for sid, label, _kinds, _lc, _dc in STREAMS + [OTHER_STREAM]:
+        mine = [t for t in tasks if stream_of(t) == sid]
+        if not mine:
+            continue
+        counts = {k: sum(1 for t in mine if t["status"] == k) for k in order}
+        live = counts["todo"] + counts["in_progress"] + counts["blocked"] + counts["needs-human"]
+        total = len(mine)
+        segs = []
+        for k in order:
+            if not counts[k]:
+                continue
+            tone = STATUS_META.get(k, (k, "idle"))[1]
+            pct = counts[k] / total * 100
+            segs.append(
+                f'<span class="seg seg--{tone}" style="width:{pct:.4f}%" '
+                f'title="{E(STATUS_META[k][0])} {counts[k]} 件"></span>'
+            )
+        detail = " / ".join(f"{STATUS_META[k][0]} {counts[k]}" for k in order if counts[k])
+        rows.append(f"""
+      <li class="stream">
+        <span class="stream__dot stream__dot--{sid}" aria-hidden="true"></span>
+        <span class="stream__name">{E(label)}</span>
+        <span class="stream__bar">{''.join(segs)}</span>
+        <span class="stream__n">{total}<span class="stream__live">{f' / 残 {live}' if live else ' / 完'}</span></span>
+        <span class="stream__detail">{E(detail)}</span>
+      </li>""")
+    return "".join(rows) or '<li class="empty">まだタスクがありません。</li>'
+
+
+def render_gantt(tasks: list[dict], merged: list[dict], runs: list[dict]) -> str:
+    """起動ごとの成果を時間軸に並べる。行＝ストリーム、印＝main に入った PR。"""
+    pr2stream = {}
+    for t in tasks:
+        if t.get("pr"):
+            pr2stream[int(t["pr"])] = stream_of(t)
+
+    marks = []
+    for p in merged:
+        ts = p.get("mergedAt")
+        if not ts:
+            continue
+        try:
+            when = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        marks.append((when, pr2stream.get(p["number"], "other"), p))
+    if not marks:
+        return ""
+
+    run_times = []
+    for r in runs:
+        try:
+            run_times.append(datetime.fromisoformat(str(r.get("at", "")).replace("Z", "+00:00")))
+        except ValueError:
+            pass
+
+    t0 = min([m[0] for m in marks] + run_times)
+    t1 = datetime.now(timezone.utc)
+    span = max((t1 - t0).total_seconds(), 1)
+
+    def x(when) -> float:
+        return max(0.0, min(100.0, (when - t0).total_seconds() / span * 100))
+
+    # 時間目盛り（3 時間ごと）
+    ticks = []
+    step = 3 * 3600
+    first = t0.replace(minute=0, second=0, microsecond=0)
+    cur = first
+    while cur <= t1:
+        if cur >= t0:
+            ticks.append(f'<span class="gtick" style="left:{x(cur):.3f}%"><i></i>'
+                         f'<em>{cur.strftime("%H:%M")}</em></span>')
+        cur = cur.fromtimestamp(cur.timestamp() + step, tz=timezone.utc)
+
+    run_marks = "".join(
+        f'<span class="grun" style="left:{x(w):.3f}%" title="起動 {w.strftime("%m-%d %H:%M")} UTC"></span>'
+        for w in sorted(run_times)
+    )
+
+    lanes = []
+    for sid, label, _k, _lc, _dc in STREAMS + [OTHER_STREAM]:
+        mine = [m for m in marks if m[1] == sid]
+        if not mine:
+            continue
+        dots = "".join(
+            f'<span class="gmark gmark--{sid}" style="left:{x(w):.3f}%" '
+            f'title="#{p["number"]} {E(p["title"])}（{w.strftime("%m-%d %H:%M")} UTC）"></span>'
+            for w, _s, p in sorted(mine)
+        )
+        lanes.append(f"""
+        <div class="glane">
+          <span class="glane__label"><span class="stream__dot stream__dot--{sid}" aria-hidden="true"></span>{E(label)}</span>
+          <span class="glane__track">{dots}</span>
+          <span class="glane__n">{len(mine)}</span>
+        </div>""")
+
+    return f"""
+    <div class="gantt">
+      <div class="gantt__runs"><span class="glane__label">起動</span><span class="glane__track">{run_marks}</span><span class="glane__n">{len(run_times)}</span></div>
+      {''.join(lanes)}
+      <div class="gantt__axis"><span class="glane__label"></span><span class="glane__track">{''.join(ticks)}</span><span class="glane__n"></span></div>
+    </div>
+    <p class="lede">印ひとつが main に入った変更 1 件。横位置がマージ時刻（UTC）。上段の細い線が起動。</p>"""
 
 
 def journal_row(e: dict) -> str:
@@ -270,6 +400,8 @@ def build() -> str:
     runs_html = "".join(journal_row(e) for e in journal[:4]) or '<li class="empty">まだ記録がありません。</li>'
     done_html = "".join(done_row(p) for p in (auto_merged or merged)[:12]) or '<li class="empty">まだ反映された変更はありません。</li>'
     inv_html = "".join(inv_row(t) for t in inventory["targets"])
+    streams_html = render_streams(tasks)
+    gantt_html = render_gantt(tasks, merged, runs)
 
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     stage = state.get("vision_stage", "?")
@@ -281,6 +413,7 @@ def build() -> str:
         generated=generated, stage=stage, stage_label=E(stage_label), next_html=next_html,
         stats=stats, attention=attention_html, queue=queue_html, more=more,
         prs=prs_html, runs=runs_html, done=done_html, inv=inv_html, stale=stale_html,
+        streams=streams_html, gantt=gantt_html,
         fb_url=E(fb_url), fb_issue=E(str(fb.get("issue") or "?")),
         fb_read=E(rel_time(fb.get("last_read"))),
     )
@@ -414,6 +547,75 @@ code {{ font-family:var(--mono); font-size:.76rem; color:var(--muted);
 .pr__age {{ font-size:.78rem; color:var(--muted); font-family:var(--mono); }}
 .prlink {{ font-size:.78rem; font-family:var(--mono); color:var(--sig); }}
 
+
+/* ---- streams / gantt
+   ストリームの色は識別のみを担う（dataviz 参照パレット先頭6スロット、light/dark とも検証済み）。
+   light では一部が 3:1 未満のため、必ず可視ラベルを併記して色だけに頼らない。
+   状態（完了/待ち/詰まり/要対応）は意味色の帯で別に表す。 */
+.stream__dot--kiki,.gmark--kiki {{ background:#2a78d6; }}
+.stream__dot--kenshou,.gmark--kenshou {{ background:#eb6834; }}
+.stream__dot--tsuijuu,.gmark--tsuijuu {{ background:#1baf7a; }}
+.stream__dot--seiri,.gmark--seiri {{ background:#eda100; }}
+.stream__dot--anzen,.gmark--anzen {{ background:#e87ba4; }}
+.stream__dot--chousa,.gmark--chousa {{ background:#008300; }}
+.stream__dot--other,.gmark--other {{ background:#6a7382; }}
+
+.stream {{ display:grid; grid-template-columns:auto minmax(7rem,auto) 1fr auto;
+  grid-template-areas:"dot name bar n" ". detail detail detail";
+  align-items:center; gap:.25rem .6rem;
+  background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:.6rem .85rem; }}
+.stream__dot {{ grid-area:dot; width:.7rem; height:.7rem; border-radius:2px; display:inline-block; }}
+.stream__name {{ grid-area:name; font-weight:600; font-size:.92rem; }}
+.stream__bar {{ grid-area:bar; display:flex; gap:2px; height:.55rem; min-width:5rem; }}
+.seg {{ display:block; border-radius:2px; min-width:3px; }}
+.seg--ok {{ background:var(--ok); }} .seg--idle {{ background:var(--idle); }}
+.seg--warn {{ background:var(--warn); }} .seg--crit {{ background:var(--crit); }}
+.seg--sig {{ background:var(--sig); }}
+.stream__n {{ grid-area:n; font-family:var(--mono); font-size:.82rem; font-variant-numeric:tabular-nums; }}
+.stream__live {{ color:var(--muted); font-size:.74rem; }}
+.stream__detail {{ grid-area:detail; font-size:.74rem; color:var(--muted); font-family:var(--mono); }}
+
+.gantt {{ background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+  padding:.85rem 1rem; display:flex; flex-direction:column; gap:.35rem; overflow-x:auto; }}
+.glane, .gantt__runs, .gantt__axis {{ display:grid; grid-template-columns:9.5rem 1fr 2.2rem;
+  align-items:center; gap:.6rem; min-width:34rem; }}
+.glane__label {{ font-size:.8rem; display:flex; align-items:center; gap:.4rem; white-space:nowrap; }}
+.glane__track {{ position:relative; height:1.05rem; border-left:1px solid var(--line);
+  border-right:1px solid var(--line); }}
+.glane__track::before {{ content:""; position:absolute; inset:50% 0 auto 0; height:1px; background:var(--line); }}
+.glane__n {{ font-family:var(--mono); font-size:.74rem; color:var(--muted); text-align:right;
+  font-variant-numeric:tabular-nums; }}
+.gmark {{ position:absolute; top:50%; transform:translate(-50%,-50%); width:7px; height:11px;
+  border-radius:2px; box-shadow:0 0 0 2px var(--surface); }}
+.grun {{ position:absolute; top:2px; bottom:2px; width:2px; transform:translateX(-50%);
+  background:var(--muted); opacity:.5; border-radius:1px; }}
+.gantt__axis .glane__track {{ height:1.1rem; border:none; }}
+.gantt__axis .glane__track::before {{ display:none; }}
+.gtick {{ position:absolute; top:0; transform:translateX(-50%); display:flex;
+  flex-direction:column; align-items:center; }}
+.gtick i {{ width:1px; height:4px; background:var(--line); display:block; }}
+.gtick em {{ font-style:normal; font-family:var(--mono); font-size:.66rem; color:var(--muted); }}
+
+@media (prefers-color-scheme: dark) {{
+.stream__dot--kiki,.gmark--kiki {{ background:#3987e5; }}
+.stream__dot--kenshou,.gmark--kenshou {{ background:#d95926; }}
+.stream__dot--tsuijuu,.gmark--tsuijuu {{ background:#199e70; }}
+.stream__dot--seiri,.gmark--seiri {{ background:#c98500; }}
+.stream__dot--anzen,.gmark--anzen {{ background:#d55181; }}
+.stream__dot--chousa,.gmark--chousa {{ background:#008300; }}
+.stream__dot--other,.gmark--other {{ background:#8e97a7; }}
+}}
+:root[data-theme="dark"] {{
+.stream__dot--kiki,.gmark--kiki {{ background:#3987e5; }}
+.stream__dot--kenshou,.gmark--kenshou {{ background:#d95926; }}
+.stream__dot--tsuijuu,.gmark--tsuijuu {{ background:#199e70; }}
+.stream__dot--seiri,.gmark--seiri {{ background:#c98500; }}
+.stream__dot--anzen,.gmark--anzen {{ background:#d55181; }}
+.stream__dot--chousa,.gmark--chousa {{ background:#008300; }}
+.stream__dot--other,.gmark--other {{ background:#8e97a7; }}
+}}
+
 /* ---- done (反映済み) */
 .done {{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.35rem .75rem;
   padding:.5rem .85rem; background:var(--surface); border:1px solid var(--line);
@@ -481,6 +683,17 @@ a {{ color:var(--sig); }}
 
   <div class="stats">{stats}</div>
   {stale}
+
+  <section>
+    <h2>いま何が動いているか</h2>
+    <p class="lede">タスクを大きい流れで分けたもの。帯は状態の内訳（完了・待ち・詰まり・要対応）。</p>
+    <ul class="list">{streams}</ul>
+  </section>
+
+  <section>
+    <h2>これまでの流れ</h2>
+    {gantt}
+  </section>
 
   <section>
     <h2>やったこと</h2>
