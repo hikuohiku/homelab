@@ -2,6 +2,41 @@
   "open": [],
   "merged": [
     {
+      "number": 215,
+      "title": "security(dex,argocd): OIDC client secret を Doppler 経由の ExternalSecret に切り替える",
+      "url": "https://github.com/hikuohiku/homelab/pull/215",
+      "mergedAt": "2026-08-05T17:28:31Z",
+      "headRefName": "autopilot/T-0060-dex-argocd-oidc-secret"
+    },
+    {
+      "number": 214,
+      "title": "fix(vaultwarden): restic backup の activeDeadlineSeconds を 1800→3600 に緩和",
+      "url": "https://github.com/hikuohiku/homelab/pull/214",
+      "mergedAt": "2026-08-05T17:25:31Z",
+      "headRefName": "autopilot/T-0097-vaultwarden-backup-deadline"
+    },
+    {
+      "number": 213,
+      "title": "ops: issue #56 のフィードバック5件を backlog/CHARTER に反映",
+      "url": "https://github.com/hikuohiku/homelab/pull/213",
+      "mergedAt": "2026-08-05T17:24:01Z",
+      "headRefName": "autopilot/T-0107-run56-feedback-records"
+    },
+    {
+      "number": 212,
+      "title": "feat(ops): ダッシュボードに「いま動いているもの」を追加し鮮度を可視化する",
+      "url": "https://github.com/hikuohiku/homelab/pull/212",
+      "mergedAt": "2026-08-05T17:20:08Z",
+      "headRefName": "autopilot/dashboard-live"
+    },
+    {
+      "number": 211,
+      "title": "ops: run #55 の記録更新（重複 PR #210 の close、PRキャッシュ更新）",
+      "url": "https://github.com/hikuohiku/homelab/pull/211",
+      "mergedAt": "2026-08-05T16:32:00Z",
+      "headRefName": "autopilot/run55-record"
+    },
+    {
       "number": 209,
       "title": "ops: run #54 の記録更新（immich restic backup 検証確認、T-0105/T-0106 起票）",
       "url": "https://github.com/hikuohiku/homelab/pull/209",
@@ -336,90 +371,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/156",
       "mergedAt": "2026-08-05T05:27:17Z",
       "headRefName": "autopilot/run30-feedback"
-    },
-    {
-      "number": 152,
-      "title": "docs: terraform plan の CI 化を調査する (T-0073)",
-      "url": "https://github.com/hikuohiku/homelab/pull/152",
-      "mergedAt": "2026-08-05T05:23:45Z",
-      "headRefName": "autopilot/T-0073-terraform-plan-ci-feasibility"
-    },
-    {
-      "number": 153,
-      "title": "T-0015: ArgoCD/k8s の健全性を homelab から repo へ書き戻す CronJob を追加",
-      "url": "https://github.com/hikuohiku/homelab/pull/153",
-      "mergedAt": "2026-08-05T05:21:50Z",
-      "headRefName": "autopilot/T-0015-ops-health-reporter"
-    },
-    {
-      "number": 154,
-      "title": "ops: run #29 の記録をまとめ、ダッシュボードを再生成する",
-      "url": "https://github.com/hikuohiku/homelab/pull/154",
-      "mergedAt": "2026-08-05T05:16:19Z",
-      "headRefName": "autopilot/run29-wrapup"
-    },
-    {
-      "number": 151,
-      "title": "T-0011: vaultwarden ADMIN_TOKEN の Argon2 PHC 化を完了扱いにする",
-      "url": "https://github.com/hikuohiku/homelab/pull/151",
-      "mergedAt": "2026-08-05T05:06:53Z",
-      "headRefName": "autopilot/T-0011-vaultwarden-admin-token-done"
-    },
-    {
-      "number": 150,
-      "title": "ops: run #28 の記録をまとめる（T-0064 merge、backup 方針転換の反映）",
-      "url": "https://github.com/hikuohiku/homelab/pull/150",
-      "mergedAt": "2026-08-05T04:59:11Z",
-      "headRefName": "autopilot/run28-wrapup"
-    },
-    {
-      "number": 149,
-      "title": "T-0064: proxmox_virtual_environment_download_file を proxmox_download_file に改名",
-      "url": "https://github.com/hikuohiku/homelab/pull/149",
-      "mergedAt": "2026-08-05T04:52:53Z",
-      "headRefName": "autopilot/T-0064-terraform-download-file-rename"
-    },
-    {
-      "number": 148,
-      "title": "T-0062: k3s 1.34→1.35の非推奨API影響確認、および人間merge分の記録同期",
-      "url": "https://github.com/hikuohiku/homelab/pull/148",
-      "mergedAt": "2026-08-05T04:35:42Z",
-      "headRefName": "autopilot/T-0062-k3s-1.35-deprecation-check"
-    },
-    {
-      "number": 147,
-      "title": "T-0061: 時刻表示のJST化と、残った不確実性のbacklog追跡",
-      "url": "https://github.com/hikuohiku/homelab/pull/147",
-      "mergedAt": "2026-08-05T04:25:47Z",
-      "headRefName": "autopilot/T-0061-jst-time-and-uncertainty-tracking"
-    },
-    {
-      "number": 146,
-      "title": "chore(nix): flake.lock を更新する（nixpkgs 2025-12-08 → 2026-08-04）",
-      "url": "https://github.com/hikuohiku/homelab/pull/146",
-      "mergedAt": "2026-08-05T04:24:50Z",
-      "headRefName": "autopilot/T-0049-nix-flake-update"
-    },
-    {
-      "number": 145,
-      "title": "chore(terraform): bpg/proxmox provider を 0.89.1 → 0.111.1 に上げる",
-      "url": "https://github.com/hikuohiku/homelab/pull/145",
-      "mergedAt": "2026-08-05T04:22:12Z",
-      "headRefName": "autopilot/T-0030-tf-provider-0.111.1"
-    },
-    {
-      "number": 144,
-      "title": "ops: run #26 の記録をまとめ、T-0060 を起票する",
-      "url": "https://github.com/hikuohiku/homelab/pull/144",
-      "mergedAt": "2026-08-05T04:14:29Z",
-      "headRefName": "autopilot/T-0060-dex-argocd-secret-plaintext"
-    },
-    {
-      "number": 143,
-      "title": "feat(ops): ダッシュボードにストリーム分類とガントを追加する",
-      "url": "https://github.com/hikuohiku/homelab/pull/143",
-      "mergedAt": "2026-08-05T04:05:35Z",
-      "headRefName": "autopilot/dashboard-streams-gantt"
     }
   ]
 }
