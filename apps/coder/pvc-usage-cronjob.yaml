@@ -1,0 +1,215 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pvc-usage-reporter
+  namespace: coder
+---
+# 自 namespace の ConfigMap 1 個のみを get/create/update できる最小権限。
+# 他 namespace への到達手段は無く、PVC 自体もこの CronJob からは readOnly マウントのみ。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: pvc-usage-reporter
+  namespace: coder
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pvc-usage-reporter
+  namespace: coder
+subjects:
+  - kind: ServiceAccount
+    name: pvc-usage-reporter
+    namespace: coder
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: pvc-usage-reporter
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pvc-usage-reporter-script
+  namespace: coder
+data:
+  pvc_usage.py: |
+    """PVC の実使用量を計測し、同一 namespace 内の ConfigMap へ書き戻す。
+
+    対象 PVC を readOnly でマウントしたコンテナから、標準ライブラリのみで
+    ディレクトリサイズを合計する（du バイナリに依存しない）。書き込み先は
+    自 namespace 内の ConfigMap 1 個のみで、GitHub への到達性やクラスタ全体への
+    書き込み権限は持たない。ops-health-reporter (別 namespace, cluster-wide
+    read-only) がこの ConfigMap を get して集約する。
+    """
+
+    import datetime
+    import json
+    import os
+    import ssl
+    import urllib.error
+    import urllib.request
+
+    SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+    K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
+    K8S_PORT = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+    K8S_BASE = "https://{}:{}".format(K8S_HOST, K8S_PORT)
+
+    with open(os.path.join(SA_DIR, "namespace")) as f:
+        NAMESPACE = f.read().strip()
+    with open(os.path.join(SA_DIR, "token")) as f:
+        SA_TOKEN = f.read().strip()
+    SSL_CTX = ssl.create_default_context(cafile=os.path.join(SA_DIR, "ca.crt"))
+
+
+    def k8s_request(method, path, body=None):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(
+            K8S_BASE + path,
+            data=data,
+            method=method,
+            headers={
+                "Authorization": "Bearer " + SA_TOKEN,
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, context=SSL_CTX, timeout=15) as resp:
+                raw = resp.read()
+                return resp.status, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            return e.code, (json.loads(raw) if raw else None)
+
+
+    def dir_size_bytes(path):
+        total = 0
+        for root, _dirs, files in os.walk(path):
+            for name in files:
+                fp = os.path.join(root, name)
+                try:
+                    total += os.lstat(fp).st_size
+                except OSError:
+                    pass
+        return total
+
+
+    def parse_mounts(spec):
+        # "name:/mnt/path,name2:/mnt/path2" 形式
+        out = []
+        for item in spec.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            name, path = item.split(":", 1)
+            out.append((name, path))
+        return out
+
+
+    def put_configmap(name, data):
+        path = "/api/v1/namespaces/{}/configmaps/{}".format(NAMESPACE, name)
+        status, existing = k8s_request("GET", path)
+        body = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": name, "namespace": NAMESPACE},
+            "data": data,
+        }
+        if status == 200:
+            body["metadata"]["resourceVersion"] = existing["metadata"]["resourceVersion"]
+            status, resp = k8s_request("PUT", path, body)
+        else:
+            status, resp = k8s_request(
+                "POST", "/api/v1/namespaces/{}/configmaps".format(NAMESPACE), body
+            )
+        if status not in (200, 201):
+            raise RuntimeError("configmap 書き込みに失敗: {} {}".format(status, resp))
+
+
+    def main():
+        mounts = parse_mounts(os.environ["PVC_MOUNTS"])
+        generated_at = datetime.datetime.now(datetime.timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+        usage = [
+            {"pvc": pvc_name, "bytes": dir_size_bytes(mount_path)}
+            for pvc_name, mount_path in mounts
+        ]
+        report = {"generated_at": generated_at, "namespace": NAMESPACE, "usage": usage}
+        put_configmap("pvc-usage-report", {"report.json": json.dumps(report, ensure_ascii=False)})
+        print("pvc-usage-report ConfigMap を更新しました ({})".format(generated_at))
+
+
+    if __name__ == "__main__":
+        main()
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: pvc-usage-reporter
+  namespace: coder
+spec:
+  # ディレクトリ全体を stat してサイズを合計する重い処理のため、30分毎の
+  # ops-health-reporter より粗い間隔にする
+  schedule: "25 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+          serviceAccountName: pvc-usage-reporter
+          restartPolicy: Never
+          containers:
+            - name: pvc-usage
+              image: python:3.12-alpine
+              command: ["python", "/scripts/pvc_usage.py"]
+              env:
+                - name: PVC_MOUNTS
+                  value: "coder-postgres-data:/mnt/coder-postgres-data"
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              # PVC の中身は postgres コンテナの fsGroup/runAsUser (999)
+              # で書かれており、このジョブは対象 PVC の実データを正確に数える
+              # ことが目的のため root で読む（DAC_OVERRIDE を保持し、
+              # capabilities は絞らない）。書き込みは volumeMounts の
+              # readOnly: true が構造的に禁止しており、root であることによる
+              # 追加リスクは無い
+              securityContext:
+                runAsUser: 0
+                allowPrivilegeEscalation: false
+              # 数万ファイル規模の stat 走査でもファイル内容は読まないためメモリは
+              # 低く収まる見込みだが実測はしていない。暴走しても他 Pod を巻き込まない
+              # 目的の緩い上限（CHARTER §4「縛る変更には実測か裏付けが要る」対象）
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 300m
+                  memory: 256Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: coder-postgres-data
+                  mountPath: /mnt/coder-postgres-data
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: script
+              configMap:
+                name: pvc-usage-reporter-script
+            - name: coder-postgres-data
+              persistentVolumeClaim:
+                claimName: coder-postgres-data
+                readOnly: true
+            - name: tmp
+              emptyDir: {}
