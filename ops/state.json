@@ -235,7 +235,9 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。backlog の todo が 0 件（T-0040/T-0012 とも next_review は 2026-08-11）だったため CHARTER §3 に従い調査。ops/inventory.json の policy: manual エントリのうち『離散リリースが無いので棚卸し対象外』とされている nixpkgs（nix/images/proxmox-cloud/flake.lock）を見た。flake.lock 内の locked.lastModified を読むと4入力とも2025-11〜12止まりで約8ヶ月放置と判明（離散リリース無し＝経年チェック不要ではなかった）。T-0049 として needs-human 起票（nix flake update にはロックハッシュの実計算が要り、サンドボックスに nix が無い。T-0030 と同型）。あわせて T-0040 の DoD に経年チェックを追記し、今後同種の見落としが再検出されるようにした",
-      "prs": []
+      "prs": [
+        124
+      ]
     }
   ]
 }
