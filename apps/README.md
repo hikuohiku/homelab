@@ -100,30 +100,6 @@ echo
 
 ## 事前設定 (初回のみ)
 
-### K3s シークレットの事前生成
-
-事前に K3s の CA と Token を生成し、Doppler に保存します:
-
-```bash
-# 一時ディレクトリで作業
-mkdir -p /tmp/k3s-scrt && cd /tmp/k3s-scrt
-
-# CA 生成
-openssl genrsa -out server-ca.key 2048
-openssl req -x509 -new -nodes -key server-ca.key -sha256 -days 3650 -out server-ca.crt -subj "/CN=k3s"
-
-# Token 生成
-K3S_TOKEN=$(openssl rand -hex 32)
-
-# Doppler に保存
-doppler secrets set K3S_TOKEN="$K3S_TOKEN" \
-  K3S_CA_CERT="$(cat server-ca.crt)" \
-  K3S_CA_KEY="$(cat server-ca.key)"
-
-# クリーンアップ
-cd - && rm -rf /tmp/k3s-scrt
-```
-
 ### Doppler プロジェクト設定
 
 1. [Doppler](https://doppler.com) でアカウント作成
@@ -132,12 +108,6 @@ cd - && rm -rf /tmp/k3s-scrt
    - `TAILSCALE_CLIENT_ID`
    - `TAILSCALE_CLIENT_SECRET`
 4. Service Token を生成 (Access → Generate Service Token)
-
-### VM 再構築後
-
-```bash
-just inject-secrets
-```
 
 ---
 

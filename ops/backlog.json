@@ -1743,7 +1743,9 @@
         "nix/images/proxmox-cloud/configuration.nix"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "status": "done",
+      "pr": null,
+      "notes": "run #47: 再度 grep で確認（K3S_TOKEN/K3S_CA_CERT/K3S_CA_KEY/inject-secrets ともリポジトリ内でこのファイル以外に参照なし）。DoD どおり『K3s シークレットの事前生成』節と『VM 再構築後』節（`just inject-secrets`）を削除。`Doppler プロジェクト設定`（TAILSCALE_CLIENT_ID/SECRET）は apps/external-secrets/tailscale-oauth-external-secret.yaml が実際に参照しており有効なため残置"
     },
     {
       "id": "T-0096",
