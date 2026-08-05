@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 79,
-  "updated": "2026-08-05T05:45:00Z",
+  "next_id": 80,
+  "updated": "2026-08-05T05:58:50Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1220,7 +1220,8 @@
         "docs/backup.md"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": null,
+      "notes": "run #31: issue #56 (05:35:04) で上限が判明。ops-health-report (05:30:09) の node allocatable ephemeral-storage が 51250152Ki（≈48.9GiB）しか無く、immich ライブラリは物理的に 49GiB を超えられない。300GB/1TB 想定は前提から外れ、保存先は Backblaze B2 で確定（Hetzner Storage Box との比較は不要）。ただし正確な実使用バイト数（T-0077 待ち）と、そもそも disk 全体が 48.9GiB しか無いという事実自体の確認（T-0079）はまだ完了していないため needs-human のまま"
     },
     {
       "id": "T-0067",
@@ -1392,7 +1393,7 @@
       "kind": "feature",
       "risk": "low",
       "status": "todo",
-      "priority": 36,
+      "priority": 5,
       "why": "issue #56 (2026-08-05 05:12:43) の指摘。T-0015 (#153) の ops-health-reporter は ArgoCD sync/health・Pod 異常・Node 状態は取れるが、PVC の `capacity`（宣言値）しか読んでおらず実使用量は取れない。コンテナの実メモリ/CPU 使用量も取れていない。この2つが無いと T-0066（immich ライブラリの実サイズ測定、restic 保存先の選定に必要）と、#132 で差し戻された resource limits の実測が永久に手に入らない",
       "dod": "(1) 対象 PVC を `readOnly: true` でマウントし `du -sb` を実行する専用 CronJob（追加 RBAC 不要、既存の ops-health-reporter ClusterRole とは分離してよい）を追加し、結果を `ops/health/` 配下に書き戻す。(2) `metrics.k8s.io`（k3s 同梱の metrics-server）への read 権限を ops-health-reporter の ClusterRole に追加し、コンテナ単位の実メモリ/CPU 使用量を収集する。(2) は `nodes/proxy` のような広い権限を避け、`metrics.k8s.io` の `pods`/`nodes` read のみに絞る。T-0066 が求める実サイズがこれで得られることを確認する",
       "refs": [
@@ -1401,7 +1402,7 @@
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": "run #30: issue #56 (05:12:43) の提案をそのまま起票。実装自体はブロックされていないが、T-0075（CronJob が実際に動いているかの確認）が先に通ってから着手するのが安全（土台が動いていない状態に機能を足しても検証できない）"
+      "notes": "run #30: issue #56 (05:12:43) の提案をそのまま起票。実装自体はブロックされていないが、T-0075（CronJob が実際に動いているかの確認）が先に通ってから着手するのが安全（土台が動いていない状態に機能を足しても検証できない） | run #31: T-0075 は既に完了済み（着手可能）。T-0079 で node01 の実ディスクが 48.9GiB しか無いと判明し、PVC 実使用量が緊急の情報になったため priority を 36→5 に引き上げた（issue #56, 2026-08-05 05:35:04）"
     },
     {
       "id": "T-0078",
@@ -1420,6 +1421,26 @@
       ],
       "created": "2026-08-05",
       "pr": null
+    },
+    {
+      "id": "T-0079",
+      "domain": "homelab",
+      "title": "node01 の実ディスク容量がドキュメント記載（256GiB）と health report の実測（48.9GiB）で食い違っている件を確認してほしい",
+      "kind": "investigate",
+      "risk": "high",
+      "status": "needs-human",
+      "priority": 1,
+      "why": "issue #56 (2026-08-05 05:35:04, 構築セッション経由)。ops-health-report ブランチ (generated_at: 2026-08-05T05:30:09Z) が報告する node の allocatable/capacity ephemeral-storage は 51250152Ki（≈48.9GiB）。一方 `terraform/proxmox/vm-nixos.tf` の `size = 256`（GiB）、`docs/node01-storage.md`（『2026-08-04 に 50GiB→256GiB へ拡張した』）、`CLAUDE.md`（『node01 の root disk は 256 GiB』）は全て 256GiB を前提にしている。**PVC requested 合計は 215Gi（immich-library 単体で 50Gi）で、実測どおり 48.9GiB しか無いなら既に定義上のオーバーコミット状態。** local-path は実ディスクを予約しないため、使用量が実容量に達した時点で node 上の全データ（immich 写真・vaultwarden シークレット・coder workspace・両 postgres）が同時に破損しうる。system Pod（argocd/coredns/local-path-provisioner/metrics-server 等）の restarts が軒並み 19 回で揃っており、手動で行った growpart/resize2fs がノード再起動の過程で失われた可能性がある",
+      "dod": "人間が node01 で `df -h /` と `lsblk` を実行し、(1) パーティション/ファイルシステムの実サイズ、(2) 256GiB へ拡張したはずの領域が実際に root ファイルシステムまで反映されているか、を確認する。結果を踏まえて次のいずれかに分岐する: (a) 実ディスクが本当に48.9GiB程度しか無い→ growpart/resize2fs をやり直すか、terraform の size を実態に合わせて修正し、215Gi分のPVC要求をどう減らす/どこに逃がすかを検討する新タスクを起票する (b) kubelet 側の ephemeral-storage 計算が古い/誤り（再起動で直る等）→ health report 側の実装かCronJobの再起動を疑う。**autopilot 側では docs/terraform を先に『直さない』**（構築セッションの助言どおり、実態が未確定のうちにドキュメントだけ書き換えると誤った事実が固定化する）",
+      "needs_human_reason": "node01 の実機（Proxmox ホストまたは NixOS 本体）で `df -h` / `lsblk` を実行してほしい。Tailscale 越しに到達できる人間の環境でしか実行できず、autopilot のクラウドサンドボックスは物理的に到達できない（CHARTER §5.2）",
+      "refs": [
+        "terraform/proxmox/vm-nixos.tf",
+        "docs/node01-storage.md",
+        "CLAUDE.md"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #31: issue #56 (05:35:04) の指摘をそのまま起票。判断材料は ops-health-report ブランチの ops/health/latest.json（generated_at: 2026-08-05T05:30:09Z）。T-0066 の上限確定（B2 確定、Hetzner比較不要）にも直結。T-0077（PVC実使用量の取得）と合わせて実施すると、ディスク逼迫の全体像（容量×使用量）が揃う"
     }
   ]
 }
