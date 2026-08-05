@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 78,
-  "updated": "2026-08-05T05:50:00Z",
+  "next_id": 79,
+  "updated": "2026-08-05T06:05:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1193,7 +1193,7 @@
       "title": "IaC 完全性の棚卸し — node01 が揮発しても Git/Doppler に無いものが残っていないか確認する",
       "kind": "investigate",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 35,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針: 『k8s より上は IaC で完全に記述できるようにして、揮発しても大丈夫な状態にしたい』。ArgoCD/dex/external-secrets/tailscale-operator 自体は状態を持たないはずだが、それを裏取りした記録が無い。『持っていないことを確認する』のがこのタスクの仕事（人間の言葉どおり）",
       "dod": "ArgoCD/dex/external-secrets/tailscale-operator の各 Deployment/StatefulSet が使う PVC を列挙し、実際に永続データを持つのはどれか（immich/vaultwarden/coder-postgres/immich-postgres 以外に無いか）を確認する。ArgoCD 自身の設定（RBAC、AppProject 等）が manifest（Git）だけで再現できるか、UI 経由でしか設定できない項目が無いかも確認する。結果を docs/backup.md に追記する。この調査自体では manifest を変更しない",
@@ -1202,7 +1202,8 @@
         "apps/"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": 157,
+      "notes": "run #30: subagent に repo 横断調査を投げた。PVC を持つのは immich/vaultwarden/coder-postgres/immich-postgres の4アプリのみ（immich の valkey/machine-learning persistence はキャッシュ用途で再現可能なため対象外）。ArgoCD/dex/external-secrets/tailscale-operator は PVC/StatefulSet を一切持たず resync で完全復元可能と確認（『持っていないことの確認』完了）。ArgoCD 自身の RBAC/OIDC/アカウント宣言は values.yaml に git 管理され再現可能（admin ローカルアカウントの有効化制御のみ repo に無いが実害は薄い、Dex OIDC が主経路）。**新規発見**: `apps/coder/templates/personal/main.tf` が Coder の Terraform プロビジョナー経由で workspace ごとに `coder-<workspace-id>-home` PVC を動的作成しており（`apps/coder/*.yaml` の静的マニフェストには現れない）、これが Git/Doppler に無い5つ目の実データ対象と判明。docs/backup.md に追記し、backup CronJob 化を T-0078 として起票した"
     },
     {
       "id": "T-0066",
@@ -1401,6 +1402,24 @@
       "created": "2026-08-05",
       "pr": null,
       "notes": "run #30: issue #56 (05:12:43) の提案をそのまま起票。実装自体はブロックされていないが、T-0075（CronJob が実際に動いているかの確認）が先に通ってから着手するのが安全（土台が動いていない状態に機能を足しても検証できない）"
+    },
+    {
+      "id": "T-0078",
+      "domain": "homelab",
+      "title": "Coder workspace ごとの home PVC (`coder-<workspace-id>-home`) 用の backup CronJob を追加する",
+      "kind": "feature",
+      "risk": "medium",
+      "status": "blocked",
+      "priority": 40,
+      "why": "T-0065（run #30）の調査で発見。`apps/coder/templates/personal/main.tf` が Coder の Terraform プロビジョナー経由で workspace 作成のたびに `coder-<workspace-id>-home` という PVC を動的作成しており（`/home/coder` にマウント、dotfiles・`ghq` clone・code-server 設定等のユーザーデータが載る）、これは `apps/coder/*.yaml` の静的マニフェストには現れないため T-0070（coder-postgres の backup）ではカバーされない。node01 揮発時に失われる実データの5つ目の対象",
+      "dod": "workspace ごとに動的作成される `coder-<workspace-id>-home` PVC を列挙し（PVC 名は `coder-<workspace-id>-home` の命名規則で特定可能）、pg_dump 同様の考え方でファイルシステムスナップショット（tar もしくは直接 restic でファイルシステムを対象にする、DB とは異なりファイルなのでオンライン中でも整合性の問題は薄い）を restic で T-0067 の保存先へ push する CronJob を追加する。workspace は増減するため、対象 PVC の列挙は動的（`kubectl get pvc -l` 相当のラベルセレクタ、または命名パターンでのマッチ）にする",
+      "blocked_by": "T-0067（restic 保存先・credential）",
+      "refs": [
+        "apps/coder/templates/personal/main.tf",
+        "docs/backup.md"
+      ],
+      "created": "2026-08-05",
+      "pr": null
     }
   ]
 }
