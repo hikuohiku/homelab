@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 100,
+  "next_id": 101,
   "updated": "2026-08-05T10:30:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
@@ -1248,13 +1248,14 @@
       "title": "immich 用 backup CronJob（日次内蔵DBダンプ + restic でライブラリごと）を追加する",
       "kind": "feature",
       "risk": "medium",
-      "status": "todo",
+      "status": "done",
       "priority": 40,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針・構築セッションの調査。immich は内蔵の日次 DB ダンプが UPLOAD_LOCATION/backups に 14 世代落ちる仕様のため、これが有効なら library PVC を restic で 1 本取るだけでライブラリと DB dump が同時に取れる（要確認）。稼働中に取る場合は DB dump が先、ファイルが後の順（DB に無い余分なファイルが残るだけで済む）",
       "dod": "immich の内蔵日次 DB ダンプが有効か確認したうえで、CronJob が restic でライブラリ PVC（DB dump を含む）を snapshot し、T-0067 の保存先へ push する。retention（`restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune` 相当）を週次で走らせる仕組みも同じ PR に含める。credential は Doppler → External Secrets 経由（キー名は T-0069 で決めた命名規則に揃える）",
-      "notes": "run #48: issue #56 (10:29:40) の指摘を受け blocked → todo に変更。manifest（CronJob・ExternalSecret）の設計・記述は T-0067（credential 発行）を待たずに進められる。実際に暗号化 push が成功するかの確認だけが T-0067 待ち",
+      "notes": "run #48: issue #56 (10:29:40) の指摘を受け blocked → todo に変更。manifest（CronJob・ExternalSecret）の設計・記述は T-0067（credential 発行）を待たずに進められる。実際に暗号化 push が成功するかの確認だけが T-0067 待ち | run #49: subagent に immich v2.7.5 タグの実ソースを直接確認させ、内蔵 Database Backup がデフォルト有効（毎日02:00 UTC, keepLastAmount:14）で UPLOAD_LOCATION（=immich-library PVC）配下に pg_dump 相当のフルダンプ（拡張含め除外なし）を .tmp→rename の atomic write で書き出すことを裏取りした。これにより immich-postgres-data の生 PVC を別途バックアップする必要は無いと確定（DoD の『要確認』が解消）。immich-library PVC を restic で1本取るだけの CronJob（coder-postgres のような pg_dump initContainer は不要）を実装。immich 自身のダンプ完了を待つため backup スケジュールを 02:45 UTC（ダンプ開始 02:00 の45分後）にした。restic-backup コンテナは pvc-usage-cronjob.yaml (T-0080) と同じ runAsUser:0 + DAC_READ_SEARCH パターンを再利用（PVC所有権が immich-server コンテナの UID のため）。実際に restic push が成功するかは T-0067（credential 登録）待ちのため T-0100 として確認タスクを別途起票した。done とするが、DoD の『保存先へ push する』が実際に成功したことの確認は T-0100 が担う",
       "refs": [
-        "apps/immich/",
+        "apps/immich/restic-backup-cronjob.yaml",
+        "apps/immich/restic-external-secret.yaml",
         "docs/backup.md"
       ],
       "created": "2026-08-05",
@@ -1793,13 +1794,32 @@
       "risk": "low",
       "status": "todo",
       "priority": 45,
-      "why": "T-0069 (#191) で apps/vaultwarden/restic-backup-cronjob.yaml に restic/restic:0.19.1 が2箇所（backup と retention の CronJob）独立して書かれた。T-0090/T-0082 と同型のドリフトパターンで、片方だけ更新した PR が CI green のまま素通りしうる。T-0070 (run #49) で apps/coder/restic-backup-cronjob.yaml にも同じタグの CronJob が2つ追加され、ファイル間（vaultwarden ⇔ coder-postgres）でも同じ重複が生じている。対象はこの4箇所（vaultwarden の2つ、coder-postgres の2つ）に拡張する",
-      "dod": "ops/check_version_sync.py の GROUPS に apps/vaultwarden/restic-backup-cronjob.yaml と apps/coder/restic-backup-cronjob.yaml、それぞれ内部の2出現（backup/retention）を1つの GROUP として追加する（ops/inventory.json の vaultwarden-restic-image / coder-postgres-restic-image エントリの note も『未登録』の記述を削除して更新する）。意図的に値をずらして CI が exit 1 になることを確認する",
+      "why": "T-0069 (#191) で apps/vaultwarden/restic-backup-cronjob.yaml に restic/restic:0.19.1 が2箇所（backup と retention の CronJob）独立して書かれた。T-0090/T-0082 と同型のドリフトパターンで、片方だけ更新した PR が CI green のまま素通りしうる。T-0070/T-0068 (run #49) で apps/coder/restic-backup-cronjob.yaml・apps/immich/restic-backup-cronjob.yaml にも同じタグの CronJob が2つずつ追加され、ファイル間（vaultwarden ⇔ coder-postgres ⇔ immich）でも同じ重複が生じている。対象はこの6箇所（3ファイル×backup/retentionの2つずつ）に拡張する",
+      "dod": "ops/check_version_sync.py の GROUPS に apps/vaultwarden/restic-backup-cronjob.yaml・apps/coder/restic-backup-cronjob.yaml・apps/immich/restic-backup-cronjob.yaml、それぞれ内部の2出現（backup/retention）を1つの GROUP として追加する（ops/inventory.json の vaultwarden-restic-image / coder-postgres-restic-image / immich-restic-image エントリの note も『未登録』の記述を削除して更新する）。意図的に値をずらして CI が exit 1 になることを確認する",
       "refs": [
         "ops/check_version_sync.py",
         "apps/vaultwarden/restic-backup-cronjob.yaml",
         "apps/coder/restic-backup-cronjob.yaml",
+        "apps/immich/restic-backup-cronjob.yaml",
         "ops/inventory.json"
+      ],
+      "created": "2026-08-05",
+      "pr": null
+    },
+    {
+      "id": "T-0100",
+      "domain": "homelab",
+      "title": "T-0068（immich restic backup）が実際に成功しているか確認する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "blocked",
+      "priority": 41,
+      "why": "T-0068 は manifest 実装のみで、実際に restic push が成功するかは T-0067 の credential 登録が終わるまで検証できない（このクラウドサンドボックスは k8s Job のログを見られない）。T-0097（vaultwarden 版）/T-0099（coder-postgres 版）と同型",
+      "dod": "T-0067 の Doppler 登録後、次回以降の起動で ops-health-report の pod_issues に `immich-restic-backup`/`immich-restic-retention` の CronJob の Job が Failed で出ていないかを確認する。あわせて `immich-restic-backup` が想定どおり immich 自身の日次DBダンプ完了後（02:45 UTC）に走っていることも確認する。問題なければ docs/backup.md に成功日時を記録して done にする。継続的に失敗するなら症状を記録し、原因調査を新規タスクとして起票する",
+      "blocked_by": "T-0067（credential 登録。登録完了後の確認作業自体は autopilot が行う）",
+      "refs": [
+        "apps/immich/restic-backup-cronjob.yaml",
+        "docs/backup.md"
       ],
       "created": "2026-08-05",
       "pr": null

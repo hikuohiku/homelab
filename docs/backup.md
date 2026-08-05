@@ -37,8 +37,8 @@ issue #56 (2026-08-05 04:40:59) で人間から新方針: **PBS は重すぎる�
 
 | PVC / データ | 用途 | backup CronJob タスク |
 |---|---|---|
-| `immich-library` | 写真/動画原本・サムネイル・変換済み動画 | T-0068 |
-| `immich-postgres-data` | immich アセットメタデータ・CLIP埋め込み | T-0068 と同時（T-0029 側で拡張検討） |
+| `immich-library` | 写真/動画原本・サムネイル・変換済み動画 | T-0068（実装済み・credential 登録待ち） |
+| `immich-postgres-data` | immich アセットメタデータ・CLIP埋め込み | T-0068 の immich 内蔵日次DBダンプ（`immich-library` 内）で代替。生 PVC 自体のバックアップは対象外 |
 | `vaultwarden-data` | パスワードマネージャ本体（SQLite） | T-0069 |
 | `coder-postgres-data` | Coder 制御プレーン（ユーザー・workspace・監査ログ） | T-0070（実装済み・credential 登録待ち） |
 | `coder-<workspace-id>-home`（動的作成、`apps/coder/templates/personal/main.tf`） | workspace ごとの `/home/coder`（dotfiles・ghq clone 等） | **未起票**。T-0070 の対象外（別 PVC 群）のため、別途タスク化が必要 |
@@ -67,6 +67,31 @@ issue #56 (2026-08-05 04:40:59) で人間から新方針: **PBS は重すぎる�
   （T-0070）も同じ bucket・同じ credential でパス末尾だけ変える設計にした
 - **復元時の注意**: 復元前に vaultwarden コンテナを止め、既存の `db.sqlite3-wal`/`db.sqlite3-shm`
   を削除してから復元後の `db.sqlite3` を配置すること（stale な WAL が残ると起動時に不整合を起こしうる）
+
+## immich の restic バックアップ (T-0068, 実装済み・credential 登録待ち)
+
+`apps/immich/restic-backup-cronjob.yaml` に2つの CronJob を実装した。
+
+- immich server v2.7.5 には "Database Backup" 機能がデフォルトで有効（`server/src/config.ts`
+  の `backup.database`: `enabled: true`、毎日 02:00 UTC 実行、`keepLastAmount: 14`）で、
+  pg_dump 相当のフルダンプ（pgvector/embeddings テーブル含め除外なし）を `.tmp` へ書いてから
+  rename する形で `UPLOAD_LOCATION/backups/*.sql.gz` に確定させる（サブエージェントが v2.7.5
+  タグの実ソース `database-backup.service.ts` を直接確認して裏取り済み）。`UPLOAD_LOCATION`
+  は `immich-library` PVC そのもの（`apps/immich/values.yaml` の `immich.persistence.library`）
+  のため、**`immich-library` PVC を restic で1本取るだけでライブラリ本体と DB ダンプ
+  （immich-postgres-data 相当のデータを含む）が同時に取れる。** coder-postgres（T-0070）の
+  ような専用 `pg_dump` initContainer は不要だった
+- **`immich-restic-backup`**（毎日 02:45 UTC、immich 自身のダンプ完了を待つため45分後に開始）:
+  `immich-library` PVC をそのまま restic backup する
+- **`immich-restic-retention`**（毎週日曜 03:45 UTC）: `restic forget --keep-daily 7
+  --keep-weekly 4 --keep-monthly 6 --prune`
+- 保存先は vaultwarden/coder-postgres と同じ Backblaze B2 バケット、パス末尾のみ `immich`
+  （`b2:<bucket>:immich`）
+- **復元時の注意**: `immich-library` PVC をリストア後、`backups/` 配下の最新 `.sql.gz` を
+  `gunzip` して `psql`（`--clean --if-exists` 付きダンプなので既存オブジェクトを DROP しつつ
+  流し込める想定）で immich-postgres へ復元する。復元時のバージョン整合（ダンプ生成時の
+  immich/postgres バージョンとファイル名の `v{serverVersion}-pg{postgresVersion}` を突き合わせる）
+  を事前に確認すること
 
 ## coder-postgres の restic バックアップ (T-0070, 実装済み・credential 登録待ち)
 
