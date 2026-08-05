@@ -139,12 +139,12 @@
       "id": "immich-postgres",
       "kind": "image",
       "name": "cloudnative-vectorchord",
-      "current": "16.9-0.4.3",
+      "current": "16.14-1.1.1",
       "file": "apps/immich/postgres.yaml",
       "match": "vectorchord",
       "upstream": "github:tensorchord/VectorChord-images",
       "policy": "manual",
-      "note": "Immich のベクタ DB。データを持つため拡張のメジャー更新は自動追随せず、都度 CHARTER §4 の高リスク手順（バックアップ復元確認 + ALTER EXTENSION UPDATE/REINDEX を伴う専用 Job）を踏む（T-0029）。16.14-1.1.1 は #244 で一度 merge したが immich-postgres が CrashLoopBackOff（コンテナ起動時に `exec: \"-c\": executable file not found in $PATH`）になり #247 で revert した（run #72 続き）。run #73 で GHCR の実イメージ config を確認し根本原因を確定: 2025-11-12 のベースイメージ変更（`postgresql:$CNPG_TAG-bookworm` → `-system-bookworm`）で `16.10-1.0.0` 以降（`16.14-1.1.1` を含む）は docker-library 系 postgres（`ENTRYPOINT docker-entrypoint.sh` / `CMD postgres`）ではなく CloudNativePG operand 系イメージ（ENTRYPOINT 無し、`CMD bash`）に切り替わっており、`docker-entrypoint.sh` 自体が同梱されなくなった。`command: [\"postgres\"]` を明示すれば既存の初期化済み PGDATA に対する起動は通る見込みだが、**initdb によるブートストラップ機能が丸ごと無くなっている**ため、PVC を新規作成し直す（災害復旧）シナリオでは `postgres` コマンドだけでは空の PGDATA を初期化できず起動しない。T-0071 で確立した復元手順（immich-library PVC 復元後、稼働中の immich-postgres へ psql でダンプを流し込む）はこの『稼働中の postgres』を新規 PVC 上でどう用意するかに暗黙に依存しており、16.10-1.0.0 系以降ではこの前提が崩れる。T-0111（initdb 相当のブートストラップ経路を用意する）が解決してから再着手する T-0111（run #75, #250-#254）で initdb ブートストラップ経路（unix_socket_directories=/tmp を明示 → createdb → shared_preload_libraries=vchord.so で再起動 → CREATE EXTENSION）を使い捨て PVC/Job で検証・確立済み。T-0029 の blocked_by は解除したが、postgres.yaml 本体にこの手順を組み込むところまでは未実装"
+      "note": "Immich のベクタ DB。データを持つため拡張のメジャー更新は自動追随せず、都度 CHARTER §4 の高リスク手順（バックアップ復元確認 + ALTER EXTENSION UPDATE/REINDEX を伴う専用 Job）を踏む（T-0029/T-0112）。16.14-1.1.1 は #244 で一度 merge したが immich-postgres が CrashLoopBackOff（コンテナ起動時に `exec: \"-c\": executable file not found in $PATH`）になり #247 で revert した（run #72 続き）。run #73 で GHCR の実イメージ config を確認し根本原因を確定: 2025-11-12 のベースイメージ変更（`postgresql:$CNPG_TAG-bookworm` → `-system-bookworm`）で `16.10-1.0.0` 以降（`16.14-1.1.1` を含む）は docker-library 系 postgres（`ENTRYPOINT docker-entrypoint.sh` / `CMD postgres`）ではなく CloudNativePG operand 系イメージ（ENTRYPOINT 無し、`CMD bash`）に切り替わっており、`docker-entrypoint.sh` 自体が同梱されなくなった。T-0111（run #75, #250-#254）で initdb 相当のブートストラップ経路を使い捨て PVC/Job で検証・確立し、T-0029（run #76）で postgres.yaml 本体に「PGDATA が空のときのみ動く initContainer」として組み込み、image を 16.14-1.1.1 に上げ、main container に `command: [\"postgres\"]` を明示した（CrashLoopBackOff の再発防止）。ALTER EXTENSION UPDATE / REINDEX による実データの vchord 拡張移行は T-0112 として分離済み、未着手。"
     },
     {
       "id": "busybox",
