@@ -1,6 +1,28 @@
 {
-  "open": [],
+  "open": [
+    {
+      "number": 128,
+      "title": "docs: secrets/ ディレクトリ記述を実態に合わせる (T-0052)",
+      "url": "https://github.com/hikuohiku/homelab/pull/128",
+      "isDraft": false,
+      "createdAt": "2026-08-05T02:18:15Z",
+      "statusCheckRollup": [
+        {
+          "conclusion": "PENDING"
+        }
+      ],
+      "headRefName": "autopilot/T-0052-secrets-path-doc-drift",
+      "autoMergeRequest": null
+    }
+  ],
   "merged": [
+    {
+      "number": 127,
+      "title": "ops: run #20 の記録をまとめ、ダッシュボードを再生成する",
+      "url": "https://github.com/hikuohiku/homelab/pull/127",
+      "mergedAt": "2026-08-05T02:00:17Z",
+      "headRefName": "autopilot/run20-wrapup"
+    },
     {
       "number": 126,
       "title": "T-0051: check_version_sync.py の検証対象を inventory.json の mirrors 全件に揃える",
@@ -17,9 +39,9 @@
     },
     {
       "number": 124,
-      "title": "ops: nixpkgs flake.lock の経年を調査し T-0049 として起票する",
+      "title": "ops: nixpkgs flake.lock の経年放置を発見し T-0049 として起票する (T-0049)",
       "url": "https://github.com/hikuohiku/homelab/pull/124",
-      "mergedAt": "2026-08-05T01:30:00Z",
+      "mergedAt": "2026-08-05T01:30:01Z",
       "headRefName": "autopilot/T-0049-nixpkgs-pin-staleness"
     },
     {
@@ -385,6 +407,27 @@
       "url": "https://github.com/hikuohiku/homelab/pull/71",
       "mergedAt": "2026-08-04T19:40:33Z",
       "headRefName": "autopilot/T-0001-pin-tailscale-nameserver"
+    },
+    {
+      "number": 70,
+      "title": "fix(ci): direct-push-guard のレビュー指摘3点を修正",
+      "url": "https://github.com/hikuohiku/homelab/pull/70",
+      "mergedAt": "2026-08-04T19:34:27Z",
+      "headRefName": "autopilot/T-0014-fix-direct-push-guard-review"
+    },
+    {
+      "number": 69,
+      "title": "fix(ops): ダッシュボードに起動間隔が出ない退行を直す",
+      "url": "https://github.com/hikuohiku/homelab/pull/69",
+      "mergedAt": "2026-08-04T19:26:25Z",
+      "headRefName": "autopilot/fix-dashboard-cadence"
+    },
+    {
+      "number": 68,
+      "title": "fix(terraform): .terraform.lock.hcl から未宣言の tailscale provider を除去する",
+      "url": "https://github.com/hikuohiku/homelab/pull/68",
+      "mergedAt": "2026-08-04T19:25:17Z",
+      "headRefName": "autopilot/T-0004-tf-lock-cleanup"
     }
   ]
 }

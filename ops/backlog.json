@@ -946,7 +946,7 @@
         "ops/CHARTER.md"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 128,
       "notes": "run #21: find で secrets 関連ファイルを実測（`.sops.yaml` はリポジトリルート、暗号化データは `nix/images/proxmox-cloud/secrets.yaml` の 1 ファイルのみ。apps/*/*-external-secret.yaml は ExternalSecret リソースであり SOPS 暗号化ではないため対象外）。CLAUDE.md の該当行を実際のパスに書き換え、CHARTER §5 の該当行も同様に修正した"
     }
   ]
