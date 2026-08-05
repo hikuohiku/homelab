@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T20:25:00Z",
+  "updated": "2026-08-05T20:48:27Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -720,6 +720,16 @@
       "summary": "T-0071 の vaultwarden 分に着手。immich 分（#231-234, 完了済み）で判明した CHOWN/FOWNER/DAC_OVERRIDE + restore前クリーンアップ + restore_output_tail の教訓を初回実装から織り込んだ apps/vaultwarden/restic-restore-verify-job.yaml を追加 (#236)。coder-postgres 分は未実施のため T-0071 は in_progress のまま継続",
       "prs": [
         236
+      ]
+    },
+    {
+      "n": 66,
+      "at": "2026-08-05T20:38:59Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "run #65 の PR #236（T-0071, vaultwarden restore-verify Job 追加）merge 後、vaultwarden-restic-restore-verify Job を確認したところ初回実行で成功していた（restore_rc=0, elapsed_seconds=9, file_count=4, rsa_key_count=1, db_sqlite_magic_ok=true）。immich で判明した CHOWN/FOWNER/DAC_OVERRIDE + クリーンアップの教訓を初回実装から織り込んでいたため試行錯誤は不要だった。結果を docs/backup.md に記録し検証専用リソースを削除する PR を出した（#237, merged）。T-0071 は immich・vaultwarden の2分が完了、coder-postgres 分が残り in_progress のまま継続。この run 自身の state.json 記録更新（runs 追記・last_read 反映）は行われないまま起動が終了しており、次の run（#67）が埋め合わせた",
+      "prs": [
+        237
       ]
     }
   ]
