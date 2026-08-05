@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 74,
+  "next_id": 75,
   "updated": "2026-08-05T05:10:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
@@ -261,18 +261,35 @@
       "title": "ArgoCD/k8s の健全性を homelab 側から repo に書き戻す経路を作る（T-0010 の解決策）",
       "kind": "feature",
       "risk": "medium",
-      "status": "needs-human",
+      "status": "in_progress",
       "priority": 11,
       "why": "issue #56 (2026-08-04 19:12:21) で設計方向のフィードバックを受けた。クラウドから homelab へは到達できないが、逆にクラスタ内 CronJob が状態を repo へ push する方向なら到達性の制約を回避できる。medium リスクの auto-merge を続ける以上、効いたかを確認する経路が要る",
       "dod": "クラスタ内 CronJob が ArgoCD Application ごとの sync/health 状態、Pod 異常、ディスク空きなどを集めて repo（専用ブランチ or 状態報告用 issue）に書き戻す。autopilot が起動のたびにそれを読み、直前の auto-merge 後に異常が無いか確認できる。manifest は apps/ に置くだけで良く、クラスタ credential は不要。書き戻し用の GitHub token は Doppler → External Secrets 経由",
-      "needs_human_reason": "書き戻しに使う GitHub token の発行と Doppler への登録。必要スコープ: 対象 repo への contents:write（専用ブランチのみで良ければ fine-grained PAT で branch 制限可）。登録先キー名は実装時に backlog へ追記する。token 自体の発行はエージェントから手が届かない",
       "refs": [
         "ops/CHARTER.md",
-        "apps/"
+        "apps/ops-health-reporter/"
       ],
       "created": "2026-08-04",
-      "pr": null,
-      "notes": "T-0010 を置き換える形の具体案。manifest の設計・実装自体は着手できるので、token 待ちの間に CronJob 用 manifest の下書きを進めてよい"
+      "pr": 152,
+      "notes": "T-0010 を置き換える形の具体案。run #29: issue #56 (04:51:25、構築セッション経由) で GITHUB_HEALTH_REPORTER_TOKEN が Doppler に登録されたと判明し着手。apps/ops-health-reporter/ に Namespace・ServiceAccount・ClusterRole(get/list のみ)・ClusterRoleBinding・ExternalSecret・CronJob（30分毎, python:3.12-alpine, 標準ライブラリのみ）を実装した。スクリプトは k8s API (Application CRD / Pods / PVC / Nodes) を SA トークンで直接読み、GitHub Contents API で ops-health-report ブランチ (main と別、専用) の ops/health/latest.json を作成・更新する。CronJob に memory limits (256Mi) と securityContext (runAsNonRoot/runAsUser: 65534) を新設したため CHARTER §4 の『縛る変更』クールダウンの対象と判断し、この起動では merge しない（PR #152 open のまま）。DoD のうち『autopilot が起動のたびにそれを読む』は未実施 — CronJob が実際に動作し書き込めることを確認してから CHARTER §2 に読む手順を追加する（T-0074）。実使用量（ディスク/メモリ）は metrics-server 依存のため今回のスコープ外とし、応答スクリプトの notes フィールドに明記した"
+    },
+    {
+      "id": "T-0074",
+      "domain": "homelab",
+      "title": "ops-health-reporter CronJob が実際に動作し ops-health-report ブランチへ書き込めているか確認する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 12,
+      "why": "T-0015 (#152) で実装した CronJob は python:3.12-alpine の runAsUser: 65534 での起動可否、GITHUB_HEALTH_REPORTER_TOKEN の Contents:write 権限での branch 作成可否、node01 から api.github.com への到達性のいずれもこのクラウドサンドボックスからは検証できず未確認のまま",
+      "dod": "`git fetch origin ops-health-report` (または `git ls-remote origin ops-health-report`) でブランチの存在と `ops/health/latest.json` の `generated_at` が直近であることを確認する。存在すれば CHARTER §2 に『書き戻された状態を読む』手順を追加し（issue #56 の 04:51:25 コメントが依頼した内容）、存在しない・古いままなら CronJob の失敗を疑い調査する（このクラウドサンドボックスから Pod ログは見られないため、症状を記録した上で needs-human に切り替える判断も検討する）",
+      "blocked_by": "T-0015（#152）が merge され、CronJob のスケジュール（30分毎）が最低 1〜2 回まわる時間が経ってから確認する",
+      "refs": [
+        "apps/ops-health-reporter/",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-05",
+      "pr": null
     },
     {
       "id": "T-0016",

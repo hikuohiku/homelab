@@ -280,6 +280,18 @@
       "policy": "auto",
       "note": "T-0042 (run #16) で @main の floating ref から固定した。Action 自体の pin と、実際にインストールされる Nix のバージョンは無関係（upstream README に明記）",
       "observability_impact": "release-image.yml（workflow_dispatch 専用、CI 非カバレッジ。CHARTER §5.4）が使用。CI では検証されないため壊れても次の手動実行まで気づけない"
+    },
+    {
+      "id": "ops-health-reporter-image",
+      "kind": "image",
+      "name": "python (ops-health-reporter CronJob)",
+      "current": "3.12-alpine",
+      "file": "apps/ops-health-reporter/cronjob.yaml",
+      "match": "image: python:",
+      "upstream": "dockerhub:library/python",
+      "policy": "auto",
+      "note": "T-0015 (run #29) で新設。標準ライブラリのみで動くスクリプトのため minor/patch 更新はほぼ無害",
+      "observability_impact": "壊れると ops-health-report ブランチへの書き戻しが止まり、autopilot が直前の auto-merge 後の ArgoCD/Pod/PVC 状態を確認できなくなる。ただし読み取り専用 CronJob であり、壊れても homelab 本体の到達性・稼働には影響しない"
     }
   ]
 }
