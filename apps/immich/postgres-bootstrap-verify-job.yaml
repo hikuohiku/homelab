@@ -38,6 +38,11 @@ kind: Job
 metadata:
   name: immich-postgres-bootstrap-verify
   namespace: immich
+  annotations:
+    # Job の .spec.template は immutable なので、この検証用 Job のようにイテレーションのたびに
+    # 中身を変える運用では通常の apply が "field is immutable" で失敗する（run #75 で実測）。
+    # Force=true,Replace=true を指定し、ArgoCD に delete → re-create させる。
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
 spec:
   backoffLimit: 0
   activeDeadlineSeconds: 600
