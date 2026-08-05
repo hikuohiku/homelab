@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T00:30:00Z",
+  "updated": "2026-08-05T00:35:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -192,6 +192,16 @@
         110,
         111,
         112
+      ]
+    },
+    {
+      "n": 15,
+      "at": "2026-08-05T00:21:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。backlog の todo が 0 件（T-0040 は 2026-08-11 まで defer）だったため CHARTER §3 に従い調査タスクを起票。CLAUDE.md/Plans.md/Maintenance.md/docs/ の実態ずれを探し、Plans.md（LXC→k8s 移行計画）の補足が『kubectl は permissions.ask 付きで実行する方針』という記述のまま取り残されていたのを発見（ask ルールは CHARTER §5.1 で全廃済み、CLAUDE.md は既に反映済み）。T-0041 として起票・即完遂（#114）",
+      "prs": [
+        114
       ]
     }
   ]
