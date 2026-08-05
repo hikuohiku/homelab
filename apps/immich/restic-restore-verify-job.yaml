@@ -38,6 +38,15 @@
 # root であっても CAP_FOWNER が無いと、ファイルの所有者と一致しないプロセスから
 # タイムスタンプを変更できない（man 7 capabilities の CAP_FOWNER に utime(2) が明記
 # されている）。`capabilities.add` に `FOWNER` を足して解消する。
+#
+# T-0071 4回目実行（run #64 内、FOWNER 追加直後）でまた別のエラー: 今度は EPERM
+# （operation not permitted）ではなく EACCES（permission denied）の `lchown` 失敗。
+# 原因は capability ではなく、PVC（immich-restore-verify）が Job の再実行間で消えずに
+# 残ること。2回目実行で一部ディレクトリが backup 側の所有者（immich 実行 UID）へ
+# 実際に chown され、そのディレクトリの通常権限ビットが root（DAC_OVERRIDE 無し）の
+# トラバース/書き込みを塞いだ。CAP_DAC_OVERRIDE を足して恒久的に解消しつつ、
+# 毎回の実行を PVC の残留状態に依存させないよう、restore 前に target を空にする
+# クリーンアップを追加した（PVC 自体は Job 実行間で使い回される前提のまま）。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -73,6 +82,7 @@ spec:
             - -c
             - |
               set -u
+              rm -rf /mnt/restore/* 2>/dev/null || true
               START=$(date +%s)
               RESTORE_OUTPUT=$(restic restore latest --target /mnt/restore 2>&1)
               RESTORE_RC=$?
@@ -121,7 +131,7 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-              add: ["CHOWN", "FOWNER"]
+              add: ["CHOWN", "FOWNER", "DAC_OVERRIDE"]
           resources:
             requests:
               cpu: 50m
