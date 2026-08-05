@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_comment": "autopilot がバージョン更新を監視する対象。行番号は書かない（腐るため）。match は該当行を grep するための文字列。mirrors は同じバージョンを書いている別ファイル（更新時は必ず同じ PR で揃える）。policy: auto=patch/minor まで自動更新可 / manual=常に人間へ / pinned=意図的に固定、上げない",
+  "_comment": "autopilot がバージョン更新を監視する対象。行番号は書かない（腐るため）。match は該当行を grep するための文字列。mirrors は同じバージョンを書いている別ファイル（更新時は必ず同じ PR で揃える）。policy: auto=patch/minor まで自動更新可 / manual=常に人間へ / pinned=意図的に固定、上げない。observability_impact: この対象が壊れると何が観測・操作できなくなるか（CHARTER §4『到達性を失いうる変更』の該当判定材料、T-0059）。該当しないものは省略する（無いこと自体が『安全』の証拠にはならないので、無指定＝未評価であって『影響なし確認済み』ではない）",
   "targets": [
     {
       "id": "argocd-chart",
@@ -13,7 +13,8 @@
       "upstream": "github:argoproj/argo-helm",
       "release_prefix": "argo-cd-",
       "policy": "manual",
-      "note": "ArgoCD 自身。壊すと全アプリのデプロイ経路が止まるため常に人間確認。bootstrap 側 (nix) と二重管理"
+      "note": "ArgoCD 自身。壊すと全アプリのデプロイ経路が止まるため常に人間確認。bootstrap 側 (nix) と二重管理",
+      "observability_impact": "ArgoCD 自身が壊れると Git → CI → ArgoCD というこの repo 唯一のデプロイ経路が止まる。revert コミットを積んでも、それを適用する手段（ArgoCD 自身）ごと失われる。復旧には kubectl/ArgoCD CLI でのクラスタ直接操作が要り、autopilot は到達できない（CHARTER §4, T-0028）"
     },
     {
       "id": "dex-chart",
@@ -24,7 +25,8 @@
       "match": "version:",
       "upstream": "github:dexidp/helm-charts",
       "policy": "auto",
-      "note": "OIDC。認証が壊れると ArgoCD にログインできなくなるので検証を厚く"
+      "note": "OIDC。認証が壊れると ArgoCD にログインできなくなるので検証を厚く",
+      "observability_impact": "壊れると ArgoCD への OIDC ログインができなくなる。ArgoCD 自体は動いていても、人間が UI/CLI から状態を確認する経路が塞がれる"
     },
     {
       "id": "external-secrets-chart",
@@ -56,7 +58,8 @@
       "match": "version:",
       "upstream": "github:tailscale/tailscale",
       "policy": "auto",
-      "note": "到達性の根幹。壊すとクラスタに届かなくなる。T-0024 で 1.90.9→1.98.9 に更新（#100）。k8s-nameserver（同ファイル群内の別エントリ）と同じ tailscale/tailscale@vX.Y.Z タグから揃えて更新すること"
+      "note": "到達性の根幹。壊すとクラスタに届かなくなる。T-0024 で 1.90.9→1.98.9 に更新（#100）。k8s-nameserver（同ファイル群内の別エントリ）と同じ tailscale/tailscale@vX.Y.Z タグから揃えて更新すること",
+      "observability_impact": "壊れると Tailscale 経由の到達性（人間・autopilot 自身がこの homelab に触れる唯一の経路）そのものが失われる。復旧に homelab への到達自体が要るため、壊れている間は自分で直せない可能性がある"
     },
     {
       "id": "vaultwarden",
@@ -78,7 +81,8 @@
       "match": "coder/coder:",
       "upstream": "github:coder/coder",
       "policy": "auto",
-      "note": "autopilot 自身の開発環境をホストしている。更新中に自分の足場が消えないよう注意"
+      "note": "autopilot 自身の開発環境をホストしている。更新中に自分の足場が消えないよう注意",
+      "observability_impact": "壊れると Coder（人間・構築セッションがこの homelab で作業する開発環境）が使えなくなる。人間と構築セッションがこの homelab を観測・操作する経路の一つが失われる（CHARTER §4, issue #56 2026-08-04 21:38:00）"
     },
     {
       "id": "coder-postgres",
@@ -89,7 +93,8 @@
       "match": "image: postgres:",
       "upstream": "dockerhub:library/postgres",
       "policy": "auto",
-      "note": "メジャー更新 (17→18) はデータ移行が要るので必ず人間へ"
+      "note": "メジャー更新 (17→18) はデータ移行が要るので必ず人間へ",
+      "observability_impact": "coder の DB。壊れると Coder が起動できず、coder と同じ影響（開発環境・観測経路の喪失）が出る（T-0058, issue #56 2026-08-05 03:26:49）"
     },
     {
       "id": "immich-server",
@@ -155,7 +160,8 @@
       "match": "k8s-nameserver",
       "upstream": "github:tailscale/tailscale",
       "policy": "auto",
-      "note": "T-0025 で unstable-v1.91.150 → v1.98.9 に更新（#100）。訂正: T-0001/T-0005 時点（chart 1.90.9）では stable 相当のタグは無く unstable-vX.Y.Z のスナップショットのみだったが、chart 1.92 系以降は tailscale/tailscale の release tag と同じ非 floating な vX.Y.Z タグが ghcr.io / Docker Hub 両方に存在する。今後の更新は unstable-* に戻さず、tailscale-operator-chart と同じ vX.Y.Z で揃える"
+      "note": "T-0025 で unstable-v1.91.150 → v1.98.9 に更新（#100）。訂正: T-0001/T-0005 時点（chart 1.90.9）では stable 相当のタグは無く unstable-vX.Y.Z のスナップショットのみだったが、chart 1.92 系以降は tailscale/tailscale の release tag と同じ非 floating な vX.Y.Z タグが ghcr.io / Docker Hub 両方に存在する。今後の更新は unstable-* に戻さず、tailscale-operator-chart と同じ vX.Y.Z で揃える",
+      "observability_impact": "tailscale-operator-chart と同じ到達性の一部（tailnet 内の MagicDNS 名前解決）。壊れると名前解決経由のアクセスが失われる（IP 直指定は影響を受けない可能性がある）"
     },
     {
       "id": "coder-workspace-image",
@@ -200,7 +206,8 @@
       "mirrors": [".github/workflows/direct-push-guard.yml", ".github/workflows/release-image.yml"],
       "upstream": "github:actions/checkout",
       "policy": "auto",
-      "note": "T-0043/T-0044 で発見・v4→v7 に更新済み (run #16)。CI 全 job で使用"
+      "note": "T-0043/T-0044 で発見・v4→v7 に更新済み (run #16)。CI 全 job で使用",
+      "observability_impact": "CI 全 job が使用。壊れると CI（kustomize build / terraform validate / ops state validate / manifest-diff / nix flake check）が動かなくなり、autopilot の auto-merge の安全性の根拠（ruleset の必須チェック）が機能しなくなる"
     },
     {
       "id": "gha-azure-setup-helm",
@@ -211,7 +218,8 @@
       "match": "azure/setup-helm@",
       "upstream": "github:Azure/setup-helm",
       "policy": "auto",
-      "note": "T-0045 (run #17) で v4→v5 に更新。破壊的変更は Node24 ランタイムのみ（GitHub-hosted runner では透過的）"
+      "note": "T-0045 (run #17) で v4→v5 に更新。破壊的変更は Node24 ランタイムのみ（GitHub-hosted runner では透過的）",
+      "observability_impact": "kustomize build job (--enable-helm) が使用。壊れると manifest-diff / kustomize build の CI が動かなくなる"
     },
     {
       "id": "gha-hashicorp-setup-terraform",
@@ -222,7 +230,8 @@
       "match": "hashicorp/setup-terraform@",
       "upstream": "github:hashicorp/setup-terraform",
       "policy": "auto",
-      "note": "T-0046 (run #17) で v3→v4 に更新。破壊的変更は Node24 ランタイムのみ。terraform_wrapper: false のためラッパー由来の stdout 挙動変更（v3.0.0 時点の話）とも無関係"
+      "note": "T-0046 (run #17) で v3→v4 に更新。破壊的変更は Node24 ランタイムのみ。terraform_wrapper: false のためラッパー由来の stdout 挙動変更（v3.0.0 時点の話）とも無関係",
+      "observability_impact": "terraform validate job が使用。壊れると terraform validate の CI が動かなくなる"
     },
     {
       "id": "gha-cachix-install-nix-action",
@@ -233,7 +242,8 @@
       "match": "cachix/install-nix-action@",
       "upstream": "github:cachix/install-nix-action",
       "policy": "auto",
-      "note": "T-0043 (run #16) 時点で最新"
+      "note": "T-0043 (run #16) 時点で最新",
+      "observability_impact": "nix flake check job が使用。壊れると nix 側の変更が機械検証されなくなる"
     },
     {
       "id": "gha-cachix-cachix-action",
@@ -244,7 +254,8 @@
       "match": "cachix/cachix-action@",
       "upstream": "github:cachix/cachix-action",
       "policy": "auto",
-      "note": "T-0047 (run #17) で v15→v17 に更新。破壊的変更は Node24 ランタイムのみ。T-0050 (run #19) でこのファイルの実際の呼び出し（`name:` のみ、`authToken` 無し）を action 本体のソースで確認し、`authToken`/`signingKey` 無しでは push を一切行わない（pushMode=None）ため v17 の push 失敗伝播修正はこの workflow に影響しないと確定した（ops/CHARTER.md §5.4）"
+      "note": "T-0047 (run #17) で v15→v17 に更新。破壊的変更は Node24 ランタイムのみ。T-0050 (run #19) でこのファイルの実際の呼び出し（`name:` のみ、`authToken` 無し）を action 本体のソースで確認し、`authToken`/`signingKey` 無しでは push を一切行わない（pushMode=None）ため v17 の push 失敗伝播修正はこの workflow に影響しないと確定した（ops/CHARTER.md §5.4）",
+      "observability_impact": "release-image.yml（workflow_dispatch 専用、CI 非カバレッジ。CHARTER §5.4）が使用。CI では検証されないため壊れても次の手動実行まで気づけない"
     },
     {
       "id": "gha-softprops-action-gh-release",
@@ -255,7 +266,8 @@
       "match": "softprops/action-gh-release@",
       "upstream": "github:softprops/action-gh-release",
       "policy": "auto",
-      "note": "T-0048 (run #17) で v2→v3 に更新。破壊的変更は Node24 ランタイムのみ。non-draft/non-prerelease の使用範囲には無関係な変更（既存 draft の再利用、Gitea 対応等）のみ追加"
+      "note": "T-0048 (run #17) で v2→v3 に更新。破壊的変更は Node24 ランタイムのみ。non-draft/non-prerelease の使用範囲には無関係な変更（既存 draft の再利用、Gitea 対応等）のみ追加",
+      "observability_impact": "release-image.yml（workflow_dispatch 専用、CI 非カバレッジ。CHARTER §5.4）が使用。CI では検証されないため壊れても次の手動実行まで気づけない"
     },
     {
       "id": "gha-nix-installer-action",
@@ -266,7 +278,8 @@
       "match": "DeterminateSystems/nix-installer-action@",
       "upstream": "github:DeterminateSystems/nix-installer-action",
       "policy": "auto",
-      "note": "T-0042 (run #16) で @main の floating ref から固定した。Action 自体の pin と、実際にインストールされる Nix のバージョンは無関係（upstream README に明記）"
+      "note": "T-0042 (run #16) で @main の floating ref から固定した。Action 自体の pin と、実際にインストールされる Nix のバージョンは無関係（upstream README に明記）",
+      "observability_impact": "release-image.yml（workflow_dispatch 専用、CI 非カバレッジ。CHARTER §5.4）が使用。CI では検証されないため壊れても次の手動実行まで気づけない"
     }
   ]
 }

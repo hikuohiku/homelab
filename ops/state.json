@@ -307,8 +307,10 @@
       "at": "2026-08-05T03:50:00Z",
       "kind": "scheduled",
       "by": "cloud routine",
-      "summary": "前回の中断: ローカル main が origin から 121 コミット遅れて古いキャッシュのまま残っていたため checkout -B で追従（作業喪失なし）。オープン PR・autopilot ブランチとも無く中断なし。issue #56 の未読3件を反映: (1) 縛る変更は作成した起動の中で merge しない cooldown を CHARTER §4 の firm rule 化（実測の裏付け有無に関わらず対象）、(2) get_comments のページネーションの罠（perPage 未指定だと全件取れない）を自分でも実測し CHARTER §6 に明記、(3) judgment table 提案を T-0059 として起票。backlog の todo は T-0059 のみで今回は着手せず次回に回した",
-      "prs": []
+      "summary": "前回の中断: ローカル main が origin から 121 コミット遅れて古いキャッシュのまま残っていたため checkout -B で追従（作業喪失なし）。オープン PR・autopilot ブランチとも無く中断なし。issue #56 の未読3件を反映: (1) 縛る変更は作成した起動の中で merge しない cooldown を CHARTER §4 の firm rule 化（実測の裏付け有無に関わらず対象）、(2) get_comments のページネーションの罠（perPage 未指定だと全件取れない）を自分でも実測し CHARTER §6 に明記、(3) judgment table 提案を T-0059 として起票（#139）。続けて T-0059 自体（ops/inventory.json に observability_impact フィールドを追加）を完遂。純粋なメタデータ追加で cooldown 対象外のため同一起動内で auto-merge した",
+      "prs": [
+        139
+      ]
     }
   ]
 }
