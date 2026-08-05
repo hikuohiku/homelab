@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 110,
-  "updated": "2026-08-05",
+  "updated": "2026-08-06",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2044,8 +2044,8 @@
         "apps/vaultwarden/restic-backup-cronjob.yaml"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "T-0097 が『T-0108 で activeDeadlineSeconds を緩和したうえで再実行を待つ』として forward-reference していたが実体が起票されていなかった（T-0107 と同じ経緯）。#214 で timeout 緩和は既に着手済みだが、構築セッションの後続指摘（unlock 自動化・verbose 診断・timeout短縮での切り分け）はまだ manifest に反映されていない。次回以降で実装する。"
+      "pr": 223,
+      "notes": "T-0097 が『T-0108 で activeDeadlineSeconds を緩和したうえで再実行を待つ』として forward-reference していたが実体が起票されていなかった（T-0107 と同じ経緯）。#214 で timeout 緩和は既に着手済みだが、構築セッションの後続指摘（unlock 自動化・verbose 診断・timeout短縮での切り分け）はまだ manifest に反映されていない。次回以降で実装する。 | run #58: manifest 変更を実装した。apps/vaultwarden/restic-backup-verify-job.yaml に restic unlock・--verbose・RESTIC_PROGRESS_FPS=1 を追加し、診断のため activeDeadlineSeconds を 3600→300 に短縮（延ばす方向ではなく早く失敗させて途中経過を見る）。この Job は既にクラスタ上に Failed 状態で存在し Job.spec.template は不変フィールドのため、argocd.argoproj.io/sync-options: Replace=true を追加して ArgoCD が delete+recreate できるようにした。apps/vaultwarden/restic-backup-cronjob.yaml（本番）にも restic unlock のみを追加（timeout は変更しない）。ttlSecondsAfterFinished は元々未設定でログ保持の要件は満たしている。マージ後の実行結果（Complete/Failed）は autopilot が kubectl で自分で追える（Job/Pod の get/list は許可されている）が、--verbose の出力は Pod ログの読み取り権限が無いため見られない。失敗が続く場合は issue #56 で構築セッションにログ確認を依頼する。"
     }
   ]
 }

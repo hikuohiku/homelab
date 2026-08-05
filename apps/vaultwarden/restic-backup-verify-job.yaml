@@ -5,16 +5,28 @@
 #
 # 確認が取れ次第、この Job は削除する PR を出す（restic-backup-cronjob.yaml 側は変更しない、
 # CronJob の schedule は引き続き 03:40 UTC のまま）。
+#
+# T-0108: T-0097 で 1800s→3600s（#214）に緩和しても DeadlineExceeded は解消していない
+# （このジョブが実際に 3600s まで走った実績はまだ無く、緩和前の 1800s 失敗記録がそのまま
+# 残っていただけだった）。原因不明のまま timeout を延ばし続けるのではなく、診断のため
+# 意図的に短く戻し、restic unlock（stale lock 除去）と --verbose / RESTIC_PROGRESS_FPS で
+# 途中経過をログに残す。Pod のログは autopilot からは読めない（§5.5）ため、構築セッションに
+# issue #56 で確認を依頼する。
+#
+# T-0108: この Job オブジェクトは既に Failed 状態でクラスタに存在しており、
+# Job.spec.template は不変フィールドのため通常の patch では更新できない。
+# argocd.argoproj.io/sync-options: Replace=true で ArgoCD に delete+recreate させる。
 apiVersion: batch/v1
 kind: Job
 metadata:
   name: vaultwarden-restic-backup-verify
   namespace: vaultwarden
+  annotations:
+    argocd.argoproj.io/sync-options: Replace=true
 spec:
   backoffLimit: 1
-  # T-0097: 初回実行が DeadlineExceeded で失敗したため、restic-backup-cronjob.yaml と同じ理由で
-  # 3600s に揃える（immich 側の既存の実績値）
-  activeDeadlineSeconds: 3600
+  # T-0108: 診断目的で短く戻す（延ばす方向ではなく、早く失敗させて --verbose の途中経過を見る）
+  activeDeadlineSeconds: 300
   template:
     spec:
       automountServiceAccountToken: false
@@ -61,10 +73,14 @@ spec:
             - |
               set -eu
               restic snapshots >/dev/null 2>&1 || restic init
+              restic unlock
               restic backup /mnt/vaultwarden-data /staging/db.sqlite3 \
                 --exclude db.sqlite3 --exclude db.sqlite3-wal --exclude db.sqlite3-shm \
-                --exclude icon_cache
+                --exclude icon_cache \
+                --verbose
           env:
+            - name: RESTIC_PROGRESS_FPS
+              value: "1"
             - name: RESTIC_B2_BUCKET
               valueFrom:
                 secretKeyRef:

@@ -64,6 +64,10 @@ spec:
       # 使っており実績があるため、その値に揃える。根本原因（なぜ vaultwarden だけ時間がかかったか）
       # は未確定のまま、失敗を解消する方向の緩和として先に反映する（CHARTER §4、縛る変更のcooldownは
       # 失敗を緩める変更には適用しない）
+      #
+      # T-0108: DeadlineExceeded で restic のロックが残ったまま次回以降も失敗し続ける状態になって
+      # いた（構築セッションが restic unlock --remove-all で解消した実例あり）。1回の失敗が
+      # 恒久的な失敗にならないよう、backup 実行前に stale lock だけを外す restic unlock を先頭に入れる
       activeDeadlineSeconds: 3600
       template:
         spec:
@@ -117,6 +121,7 @@ spec:
                 - |
                   set -eu
                   restic snapshots >/dev/null 2>&1 || restic init
+                  restic unlock
                   restic backup /mnt/vaultwarden-data /staging/db.sqlite3 \
                     --exclude db.sqlite3 --exclude db.sqlite3-wal --exclude db.sqlite3-shm \
                     --exclude icon_cache
