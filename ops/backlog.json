@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 44,
+  "next_id": 49,
   "updated": "2026-08-05T06:20:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
@@ -783,6 +783,89 @@
         ".github/workflows/direct-push-guard.yml",
         ".github/workflows/release-image.yml",
         "ops/inventory.json"
+      ],
+      "created": "2026-08-05",
+      "pr": null
+    },
+    {
+      "id": "T-0044",
+      "domain": "homelab",
+      "title": "actions/checkout を v4 → v7 に上げる（全 workflow）",
+      "kind": "ci",
+      "risk": "low",
+      "status": "done",
+      "priority": 26,
+      "why": "T-0043 (run #16) の調査で判明。v4 は現在から 3 メジャー遅れ（v5/v6/v7 は同日リリース）。CHANGELOG を確認: v5.0.0 は Node 24 ランタイム更新（GitHub-hosted runner では透過的）、v6.0.0 は credential の永続化方法の内部実装変更（`.git/config` を直接読む使い方はこの repo に無い）、v7.0.0 は `pull_request_target`/`workflow_run` での fork PR checkout を塞ぐ変更（この repo は 3 workflow とも `pull_request`（target ではない）/`push`/`workflow_dispatch` のみで該当しない）。全 8 箇所とも fetch-depth や path の指定以外は素の checkout で、影響する破壊的変更は無いと判断した",
+      "dod": "ci.yml (6箇所) / direct-push-guard.yml (1箇所) / release-image.yml (1箇所) の actions/checkout がすべて v7。CI が green",
+      "refs": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/direct-push-guard.yml",
+        ".github/workflows/release-image.yml"
+      ],
+      "created": "2026-08-05",
+      "pr": 116,
+      "notes": "run #16: WebFetch で actions/checkout の CHANGELOG.md を原文確認。この repo の使用範囲（pull_request（非 target）、fetch-depth 0 の使用、submodule 不使用、persist-credentials のデフォルト挙動に依存する git 操作なし）に影響する破壊的変更は無いと確認して着手"
+    },
+    {
+      "id": "T-0045",
+      "domain": "homelab",
+      "title": "azure/setup-helm を v4 → v5 に上げる",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 27,
+      "why": "T-0043 (run #16) の調査で判明。現在 v4、最新は v5（Node.js ランタイムを node20→node24 に更新する破壊的変更のみ、GitHub-hosted runner では透過的なはず）",
+      "dod": "apps/ CI (ci.yml) 内の azure/setup-helm@v4 が v5 になり CI が green",
+      "refs": [
+        ".github/workflows/ci.yml"
+      ],
+      "created": "2026-08-05",
+      "pr": null
+    },
+    {
+      "id": "T-0046",
+      "domain": "homelab",
+      "title": "hashicorp/setup-terraform を v3 → v4 に上げる",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 27,
+      "why": "T-0043 (run #16) の調査で判明。現在 v3、最新は v4（Node.js 24 へのランタイム更新が唯一の破壊的変更）",
+      "dod": "ci.yml の hashicorp/setup-terraform@v3 が v4 になり CI が green",
+      "refs": [
+        ".github/workflows/ci.yml"
+      ],
+      "created": "2026-08-05",
+      "pr": null
+    },
+    {
+      "id": "T-0047",
+      "domain": "homelab",
+      "title": "cachix/cachix-action を v15 → v17 に上げる",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 27,
+      "why": "T-0043 (run #16) の調査で判明。現在 v15、最新は v17（2 メジャー遅れ）。v16/v17 は Node 24 移行と daemon hook のハードニングが主な変更点。cachix push 用の認証設定 (name: hikuohiku) への影響は release note を精査して確認する",
+      "dod": "ci.yml (nix flake check job) の cachix/cachix-action@v15 が v17 になり CI が green。cachix への push（あれば）が引き続き成功することを確認",
+      "refs": [
+        ".github/workflows/ci.yml"
+      ],
+      "created": "2026-08-05",
+      "pr": null
+    },
+    {
+      "id": "T-0048",
+      "domain": "homelab",
+      "title": "softprops/action-gh-release を v2 → v3 に上げる",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 27,
+      "why": "T-0043 (run #16) の調査で判明。現在 v2、最新は v3。release-image.yml（workflow_dispatch 手動実行のみ）でのリリース作成に使用",
+      "dod": "release-image.yml の softprops/action-gh-release@v2 が v3 になる。workflow_dispatch のため実行時検証は次回の手動実行まで難しく、release note に破壊的変更が無いことの確認で足りるとする",
+      "refs": [
+        ".github/workflows/release-image.yml"
       ],
       "created": "2026-08-05",
       "pr": null
