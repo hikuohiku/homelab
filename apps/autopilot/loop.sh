@@ -39,6 +39,27 @@ log() {
 # PR / autopilot-* ブランチ経由なので、途中で落ちても次の Pod が拾える
 trap 'log "received SIGTERM, stopping after current step"; exit 0' TERM INT
 
+trust_workspace() {
+  # claude は未 trust のワークスペースでは repo 側 .claude/settings.json の
+  # permissions.allow を無視する（起動直後のログで実際に 18 件が無視された）。
+  # Pod には trust dialog に答える人間がいないので、受理済みとして書いておく。
+  mkdir -p "${HOME}"
+  CLAUDE_JSON="${HOME}/.claude.json" REPO="${REPO_DIR}" python3 - <<'EOF'
+import json
+import os
+
+path = os.environ["CLAUDE_JSON"]
+try:
+    with open(path) as f:
+        cfg = json.load(f)
+except (OSError, ValueError):
+    cfg = {}
+cfg.setdefault("projects", {}).setdefault(os.environ["REPO"], {})["hasTrustDialogAccepted"] = True
+with open(path, "w") as f:
+    json.dump(cfg, f)
+EOF
+}
+
 setup_git() {
   # トークンを remote URL に埋め込むと .git/config に平文で残り、`git remote -v` や
   # エラーメッセージに載りうる。credential helper 経由なら環境変数のまま渡せる
@@ -72,8 +93,14 @@ iterate() {
   # headless では既定で権限確認が要る。Pod は read-only RBAC の非 root コンテナで、
   # 確認に応じられる人間もいないので bypass する（CHARTER §5.1 の「止まるくらいなら
   # 最初から確認を出さない」と同じ理由）。
+  set -o pipefail
   timeout -k 30 "${ITERATION_TIMEOUT_SECONDS}" \
-    claude -p --permission-mode bypassPermissions "${PROMPT}"
+    claude -p --permission-mode bypassPermissions \
+      --output-format stream-json --verbose "${PROMPT}" \
+    | python3 /config/render.py
+  rc=$?
+  set +o pipefail
+  return "${rc}"
 }
 
 main() {
@@ -81,6 +108,7 @@ main() {
   # ホームに書けるよう、先に実体を作っておく
   mkdir -p "${WORKDIR}" "${HOME}"
   setup_git
+  trust_workspace
 
   log "started (interval=${INTERVAL_SECONDS}s timeout=${ITERATION_TIMEOUT_SECONDS}s repo=${REPO_URL})"
 
