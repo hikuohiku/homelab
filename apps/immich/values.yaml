@@ -3,7 +3,7 @@ controllers:
     containers:
       main:
         image:
-          tag: v2.6.3
+          tag: v2.7.5
         env:
           DB_HOSTNAME: immich-postgres
           DB_USERNAME: immich
@@ -70,7 +70,7 @@ machine-learning:
         main:
           image:
             repository: ghcr.io/immich-app/immich-machine-learning
-            tag: v2.6.3
+            tag: v2.7.5
           env:
             TRANSFORMERS_CACHE: /cache
             HF_XET_CACHE: /cache/huggingface-xet

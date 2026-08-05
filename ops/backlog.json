@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 86,
-  "updated": "2026-08-05T08:10:00Z",
+  "next_id": 88,
+  "updated": "2026-08-05T08:25:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1561,6 +1561,42 @@
       "created": "2026-08-05",
       "pr": 169,
       "notes": "run #38: CHARTER §2 に schedule (5/15/25 */6 * * *) から算出した実行予定時刻（00:05/06:05/12:05/18:05 UTC + namespace ごとの分オフセット）を明記し、それを過ぎてもなお 404 なら CronJob の異常を疑う基準を追加した"
+    },
+    {
+      "id": "T-0086",
+      "domain": "homelab",
+      "title": "immich server / machine-learning を v2.6.3 → v2.7.5 に上げる（v2.x 系最終、v3 メジャー更新は対象外）",
+      "kind": "upgrade",
+      "risk": "medium",
+      "status": "done",
+      "priority": 14,
+      "why": "run #39 の subagent 調査（inventory.json の auto-policy 対象の棚卸し）で v2.7.5 が出ていると判明。v3.x は既に T-0027 として別途 blocked（バックアップ健全性未確認のため見送り）だが、v2.x 系内の更新はデータ移行を伴わないため対象外にする理由が無い",
+      "dod": "apps/immich/values.yaml の server / machine-learning 両方のタグが v2.7.5。ops/inventory.json の current も両方更新。v2.6.3 から v2.7.5 までの中間リリース(v2.7.0〜v2.7.4)を原文で確認し breaking change が無いことを確かめる",
+      "refs": [
+        "apps/immich/values.yaml",
+        "ops/inventory.json"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #39: subagent に v2.6.3→v2.7.5 の全中間リリース(v2.7.0〜v2.7.5)を原文確認させた。env var・values.yaml キー・ストレージテンプレート形式の破壊的変更は無し（v2.7.1 はサーバー起動が壊れた欠陥リリースだが v2.7.2 で修正済み、v2.7.5 まで一直線に上げれば影響なし）。immich-chart (0.13.1) はこのリポジトリが image.tag を明示的に上書きしている構造のため chart 側のバージョンとは独立、変更不要と再確認。valkey (9.1.1-alpine) は対象外で変更なし。postgres は self-hosted cloudnative-vectorchord で immich チャート管理外のため無関係。残った不確実性（v2.7.0/2.7.1 の一時的な ML numpy クラッシュが node01 の CPU で再発しないか）は T-0087 として post-deploy 確認タスクを起票した"
+    },
+    {
+      "id": "T-0087",
+      "domain": "homelab",
+      "title": "T-0086 (immich v2.7.5) 反映後、machine-learning Pod が健全に起動しているか ops-health-report で確認する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "blocked",
+      "priority": 15,
+      "why": "T-0086 の調査で、v2.7.0/v2.7.1 時点で一部 CPU（AVX2 非対応等）向けに ML コンテナが numpy 関連でクラッシュする一時的な不具合があったと判明（v2.7.2 で修正済みのため v2.7.5 には修正が含まれるが、node01 の CPU 世代でも問題ないかは未確認）",
+      "dod": "T-0086 の PR が merge・ArgoCD に反映されてから1起動以上後、ops-health-report ブランチの pod_issues に immich-machine-learning の CrashLoopBackOff/Error が無いことを確認する。問題が無ければ done、あれば v2.6.3 への revert PR を出す",
+      "blocked_by": "T-0086 の反映待ち（ArgoCD sync + 次回 health report、CronJob は30分毎）",
+      "refs": [
+        "apps/immich/values.yaml",
+        "ops/health/latest.json"
+      ],
+      "created": "2026-08-05",
+      "pr": null
     }
   ]
 }
