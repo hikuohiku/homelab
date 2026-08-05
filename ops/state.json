@@ -6,7 +6,7 @@
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T08:16:27Z"
+    "last_read": "2026-08-05T08:23:09Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -458,6 +458,16 @@
       "summary": "前回の中断: なし。ops-health-report ブランチで T-0083（history ファイル）の生成を確認し、ArgoCD 全10アプリ Synced/Healthy、node の実ディスク容量は変わらず約48.9GiB（T-0079 は引き続き人間の報告待ち）。issue #56 の未読は人間自身の相槌1件のみで新規指示なし。backlog の todo が0件だったため subagent に inventory.json の auto-policy 対象20件の上流最新版チェックを投げ、immich server/machine-learning (v2.6.3→v2.7.5) と tailscale-operator-chart/k8s-nameserver (v1.98.9→v1.102.2) の2件の差分を発見。1 PR 1 論点に従い低リスクの immich から着手し、中間リリース(v2.7.0〜v2.7.5)の原文確認（破壊的変更なし、v2.7.1のみ欠陥リリースだが2.7.5まで一直線に上げれば無関係）を経て更新（T-0086, #171）。残った不確実性（旧CPU向けの一時的なMLクラッシュ既知不具合、v2.7.2で修正済みだがnode01での再発は未確認）を T-0087（blocked）として起票。tailscale-operator-chart の更新は到達性の根幹のため直列化ルールに従い今回は着手せず、次回の調査候補として残した",
       "prs": [
         171
+      ]
+    },
+    {
+      "n": 40,
+      "at": "2026-08-05T08:22:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 の未読1件（08:16:27）を反映: #171（T-0086, immich v2.7.5）のロールバック手順が『revert 後にデータ不整合が残る想定はない』と言い切っていたのは表現が強すぎたという指摘。マイグレーションは前進のみでコードだけ戻る点を明記すべきという内容を受け、CHARTER §4 に『DB を持つコンポーネントのロールバック手順には必ずスキーマの扱いを明記する』を追記し、T-0086 の backlog notes にも訂正を追記した（#172, auto-merged）。ラップアップ（state.json runs への自身の記録・last_read 更新）を終える前に起動が終了しており、run #41 がこの run の記録を追記して埋め合わせた",
+      "prs": [
+        172
       ]
     }
   ]
