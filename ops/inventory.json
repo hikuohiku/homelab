@@ -133,12 +133,12 @@
       "id": "immich-postgres",
       "kind": "image",
       "name": "cloudnative-vectorchord",
-      "current": "16.14-1.1.1",
+      "current": "16.9-0.4.3",
       "file": "apps/immich/postgres.yaml",
       "match": "vectorchord",
       "upstream": "github:tensorchord/VectorChord-images",
       "policy": "manual",
-      "note": "Immich のベクタ DB。データを持つため拡張のメジャー更新は自動追随せず、都度 CHARTER §4 の高リスク手順（バックアップ復元確認 + ALTER EXTENSION UPDATE/REINDEX を伴う専用 Job）を踏む（T-0029）"
+      "note": "Immich のベクタ DB。データを持つため拡張のメジャー更新は自動追随せず、都度 CHARTER §4 の高リスク手順（バックアップ復元確認 + ALTER EXTENSION UPDATE/REINDEX を伴う専用 Job）を踏む（T-0029）。16.14-1.1.1 は #244 で一度 merge したが immich-postgres が CrashLoopBackOff（コンテナ起動時に `exec: \"-c\": executable file not found in $PATH`）になり #247 で revert した（run #72 続き）。イメージの ENTRYPOINT/CMD が 16.9-0.4.3 と 16.14-1.1.1 の間で変わっており、`args: [-c, shared_preload_libraries=...]` だけを渡す既存の manifest では 16.14-1.1.1 を起動できない。再着手する場合はまずこのイメージの Dockerfile/entrypoint スクリプトの差分を確認し、必要なら `command:` を明示する"
     },
     {
       "id": "busybox",
