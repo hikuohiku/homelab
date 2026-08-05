@@ -963,7 +963,7 @@
         "terraform/proxmox/vm-nixos.tf"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 129,
       "notes": "run #22: subagent に新しい調査観点探しを投げ、terraform/proxmox/vm-nixos.tf 内の IP 重複を発見（リポジトリ全体を grep し他にこの IP を参照する箇所が無いことも確認済み）。`locals { node01_ip = \"192.168.0.129\" }` を追加し、`ip_config.ipv4.address = \"${local.node01_ip}/24\"` と `output \"node01_ip\" { value = local.node01_ip }` に置き換えた。値は不変のため CI (`terraform fmt -check`/`validate`) で挙動が変わらないことを確認できる想定"
     }
   ]
