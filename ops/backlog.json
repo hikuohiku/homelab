@@ -1872,7 +1872,7 @@
       "title": "ci.yml の azure/setup-helm version input (helm バイナリ) を v3.16.4 → v3.21.3 に上げる",
       "kind": "upgrade",
       "risk": "low",
-      "status": "in_progress",
+      "status": "done",
       "priority": 20,
       "why": "T-0090（run #43）で ops/inventory.json に gha-setup-helm-version として監視対象に加えたが、追加後に実際の上流最新版と比較したことが一度も無く 5 minor 分（v3.17〜v3.21）遅れていた。kustomize build --enable-helm（manifests job・manifest-diff job の両方）が使う helm バイナリ本体",
       "dod": "ci.yml の2箇所（manifests job・manifest-diff job）の version: が v3.21.3。ops/inventory.json の gha-setup-helm-version の current/match も更新。v3.17.0〜v3.21.3 の全リリースノートを原文確認し、helm template のレンダリング挙動に影響する breaking change が無いことを確認する",
@@ -1881,7 +1881,7 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 200,
       "notes": "subagent 2件で調査: (1) 既存 backlog に重複が無いことを確認したうえで発見（T-0045 は Action 自体の pin、T-0090 はファイル内2箇所の内部一致検証のみで上流比較は対象外だった）。(2) v3.16.4→v3.21.3 間の全25リリース（v3.17.0〜v3.21.3）の release note を原文確認。Capabilities.KubeVersion / APIVersions のデフォルトは不変、helm template のフラグ既定値変更なし、新規必須フィールドなし。narrow な非破壊的エッジケース3件（v3.17.1 の subchart values null override 修正、v3.18.5 の maintainers 空エントリ拒否、v3.21.1 の ClientOnly panic→エラー化）はいずれもこのリポジトリが使う argo-cd/dex/external-secrets/immich/tailscale-operator の標準的な chart には該当しない。CI green（kustomize build --enable-helm 自体が実地検証を兼ねる）を根拠に low risk のまま着手した"
     }
   ]
