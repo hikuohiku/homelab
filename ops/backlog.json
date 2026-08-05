@@ -1481,7 +1481,7 @@
         "apps/coder/pvc-usage-cronjob.yaml"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 166,
       "notes": "run #35: ops/check_version_sync.py と同じ標準ライブラリのみの方針で ops/check_pvc_usage_script_sync.py を作成。ブロックスカラー（`pvc_usage.py: |`）をインデント境界で抽出し3ファイル間で完全一致を検証する。既存の ops job（ruleset の必須チェックの1つ）にステップとして追加したため、新しい required check の登録依頼は不要（既存job内の追加ステップのため）。手元で1ファイルだけ書き換えて非0終了することを確認済み。フル共有化（Kustomize component 化等のアーキテクチャ変更）は見送り、drift の機械検出のみに留めた（CHARTER『器を太らせる前に使い切る』、既存パターンの横展開で足りるため）"
     }
   ]
