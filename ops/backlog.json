@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 49,
-  "updated": "2026-08-05T01:09:00Z",
+  "updated": "2026-08-05T01:12:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -813,7 +813,7 @@
       "title": "azure/setup-helm を v4 → v5 に上げる",
       "kind": "ci",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 27,
       "why": "T-0043 (run #16) の調査で判明。現在 v4、最新は v5（Node.js ランタイムを node20→node24 に更新する破壊的変更のみ、GitHub-hosted runner では透過的なはず）",
       "dod": "apps/ CI (ci.yml) 内の azure/setup-helm@v4 が v5 になり CI が green",
@@ -821,7 +821,8 @@
         ".github/workflows/ci.yml"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": 119,
+      "notes": "run #17: subagent に v4.0.0〜v5.0.1 の release notes を原文確認させた。破壊的変更は Node20→Node24 ランタイム更新のみ（GitHub-hosted runner では透過的）。抽出バイナリの chmod 777→755 化はセキュリティ向上のみで利用側に影響なし。version 入力（v3.16.4 固定）や他の入出力契約に変更なし。ci.yml 内 2 箇所とも v5 に更新"
     },
     {
       "id": "T-0046",
