@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 49,
-  "updated": "2026-08-05T06:20:00Z",
+  "updated": "2026-08-05T01:09:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -774,7 +774,7 @@
       "title": ".github/workflows/*.yml の Action バージョンを棚卸しし、監視の要否を判断する",
       "kind": "investigate",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 26,
       "why": "T-0042 (run #16) で発見。ops/inventory.json はアプリ/インフラのバージョンしか監視しておらず、CI workflow が使う GitHub Actions（actions/checkout, azure/setup-helm, hashicorp/setup-terraform, cachix/install-nix-action, cachix/cachix-action, softprops/action-gh-release 等）は誰も追っていない。T-0042 で見つけた `@main` の floating ref は個別に直したが、他にも同種の問題（メジャータグ pin だが実際は古いメジャー、等）が残っていないか未確認",
       "dod": "各 workflow の `uses:` 行を洗い出し、(1) floating ref（`@main`/`@master`等ブランチ名）が残っていないか (2) 各メジャータグの最新版から大きく遅れていないか を確認する。継続監視が要ると判断すれば ops/inventory.json に kind: \"github-action\" 相当のエントリとして追加する。この調査自体ではコードを変更しない",
@@ -785,7 +785,8 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": 118,
+      "notes": "run #17: T-0042 で見つけた floating ref は release-image.yml の nix-installer-action のみで、他に `@main`/`@master` の残りは無いことを確認済み（run #16）。継続監視が要ると判断し、ops/inventory.json に kind: \"github-action\" のエントリ 7 件（actions/checkout, azure/setup-helm, hashicorp/setup-terraform, cachix/install-nix-action, cachix/cachix-action, softprops/action-gh-release, DeterminateSystems/nix-installer-action）を追加。これで T-0040（inventory.json の定期再調査、weekly）が自動的に GitHub Actions もカバーする"
     },
     {
       "id": "T-0044",

@@ -189,6 +189,84 @@
       "upstream": "github:bpg/terraform-provider-proxmox",
       "policy": "manual",
       "note": "完全一致 pin（理由コメントあり）。上げるときは理由ごと見直す"
+    },
+    {
+      "id": "gha-actions-checkout",
+      "kind": "github-action",
+      "name": "actions/checkout",
+      "current": "v7",
+      "file": ".github/workflows/ci.yml",
+      "match": "actions/checkout@",
+      "mirrors": [".github/workflows/direct-push-guard.yml", ".github/workflows/release-image.yml"],
+      "upstream": "github:actions/checkout",
+      "policy": "auto",
+      "note": "T-0043/T-0044 で発見・v4→v7 に更新済み (run #16)。CI 全 job で使用"
+    },
+    {
+      "id": "gha-azure-setup-helm",
+      "kind": "github-action",
+      "name": "azure/setup-helm",
+      "current": "v4",
+      "file": ".github/workflows/ci.yml",
+      "match": "azure/setup-helm@",
+      "upstream": "github:Azure/setup-helm",
+      "policy": "auto",
+      "note": "T-0043 (run #16) で発見。最新 v5 は Node24 ランタイム更新のみ → T-0045"
+    },
+    {
+      "id": "gha-hashicorp-setup-terraform",
+      "kind": "github-action",
+      "name": "hashicorp/setup-terraform",
+      "current": "v3",
+      "file": ".github/workflows/ci.yml",
+      "match": "hashicorp/setup-terraform@",
+      "upstream": "github:hashicorp/setup-terraform",
+      "policy": "auto",
+      "note": "T-0043 (run #16) で発見。最新 v4 は Node24 ランタイム更新のみ → T-0046"
+    },
+    {
+      "id": "gha-cachix-install-nix-action",
+      "kind": "github-action",
+      "name": "cachix/install-nix-action",
+      "current": "v31",
+      "file": ".github/workflows/ci.yml",
+      "match": "cachix/install-nix-action@",
+      "upstream": "github:cachix/install-nix-action",
+      "policy": "auto",
+      "note": "T-0043 (run #16) 時点で最新"
+    },
+    {
+      "id": "gha-cachix-cachix-action",
+      "kind": "github-action",
+      "name": "cachix/cachix-action",
+      "current": "v15",
+      "file": ".github/workflows/release-image.yml",
+      "match": "cachix/cachix-action@",
+      "upstream": "github:cachix/cachix-action",
+      "policy": "auto",
+      "note": "T-0043 (run #16) で発見。最新 v17 は 2 メジャー遅れ → T-0047"
+    },
+    {
+      "id": "gha-softprops-action-gh-release",
+      "kind": "github-action",
+      "name": "softprops/action-gh-release",
+      "current": "v2",
+      "file": ".github/workflows/release-image.yml",
+      "match": "softprops/action-gh-release@",
+      "upstream": "github:softprops/action-gh-release",
+      "policy": "auto",
+      "note": "T-0043 (run #16) で発見。最新 v3 → T-0048"
+    },
+    {
+      "id": "gha-nix-installer-action",
+      "kind": "github-action",
+      "name": "DeterminateSystems/nix-installer-action",
+      "current": "v22",
+      "file": ".github/workflows/release-image.yml",
+      "match": "DeterminateSystems/nix-installer-action@",
+      "upstream": "github:DeterminateSystems/nix-installer-action",
+      "policy": "auto",
+      "note": "T-0042 (run #16) で @main の floating ref から固定した。Action 自体の pin と、実際にインストールされる Nix のバージョンは無関係（upstream README に明記）"
     }
   ]
 }
