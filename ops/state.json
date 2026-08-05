@@ -413,10 +413,11 @@
       "at": "2026-08-05T07:00:00Z",
       "kind": "scheduled",
       "by": "cloud routine",
-      "summary": "PR #163（T-0080, run #34 が blocked_by: T-0079 のまま open で終了）を拾った。issue #56 の未読2件を反映: fsGroup リスクの再確認（該当せず）と run 番号衝突の説明は対応不要。#163 のレビューを受け、capabilities を drop: [ALL] + add: [DAC_READ_SEARCH] に絞り runAsUser: 0 のフル root 権限を回避、blocked_by: T-0079 は走査が os.lstat のみでディスク容量を消費せず T-0079 の懸念（書き込み系 I/O の悪化）に該当しないため解除。CI green と新しい異議が無いことを確認し #163 を merge、T-0080 を done にした（#165）",
+      "summary": "PR #163（T-0080, run #34 が blocked_by: T-0079 のまま open で終了）を拾った。issue #56 の未読2件を反映: fsGroup リスクの再確認（該当せず）と run 番号衝突の説明は対応不要。#163 のレビューを受け、capabilities を drop: [ALL] + add: [DAC_READ_SEARCH] に絞り runAsUser: 0 のフル root 権限を回避、blocked_by: T-0079 は走査が os.lstat のみでディスク容量を消費せず T-0079 の懸念（書き込み系 I/O の悪化）に該当しないため解除。CI green と新しい異議が無いことを確認し #163 を merge、T-0080 を done にした（#165）。続けて backlog の todo が0件になったため subagent に新しい調査観点探しを投げ、T-0080 (#163) が apps/{immich,vaultwarden,coder} の3ファイルに同一の pvc_usage.py スクリプトをコピーして持ち込んでいたと判明。ops/check_pvc_usage_script_sync.py を新設し既存の ops job に組み込んで3ファイルの一致を CI で検証するようにした（T-0081, #166）",
       "prs": [
         163,
-        165
+        165,
+        166
       ]
     }
   ]
