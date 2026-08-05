@@ -309,7 +309,10 @@ def main():
             "Coder workspace ごとの動的 PVC は対象外、T-0078 参照）。RBAC は get/list/(configmaps のみ get) "
             "で、write 系の verb は含まない。このファイルは最新1点のみで上書きされる。ピーク値の傾向を"
             "見るには ops/health/history/YYYY-MM-DD.jsonl（1行1回分、このレポートと同じ内容）を辿ること"
-            "（T-0083）。"
+            "（T-0083）。 nodes[].allocatable/capacity の ephemeral-storage は kubelet が一時ストレージ "
+            "監視用に計算する値であり、ルートファイルシステムの全体サイズとは別物（node01 の root "
+            "ファイルシステムは実際には約252GiBあるが、この値は約48.9GiBしか出ない）。ディスク容量の "
+            "確認にこの値を使わないこと（T-0079, issue #56 2026-08-05 15:45:04 参照）。"
         ),
     }
 
