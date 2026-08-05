@@ -329,6 +329,18 @@
       "policy": "auto",
       "note": "manifests job と manifest-diff job が GitHub Releases から curl で直接ダウンロードしている kustomize バイナリのバージョン。GitHub Action ではないため gha-* エントリとは別扱い。2箇所に独立して書かれている（T-0090。ops/check_version_sync.py の GROUPS で内部一致を検証）",
       "observability_impact": "kustomize build job と manifest-diff job が使用。2箇所がずれると job ごとに異なる kustomize バージョンでレンダリングされ、T-0036 の削除検出（manifest-diff）がツールバージョン差分由来の偽陽性/偽陰性を出しうる"
+    },
+    {
+      "id": "terraform-binary",
+      "kind": "binary",
+      "name": "terraform (hashicorp/setup-terraform terraform_version input)",
+      "current": "1.15.8",
+      "file": ".github/workflows/ci.yml",
+      "match": "terraform_version:",
+      "upstream": "github:hashicorp/terraform",
+      "policy": "auto",
+      "note": "terraform job がインストールする terraform バイナリ本体のバージョン。terraform/proxmox/providers.tf の required_version (\"~> 1.15\") の範囲内で揃える。T-0091 (run #43) で発見時点 1.15.0 が最新 1.15.8 より8パッチ遅れていた（required_version の範囲は満たすため CI は気づけない）ことを機に新設。CHANGELOG 全文確認（1.15.1〜1.15.8）で breaking change 無し、fmt/validate/init への影響も軽微（backend block validation の追加→撤回、ログ整形のみ）と確認済み",
+      "observability_impact": "terraform validate job が使用。壊れると terraform validate の CI が動かなくなる"
     }
   ]
 }
