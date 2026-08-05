@@ -119,6 +119,14 @@ backlog が空、または全部 `blocked` のときは**調査タスクを自�
 
 ### 共通ルール
 
+- **新しい task id をブランチ名・commit message・PR タイトルに使う前に、`ops/backlog.json` に
+  同じ id が既に存在しないか確認する。** `next_id` を読むだけでは足りない（run #48 の実例:
+  backlog.json にタスクとして正式に起票せず PR の見出し・記録用のラベルとして id を使った際、
+  `next_id` を確認せず「T-0095」を割り当てたところ、実は run #47 が既に同じ id で別タスク
+  （apps/README.md の旧ブートストラップ削除）を起票済みだった。backlog.json 自体に重複エントリは
+  作らなかったが、commit/PR タイトル上で同じ id が2つの別タスクを指す表記ゆれが残った）。
+  backlog に正式起票しない一時的なラベルであっても、`grep '"id": "T-XXXX"' ops/backlog.json`
+  で既存の有無を確認してから使う
 - ブランチ名は `autopilot/<task-id>-<slug>`。**task-id の大文字小文字も含めてそのまま使う**
   （`autopilot/T-0037-...` が正、`autopilot/t0037-...` のような表記ゆれを作らない）。
   同じタスクで PR を作り直す（レビュー指摘で作り直す、他セッションと重複した等）ときは、

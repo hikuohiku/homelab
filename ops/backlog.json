@@ -1734,7 +1734,7 @@
       "title": "apps/README.md の『事前設定 (初回のみ)』が使われていない旧ブートストラップ手順を案内している",
       "kind": "docs",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 41,
       "why": "run #47 の subagent 調査で発見。apps/README.md の『K3s シークレットの事前生成』(openssl で CA/Token を作り `doppler secrets set K3S_TOKEN=... K3S_CA_CERT=... K3S_CA_KEY=...`) と『VM 再構築後』の `just inject-secrets` は、リポジトリ全体を grep しても K3S_TOKEN/K3S_CA_CERT/K3S_CA_KEY を参照する箇所が無く、justfile にも inject-secrets という recipe が存在しない（確認済み、run #47）。実際のブートストラップは同ファイル前半に書かれている sops-nix → doppler-token Secret → ArgoCD/ESO の経路のみで完結しており、この節は sops-nix 導入前の古い手順の残骸と見られる。VM 再構築の際にこの節を真に受けると、何も消費されない Doppler 変数を設定する無駄な作業と、実行すると失敗する `just inject-secrets`（unknown recipe）に時間を溶かす",
       "dod": "K3s シークレット事前生成の節と `just inject-secrets` の呼び出しを apps/README.md から削除する（または、実際に使われている sops-nix 経路への書き換えとして残す）。削除前に本当にどこからも参照されていないことを再度 grep で確認する",
@@ -1744,9 +1744,8 @@
         "nix/images/proxmox-cloud/configuration.nix"
       ],
       "created": "2026-08-05",
-      "status": "done",
-      "pr": null,
-      "notes": "run #47: 再度 grep で確認（K3S_TOKEN/K3S_CA_CERT/K3S_CA_KEY/inject-secrets ともリポジトリ内でこのファイル以外に参照なし）。DoD どおり『K3s シークレットの事前生成』節と『VM 再構築後』節（`just inject-secrets`）を削除。`Doppler プロジェクト設定`（TAILSCALE_CLIENT_ID/SECRET）は apps/external-secrets/tailscale-oauth-external-secret.yaml が実際に参照しており有効なため残置"
+      "pr": 189,
+      "notes": "run #47: 再度 grep で確認（K3S_TOKEN/K3S_CA_CERT/K3S_CA_KEY/inject-secrets ともリポジトリ内でこのファイル以外に参照なし）。DoD どおり『K3s シークレットの事前生成』節と『VM 再構築後』節（`just inject-secrets`）を削除。`Doppler プロジェクト設定`（TAILSCALE_CLIENT_ID/SECRET）は apps/external-secrets/tailscale-oauth-external-secret.yaml が実際に参照しており有効なため残置 | run #48: PR番号(#189)を記録に反映、重複していたstatusキーを整理"
     },
     {
       "id": "T-0096",
