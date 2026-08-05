@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T06:41:00Z",
+  "updated": "2026-08-05T06:50:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -397,6 +397,16 @@
       "by": "cloud routine",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。着手直後に、同じ cron から同時刻に起動した別セッション（run #32 を先に使用）が T-0077 を分割実装済み（metrics-server 経由のコンテナ実メモリ/CPU 収集、#161 merge 済み）・T-0080（PVC実使用量）を起票済みと判明。自分が用意していたローカル変更（T-0077 を丸ごと blocked にする案）は stale だったため破棄し、origin/main へ reset して再出発（journal 側は run #33 に採番し直した）。T-0080 に、自分が独自に見つけていた懸念（fsGroup が既存 Pod と食い違うと readOnly マウントでも kubelet が再帰的 chown を試みうるリスク、ディスク逼迫が疑われる状況での追加走査の危険性）を notes として追記し、T-0079 待ちの blocked_by を付けた。同一 cron から複数セッションが同時起動し run 番号が衝突する事例を初めて確認",
       "prs": []
+    },
+    {
+      "n": 34,
+      "at": "2026-08-05T06:35:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "PR #161（T-0077, metrics-server 経由のコンテナ実メモリ/CPU 収集）の merge を見届けた後、T-0080（PVC実使用量収集）に着手。immich/vaultwarden/coder の3 namespace それぞれに pvc-usage-reporter CronJob を実装（対象 PVC を readOnly マウントし標準ライブラリのみでディレクトリサイズを合計、自 namespace の ConfigMap へ書き戻す）。ラップアップ中に並行セッション（run #33, #162）が先に T-0080 へ fsGroup 再帰 chown リスクと blocked_by: T-0079 を記録済みと判明。この実装は pod レベルの fsGroup を設定しない設計のためそのリスクは該当しないと #163 にコメントで説明したが、もう一つの懸念（T-0079 未解決のまま新しい I/O 負荷をかけない）は踏襲し、#163 は実装完了・merge保留のまま open で起動を終えた",
+      "prs": [
+        163
+      ]
     }
   ]
 }
