@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T05:58:50Z",
+  "updated": "2026-08-05T06:25:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -378,6 +378,16 @@
       "summary": "オープン PR・autopilot ブランチとも無く中断なし（#159 は構築セッションが既に自力で作成・merge 済みで main に反映確認済み）。issue #56 の未読フィードバック2件を反映: (1) 05:35:04（重要）ops-health-report の実測で node01 の ephemeral-storage capacity が 48.9GiB しか無いと判明、terraform/docs/CLAUDE.md が前提とする 256GiB と食い違う。PVC requested 合計 215Gi（immich-library 単体 50Gi）が既に実ディスクを超えており local-path 特性上ディスク逼迫で全データ同時破損のリスクがあるため、T-0079（needs-human, priority 1）として起票し人間に df -h/lsblk での実機確認を依頼。ドキュメントは実態未確定のため書き換えず。T-0066 は上限確定（immich ライブラリは物理的に49GiB上限、保存先はBackblaze B2で確定）を notes に反映。T-0077（PVC実使用量取得）の priority を 36→5 に引き上げ。(2) 05:56:49: #155→#158 の作り直しで CHARTER の8行(cooldown/直列化対処)が一時的に main から漏れていた件（構築セッションが #159 で復旧済み）を受け、CHARTER §4 に『PR を作り直すときは git diff で旧ブランチとの差分ゼロを確認する』『新しい規則を足すときは既存規則との前提衝突を1行考える』の2点を追記",
       "prs": [
         160
+      ]
+    },
+    {
+      "n": 32,
+      "at": "2026-08-05T06:25:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 の未読1件は自分自身の直前の返信で、新しい人間フィードバックなし。T-0079（node01 実ディスク容量の食い違い）は引き続き人間の df -h/lsblk 報告待ち。backlog の todo が T-0077 のみだったため着手。当初スコープ（PVC実使用量 + metrics-server 経由のコンテナ実メモリ/CPU）のうち、PVC 実使用量は対象4 PVC が immich/vaultwarden/coder の3 namespace に分散しており単一 CronJob には収まらない（Pod は自 namespace の PVC しかマウントできない）と判明したため分割。metrics-server 経由のコンテナ/ノード実メモリ・CPU 収集のみを実装し T-0077 を done、PVC 実使用量は T-0080 として新規起票（#161）",
+      "prs": [
+        161
       ]
     }
   ]
