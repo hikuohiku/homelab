@@ -1,0 +1,155 @@
+# T-0071: restic バックアップの復元試験（coder-postgres 分、最後の1コンポーネント）。
+#
+# coder-restic-backup CronJob（apps/coder/restic-backup-cronjob.yaml）が B2 に取っている
+# pg_dump -Fc（カスタム形式）のスナップショットを、本番の coder-postgres-data PVC や
+# coder-postgres の稼働中インスタンスには一切触れずに実際に restic restore し、
+# 「データが読めること」を機械的に確認する一度きりの Job。immich（#231-234）・vaultwarden（#236）
+# と同じ「教訓を初回実装から織り込む」方針で作る。
+#
+# immich/vaultwarden との違い: あちらはファイルシステムのディレクトリツリー（PVC の中身の一部）を
+# 復元するため CHOWN/FOWNER/DAC_OVERRIDE の3capability が要った。coder-postgres は単一ファイルの
+# pg_dump カスタム形式ダンプなので、復元先は使い回さない emptyDir（Job 実行のたびに新規、
+# 前回実行分の残留 chown が新たな失敗を生む心配が無いため rm -rf のクリーンアップは不要）。
+# ただし restic は元の所有者（pg-dump initContainer が UID/GID 999 で書いた）へ chown しようと
+# するため、immich/vaultwarden で判明した CHOWN capability は同様に要る可能性が高く、
+# 単一ファイルなので FOWNER（タイムスタンプ復元）・DAC_OVERRIDE（ディレクトリ横断アクセス）も
+# 予防的に足しておく（3つとも drop:["ALL"] からの追加のみで、他コンポーネントの
+# securityContext には影響しない）。
+#
+# 「データが読めること」の確認方法が immich/vaultwarden と異なる: pg_dump カスタム形式は
+# バイナリの magic bytes 確認だけでは中身が壊れていないことの証明として弱い（immich の
+# sql.gz は gzip magic のみ確認だったが、db.sqlite3 はヘッダ確認、今回はより踏み込む）。
+# pg_restore はデータベースへの接続が無くても動く2つのモードを持つ:
+#   - `pg_restore --list <dump>`: アーカイブの TOC（目次: テーブル・インデックス等の定義一覧）を
+#     読む。ヘッダとメタデータが壊れていないことを確認できる
+#   - `pg_restore -f /dev/null --no-owner --no-privileges <dump>`: TOC の全エントリを実際に
+#     処理して plain SQL へ変換する（出力は /dev/null に捨てる）。この過程で COPY データブロック
+#     を含む全データが展開・検証されるため、ヘッダだけでなく中身の圧縮ブロックまで読めることを
+#     確認できる。ライブな PostgreSQL への接続は一切不要
+# pg_restore はサーバと同じ postgres:17.10 イメージのクライアントを使う（pg_dump 側と揃える）。
+#
+# 結果の受け取り方は immich/vaultwarden と同じ: autopilot の ClusterRole (autopilot-reader) には
+# pods/log 権限が無いため、restic restore の結果は initContainer が emptyDir 上のファイルに書き、
+# 本体コンテナがそれを読んで pg_restore の結果と合わせて /dev/termination-log に書く。
+# `kubectl get pod -n coder -l job-name=coder-postgres-restic-restore-verify -o json` の
+# status.containerStatuses[].state.terminated.message から読む。
+#
+# 確認が取れ次第、この Job は削除する PR を出す（coder-restic-backup 側の CronJob は変更しない）。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: coder-postgres-restic-restore-verify
+  namespace: coder
+  annotations:
+    argocd.argoproj.io/sync-options: Replace=true,Force=true
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1800
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      initContainers:
+        - name: restic-restore
+          image: restic/restic:0.19.1
+          command:
+            - sh
+            - -c
+            - |
+              set -u
+              mkdir -p /shared/dump
+              START=$(date +%s)
+              RESTORE_OUTPUT=$(restic restore latest --target /shared/dump 2>&1)
+              RESTORE_RC=$?
+              END=$(date +%s)
+              echo "$RESTORE_RC" > /shared/restore_rc
+              echo "$((END - START))" > /shared/elapsed_seconds
+              echo "$RESTORE_OUTPUT" | tail -c 1500 > /shared/restore_output_tail.txt
+              exit 0
+          env:
+            - name: RESTIC_B2_BUCKET
+              valueFrom:
+                secretKeyRef:
+                  name: coder-restic-credentials
+                  key: RESTIC_B2_BUCKET
+            - name: RESTIC_REPOSITORY
+              value: "b2:$(RESTIC_B2_BUCKET):coder-postgres"
+            - name: RESTIC_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: coder-restic-credentials
+                  key: RESTIC_PASSWORD
+            - name: B2_ACCOUNT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: coder-restic-credentials
+                  key: B2_ACCOUNT_ID
+            - name: B2_ACCOUNT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: coder-restic-credentials
+                  key: B2_ACCOUNT_KEY
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+              add: ["CHOWN", "FOWNER", "DAC_OVERRIDE"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+          volumeMounts:
+            - name: shared
+              mountPath: /shared
+      containers:
+        - name: pg-restore-verify
+          image: postgres:17.10
+          command:
+            - sh
+            - -c
+            - |
+              set -u
+              RESTORE_RC=$(cat /shared/restore_rc 2>/dev/null || echo 1)
+              ELAPSED=$(cat /shared/elapsed_seconds 2>/dev/null || echo 0)
+              RESTORE_TAIL=$(tr '\n' ' ' < /shared/restore_output_tail.txt 2>/dev/null | cut -c1-1000)
+              DUMP=$(find /shared/dump -name 'coder-postgres.dump' 2>/dev/null | sort | tail -1)
+              LIST_RC=1
+              LIST_LINES=0
+              FULL_RC=1
+              if [ -n "$DUMP" ]; then
+                LIST_OUTPUT=$(pg_restore --list "$DUMP" 2>&1)
+                LIST_RC=$?
+                LIST_LINES=$(echo "$LIST_OUTPUT" | wc -l | tr -d ' ')
+                FULL_OUTPUT=$(pg_restore -f /dev/null --no-owner --no-privileges "$DUMP" 2>&1)
+                FULL_RC=$?
+              fi
+              MSG="restore_rc=$RESTORE_RC elapsed_seconds=$ELAPSED dump=${DUMP:-none} pg_restore_list_rc=$LIST_RC pg_restore_list_lines=$LIST_LINES pg_restore_full_rc=$FULL_RC restore_output_tail=$RESTORE_TAIL"
+              echo "$MSG"
+              echo "$MSG" > /dev/termination-log
+              if [ "$RESTORE_RC" -ne 0 ] || [ -z "$DUMP" ] || [ "$LIST_RC" -ne 0 ] || [ "$LIST_LINES" -eq 0 ] || [ "$FULL_RC" -ne 0 ]; then
+                exit 1
+              fi
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 500m
+          volumeMounts:
+            - name: shared
+              mountPath: /shared
+              readOnly: true
+      volumes:
+        - name: shared
+          emptyDir: {}
