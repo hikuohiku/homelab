@@ -4,7 +4,7 @@ Proxmox VE環境をTerraformで管理するためのIaCリポジトリです。
 
 ## 前提条件
 
-- Terraform 1.14.0
+- Terraform 1.15 系（`terraform/proxmox/providers.tf` の `required_version = "~> 1.15"`）
 - Proxmox VE 8.x以上
 - Tailscale経由でProxmoxに接続
 - Proxmox `local` ストレージで `import` コンテンツタイプが有効化されていること
@@ -62,12 +62,13 @@ just apply
 
 ```
 .
-├── README.md     # このファイル
-├── providers.tf  # Terraformプロバイダー設定
-├── variables.tf  # 共通変数定義
-├── main.tf       # カスタムVM構成ファイル
-├── pbs.tf.ignore # PBS VM構成の記録（手動管理・Terraform管理対象外）
-└── .gitignore    # Git除外設定
+├── README.md          # このファイル
+├── providers.tf       # Terraformプロバイダー設定
+├── variables.tf       # 共通変数定義
+├── vm-nixos.tf         # node01 VM構成ファイル
+├── nixos-image.tf      # NixOSイメージのダウンロード
+├── pbs.tf.ignore       # PBS VM構成の記録（手動管理・Terraform管理対象外）
+└── .terraform.lock.hcl # プロバイダーのバージョンロック
 ```
 
 ## よく使うコマンド

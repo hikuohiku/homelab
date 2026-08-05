@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 56,
+  "next_id": 59,
   "updated": "2026-08-05T02:52:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
@@ -1000,6 +1000,57 @@
       "created": "2026-08-05",
       "pr": 132,
       "notes": "run #23: immich-server（requests 150m/256Mi, limits 1500m/2Gi）・valkey（requests 25m/32Mi, limits 250m/256Mi）・machine-learning（requests 200m/512Mi, limits 2000m/3Gi）に resources を追加。既存コンポーネントの requests 合計（約700m/1.2GiB）に今回の追加分（約375m/800Mi）を足しても node01 の 4c/11.7GiB に対して余裕があることを確認。immich chart（bjw-s app-template ベース）自体はデフォルトで resources を設定していないことを WebFetch で確認済み（controllers.<name>.containers.main.resources が正しいキー、既存の image/env と同じ階層）。limits 合計は既存分と合わせても memory 側で概ね9GiB程度に収まり、全コンポーネントが同時に上限まで張り付く想定はしていない"
+    },
+    {
+      "id": "T-0056",
+      "domain": "homelab",
+      "title": "README.md の Terraform ファイル構成・前提バージョン記載を実態に合わせる",
+      "kind": "docs",
+      "risk": "low",
+      "status": "done",
+      "priority": 8,
+      "why": "run #24: subagent の調査で発見。README.md の『ファイル構成』節が `main.tf`（実在しない、実際は `vm-nixos.tf`）を挙げ、`nixos-image.tf` が抜け、存在しない `terraform/proxmox/.gitignore` を挙げていた。前提条件の `Terraform 1.14.0` も `providers.tf` の `required_version = \"~> 1.15\"` と食い違っていた",
+      "dod": "README.md のファイル構成節が実際の terraform/proxmox/ 配下のファイルと一致し、前提条件の Terraform バージョンが providers.tf と一致する",
+      "refs": [
+        "README.md",
+        "terraform/proxmox/providers.tf"
+      ],
+      "created": "2026-08-05",
+      "notes": "run #24: terraform/proxmox/ を ls して実ファイル（providers.tf, variables.tf, vm-nixos.tf, nixos-image.tf, pbs.tf.ignore, .terraform.lock.hcl）を確認し、README.md のファイル構成節と前提条件を書き換えた"
+    },
+    {
+      "id": "T-0057",
+      "domain": "homelab",
+      "title": "apps/README.md のディレクトリ構造図をアプリ追加に追随させる",
+      "kind": "docs",
+      "risk": "low",
+      "status": "todo",
+      "priority": 8,
+      "why": "run #24: subagent の調査で発見。apps/README.md の『ディレクトリ構造』節が apps.yaml/kustomization.yaml/argocd/external-secrets/tailscale-operator の5項目のみを挙げているが、実際の apps/kustomization.yaml には agent-rbac/dex/immich/vaultwarden/coder も登録済みで計8アプリある",
+      "dod": "apps/README.md のディレクトリ構造図が apps/kustomization.yaml の resources と一致する（または『詳細は kustomization.yaml 参照』に置き換える）",
+      "refs": [
+        "apps/README.md",
+        "apps/kustomization.yaml"
+      ],
+      "created": "2026-08-05"
+    },
+    {
+      "id": "T-0058",
+      "domain": "homelab",
+      "title": "coder-postgres / immich-postgres コンテナに securityContext (runAsNonRoot 等) を追加できるか検証する",
+      "kind": "security",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 20,
+      "why": "run #24: subagent の調査で発見。同じ手書き Deployment でも vaultwarden/coder のコンテナは runAsNonRoot/allowPrivilegeEscalation/seccompProfile をコンテナレベルで明示しているのに対し、apps/coder/postgres.yaml と apps/immich/postgres.yaml の postgres コンテナには Pod レベルの fsGroup しか無く、コンテナレベルの securityContext が丸ごと無い",
+      "dod": "postgres 公式イメージの実行 UID（通常 999）を確認したうえで、runAsNonRoot: true 等を追加してもコンテナが正常に起動することが分かる形に落とす。immich-postgres は既存の initContainer が chown で UID 26/999 を使い分けているため、その整合も確認する。CI (manifest-diff) で意図しないオブジェクト削除が無いことも確認する",
+      "refs": [
+        "apps/coder/postgres.yaml",
+        "apps/immich/postgres.yaml",
+        "apps/vaultwarden/deployment.yaml",
+        "apps/coder/deployment.yaml"
+      ],
+      "created": "2026-08-05"
     }
   ]
 }
