@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T19:12:00Z",
+  "updated": "2026-08-05T19:35:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -680,6 +680,24 @@
       "prs": [
         227
       ]
+    },
+    {
+      "n": 62,
+      "at": "2026-08-05T19:28:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "T-0110 の効果を確認（ops-health-reporter Application が Synced、Role/RoleBinding も Synced）。backlog の唯一の todo だった T-0071（restic 復元試験）に immich から着手。使い捨て PVC/Job （apps/immich/restic-restore-verify-job.yaml）を追加し、restic restore latest → ファイル数・DB ダンプの gzip マジックバイト確認 → 結果を /dev/termination-log 経由で読む方式にした。",
+      "prs": [
+        229
+      ]
+    },
+    {
+      "n": 63,
+      "at": "2026-08-05T19:35:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "immich-restic-restore-verify Job の初回実行結果を確認: restore_rc=1 で Failed だったが file_count=82・db_dump_gzip_magic_ok=true で一見データは正しく復元できていた。原因を切り分けるため、restic restore の出力を termination message に含めるよう修正し、Job.spec.template の immutable 制約に対応する sync-options も追加した。",
+      "prs": []
     }
   ]
 }

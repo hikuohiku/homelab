@@ -14,6 +14,14 @@
 # ops/CHARTER.md §5.5 の RBAC 一覧参照）。restic/restic イメージは alpine ベース (busybox) で
 # find/od/date が使えることを Dockerfile 確認済み（restic v0.19.1 の docker/Dockerfile,
 # alpine:latest + apk add ca-certificates fuse openssh-client tzdata jq）。
+#
+# T-0071 初回実行（run #62 の PR #229 merge 後）: restore_rc=1 だったが file_count=82
+# （バックアップ時と同数）・db_dump_gzip_magic_ok=true で、データ自体は正しく復元できている
+# ように見えた。原因不明のまま再実行しても同じ情報しか得られないため、restic の標準出力/
+# 標準エラーの末尾を termination message に含めて次回実行で原因を切り分ける。この Job は
+# 既にクラスタ上に Failed 状態で存在し Job.spec.template は不変フィールドのため、T-0108 と
+# 同じ理由（Replace=true 単体は spec.selector 等の immutable フィールドで SyncFailed する）で
+# argocd.argoproj.io/sync-options: Replace=true,Force=true を付ける。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -32,6 +40,8 @@ kind: Job
 metadata:
   name: immich-restic-restore-verify
   namespace: immich
+  annotations:
+    argocd.argoproj.io/sync-options: Replace=true,Force=true
 spec:
   backoffLimit: 0
   activeDeadlineSeconds: 1800
@@ -48,7 +58,7 @@ spec:
             - |
               set -u
               START=$(date +%s)
-              restic restore latest --target /mnt/restore
+              RESTORE_OUTPUT=$(restic restore latest --target /mnt/restore 2>&1)
               RESTORE_RC=$?
               END=$(date +%s)
               ELAPSED=$((END - START))
@@ -59,7 +69,8 @@ spec:
                 MAGIC=$(od -An -tx1 -N2 "$DUMP" 2>/dev/null | tr -d ' ')
                 [ "$MAGIC" = "1f8b" ] && DUMP_OK=true
               fi
-              MSG="restore_rc=$RESTORE_RC elapsed_seconds=$ELAPSED file_count=$FILE_COUNT db_dump=${DUMP:-none} db_dump_gzip_magic_ok=$DUMP_OK"
+              RESTORE_TAIL=$(echo "$RESTORE_OUTPUT" | tail -c 1500)
+              MSG="restore_rc=$RESTORE_RC elapsed_seconds=$ELAPSED file_count=$FILE_COUNT db_dump=${DUMP:-none} db_dump_gzip_magic_ok=$DUMP_OK restore_output_tail=$RESTORE_TAIL"
               echo "$MSG"
               echo "$MSG" > /dev/termination-log
               if [ "$RESTORE_RC" -ne 0 ] || [ "$FILE_COUNT" -eq 0 ] || [ "$DUMP_OK" != "true" ]; then
