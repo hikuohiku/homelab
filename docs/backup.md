@@ -147,6 +147,62 @@ PostgreSQL 向けに適用したもの。
   新規 DB に復元してから切り替えること。`coder server` は起動時に DB migration を自動適用する
   ため、リストア後に起動する `coder` のバージョンと migration の整合を確認する
 
+## 復元試験（T-0071）
+
+人間の新方針（issue #56, 2026-08-05 04:40:59「試したことのないバックアップは、バックアップでは
+ありません」）どおり、restic バックアップから実際に復元し「データが読めること」を確認する検証。
+本番の PVC には一切触れず、使い捨ての別 PVC/Job（`apps/immich/restic-restore-verify-job.yaml`）を
+Git → ArgoCD 経由で apply し、`kubectl get pod`（`autopilot-reader` で許可されている read 専用
+操作）で結果を確認する形で、autopilot 自身が人間の手を借りずに完結できた。
+
+### immich（完了、2026-08-05）
+
+`restic restore latest` を使い捨て PVC (`immich-restore-verify`, 5Gi) へ実行し、成功を確認した。
+
+| 項目 | 結果 |
+|---|---|
+| restore 結果 | 成功（`restore_rc=0`） |
+| 復元にかかった時間 | **16 秒**（332 MiB、173 files/dirs） |
+| 復元されたファイル数 | 82（バックアップ時と同数） |
+| DB ダンプの整合性 | `immich-db-backup-20260805T020000-v2.6.3-pg16.9.sql.gz` の gzip マジックバイト確認 OK |
+
+**この短時間（16秒/332MiB）は、PBS の VM 単位バックアップと比べた復元時間の判断材料になる**
+（T-0072 の PBS 退役判断で使う）。
+
+試行錯誤の記録（後続の同種検証・他コンポーネントへの流用時の参考）:
+
+1. **初回**: `restore_rc=1` だが `file_count=82`・DB dump 整合性 OK。原因不明のまま診断用に
+   `restic restore` の標準出力/標準エラー末尾を termination message に追加（#230）
+2. **原因1（EPERM, lchown）**: `securityContext.capabilities.drop: ["ALL"]` により、コンテナが
+   root で動いていても `CAP_CHOWN` が無く、restic がバックアップ時点の所有者へ `lchown`
+   できなかった。`capabilities.add: ["CHOWN"]` で解消（#231）
+3. **原因2（EPERM, utimes）**: 所有者は復元できるようになったが、今度はタイムスタンプ復元
+   （`utime(2)`）に `CAP_FOWNER` が必要で失敗。`man 7 capabilities` の `CAP_FOWNER` 説明に
+   `utime(2)` が明記されている。`capabilities.add` に `FOWNER` を追加して解消（#232）
+4. **原因3（EACCES, lchown）**: capability 不足（EPERM）とは別に、`permission denied`
+   （EACCES）が発生。原因は Job 再実行の間 PVC が消えずに残ること — 前回実行で一部
+   ディレクトリが実際に backup 側の所有者へ chown され、その通常権限ビットが
+   `CAP_DAC_OVERRIDE` を持たない root のアクセスを塞いでいた。`DAC_OVERRIDE` を追加し、
+   かつ `restic restore` の前に `rm -rf /mnt/restore/*` で毎回クリーンアップするようにして
+   解消（#233）
+
+**教訓**: `securityContext.capabilities.drop: ["ALL"]` の Pod で restic restore（所有者・
+パーミッション・タイムスタンプの復元を伴う）を実行するには、最低でも `CHOWN` / `FOWNER` /
+`DAC_OVERRIDE` の 3 capability が要る。かつ target が persistent な PVC の場合、再実行時に
+前回の残留状態（chown 済みディレクトリ等）が新たな権限エラーの原因になりうるため、
+restore 前のクリーンアップを常に入れる。
+
+検証専用の `immich-restore-verify` PVC/Job は確認が取れ次第、削除する PR を別途出す
+（このファイルの冒頭コメントに書いた運用どおり）。
+
+### vaultwarden / coder-postgres（未実施）
+
+immich と同じ設計（使い捨て PVC + Job、Replace=true,Force=true sync、termination message
+経由で結果を受け取る）で、次のタスクとして続ける。immich で判明した 3 capability
+（CHOWN/FOWNER/DAC_OVERRIDE）+ クリーンアップステップを初回実装から織り込む想定
+（同じ試行錯誤を繰り返さない）。coder-postgres は PVC 直接ではなく `pg_restore` を使う設計
+（上記セクション参照）のため、権限まわりの事情が immich/vaultwarden と異なる可能性がある。
+
 ### 必要な Doppler 登録（T-0067）
 
 `apps/vaultwarden/restic-external-secret.yaml` / `apps/coder/restic-external-secret.yaml` が
