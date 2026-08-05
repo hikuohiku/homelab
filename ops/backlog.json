@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 94,
-  "updated": "2026-08-05T08:55:00Z",
+  "updated": "2026-08-05T09:24:25Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1679,7 +1679,7 @@
       "title": "README.md のトラブルシューティングが存在しない providers.tf の insecure フィールドを参照している",
       "kind": "docs",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 40,
       "why": "run #43 の subagent 調査で発見。README.md:268 に『自己署名証明書を許可する場合: providers.tf の insecure = false を insecure = true に変更』とあるが、実際の terraform/proxmox/providers.tf の provider \"proxmox\" ブロックには endpoint / api_token / ssh {} しかなく insecure 属性自体が存在しない（false との明記も無い）。bpg/proxmox provider が insecure という provider 引数を実際にサポートしているか一次ソース（provider ドキュメント）で確認した上で、サポートしているなら『追加する』という正しい手順に、廃止/非対応なら現状の正しい対処法に書き換える",
       "dod": "bpg/proxmox provider のドキュメント（Terraform Registry または GitHub リポジトリ）で insecure 引数の現状を確認。README.md の該当箇所を実態に合わせて書き換える（値を変更ではなく追加する手順であること、または別の対処法であることを明記）",
@@ -1688,7 +1688,8 @@
         "terraform/proxmox/providers.tf"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": null,
+      "notes": "run #44: bpg/proxmox provider の一次ソース（docs/index.md）で insecure が省略可能な bool 引数（省略時 false）と確認。README.md の該当手順を「insecure=false→true に変更」ではなく「provider ブロックに insecure=true を追加」に書き換えた（PROXMOX_VE_INSECURE 環境変数でも指定可能な旨も追記）"
     },
     {
       "id": "T-0093",
