@@ -58,7 +58,13 @@ spec:
   jobTemplate:
     spec:
       backoffLimit: 1
-      activeDeadlineSeconds: 1800
+      # T-0097: 初回実行が restic backup 実行中に 1800s の deadline に到達し DeadlineExceeded で
+      # 失敗した（sqlite の一貫コピー・restic リポジトリ作成までは成功していた）。同じ restic
+      # backup CronJob である immich 側 (apps/immich/restic-backup-cronjob.yaml) が既に 3600s を
+      # 使っており実績があるため、その値に揃える。根本原因（なぜ vaultwarden だけ時間がかかったか）
+      # は未確定のまま、失敗を解消する方向の緩和として先に反映する（CHARTER §4、縛る変更のcooldownは
+      # 失敗を緩める変更には適用しない）
+      activeDeadlineSeconds: 3600
       template:
         spec:
           automountServiceAccountToken: false

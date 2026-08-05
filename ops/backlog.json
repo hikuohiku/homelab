@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 109,
-  "updated": "2026-08-05T17:19:51Z",
+  "updated": "2026-08-05T17:35:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -1805,7 +1805,7 @@
       ],
       "created": "2026-08-05",
       "pr": 191,
-      "notes": " | run #56: issue #56 (17:14:24, 構築セッション経由) の実測報告で vaultwarden-restic-backup-verify Job が DeadlineExceeded で Failed と判明（sqlite バックアップ・restic リポジトリ作成までは成功していたが、その後の restic backup 実行中に activeDeadlineSeconds=1800 に到達）。immich (12秒) は成功しているためデータ量の問題ではなさそう。T-0108 で activeDeadlineSeconds を緩和したうえで再実行を待つ。blocked_by は T-0104 のまま（3つとも Complete になるまで T-0104 は完了しない）。"
+      "notes": " | run #56: issue #56 (17:14:24, 構築セッション経由) の実測報告で vaultwarden-restic-backup-verify Job が DeadlineExceeded で Failed と判明（sqlite バックアップ・restic リポジトリ作成までは成功していたが、その後の restic backup 実行中に activeDeadlineSeconds=1800 に到達）。immich (12秒) は成功しているためデータ量の問題ではなさそう。T-0108 で activeDeadlineSeconds を緩和したうえで再実行を待つ。blocked_by は T-0104 のまま（3つとも Complete になるまで T-0104 は完了しない）。 | run #56 続き: activeDeadlineSeconds を 1800→3600 に緩和（immich 側の既存値に揃えた）。構築セッションに再実行を依頼済み。成功が確認できたら T-0104/T-0097 を done にする。"
     },
     {
       "id": "T-0098",
