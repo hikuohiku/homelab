@@ -2075,7 +2075,7 @@
       "title": "cloudnative-vectorchord 16.10-1.0.0 以降で消えた initdb ブートストラップに代わる初期化経路を用意する（T-0029 の前提条件）",
       "kind": "investigate",
       "risk": "medium",
-      "status": "todo",
+      "status": "in_progress",
       "priority": 21,
       "why": "run #73 の調査（T-0029 参照）で判明。cloudnative-vectorchord は 2025-11-12 のベースイメージ変更で docker-library postgres 系（ENTRYPOINT docker-entrypoint.sh）から CloudNativePG operand 系（`cloudnative-pg/postgres-containers`、ENTRYPOINT 無し）に切り替わり、`16.10-1.0.0` 以降（`16.14-1.1.1` を含む）には initdb/createuser/createdb のブートストラップが一切無い。既存の初期化済み PVC への in-place upgrade には影響しないが、T-0071 で確立した immich-postgres の災害復旧手順（新規 PVC 上で immich-postgres を起動し psql でダンプを流し込む）はこのイメージ系統では新規 PVC からの起動自体ができず機能しない。CHARTER §4『データを失いうる変更』は revert 経路だけでなく DR 経路の健全性も要求すると判断し、T-0029 を blocked にして本タスクを切り出した",
       "dod": "cloudnative-vectorchord 16.10-1.0.0 以降のイメージのまま、新規（空の）PVC から immich-postgres を初期化できる経路を用意する。候補: (a) initContainer で PGDATA が空の場合のみ initdb + createuser/createdb/ALTER ROLE PASSWORD を実行する、(b) CloudNativePG operator を導入し operand イメージ本来の使われ方（operator の instance-manager が initdb を制御）に寄せる、(c) 新規 PVC からの起動が要るのは実質 DR 時のみと割り切り、docs/backup.md に『まず 16.9-0.4.3 系イメージで initdb させてから 16.14 系に切り替える』といった明示的な回避手順を書いて代替する。どの案でも、使い捨て PVC + Job で実際に空の PGDATA から起動できることを検証してから T-0029 の blocked_by を解除する",
@@ -2087,7 +2087,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": ""
+      "notes": "run #74: apps/immich/postgres-bootstrap-verify-job.yaml を追加。空の使い捨て PVC に対し 16.14-1.1.1 で initdb を手動実行（docker-entrypoint.sh 相当を再現: initdb --pwfile → pg_hba.conf に host scram-sha-256 追記 → 一時サーバーで createdb → shared_preload_libraries=vchord.so で再起動 → CREATE EXTENSION vchord）を検証する。事前調査は subagent が GHCR の実イメージレイヤーを直接展開して binary PATH・UID(26)/GID(999)・auth 挙動・vchord 拡張作成順序を裏取り済み。結果は次回起動で kubectl get pod -n immich -l job-name=immich-postgres-bootstrap-verify 経由の termination-log で確認する。"
     }
   ]
 }
