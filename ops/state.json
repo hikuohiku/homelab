@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T08:42:00Z",
+  "updated": "2026-08-05T08:51:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -487,6 +487,16 @@
       "prs": [
         175,
         176
+      ]
+    },
+    {
+      "n": 43,
+      "at": "2026-08-05T08:51:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし（last_read 以降新規コメント0件、全64件を機械的に確認）。backlog の唯一の todo だった T-0090（ci.yml の manifests job / manifest-diff job に独立に書かれている azure/setup-helm の version 入力と kustomize バイナリ版が監視対象外）を完遂。ops/inventory.json に2エントリを追加し、ops/check_version_sync.py に extract_yaml_job_block（jobs: 配下の2-indent境界でブロックを絞る）とそれを使う2つの抽出関数、GROUPS に2グループを追加。DoD の『意図的に値をずらして CI が exit 1 になることを確認する』は手元で ci.yml を一時的に書き換えて両パターンとも検出できることを確認し、diff が空であることを確認して復元した（#178）",
+      "prs": [
+        178
       ]
     }
   ]

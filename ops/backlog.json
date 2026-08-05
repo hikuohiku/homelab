@@ -1652,7 +1652,7 @@
       ],
       "created": "2026-08-05",
       "notes": "ops/inventory.json に gha-setup-helm-version (v3.16.4) / kustomize-binary (v5.8.1) を追加。ops/check_version_sync.py に extract_yaml_job_block（2-indent のジョブ境界でブロックを絞る）と、それを使う extract_helm_setup_version / extract_kustomize_download_version を追加し、GROUPS に manifests job / manifest-diff job の2箇所ずつを検証する2グループを追加。手元でこの2グループそれぞれ片方の値だけをずらして exit 1 になること、元に戻すと exit 0 に戻ることを確認済み（DoD 達成）。ci.yml 自体は変更していない",
-      "pr": null
+      "pr": 178
     }
   ]
 }
