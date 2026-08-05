@@ -1111,7 +1111,7 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 147,
       "notes": "run #27: (1) CHARTER §7.2『時刻表記』を新設。journal 見出し例を JST に更新、dashboard/build.py に JST = timezone(timedelta(hours=9)) を定義し generated/ガント目盛り/ツールチップを JST 表示に変更（rel_time() は相対表示のため対象外、変更なし）。(2) CHARTER §4 に『残った不確実性は同じ PR で backlog にも needs-human タスクとして起票する』運用を追記。(3) #100 の実機確認結果（DNS 解決 OK）を tailscale-operator-chart / k8s-nameserver の note に追記。#100 の PR 本文にあったもう1点（admissionregistration.k8s.io/v1）は未使用機能のため実害なしのまま据え置き、新規タスクは起票していない（人間の報告で既に決着済みのため）"
     }
   ]
