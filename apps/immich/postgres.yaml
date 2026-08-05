@@ -47,6 +47,17 @@ spec:
       containers:
         - name: postgres
           image: ghcr.io/tensorchord/cloudnative-vectorchord:16.9-0.4.3
+          # このイメージは CloudNativePG operand イメージ (postgres-containers)
+          # を継承しており、ベースの Debian postgres ユーザー (UID/GID 999) に
+          # usermod -u 26 postgres で UID のみ 26 に変更している (GID は 999 のまま)。
+          # 上の fsGroup / chown コメントの UID 26 / GID 999 と一致させる。
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 26
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
           args:
             - -c
             - shared_preload_libraries=vchord.so
