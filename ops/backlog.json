@@ -1697,7 +1697,7 @@
       "title": "CLAUDE.md が autopilot の定期実行間隔を『3時間ごと』と書いているが実際は毎時（ops/state.json 参照）",
       "kind": "docs",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 40,
       "why": "run #43 の subagent 調査で発見。CLAUDE.md:70『クラウドの定期実行（3 時間ごと）が独立セッションを起こし...』は、ops/state.json の routines[0] (cron: \"19 * * * * (UTC)\", cron_human: \"1 時間ごと（毎時 19 分）\") と食い違っている。state.json の note に『立ち上げ期は頻度を上げて安定性を見る。落ち着いたら間隔を空ける』とあり、この値は今後も変わりうるため、CLAUDE.md に具体的な間隔を固定で書くのではなく ops/state.json の routines を単一の情報源として指し示す書き方に直す",
       "dod": "CLAUDE.md の該当箇所を、具体的な時間を決め打ちせず ops/state.json の routines を参照する記述に書き換える（もしくは現在の実値『毎時』に修正した上で、変更されたら state.json 側で追随する運用であることを明記する）",
@@ -1706,7 +1706,8 @@
         "ops/state.json"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": 186,
+      "notes": "run #46: DoD の代替案（固定値を書かず ops/state.json の routines を単一の情報源として指す）を採用。具体的な数値は state.json 側で変わっても CLAUDE.md の修正が要らなくなる"
     }
   ]
 }
