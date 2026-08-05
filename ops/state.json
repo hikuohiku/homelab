@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T06:50:00Z",
+  "updated": "2026-08-05T07:15:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -406,6 +406,17 @@
       "summary": "PR #161（T-0077, metrics-server 経由のコンテナ実メモリ/CPU 収集）の merge を見届けた後、T-0080（PVC実使用量収集）に着手。immich/vaultwarden/coder の3 namespace それぞれに pvc-usage-reporter CronJob を実装（対象 PVC を readOnly マウントし標準ライブラリのみでディレクトリサイズを合計、自 namespace の ConfigMap へ書き戻す）。ラップアップ中に並行セッション（run #33, #162）が先に T-0080 へ fsGroup 再帰 chown リスクと blocked_by: T-0079 を記録済みと判明。この実装は pod レベルの fsGroup を設定しない設計のためそのリスクは該当しないと #163 にコメントで説明したが、もう一つの懸念（T-0079 未解決のまま新しい I/O 負荷をかけない）は踏襲し、#163 は実装完了・merge保留のまま open で起動を終えた",
       "prs": [
         163
+      ]
+    },
+    {
+      "n": 35,
+      "at": "2026-08-05T07:00:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "PR #163（T-0080, run #34 が blocked_by: T-0079 のまま open で終了）を拾った。issue #56 の未読2件を反映: fsGroup リスクの再確認（該当せず）と run 番号衝突の説明は対応不要。#163 のレビューを受け、capabilities を drop: [ALL] + add: [DAC_READ_SEARCH] に絞り runAsUser: 0 のフル root 権限を回避、blocked_by: T-0079 は走査が os.lstat のみでディスク容量を消費せず T-0079 の懸念（書き込み系 I/O の悪化）に該当しないため解除。CI green と新しい異議が無いことを確認し #163 を merge、T-0080 を done にした（#165）",
+      "prs": [
+        163,
+        165
       ]
     }
   ]
