@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T05:20:00Z",
+  "updated": "2026-08-05T05:50:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T04:51:25Z"
+    "last_read": "2026-08-05T05:16:46Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -358,6 +358,14 @@
         151,
         153
       ]
+    },
+    {
+      "n": 30,
+      "at": "2026-08-05T05:50:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "前回の中断: open PR 2件（#152 他セッション T-0073、#153 自分 T-0015 cooldown 中）を拾った。issue #56 に新しい異議が無いことを確認して #153 を merge（CI green）。#152 は main が先行しコンフリクトしていたため origin/main へ rebase・push し、別セッション側が先に merge した。issue #56 の未読フィードバック2件を反映: (1) クールダウンと直列化の規則衝突の指摘を受け、CHARTER §4 に『クールダウン中の PR には ops/ 記録を相乗りさせない』を追記。(2) #153 のレビュー（PVC 実使用量・コンテナ実メモリ/CPU が取れていない指摘）を T-0077 として起票",
+      "prs": []
     }
   ]
 }
