@@ -292,6 +292,19 @@
       "policy": "auto",
       "note": "T-0015 (run #29) で新設。標準ライブラリのみで動くスクリプトのため minor/patch 更新はほぼ無害",
       "observability_impact": "壊れると ops-health-report ブランチへの書き戻しが止まり、autopilot が直前の auto-merge 後の ArgoCD/Pod/PVC 状態を確認できなくなる。ただし読み取り専用 CronJob であり、壊れても homelab 本体の到達性・稼働には影響しない"
+    },
+    {
+      "id": "pvc-usage-reporter-image",
+      "kind": "image",
+      "name": "python (pvc-usage-reporter CronJob)",
+      "current": "3.12-alpine",
+      "file": "apps/immich/pvc-usage-cronjob.yaml",
+      "match": "image: python:",
+      "mirrors": ["apps/coder/pvc-usage-cronjob.yaml", "apps/vaultwarden/pvc-usage-cronjob.yaml"],
+      "upstream": "dockerhub:library/python",
+      "policy": "auto",
+      "note": "T-0080 (#163) で新設。3 namespace (immich/vaultwarden/coder) に同じタグを持つ同型 CronJob をコピーして配置しているため、ops-health-reporter-image と同様に 3 箇所とも揃えて更新すること（T-0082）",
+      "observability_impact": "壊れるとその namespace の PVC 実使用量が pvc-usage-report ConfigMap に書き戻されなくなり、ops-health-reporter が集約する pvc_usage が古いまま止まる。読み取り専用 CronJob であり、壊れても homelab 本体の到達性・稼働には影響しない"
     }
   ]
 }

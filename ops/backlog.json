@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 82,
-  "updated": "2026-08-05T07:25:00Z",
+  "next_id": 83,
+  "updated": "2026-08-05T07:35:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1483,6 +1483,27 @@
       "created": "2026-08-05",
       "pr": 166,
       "notes": "run #35: ops/check_version_sync.py と同じ標準ライブラリのみの方針で ops/check_pvc_usage_script_sync.py を作成。ブロックスカラー（`pvc_usage.py: |`）をインデント境界で抽出し3ファイル間で完全一致を検証する。既存の ops job（ruleset の必須チェックの1つ）にステップとして追加したため、新しい required check の登録依頼は不要（既存job内の追加ステップのため）。手元で1ファイルだけ書き換えて非0終了することを確認済み。フル共有化（Kustomize component 化等のアーキテクチャ変更）は見送り、drift の機械検出のみに留めた（CHARTER『器を太らせる前に使い切る』、既存パターンの横展開で足りるため）"
+    },
+    {
+      "id": "T-0082",
+      "domain": "homelab",
+      "title": "pvc-usage-reporter CronJob の python イメージを ops/inventory.json の監視対象に追加する",
+      "kind": "ci",
+      "risk": "low",
+      "status": "done",
+      "priority": 6,
+      "why": "run #36 の調査で発見。T-0080 (#163) が追加した apps/{immich,vaultwarden,coder}/pvc-usage-cronjob.yaml の3ファイルは同じ python:3.12-alpine タグを使っているが、ops-health-reporter-image と違って ops/inventory.json に対応するエントリが無く、上流の新しいリリースを誰も監視していなかった。加えて check_version_sync.py の GROUPS にも入っておらず、3ファイルのうち1つだけタグを上げても CI が検出できない状態だった（T-0051/T-0081 と同型の抜け）",
+      "dod": "ops/inventory.json に pvc-usage-reporter-image エントリ（mirrors で他2ファイルを指定）を追加する。ops/check_version_sync.py の GROUPS に3ファイル分の mirror group を追加し、1ファイルだけタグを変えると非0終了することを手元で確認する",
+      "refs": [
+        "ops/inventory.json",
+        "ops/check_version_sync.py",
+        "apps/immich/pvc-usage-cronjob.yaml",
+        "apps/coder/pvc-usage-cronjob.yaml",
+        "apps/vaultwarden/pvc-usage-cronjob.yaml"
+      ],
+      "created": "2026-08-05",
+      "pr": 167,
+      "notes": "run #36: inventory.json に pvc-usage-reporter-image（current: 3.12-alpine, mirrors: coder/vaultwarden の2ファイル）を追加し、check_version_sync.py の GROUPS に対応する3ファイルの mirror group を追加した。手元で apps/coder/pvc-usage-cronjob.yaml だけタグを 3.13-alpine に変えて非0終了することを確認済み（変更後は元に戻した）。バージョン更新自体はスコープ外（現行 3.12-alpine のまま、監視の仕組みのみ追加）"
     }
   ]
 }
