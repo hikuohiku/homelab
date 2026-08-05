@@ -8,11 +8,13 @@ configs:
     # ArgoCD URL
     url: https://argocd.tailae6c2.ts.net
     # 外部 Dex を OIDC プロバイダーとして使用
+    # clientSecret は `$<secret-name>:<key>` 構文（T-0060）。参照先は
+    # apps/argocd/dex-client-secret-external-secret.yaml が作る Secret
     oidc.config: |
       name: Dex
       issuer: https://dex.tailae6c2.ts.net
       clientID: argocd
-      clientSecret: argocd-dex-client-secret
+      clientSecret: $argocd-dex-client-secret:secret
       requestedScopes:
         - openid
         - profile

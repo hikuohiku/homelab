@@ -35,10 +35,14 @@ config:
         redirectURI: https://dex.tailae6c2.ts.net/callback
 
   # Static clients
+  # T-0060: secret はリテラル値を直書きせず、envFrom で取り込んだ env var 名を
+  # secretEnv で指定する（dex は connector config にしか $VAR 展開をせず、
+  # staticClients は idEnv/secretEnv という専用フィールドで env var 名を指定する
+  # 仕組み。ソース: dexidp/dex の cmd/dex/config.go, storage/storage.go）
   staticClients:
     - id: argocd
       name: ArgoCD
-      secret: argocd-dex-client-secret
+      secretEnv: DEX_ARGOCD_CLIENT_SECRET
       redirectURIs:
         - https://argocd.tailae6c2.ts.net/auth/callback
 
