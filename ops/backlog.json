@@ -1247,11 +1247,11 @@
       "title": "immich 用 backup CronJob（日次内蔵DBダンプ + restic でライブラリごと）を追加する",
       "kind": "feature",
       "risk": "medium",
-      "status": "blocked",
+      "status": "todo",
       "priority": 40,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針・構築セッションの調査。immich は内蔵の日次 DB ダンプが UPLOAD_LOCATION/backups に 14 世代落ちる仕様のため、これが有効なら library PVC を restic で 1 本取るだけでライブラリと DB dump が同時に取れる（要確認）。稼働中に取る場合は DB dump が先、ファイルが後の順（DB に無い余分なファイルが残るだけで済む）",
-      "dod": "immich の内蔵日次 DB ダンプが有効か確認したうえで、CronJob が restic でライブラリ PVC（DB dump を含む）を snapshot し、T-0067 の保存先へ push する。retention（`restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune` 相当）を週次で走らせる仕組みも同じ PR に含める。credential は Doppler → External Secrets 経由",
-      "blocked_by": "T-0067（restic 保存先・credential）",
+      "dod": "immich の内蔵日次 DB ダンプが有効か確認したうえで、CronJob が restic でライブラリ PVC（DB dump を含む）を snapshot し、T-0067 の保存先へ push する。retention（`restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune` 相当）を週次で走らせる仕組みも同じ PR に含める。credential は Doppler → External Secrets 経由（キー名は T-0069 で決めた命名規則に揃える）",
+      "notes": "run #48: issue #56 (10:29:40) の指摘を受け blocked → todo に変更。manifest（CronJob・ExternalSecret）の設計・記述は T-0067（credential 発行）を待たずに進められる。実際に暗号化 push が成功するかの確認だけが T-0067 待ち",
       "refs": [
         "apps/immich/",
         "docs/backup.md"
@@ -1265,11 +1265,11 @@
       "title": "vaultwarden 用 backup CronJob（sqlite .backup + restic）を追加する",
       "kind": "feature",
       "risk": "medium",
-      "status": "blocked",
+      "status": "in_progress",
       "priority": 40,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針・構築セッションの調査。`/data` を丸ごと restic するのは NG（`-wal`/`-shm` と本体の不整合）。`sqlite3 .backup` か vaultwarden 内蔵の `/vaultwarden backup`（1.32.1+、このリポジトリは 1.37.1 で対象）を使い、その出力を restic で保存する",
-      "dod": "CronJob が vaultwarden 内蔵の backup 機能（またはsqlite3 .backup）でリストア可能な単一ファイルを作り、restic で T-0067 の保存先へ push する。復元時は既存の db.sqlite3-wal を先に消す必要がある旨を手順として docs/backup.md に残す。retention は T-0068 と同じ方針",
-      "blocked_by": "T-0067（restic 保存先・credential）",
+      "dod": "CronJob が vaultwarden 内蔵の backup 機能（またはsqlite3 .backup）でリストア可能な単一ファイルを作り、restic で T-0067 の保存先へ push する。復元時は既存の db.sqlite3-wal を先に消す必要がある旨を手順として docs/backup.md に残す。retention は T-0068 と同じ方針。credential (RESTIC_PASSWORD/RESTIC_REPOSITORY/B2 キー) は Doppler のキー名をこのタスクで決め、T-0067 の登録依頼に反映する",
+      "notes": "run #48: issue #56 (10:29:40) の指摘を受け blocked → in_progress に変更し着手。restic の暗号化 push 自体は T-0067（credential）待ちだが、CronJob/ExternalSecret の manifest は先に書く",
       "refs": [
         "apps/vaultwarden/",
         "docs/backup.md"
@@ -1283,11 +1283,11 @@
       "title": "coder-postgres 用 backup CronJob（pg_dump + restic）を追加する",
       "kind": "feature",
       "risk": "medium",
-      "status": "blocked",
+      "status": "todo",
       "priority": 40,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針・構築セッションの調査。PostgreSQL は restic で PGDATA を直接舐めてはいけない（サーバを止めない限り一貫したスナップショットにならないと PostgreSQL 公式が明記）。`pg_dump` を使う。immich-postgres（cloudnative-vectorchord）は対象外（拡張本体を含めた扱いが別途要るため T-0029 側で検討）、まず coder-postgres（素の postgres）から着手する",
-      "dod": "CronJob が `pg_dump` の出力を restic で T-0067 の保存先へ push する。retention は T-0068 と同じ方針。credential は既存の coder-postgres Secret を流用する",
-      "blocked_by": "T-0067（restic 保存先・credential）",
+      "dod": "CronJob が `pg_dump` の出力を restic で T-0067 の保存先へ push する。retention は T-0068 と同じ方針。credential は既存の coder-postgres Secret を流用し、restic 側のキー名は T-0069 に揃える",
+      "notes": "run #48: issue #56 (10:29:40) の指摘を受け blocked → todo に変更。manifest の設計・記述は T-0067（credential 発行）を待たずに進められる",
       "refs": [
         "apps/coder/postgres.yaml",
         "docs/backup.md"
