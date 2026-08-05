@@ -32,6 +32,12 @@
 # 復元は不要なため、`capabilities.add: ["CHOWN"]` を restore コンテナにだけ足して解消する
 # （drop ["ALL"] は維持し、必要な権限だけ足し戻す）。本番の immich Pod や他コンポーネントの
 # securityContext には影響しない、この使い捨て Job だけの変更。
+#
+# T-0071 3回目実行（run #64 内、CHOWN 追加直後）で別の権限エラーが判明: 今度は
+# `failed to restore timestamp of ... operation not permitted` （utimes(2) 相当）。
+# root であっても CAP_FOWNER が無いと、ファイルの所有者と一致しないプロセスから
+# タイムスタンプを変更できない（man 7 capabilities の CAP_FOWNER に utime(2) が明記
+# されている）。`capabilities.add` に `FOWNER` を足して解消する。
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
@@ -115,7 +121,7 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
-              add: ["CHOWN"]
+              add: ["CHOWN", "FOWNER"]
           resources:
             requests:
               cpu: 50m
