@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T01:23:49Z",
+  "updated": "2026-08-05T02:10:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-04T23:59:38Z"
+    "last_read": "2026-08-05T01:18:49Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -237,6 +237,16 @@
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。backlog の todo が 0 件（T-0040/T-0012 とも next_review は 2026-08-11）だったため CHARTER §3 に従い調査。ops/inventory.json の policy: manual エントリのうち『離散リリースが無いので棚卸し対象外』とされている nixpkgs（nix/images/proxmox-cloud/flake.lock）を見た。flake.lock 内の locked.lastModified を読むと4入力とも2025-11〜12止まりで約8ヶ月放置と判明（離散リリース無し＝経年チェック不要ではなかった）。T-0049 として needs-human 起票（nix flake update にはロックハッシュの実計算が要り、サンドボックスに nix が無い。T-0030 と同型）。あわせて T-0040 の DoD に経年チェックを追記し、今後同種の見落としが再検出されるようにした",
       "prs": [
         124
+      ]
+    },
+    {
+      "n": 19,
+      "at": "2026-08-05T02:10:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "前回の中断: run17-wrapup ブランチが残っていたが #123 として既にマージ済みと main で確認し、拾い直しは不要だった。issue #56 の未読フィードバック2件を反映。01:08:27: 前回指摘（ブランチ削除）が実行不能だったという訂正を受け、『指摘を受けたら自分の環境で実行可能かも確かめる』を CHARTER §6 に追記。01:18:49（本命）: release-image.yml は workflow_dispatch 専用で CI が一度も実行せず、T-0042/T-0044/T-0047/T-0048 の Action 更新は changelog 要約のみで『動作確認』とは言えないという指摘。T-0050 として起票・即完遂（当初 T-0049 として着手したが、同時に走っていた別セッションが T-0049（nixpkgs flake.lock、#124）を先にマージしたため rebase 時に採番し直した）。subagent に4つの Action の実ソース・action.yml・changelog を原文確認させた結果、release-image.yml が実際に渡す input に対して全て安全と確定（cachix-action は authToken 無しでは push を一切行わないため T-0047 の懸念は発火しない）。revert は不要と判断し、CHARTER §5.4 に release-image.yml の CI 非カバレッジと今後の確認手順を明文化した",
+      "prs": [
+        125
       ]
     }
   ]

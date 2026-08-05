@@ -244,7 +244,7 @@
       "match": "cachix/cachix-action@",
       "upstream": "github:cachix/cachix-action",
       "policy": "auto",
-      "note": "T-0047 (run #17) で v15→v17 に更新。破壊的変更は Node24 ランタイムのみ。v17 でエラー伝播の修正が入っており、これまで握り潰されていた push 失敗が今後は CI 失敗として顕在化しうる（workflow_dispatch 手動実行のため次回実行時に確認）"
+      "note": "T-0047 (run #17) で v15→v17 に更新。破壊的変更は Node24 ランタイムのみ。T-0050 (run #19) でこのファイルの実際の呼び出し（`name:` のみ、`authToken` 無し）を action 本体のソースで確認し、`authToken`/`signingKey` 無しでは push を一切行わない（pushMode=None）ため v17 の push 失敗伝播修正はこの workflow に影響しないと確定した（ops/CHARTER.md §5.4）"
     },
     {
       "id": "gha-softprops-action-gh-release",

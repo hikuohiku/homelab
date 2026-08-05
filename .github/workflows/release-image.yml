@@ -58,6 +58,7 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@v22
 
+      # authToken/signingKey が無いため pull（substituter）専用。push は一切行わない（ops/CHARTER.md §5.4）。
       - name: Setup Cachix
         uses: cachix/cachix-action@v17
         with:
