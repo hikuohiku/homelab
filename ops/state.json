@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T08:05:00Z",
+  "updated": "2026-08-05T08:10:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -446,7 +446,9 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "前回の中断: PR #168（T-0083, run #37 が open のまま終了）を拾い、CI 6件 green を確認して merge した。issue #56 の未読1件（07:41:02）を反映: pvc-usage-reporter デプロイ後の3 namespace 404 は初回実行前（12:05 UTC 頃）として想定内という報告と、その基準を記録すべきという指摘を受け、T-0085 として起票・完遂。各 CronJob の schedule（5/15/25 */6 * * *）から算出した初回実行予定時刻を CHARTER §2 に明記し、それを過ぎてもなお404が続く場合はCronJobの異常を疑う基準を追加した。あわせて T-0083/T-0084 の backlog エントリの pr フィールド（null のまま残っていた）を実際の #168 に反映",
-      "prs": []
+      "prs": [
+        169
+      ]
     }
   ]
 }
