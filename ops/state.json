@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-04T23:20:00Z",
+  "updated": "2026-08-05T00:30:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -179,6 +179,19 @@
         104,
         106,
         107
+      ]
+    },
+    {
+      "n": 14,
+      "at": "2026-08-05T00:19:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "issue #56 の未読フィードバック4件を反映（#109）: T-0031（vaultwarden icon 無効化）を「実害なしの事象のために利用者に見える機能を犠牲にしていた」という指摘を受け revert（#110, T-0031 dropped）。CI (manifest-diff) が実際に見ている範囲（レンダリング結果の比較、upstream リポジトリのファイルとは無関係）を CHARTER §5.3 に明記。ブランチの作り直し時の削除・命名統一・中断検知の確認を CHARTER §4 に追記。T-0032 の残余リスク（IP_HEADER_TRUSTED_PROXIES が既定 local のまま）を T-0038 として起票し、subagent に vaultwarden 実ソース（1.37.1）を確認させたうえで pod CIDR 10.42.0.0/16 に絞って完遂（#111）。副産物として Maintenance.md の持ち越し記録が T-0031 revert / T-0038 完遂とずれていたのを発見し実態に合わせた（T-0039, #112）",
+      "prs": [
+        109,
+        110,
+        111,
+        112
       ]
     }
   ]
