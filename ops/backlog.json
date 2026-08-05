@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 41,
-  "updated": "2026-08-05T00:35:00Z",
+  "next_id": 42,
+  "updated": "2026-08-05T06:20:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -730,6 +730,26 @@
       "created": "2026-08-05",
       "pr": null,
       "notes": "run #14: T-0005（#78）を初回実施として recurring 化しただけで、この起票自体はコード変更を伴わないため PR は無い（ops/ の記録は run14-wrapup PR に相乗り）。次回 2026-08-11 以降の起動で todo に戻して再調査する"
+    },
+    {
+      "id": "T-0041",
+      "domain": "homelab",
+      "title": "Plans.md の M2 補足が `.claude/settings.json` permissions.ask 前提のまま実態とずれている",
+      "kind": "docs",
+      "risk": "low",
+      "status": "done",
+      "priority": 8,
+      "why": "CHARTER §3 のドキュメント整合性チェック（run #15）で発見。backlog の todo が 0 件だったため実施。Plans.md の LXC→k8s 移行計画の補足に『kubectl は permissions.ask 付きで実行する方針』と書かれたままだったが、CHARTER §5.1 で ask ルールは全廃されており（現在の `.claude/settings.json` に ask キー自体が無い）、CLAUDE.md の Agent Operations 節は既にこの前提で書き換わっている。Plans.md だけが古い記述のまま残っていた",
+      "dod": "Plans.md の該当補足が、CLAUDE.md / CHARTER.md と同じ『ask は全廃、歯止めは Git → CI → ArgoCD 経路』という現状を反映している",
+      "refs": [
+        "Plans.md",
+        "CLAUDE.md",
+        "ops/CHARTER.md",
+        ".claude/settings.json"
+      ],
+      "created": "2026-08-05",
+      "pr": 114,
+      "notes": "run #15: grep で `permissions.ask` / kubectl ask への言及を repo 横断で確認し、Plans.md 以外（CHARTER.md, CLAUDE.md, journal, dashboard/prs.json）は既に現状に即した記述か履歴記録であることを確認した上で Plans.md のみ修正"
     }
   ]
 }
