@@ -1,0 +1,178 @@
+# coder-postgres (Coder の制御プレーンDB: ユーザー・workspace・監査ログ) を restic で
+# Backblaze B2 へバックアップする (T-0070)。
+#
+# PostgreSQL は稼働中の PGDATA を restic で直接舐めてはいけない（サーバを止めない限り
+# 一貫したスナップショットにならないと PostgreSQL 公式ドキュメントが明記）。そのため
+# initContainer で `pg_dump -Fc`（カスタム形式、pg_restore で復元）を使いネットワーク経由で
+# 論理ダンプを取り、それを emptyDir 経由で本体の restic-backup コンテナが1スナップショットに
+# まとめる。initContainer には apps/coder/postgres.yaml と同じ postgres:17.10 イメージを使う
+# （pg_dump はサーバと同バージョンのクライアントを使うのが安全なため。新しい image pin を
+# 増やさず、ops/inventory.json の coder-postgres エントリの mirrors としてバージョン同期を追う）。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: coder-restic-backup
+  namespace: coder
+spec:
+  schedule: "10 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          initContainers:
+            - name: pg-dump
+              image: postgres:17.10
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  PGPASSWORD="$POSTGRES_PASSWORD" pg_dump \
+                    -h coder-postgres -U coder -d coder \
+                    -Fc -f /staging/coder-postgres.dump
+              env:
+                - name: POSTGRES_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: coder-postgres-credentials
+                      key: password
+              # postgres 公式イメージのデフォルトユーザー (UID/GID 999, T-0058 で確認済み)。
+              # ネットワーク経由の pg_dump のみで PVC には触れないため DAC_READ_SEARCH は不要
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 999
+                runAsGroup: 999
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 20m
+                  memory: 64Mi
+                limits:
+                  cpu: 300m
+              volumeMounts:
+                - name: staging
+                  mountPath: /staging
+          containers:
+            - name: restic-backup
+              image: restic/restic:0.19.1
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  restic snapshots >/dev/null 2>&1 || restic init
+                  restic backup /staging/coder-postgres.dump
+              env:
+                - name: RESTIC_B2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: coder-restic-credentials
+                      key: RESTIC_B2_BUCKET
+                # bucket 名の後ろの "coder-postgres" がリポジトリパスの区切り。vaultwarden/immich
+                # とは同じ bucket・同じ credential で末尾だけ変える設計 (T-0069 参照)
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):coder-postgres"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: coder-restic-credentials
+                      key: RESTIC_PASSWORD
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: coder-restic-credentials
+                      key: B2_ACCOUNT_ID
+                - name: B2_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: coder-restic-credentials
+                      key: B2_ACCOUNT_KEY
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+              volumeMounts:
+                - name: staging
+                  mountPath: /staging
+                  readOnly: true
+          volumes:
+            - name: staging
+              emptyDir: {}
+---
+# 週次で古い世代を刈る (restic forget --prune)。DB には触れないため pg_dump 不要。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: coder-restic-retention
+  namespace: coder
+spec:
+  schedule: "10 4 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          containers:
+            - name: restic-forget
+              image: restic/restic:0.19.1
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  restic snapshots >/dev/null 2>&1 || { echo "repository not initialized yet, skipping"; exit 0; }
+                  restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+              env:
+                - name: RESTIC_B2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: coder-restic-credentials
+                      key: RESTIC_B2_BUCKET
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):coder-postgres"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: coder-restic-credentials
+                      key: RESTIC_PASSWORD
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: coder-restic-credentials
+                      key: B2_ACCOUNT_ID
+                - name: B2_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: coder-restic-credentials
+                      key: B2_ACCOUNT_KEY
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m

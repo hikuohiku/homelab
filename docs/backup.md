@@ -40,7 +40,7 @@ issue #56 (2026-08-05 04:40:59) で人間から新方針: **PBS は重すぎる�
 | `immich-library` | 写真/動画原本・サムネイル・変換済み動画 | T-0068 |
 | `immich-postgres-data` | immich アセットメタデータ・CLIP埋め込み | T-0068 と同時（T-0029 側で拡張検討） |
 | `vaultwarden-data` | パスワードマネージャ本体（SQLite） | T-0069 |
-| `coder-postgres-data` | Coder 制御プレーン（ユーザー・workspace・監査ログ） | T-0070 |
+| `coder-postgres-data` | Coder 制御プレーン（ユーザー・workspace・監査ログ） | T-0070（実装済み・credential 登録待ち） |
 | `coder-<workspace-id>-home`（動的作成、`apps/coder/templates/personal/main.tf`） | workspace ごとの `/home/coder`（dotfiles・ghq clone 等） | **未起票**。T-0070 の対象外（別 PVC 群）のため、別途タスク化が必要 |
 
 ## vaultwarden の restic バックアップ (T-0069, 実装済み・credential 登録待ち)
@@ -68,10 +68,36 @@ issue #56 (2026-08-05 04:40:59) で人間から新方針: **PBS は重すぎる�
 - **復元時の注意**: 復元前に vaultwarden コンテナを止め、既存の `db.sqlite3-wal`/`db.sqlite3-shm`
   を削除してから復元後の `db.sqlite3` を配置すること（stale な WAL が残ると起動時に不整合を起こしうる）
 
+## coder-postgres の restic バックアップ (T-0070, 実装済み・credential 登録待ち)
+
+`apps/coder/restic-backup-cronjob.yaml` に2つの CronJob を実装した。vaultwarden（T-0069）と
+同じ設計思想（稼働中の DB を直接 restic に渡さず、一貫性のあるダンプを先に作る）を
+PostgreSQL 向けに適用したもの。
+
+- **`coder-restic-backup`**（毎日 03:10 UTC）: PostgreSQL は稼働中の PGDATA を restic で
+  直接舐めてはいけない（サーバを止めない限り一貫したスナップショットにならないと
+  PostgreSQL 公式ドキュメントが明記）ため、initContainer で `pg_dump -Fc`（カスタム形式、
+  `pg_restore` で復元）を使いネットワーク経由で論理ダンプを取り、emptyDir 経由で本体の
+  restic-backup コンテナが1スナップショットにまとめる。initContainer は
+  `apps/coder/postgres.yaml` と同じ `postgres:17.10` イメージを使う（pg_dump はサーバと
+  同バージョンのクライアントを使うのが安全なため。新しい image pin を増やさず、
+  `ops/inventory.json` の `coder-postgres` エントリの `mirrors` としてバージョン同期を
+  `check_version_sync.py` の CI で追う）。PVC には触れず DB へのネットワーク接続のみのため、
+  vaultwarden の sqlite-snapshot initContainerと違い `DAC_READ_SEARCH` は不要
+- **`coder-restic-retention`**（毎週日曜 04:10 UTC）: `restic forget --keep-daily 7
+  --keep-weekly 4 --keep-monthly 6 --prune`
+- 保存先は vaultwarden と同じ Backblaze B2 バケット、パス末尾のみ `coder-postgres`
+  （`b2:<bucket>:coder-postgres`）
+- **immich-postgres は対象外**（cloudnative-vectorchord の拡張を含めた扱いが別途要るため
+  T-0029 側で検討。上表参照）
+- **復元時の注意**: `pg_restore` で復元する前に coder-postgres の既存データをクリアするか
+  新規 DB に復元してから切り替えること。`coder server` は起動時に DB migration を自動適用する
+  ため、リストア後に起動する `coder` のバージョンと migration の整合を確認する
+
 ### 必要な Doppler 登録（T-0067）
 
-`apps/vaultwarden/restic-external-secret.yaml` が参照するキー。immich/coder-postgres 実装時も
-同じキーを使い回す想定（バケットを分けたい場合は別途相談）。
+`apps/vaultwarden/restic-external-secret.yaml` / `apps/coder/restic-external-secret.yaml` が
+参照するキー。immich 実装時も同じキーを使い回す想定（バケットを分けたい場合は別途相談）。
 
 | Doppler キー | 内容 |
 |---|---|
