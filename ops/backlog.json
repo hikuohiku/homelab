@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 101,
+  "next_id": 102,
   "updated": "2026-08-05T10:30:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
@@ -1252,11 +1252,13 @@
       "priority": 40,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針・構築セッションの調査。immich は内蔵の日次 DB ダンプが UPLOAD_LOCATION/backups に 14 世代落ちる仕様のため、これが有効なら library PVC を restic で 1 本取るだけでライブラリと DB dump が同時に取れる（要確認）。稼働中に取る場合は DB dump が先、ファイルが後の順（DB に無い余分なファイルが残るだけで済む）",
       "dod": "immich の内蔵日次 DB ダンプが有効か確認したうえで、CronJob が restic でライブラリ PVC（DB dump を含む）を snapshot し、T-0067 の保存先へ push する。retention（`restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune` 相当）を週次で走らせる仕組みも同じ PR に含める。credential は Doppler → External Secrets 経由（キー名は T-0069 で決めた命名規則に揃える）",
-      "notes": "run #48: issue #56 (10:29:40) の指摘を受け blocked → todo に変更。manifest（CronJob・ExternalSecret）の設計・記述は T-0067（credential 発行）を待たずに進められる。実際に暗号化 push が成功するかの確認だけが T-0067 待ち | run #49: subagent に immich v2.7.5 タグの実ソースを直接確認させ、内蔵 Database Backup がデフォルト有効（毎日02:00 UTC, keepLastAmount:14）で UPLOAD_LOCATION（=immich-library PVC）配下に pg_dump 相当のフルダンプ（拡張含め除外なし）を .tmp→rename の atomic write で書き出すことを裏取りした。これにより immich-postgres-data の生 PVC を別途バックアップする必要は無いと確定（DoD の『要確認』が解消）。immich-library PVC を restic で1本取るだけの CronJob（coder-postgres のような pg_dump initContainer は不要）を実装。immich 自身のダンプ完了を待つため backup スケジュールを 02:45 UTC（ダンプ開始 02:00 の45分後）にした。restic-backup コンテナは pvc-usage-cronjob.yaml (T-0080) と同じ runAsUser:0 + DAC_READ_SEARCH パターンを再利用（PVC所有権が immich-server コンテナの UID のため）。実際に restic push が成功するかは T-0067（credential 登録）待ちのため T-0100 として確認タスクを別途起票した。done とするが、DoD の『保存先へ push する』が実際に成功したことの確認は T-0100 が担う",
+      "notes": "run #48: issue #56 (10:29:40) の指摘を受け blocked → todo に変更。manifest（CronJob・ExternalSecret）の設計・記述は T-0067（credential 発行）を待たずに進められる。実際に暗号化 push が成功するかの確認だけが T-0067 待ち | run #49: subagent に immich v2.7.5 タグの実ソースを直接確認させ、内蔵 Database Backup がデフォルト有効（毎日02:00 UTC, keepLastAmount:14）で UPLOAD_LOCATION（=immich-library PVC）配下に pg_dump 相当のフルダンプ（拡張含め除外なし）を .tmp→rename の atomic write で書き出すことを裏取りした。これにより immich-postgres-data の生 PVC を別途バックアップする必要は無いと確定（DoD の『要確認』が解消）。immich-library PVC を restic で1本取るだけの CronJob（coder-postgres のような pg_dump initContainer は不要）を実装。immich 自身のダンプ完了を待つため backup スケジュールを 02:45 UTC（ダンプ開始 02:00 の45分後）にした。restic-backup コンテナは pvc-usage-cronjob.yaml (T-0080) と同じ runAsUser:0 + DAC_READ_SEARCH パターンを再利用（PVC所有権が immich-server コンテナの UID のため）。実際に restic push が成功するかは T-0067（credential 登録）待ちのため T-0100 として確認タスクを別途起票した。done とするが、DoD の『保存先へ push する』が実際に成功したことの確認は T-0100 が担う | run #49 追記: issue #56 (12:35:47) のレビューで、内蔵 DB ダンプの前提（`UPLOAD_LOCATION/backups/` に実際に落ちているか）はソースコード確認のみで実機未検証と指摘された。これは T-0067 待ちの restic push 成功確認（T-0100）とは独立に、pvc-usage-reporter（T-0080）を使って即座に検証可能なため、apps/immich/pvc-usage-cronjob.yaml（3 namespace 共通スクリプト）に任意の `BACKUP_LISTING_DIR` 環境変数対応を追加し（未設定の vaultwarden/coder には影響なし、check_pvc_usage_script_sync.py で3ファイル一致を確認済み）、immich のみ `backups/` 配下のファイル一覧を `pvc-usage-report` ConfigMap の `backup_listing` キーに書き戻すようにした。ops-health-report 経由でこれを読む手順を CHARTER §2 に追記。次回以降の起動で `backup_listing.files` が実際に埋まっているかを T-0101 として確認する",
       "refs": [
         "apps/immich/restic-backup-cronjob.yaml",
         "apps/immich/restic-external-secret.yaml",
-        "docs/backup.md"
+        "apps/immich/pvc-usage-cronjob.yaml",
+        "docs/backup.md",
+        "ops/CHARTER.md"
       ],
       "created": "2026-08-05",
       "pr": 196
@@ -1821,6 +1823,24 @@
       "refs": [
         "apps/immich/restic-backup-cronjob.yaml",
         "docs/backup.md"
+      ],
+      "created": "2026-08-05",
+      "pr": null
+    },
+    {
+      "id": "T-0101",
+      "domain": "homelab",
+      "title": "immich 内蔵バックアップの backup_listing が実際に埋まっているか確認する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 41,
+      "why": "issue #56 (2026-08-05 12:35:47) のレビュー対応。T-0068 は immich 内蔵の日次 DB ダンプが UPLOAD_LOCATION/backups/ に落ちている前提だったが、ソースコード確認のみで実機未検証だった。pvc-usage-reporter (T-0080) に BACKUP_LISTING_DIR 対応を追加し backup_listing を書き戻すようにしたので、これは T-0100（restic push 成功確認、T-0067 待ちで blocked）とは独立に、次回以降の起動で ops-health-report が更新され次第すぐ確認できる（credential 登録を待つ必要が無い）",
+      "dod": "ops-health-report の pvc_usage（immich エントリ）の backup_listing.files が空でないこと、最新ファイルの mtime が直近24時間以内であることを確認する。空・古いまま・error のいずれかなら immich 内蔵バックアップの異常を疑い、原因調査タスクを新規に起票する（pvc-usage-reporter CronJob 自体は 5 */6 * * * で実行されるため、immich-restic-backup (02:45 UTC) より後の 06:05 UTC 実行分を待つ必要がある）。問題なければ docs/backup.md に確認日時・世代数を記録して done にする",
+      "refs": [
+        "apps/immich/pvc-usage-cronjob.yaml",
+        "docs/backup.md",
+        "ops/CHARTER.md"
       ],
       "created": "2026-08-05",
       "pr": null

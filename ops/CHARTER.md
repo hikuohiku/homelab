@@ -57,6 +57,16 @@ PVC 実使用量・コンテナ/ノードの実メモリ・CPU 使用量は `pvc
 `ops/health/history/YYYY-MM-DD.jsonl`（1行1回分、T-0083）を辿る。値の妥当性は単点観測では判断できない
 （issue #56, 2026-08-05 07:25:18 の指摘。アイドル時の数字だけで memory limits 等を決めない）。
 
+**バックアップ CronJob 自身が「取れているはず」と主張しているだけでは足りない**（issue #56,
+2026-08-05 12:35:47 の指摘。T-0068 は immich 内蔵の日次 DB ダンプが `UPLOAD_LOCATION/backups/`
+に落ちている前提だったが、これはソースコードで確認しただけで実機で見ていなかった。前提が崩れて
+いれば「写真だけあって DB が無い」使えないバックアップになるのに、実際に復元するまで気づけない）。
+`pvc_usage` の immich エントリには `backup_listing`（`dir`/`files`: `name`/`bytes`/`mtime` の配列、
+または取得失敗時は `error`）が追加されている（T-0068 フォローアップ, run #49）。ops-health-report
+を読むたびに、immich の `backup_listing.files` が空でないこと・最新ファイルの `mtime` が直近
+24時間以内であることを確認する。空または古いままなら immich 内蔵バックアップの異常を疑い、
+T-0068 のバックアップは実質機能していないとみなして調査タスクを起票する。
+
 **`pvc_usage` の `error`（404 相当）は「まだ」と「ずっと」を区別すること**（issue #56, 2026-08-05
 07:41:02 の指摘）。対象の `pvc-usage-reporter` CronJob（`immich`/`vaultwarden`/`coder`、schedule は
 それぞれ `5 */6 * * *` / `15 */6 * * *` / `25 */6 * * *`、つまり毎日 00:05・06:05・12:05・18:05 UTC
