@@ -21,9 +21,11 @@ controllers:
           requests:
             cpu: 150m
             memory: 256Mi
+          # memory の limits は入れない。超えると throttle ではなく OOMKill になり、
+          # 現に動いているサービスに「死ぬ条件」を与えることになる。実使用量を観測できる
+          # ようになってから（T-0015 の後）検討する（issue #56, 2026-08-05）
           limits:
             cpu: 1500m
-            memory: 2Gi
 
 immich:
   persistence:
@@ -46,7 +48,6 @@ valkey:
               memory: 32Mi
             limits:
               cpu: 250m
-              memory: 256Mi
   persistence:
     data:
       enabled: true
@@ -83,7 +84,6 @@ machine-learning:
               memory: 512Mi
             limits:
               cpu: 2000m
-              memory: 3Gi
   persistence:
     cache:
       enabled: true
