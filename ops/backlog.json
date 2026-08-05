@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 49,
-  "updated": "2026-08-05T01:29:00Z",
+  "updated": "2026-08-05T01:32:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -864,7 +864,7 @@
       "title": "softprops/action-gh-release を v2 → v3 に上げる",
       "kind": "ci",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 27,
       "why": "T-0043 (run #16) の調査で判明。現在 v2、最新は v3。release-image.yml（workflow_dispatch 手動実行のみ）でのリリース作成に使用",
       "dod": "release-image.yml の softprops/action-gh-release@v2 が v3 になる。workflow_dispatch のため実行時検証は次回の手動実行まで難しく、release note に破壊的変更が無いことの確認で足りるとする",
@@ -872,7 +872,8 @@
         ".github/workflows/release-image.yml"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": 122,
+      "notes": "run #17: subagent に v2.6.2〜v3.0.2 の release notes を原文確認させた。v3.0.0 の唯一の破壊的変更は Node24 ランタイム（upstream が明示: Node20 互換が要るなら v2.6.2 に留まれと明記）。v3.0.1 は依存更新のみ、v3.0.2 の新機能（既存 draft の再利用、Gitea アセット置換対応等）はこのリポジトリの non-draft/non-prerelease 経路には無関係。tag_name/name/body 等の入力に変更なし。T-0045〜T-0048 で GitHub Actions のメジャー更新棚卸し（T-0043）が完了した"
     }
   ]
 }

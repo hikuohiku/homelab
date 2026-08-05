@@ -250,12 +250,12 @@
       "id": "gha-softprops-action-gh-release",
       "kind": "github-action",
       "name": "softprops/action-gh-release",
-      "current": "v2",
+      "current": "v3",
       "file": ".github/workflows/release-image.yml",
       "match": "softprops/action-gh-release@",
       "upstream": "github:softprops/action-gh-release",
       "policy": "auto",
-      "note": "T-0043 (run #16) で発見。最新 v3 → T-0048"
+      "note": "T-0048 (run #17) で v2→v3 に更新。破壊的変更は Node24 ランタイムのみ。non-draft/non-prerelease の使用範囲には無関係な変更（既存 draft の再利用、Gitea 対応等）のみ追加"
     },
     {
       "id": "gha-nix-installer-action",
