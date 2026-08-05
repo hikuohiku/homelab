@@ -1072,7 +1072,7 @@
         "ops/CHARTER.md"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 140,
       "notes": "run #25: ops/inventory.json に observability_impact フィールドを追加。CHARTER §4 で名指しされている観測・操作経路（ArgoCD, Dex, Tailscale operator/nameserver, Coder, coder-postgres, GitHub Actions 7件）に該当する対象にのみ設定し、該当しないものは省略（無指定＝未評価であって『影響なし確認済み』ではないと _comment に明記）。自動チェックまでは実装せず、まず判断材料として持たせる段階に留めた（DoD どおり）"
     }
   ]
