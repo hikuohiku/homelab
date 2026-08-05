@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 86,
-  "updated": "2026-08-05T08:05:00Z",
+  "updated": "2026-08-05T08:10:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1559,7 +1559,7 @@
         "apps/coder/pvc-usage-cronjob.yaml"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 169,
       "notes": "run #38: CHARTER §2 に schedule (5/15/25 */6 * * *) から算出した実行予定時刻（00:05/06:05/12:05/18:05 UTC + namespace ごとの分オフセット）を明記し、それを過ぎてもなお 404 なら CronJob の異常を疑う基準を追加した"
     }
   ]
