@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 107,
-  "updated": "2026-08-05T16:45:00Z",
+  "next_id": 109,
+  "updated": "2026-08-05T17:19:51Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -1099,11 +1099,10 @@
       "title": "Dex↔ArgoCD の OIDC client secret がプレーンテキストでハードコード・2箇所重複している（Doppler 経由に切り替える）",
       "kind": "security",
       "risk": "high",
-      "status": "needs-human",
+      "status": "todo",
       "priority": 20,
       "why": "run #26: subagent の調査で発見。apps/dex/values.yaml の staticClients[0].secret と apps/argocd/values.yaml の configs.cm.oidc.config.clientSecret が、どちらも同じリテラル文字列 `argocd-dex-client-secret` を平文でハードコードしている（ランダム値ではなく名前のような文字列で、実質的に推測可能な固定値）。この repo の他の全credential（Google OAuth, Tailscale OAuth, vaultwarden ADMIN_TOKEN, coder/immich の postgres パスワード）は Doppler → ExternalSecret 経由で調達しており、CLAUDE.md の『シークレットは SOPS で暗号化して Git 管理』という方針にも反する唯一の例外。dex/values.yaml 自身も2行上で Google コネクタの clientID/clientSecret を `$GOOGLE_CLIENT_ID`/`$GOOGLE_CLIENT_SECRET`（envFrom 経由）にしており、この staticClients エントリだけが取り残されている",
       "dod": "apps/dex と apps/argocd 双方が Doppler 由来の ExternalSecret を経由して client secret を取得し、git 管理下のファイルにプレーンテキストの秘密値が存在しない。実装は次の順で行う（詳細は notes の一次ソース調査結果を参照）:\n1. (needs-human, このタスク自体) 新しいランダムな秘密文字列を生成し、Doppler に新規キー DEX_ARGOCD_CLIENT_SECRET として登録する\n2. Doppler 登録確認後、次の変更を1PRで行う:\n   - apps/dex: 新しい ExternalSecret（またはdex-google-oauthへのキー追加）で Secret を作り、dex Deployment の envFrom に追加。apps/dex/values.yaml の staticClients エントリは `secret: <literal>` ではなく `secretEnv: DEX_ARGOCD_CLIENT_SECRET` を使う（`secret: $VAR` ではない。dex は connector config にしか $VAR 展開をせず、staticClients は idEnv/secretEnv という別フィールドで env var 名を直接指定する専用の仕組み。ソース: dexidp/dex の cmd/dex/config.go, storage/storage.go, cmd/dex/serve.go）\n   - apps/argocd: 新しい ExternalSecret で Secret `argocd-dex-client-secret`（key: `secret`）を作り、target.template.metadata.labels に `app.kubernetes.io/part-of: argocd` を必ず付ける（このラベルが無いと ArgoCD の secret informer から見えず解決されない）。apps/argocd/values.yaml の oidc.config.clientSecret を `$argocd-dex-client-secret:secret` にする（argocd-secret 本体は触らない。ソース: argoproj/argo-cd の util/settings/settings.go の oidcConfig()/ReplaceMapSecrets/getSecrets/partOfArgoCDSelector）\n3. 適用順序に注意: dex 側は envFrom が参照する Secret が存在しないと Pod が CreateContainerConfigError で起動しない（Dex 自体が全ログインの単一障害点になるため、Doppler 登録が先に完了していることが必須）。ArgoCD 側は secret が無くても argocd-server はクラッシュせず OIDC ログインだけが失敗する（グレースフル）ので dex 側ほど繊細ではない。したがって Doppler 登録（手順1）が確実に完了してから手順2に進むこと\n4. PR 本文に CHARTER §4『到達性を失いうる変更』の復旧手順を明記する: 失敗した場合は git revert + ArgoCD self-heal で旧設定（同じ弱い共有値だが動作する）に戻せる。Dex が起動しなくなった場合、autopilot はクラスタに到達できないため自分では直せず、人間が Tailscale 経由の kubectl で Secret を作るか revert の反映を確認する必要がある旨も明記する",
-      "needs_human_reason": "手順1（Doppler への新しい秘密値の登録）はエージェントから手が届かない、CHARTER §4 の『人間に渡してよいもの』の credential 登録に該当する。任意の強いランダム文字列で構わないので、Doppler の homelab/prd プロジェクトに新規シークレット `DEX_ARGOCD_CLIENT_SECRET` として登録してほしい（既存の External Secrets Operator の ClusterSecretStore が読む場所と同じプロジェクト）。登録が確認でき次第、手順2以降（ExternalSecret 追加 + values.yaml 切り替え、1PR）はこちらで実施する",
       "refs": [
         "apps/dex/values.yaml",
         "apps/argocd/values.yaml",
@@ -1111,7 +1110,7 @@
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": "run #26: subagent 2件で調査。(1) 発見自体は repo 横断調査の subagent（apps/dex, apps/argocd の値ファイルを実際に Read して確認）。(2) 修正方式は別の subagent に dexidp/dex と argoproj/argo-cd の実ソース（GitHub 上のソースコード、changelogではなく）を直接確認させた。dex の $VAR 展開が staticClients には効かない（idEnv/secretEnv という別フィールドが必要、dexidp/dex#4212 で明示的に未実装と確認された既知のギャップ）という誤りやすい落とし穴を事前に潰せた。ArgoCD 側は `$secret-name:key` 構文と `app.kubernetes.io/part-of=argocd` ラベル要件をソースコード（util/settings/settings.go）で確認済み。着手前に Doppler 登録が必須という順序性（dex の envFrom は Secret 不在だと Pod が起動しないため）が高リスクの核心なので、needs-human とし、手順2以降はこちらの続きの起動で行う",
+      "notes": "run #26: subagent 2件で調査。(1) 発見自体は repo 横断調査の subagent（apps/dex, apps/argocd の値ファイルを実際に Read して確認）。(2) 修正方式は別の subagent に dexidp/dex と argoproj/argo-cd の実ソース（GitHub 上のソースコード、changelogではなく）を直接確認させた。dex の $VAR 展開が staticClients には効かない（idEnv/secretEnv という別フィールドが必要、dexidp/dex#4212 で明示的に未実装と確認された既知のギャップ）という誤りやすい落とし穴を事前に潰せた。ArgoCD 側は `$secret-name:key` 構文と `app.kubernetes.io/part-of=argocd` ラベル要件をソースコード（util/settings/settings.go）で確認済み。着手前に Doppler 登録が必須という順序性（dex の envFrom は Secret 不在だと Pod が起動しないため）が高リスクの核心なので、needs-human とし、手順2以降はこちらの続きの起動で行う | run #56: issue #56 (16:40:22, 構築セッション経由) の報告により手順1（Doppler への DEX_ARGOCD_CLIENT_SECRET 登録、48文字ランダム文字列）が完了。手順2以降（apps/dex・apps/argocd の ExternalSecret 追加 + values.yaml 切り替え、1PR）に進める。dod に書かれた適用順序（dex 側の Doppler 登録が先に完了している必要がある）は既に満たされている。",
       "human_action": {
         "summary": "Dex↔ArgoCD の OIDC client secret を Doppler 管理に移す",
         "why": "client secret がリポジトリに平文で、しかも 2 箇所に重複している。漏洩すると ArgoCD への認証を突破されうる。",
@@ -1370,14 +1369,14 @@
     {
       "id": "T-0074",
       "domain": "homelab",
-      "title": "terraform plan を CI で検証できるようにする（HCP Terraform 実行モード変更 + Tailscale credential 発行）",
+      "title": "terraform plan を継続的に可視化する仕組みを作る（クラスタ内 Job で定期実行、health-reporter と同型）",
       "kind": "feature",
       "risk": "medium",
       "status": "needs-human",
-      "priority": 34,
-      "why": "T-0073 の調査結果（docs/terraform-plan-in-ci.md）。CI に `terraform plan` の検証を追加するには、HCP Terraform workspace（org `hikuohiku`, workspace `homelab`）の execution mode 変更と、新規 credential の発行が要る。どちらもこのリポジトリの外側（Tailscale 管理コンソール、HCP Terraform org 設定）での操作でエージェントからは手が届かない",
-      "dod": "T-0073 の docs/terraform-plan-in-ci.md にある方式B（推奨: 恒久ワークロード不要、影響範囲が小さい）を採用する場合: (1) HCP Terraform workspace `homelab` の execution mode を Local に変更、(2) Tailscale 管理コンソールで CI 専用の OAuth client（`writable auth_keys` スコープ、専用タグ、ACL で Proxmox ホストの 8006 番のみ許可）を発行、(3) Proxmox 側に CI 専用の PVEAuditor スコープ API token を発行。3つとも Doppler/GitHub Actions secrets に登録されたら、CI ワークフローへの `plan` job 追加はこちらで実施する。方式A（HCP Terraform Agent を k3s に常駐）を選ぶ場合は Agent Pool・Agent Token の発行が代わりに要る（判断は人間に委ねる）",
-      "needs_human_reason": "HCP Terraform org の execution mode 変更・Tailscale OAuth client の発行はどちらも管理コンソールでの手作業で、CHARTER §4『人間に渡してよいもの』の権限・認証の手作業に該当する",
+      "priority": 25,
+      "why": "T-0073 時点では HCP Terraform workspace `homelab` の execution mode が Remote だと誤認していたが、issue #56 (2026-08-05 16:43:19, 構築セッション経由) の実測で Local 実行モードと判明（HCP は state 置き場のみ）。人間が Doppler に `TF_TOKEN_APP_TERRAFORM_IO` を登録し、構築セッション（Coder ワークスペース、node01 上の Pod で Proxmox の LAN IP 192.168.0.2 に到達可能）から `terraform init && terraform plan` が実際に成功した。ただし plan の結果、`proxmox_download_file.nixos_image` に `1 to add`（datastore にファイルが存在しないと provider が判定）が出た。`vm-nixos.tf` はこのリソースを `replace_triggered_by` に持つため、実際に apply すると node01 の VM が再作成されうる。この判定は Proxmox の pveproxy 証明書の SAN 不一致による TLS 検証エラー（`x509: certificate is valid for 127.0.0.1, ::1, 192.168.1.2, ..., not 192.168.0.2`）の最中に出ており、『ファイルが本当に無い』のか『TLS 検証失敗で存在確認できなかった』のかが未確定 （詳細と当面の注意は T-0107）。",
+      "dod": "(1) T-0107 の TLS 証明書問題が解消され、`proxmox_download_file.nixos_image` の diff が確定した後に着手する。(2) ops-health-reporter と同型のパターンで、terraform plan を定期実行しその出力を専用ブランチ（例: `ops/terraform-plan-report`）へ 書き戻す CronJob を作る。node01 上で動く Pod（Coder workspace と同じネットワーク経路）を使い、GitHub-hosted CI からは Proxmox に届かないため CI 化ではなく in-cluster ジョブ化する。TF_TOKEN の大文字小文字（`TF_TOKEN_APP_TERRAFORM_IO` として Doppler に登録済みだが Terraform が読むのは小文字の `TF_TOKEN_app_terraform_io`）は ExternalSecret の target キー名をこちらで正しく指定すれば解決でき、Doppler 側のキー名を変える必要はない。(3) drift・危険な diff を検出したら journal・ダッシュボードで人間に知らせる仕組みも含める",
+      "needs_human_reason": "T-0107（Proxmox の pveproxy 証明書の SAN 不一致）が解消されるまで着手できない。証明書の再発行または SAN への到達可能なアドレス追加は PVE 管理コンソールでの手作業でエージェントからは実行できない。T-0107 の対応が先",
       "refs": [
         "docs/terraform-plan-in-ci.md",
         ".github/workflows/ci.yml"
@@ -1385,13 +1384,10 @@
       "created": "2026-08-05",
       "pr": null,
       "human_action": {
-        "summary": "terraform plan を CI で回せるようにする（調査してほしい）",
-        "why": "apps/ の変更は 5 種類の CI ゲートで検証されるが、terraform/ は validate だけで、実際に何が起きるかを事前に知る手段が無い。node01 の削除・再作成を伴う変更が誰にも気づかれずマージされうる。",
+        "summary": "terraform plan を継続的に見える化する前提として、まず T-0107（Proxmox 証明書）を先に対応してほしい",
+        "why": "証明書問題が解消しないと、plan が出す diff が本物か TLS エラーによる誤検知かを機械的に区別できない",
         "steps": [
-          "HCP Terraform（Terraform Cloud）の workspace <code>homelab</code> の実行モードを確認する（Local か Remote か）",
-          "Remote 実行なら、GitHub Actions から plan を投げるための API トークンを発行できるか確認する",
-          "ただし plan には Proxmox（Tailscale 内）への到達も要る可能性がある。到達できなければ CI 化は不可能",
-          "可否と理由を issue #56 に書く。不可能なら「不可能」と分かること自体が成果です"
+          "T-0107 の human_action を先に実施してください"
         ],
         "links": []
       }
@@ -1808,7 +1804,8 @@
         "docs/backup.md"
       ],
       "created": "2026-08-05",
-      "pr": 191
+      "pr": 191,
+      "notes": " | run #56: issue #56 (17:14:24, 構築セッション経由) の実測報告で vaultwarden-restic-backup-verify Job が DeadlineExceeded で Failed と判明（sqlite バックアップ・restic リポジトリ作成までは成功していたが、その後の restic backup 実行中に activeDeadlineSeconds=1800 に到達）。immich (12秒) は成功しているためデータ量の問題ではなさそう。T-0108 で activeDeadlineSeconds を緩和したうえで再実行を待つ。blocked_by は T-0104 のまま（3つとも Complete になるまで T-0104 は完了しない）。"
     },
     {
       "id": "T-0098",
@@ -1875,17 +1872,17 @@
       "title": "T-0070（coder-postgres restic backup）が実際に成功しているか確認する",
       "kind": "investigate",
       "risk": "low",
-      "status": "blocked",
+      "status": "done",
       "priority": 41,
       "why": "T-0070 は manifest 実装のみで、実際に restic push が成功するかは T-0067 の credential 登録が終わるまで検証できない（このクラウドサンドボックスは k8s Job のログを見られない）。T-0097（vaultwarden 版）と同型",
       "dod": "T-0067 の Doppler 登録後、次回以降の起動で ops-health-report の pod_issues に `coder-restic-backup`/`coder-restic-retention` の CronJob の Job が Failed で出ていないかを確認する。問題なければ docs/backup.md に成功日時を記録して done にする。継続的に失敗するなら症状を記録し、原因調査を新規タスクとして起票する",
-      "blocked_by": "T-0104（一度きりの検証 Job の実行結果。T-0067 は完了済み）",
       "refs": [
         "apps/coder/restic-backup-cronjob.yaml",
         "docs/backup.md"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": 207,
+      "notes": " | run #56: issue #56 (17:14:24, 構築セッション経由) の実測報告で coder-restic-backup-verify Job が Complete と確認。docs/backup.md に記録し done とする。"
     },
     {
       "id": "T-0102",
@@ -1950,11 +1947,10 @@
       "title": "Doppler に残った重複 B2 credential（RESTIC_B2_ACCOUNT_ID/RESTIC_B2_ACCOUNT_KEY）を削除してほしい",
       "kind": "chore",
       "risk": "low",
-      "status": "needs-human",
+      "status": "done",
       "priority": 60,
       "why": "T-0103 (#205) で manifest 側を Doppler の実キー名 B2_ACCOUNT_ID/B2_ACCOUNT_KEY に揃えて既に正常動作を確認済み（3 namespace とも SecretSynced、immich の restic backup も実際に成功）。一方、構築セッションが同時並行で原因調査した際に Doppler へ追加した RESTIC_B2_ACCOUNT_ID/RESTIC_B2_ACCOUNT_KEY（同じ値の別名）はどの manifest からも参照されておらず、そのまま残すと将来また同じ命名の食い違いを生む",
       "dod": "Doppler (homelab/prd) から RESTIC_B2_ACCOUNT_ID / RESTIC_B2_ACCOUNT_KEY の2キーが削除されている（B2_ACCOUNT_ID/B2_ACCOUNT_KEY は manifest が参照しているため残す）",
-      "needs_human_reason": "Doppler の値を削除する操作。credential の管理はエージェントの手が届かない。手順: Doppler (homelab/prd) を開き、RESTIC_B2_ACCOUNT_ID と RESTIC_B2_ACCOUNT_KEY の2つのシークレットが他の用途（このリポジトリ以外）で使われていないことを確認したうえで削除してください。B2_ACCOUNT_ID / B2_ACCOUNT_KEY（プレフィックス無し）は apps/{vaultwarden,coder,immich}/restic-external-secret.yaml が参照しているため残してください",
       "refs": [
         "apps/vaultwarden/restic-external-secret.yaml",
         "apps/coder/restic-external-secret.yaml",
@@ -1962,7 +1958,7 @@
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": "run #54: issue #56 (15:56:14/15:58:54) で構築セッションから、manifest を RESTIC_ プレフィックス付きに寄せ直す提案があったが、既に動作確認済みの非プレフィックス側（#205）を変える理由が薄いため見送り、代わりに未参照になった側の削除を人間に依頼する形にした"
+      "notes": "run #54: issue #56 (15:56:14/15:58:54) で構築セッションから、manifest を RESTIC_ プレフィックス付きに寄せ直す提案があったが、既に動作確認済みの非プレフィックス側（#205）を変える理由が薄いため見送り、代わりに未参照になった側の削除を人間に依頼する形にした | run #56: issue #56 (16:40:22, 構築セッション経由) の報告により done。構築セッションが Doppler の書き込み権限で重複キー RESTIC_B2_ACCOUNT_ID/RESTIC_B2_ACCOUNT_KEY を自ら削除し、manifest からの参照が無いことを grep で確認済み、削除後も3 namespace の ExternalSecret が SecretSynced のままであることも確認済み。credential 登録・削除は人間専有ではなくなった（CHARTER §4 参照）。"
     },
     {
       "id": "T-0106",
