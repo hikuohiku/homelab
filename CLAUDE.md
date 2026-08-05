@@ -13,7 +13,7 @@ Terraform で VM プロビジョニング、NixOS でOS構成、Kubernetes (Argo
 - **Networking**: Tailscale
 - **Secrets**: SOPS, External Secrets Operator
 - **Auth**: Dex (Google OAuth)
-- **Apps**: Nextcloud, ArgoCD, Tailscale Operator
+- **Apps**: ArgoCD, Dex, External Secrets Operator, Tailscale Operator, Immich, Vaultwarden, Coder, ops-health-reporter
 
 ## Directory Structure
 
@@ -23,10 +23,14 @@ nix/images/          — NixOS image definitions
 apps/                — Kubernetes manifests (ArgoCD applications)
   apps.yaml          — App of Apps root
   argocd/            — ArgoCD self-management
-  nextcloud/         — Nextcloud deployment
+  agent-rbac/        — エージェント用 read-only ServiceAccount/RBAC
   dex/               — Dex OIDC provider
   external-secrets/  — External Secrets Operator
   tailscale-operator/ — Tailscale networking
+  immich/            — Immich (写真管理)
+  vaultwarden/       — Vaultwarden (パスワード管理)
+  coder/             — Coder (開発環境)
+  ops-health-reporter/ — autopilot 向け ArgoCD/k8s 健全性レポーター（CronJob）
 .sops.yaml            — SOPS 設定（暗号鍵の対象範囲）
 nix/images/proxmox-cloud/secrets.yaml — SOPS 暗号化ファイル（単一ファイル、トップレベルの secrets/ ディレクトリは存在しない）
 ```
