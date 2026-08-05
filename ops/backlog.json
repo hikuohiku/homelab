@@ -1109,7 +1109,7 @@
         "apps/dex/dex-google-oauth-external-secret.yaml"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 215,
       "notes": "run #26: subagent 2件で調査。(1) 発見自体は repo 横断調査の subagent（apps/dex, apps/argocd の値ファイルを実際に Read して確認）。(2) 修正方式は別の subagent に dexidp/dex と argoproj/argo-cd の実ソース（GitHub 上のソースコード、changelogではなく）を直接確認させた。dex の $VAR 展開が staticClients には効かない（idEnv/secretEnv という別フィールドが必要、dexidp/dex#4212 で明示的に未実装と確認された既知のギャップ）という誤りやすい落とし穴を事前に潰せた。ArgoCD 側は `$secret-name:key` 構文と `app.kubernetes.io/part-of=argocd` ラベル要件をソースコード（util/settings/settings.go）で確認済み。着手前に Doppler 登録が必須という順序性（dex の envFrom は Secret 不在だと Pod が起動しないため）が高リスクの核心なので、needs-human とし、手順2以降はこちらの続きの起動で行う | run #56: issue #56 (16:40:22, 構築セッション経由) の報告により手順1（Doppler への DEX_ARGOCD_CLIENT_SECRET 登録、48文字ランダム文字列）が完了。手順2以降（apps/dex・apps/argocd の ExternalSecret 追加 + values.yaml 切り替え、1PR）に進める。dod に書かれた適用順序（dex 側の Doppler 登録が先に完了している必要がある）は既に満たされている。 | run #56: 手順2以降を実装。apps/dex/dex-google-oauth-external-secret.yaml に DEX_ARGOCD_CLIENT_SECRET キーを追加（既存の envFrom Secret に相乗り）、 apps/dex/values.yaml の staticClients[0].secret を secretEnv: DEX_ARGOCD_CLIENT_SECRET に。 apps/argocd に新規 ExternalSecret（Secret名 argocd-dex-client-secret、 app.kubernetes.io/part-of: argocd ラベル付き）を追加し、 apps/argocd/values.yaml の oidc.config.clientSecret を $argocd-dex-client-secret:secret に変更。 両ファイルの平文リテラルは無くなった。ArgoCD への実ログイン確認はクラスタ到達不能なため 次回以降 ops-health-report で argocd アプリが Synced/Healthy のままであることと、 可能なら人間/構築セッションに Google アカウントでのログイン確認を依頼する。",
       "human_action": {
         "summary": "Dex↔ArgoCD の OIDC client secret を Doppler 管理に移す",
