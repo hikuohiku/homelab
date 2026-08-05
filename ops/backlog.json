@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 103,
-  "updated": "2026-08-05T14:37:25Z",
+  "next_id": 104,
+  "updated": "2026-08-05T16:19:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -1955,6 +1955,26 @@
       "created": "2026-08-05",
       "pr": 200,
       "notes": "subagent 2件で調査: (1) 既存 backlog に重複が無いことを確認したうえで発見（T-0045 は Action 自体の pin、T-0090 はファイル内2箇所の内部一致検証のみで上流比較は対象外だった）。(2) v3.16.4→v3.21.3 間の全25リリース（v3.17.0〜v3.21.3）の release note を原文確認。Capabilities.KubeVersion / APIVersions のデフォルトは不変、helm template のフラグ既定値変更なし、新規必須フィールドなし。narrow な非破壊的エッジケース3件（v3.17.1 の subchart values null override 修正、v3.18.5 の maintainers 空エントリ拒否、v3.21.1 の ClientOnly panic→エラー化）はいずれもこのリポジトリが使う argo-cd/dex/external-secrets/immich/tailscale-operator の標準的な chart には該当しない。CI green（kustomize build --enable-helm 自体が実地検証を兼ねる）を根拠に low risk のまま着手した"
+    },
+    {
+      "id": "T-0103",
+      "domain": "homelab",
+      "title": "restic-external-secret.yaml (vaultwarden/coder/immich) の remoteRef が実際の Doppler キー名と不一致で ExternalSecret が同期できない",
+      "kind": "fix",
+      "risk": "medium",
+      "status": "done",
+      "priority": 1,
+      "why": "issue #56（構築セッション経由、2026-08-05 15:47:44）で T-0067 の Doppler 登録内容を実際に B2 API を叩いて確認したところ、登録されているキー名は `B2_ACCOUNT_ID`/`B2_ACCOUNT_KEY`（`RESTIC_` プレフィックス無し）だった。しかし T-0069/T-0070/T-0068 で実装した apps/{vaultwarden,coder,immich}/restic-external-secret.yaml の remoteRef.key は3ファイルとも `RESTIC_B2_ACCOUNT_ID`/`RESTIC_B2_ACCOUNT_KEY`（プレフィックス付き）を参照しており、Doppler 側に存在しないキーを探しに行っていた。ops-health-report が観測していた vaultwarden/coder/immich の Degraded は T-0067 の credential 未登録が原因ではなく、この remoteRef のタイポが原因だった（T-0067 は run #48 時点で ExternalSecret 実装者（自分）がキー名を決めて依頼したはずが、依頼文（backlog の human_action/needs_human_reason）では正しく `B2_ACCOUNT_ID`/`B2_ACCOUNT_KEY` と書いていたのに、実装（restic-external-secret.yaml）側にだけ `RESTIC_` を余分に付けてしまっていた）",
+      "dod": "apps/vaultwarden・apps/coder・apps/immich の restic-external-secret.yaml 3ファイルの remoteRef.key が `B2_ACCOUNT_ID`/`B2_ACCOUNT_KEY`（Doppler の実キー名）と一致する。docs/backup.md の該当表も同じ表記に揃える",
+      "refs": [
+        "apps/vaultwarden/restic-external-secret.yaml",
+        "apps/coder/restic-external-secret.yaml",
+        "apps/immich/restic-external-secret.yaml",
+        "docs/backup.md"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #53: issue #56 の指摘（T-0067 完了報告）を反映する過程で、依頼した2工程（Doppler 登録キー名の確定と、manifest 側のキー名）を実際に突き合わせて初めて発見した。CHARTER §4『縛る変更には実測か裏付けが要る』の逆パターンとして、『裏付けを取ったつもりが実装側の転記ミスを見落とす』ケースが起きうると分かった。secretKey（k8s Secret 内のキー名、コンテナ側の環境変数名と一致させる用）と remoteRef.key（Doppler 側のキー名）を混同しやすい構造で、コメントヘッダーの記述と実際の remoteRef.key がズレていても CI（kustomize build）はこれを検出できない（構文的には正しい YAML なので）。CI で検出できない領域だったため実測（今回は構築セッションによる Doppler API 直接確認）が唯一の発見経路だった"
     }
   ]
 }
