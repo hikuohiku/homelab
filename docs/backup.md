@@ -156,8 +156,8 @@ PostgreSQL 向けに適用したもの。
 |---|---|
 | `RESTIC_PASSWORD` | restic リポジトリの暗号化パスワード（新規に決めて登録） |
 | `RESTIC_B2_BUCKET` | Backblaze B2 のバケット名 |
-| `RESTIC_B2_ACCOUNT_ID` | B2 application key ID（**append-only** キーを推奨。node01 が乗っ取られてもバックアップを消せないように） |
-| `RESTIC_B2_ACCOUNT_KEY` | 同上 application key |
+| `B2_ACCOUNT_ID` | B2 application key ID（**append-only** キーを推奨。node01 が乗っ取られてもバックアップを消せないように） |
+| `B2_ACCOUNT_KEY` | 同上 application key |
 
 登録後、`ops-health-report`（`pod_issues`）で `vaultwarden-restic-backup` CronJob の Job が
 Failed になっていないことを確認できれば実際に動作したとみなせる（T-0097）。
