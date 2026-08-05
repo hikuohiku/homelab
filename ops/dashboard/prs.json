@@ -2,6 +2,20 @@
   "open": [],
   "merged": [
     {
+      "number": 215,
+      "title": "security(dex,argocd): OIDC client secret を Doppler 経由の ExternalSecret に切り替える",
+      "url": "https://github.com/hikuohiku/homelab/pull/215",
+      "mergedAt": "2026-08-05T17:33:00Z",
+      "headRefName": "autopilot/T-0060-dex-argocd-oidc-secret"
+    },
+    {
+      "number": 214,
+      "title": "fix(vaultwarden): restic backup の activeDeadlineSeconds を 1800→3600 に緩和",
+      "url": "https://github.com/hikuohiku/homelab/pull/214",
+      "mergedAt": "2026-08-05T17:30:00Z",
+      "headRefName": "autopilot/T-0097-vaultwarden-backup-deadline"
+    },
+    {
       "number": 213,
       "title": "ops: issue #56 のフィードバック5件を backlog/CHARTER に反映",
       "url": "https://github.com/hikuohiku/homelab/pull/213",
@@ -406,20 +420,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/148",
       "mergedAt": "2026-08-05T04:35:42Z",
       "headRefName": "autopilot/T-0062-k3s-1.35-deprecation-check"
-    },
-    {
-      "number": 147,
-      "title": "T-0061: 時刻表示のJST化と、残った不確実性のbacklog追跡",
-      "url": "https://github.com/hikuohiku/homelab/pull/147",
-      "mergedAt": "2026-08-05T04:25:47Z",
-      "headRefName": "autopilot/T-0061-jst-time-and-uncertainty-tracking"
-    },
-    {
-      "number": 146,
-      "title": "chore(nix): flake.lock を更新する（nixpkgs 2025-12-08 → 2026-08-04）",
-      "url": "https://github.com/hikuohiku/homelab/pull/146",
-      "mergedAt": "2026-08-05T04:24:50Z",
-      "headRefName": "autopilot/T-0049-nix-flake-update"
     }
   ]
 }
