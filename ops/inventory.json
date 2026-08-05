@@ -133,12 +133,12 @@
       "id": "immich-postgres",
       "kind": "image",
       "name": "cloudnative-vectorchord",
-      "current": "16.9-0.4.3",
+      "current": "16.14-1.1.1",
       "file": "apps/immich/postgres.yaml",
       "match": "vectorchord",
       "upstream": "github:tensorchord/VectorChord-images",
       "policy": "manual",
-      "note": "Immich のベクタ DB。データを持つのでメジャー/拡張バージョンの更新は人間へ"
+      "note": "Immich のベクタ DB。データを持つため拡張のメジャー更新は自動追随せず、都度 CHARTER §4 の高リスク手順（バックアップ復元確認 + ALTER EXTENSION UPDATE/REINDEX を伴う専用 Job）を踏む（T-0029）"
     },
     {
       "id": "busybox",
