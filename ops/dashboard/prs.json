@@ -2,6 +2,41 @@
   "open": [],
   "merged": [
     {
+      "number": 189,
+      "title": "docs: apps/README.md の使われていない旧ブートストラップ手順を削除する (T-0095)",
+      "url": "https://github.com/hikuohiku/homelab/pull/189",
+      "mergedAt": "2026-08-05T11:55:33Z",
+      "headRefName": "autopilot/T-0095-apps-readme-dead-bootstrap"
+    },
+    {
+      "number": 192,
+      "title": "fix: vaultwarden backupのsqlite-snapshotをapk依存からpython標準ライブラリへ (T-0069 follow-up)",
+      "url": "https://github.com/hikuohiku/homelab/pull/192",
+      "mergedAt": "2026-08-05T11:54:12Z",
+      "headRefName": "autopilot/T-0069-followup-drop-apk-dep"
+    },
+    {
+      "number": 191,
+      "title": "feat: vaultwarden用restic backup CronJobを追加 (T-0069)",
+      "url": "https://github.com/hikuohiku/homelab/pull/191",
+      "mergedAt": "2026-08-05T11:41:15Z",
+      "headRefName": "autopilot/T-0069-vaultwarden-restic-backup"
+    },
+    {
+      "number": 190,
+      "title": "CHARTER: blocked/needs-humanをタスク全体でなく部分で見る (T-0095)",
+      "url": "https://github.com/hikuohiku/homelab/pull/190",
+      "mergedAt": "2026-08-05T11:32:44Z",
+      "headRefName": "autopilot/T-0095-blocked-granularity"
+    },
+    {
+      "number": 188,
+      "title": "ops: run #47 の記録更新（PR番号反映・journal・state・PRキャッシュ）",
+      "url": "https://github.com/hikuohiku/homelab/pull/188",
+      "mergedAt": "2026-08-05T11:23:58Z",
+      "headRefName": "autopilot/run47-record"
+    },
+    {
       "number": 187,
       "title": "docs: apps/README.md の ArgoCD Application 出力例を実態に合わせる (T-0094)",
       "url": "https://github.com/hikuohiku/homelab/pull/187",
@@ -385,41 +420,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/128",
       "mergedAt": "2026-08-05T02:20:35Z",
       "headRefName": "autopilot/T-0052-secrets-path-doc-drift"
-    },
-    {
-      "number": 127,
-      "title": "ops: run #20 の記録をまとめ、ダッシュボードを再生成する",
-      "url": "https://github.com/hikuohiku/homelab/pull/127",
-      "mergedAt": "2026-08-05T02:00:17Z",
-      "headRefName": "autopilot/run20-wrapup"
-    },
-    {
-      "number": 126,
-      "title": "T-0051: check_version_sync.py の検証対象を inventory.json の mirrors 全件に揃える",
-      "url": "https://github.com/hikuohiku/homelab/pull/126",
-      "mergedAt": "2026-08-05T01:58:01Z",
-      "headRefName": "autopilot/T-0051-check-version-sync-mirrors"
-    },
-    {
-      "number": 125,
-      "title": "docs(ci): release-image.yml が CI 検証対象外であることを明記する (T-0050)",
-      "url": "https://github.com/hikuohiku/homelab/pull/125",
-      "mergedAt": "2026-08-05T01:36:23Z",
-      "headRefName": "autopilot/T-0049-release-image-ci-blindspot"
-    },
-    {
-      "number": 124,
-      "title": "ops: nixpkgs flake.lock の経年放置を発見し T-0049 として起票する (T-0049)",
-      "url": "https://github.com/hikuohiku/homelab/pull/124",
-      "mergedAt": "2026-08-05T01:30:01Z",
-      "headRefName": "autopilot/T-0049-nixpkgs-pin-staleness"
-    },
-    {
-      "number": 123,
-      "title": "ops: run #17 の記録をまとめ、ダッシュボードを再生成する",
-      "url": "https://github.com/hikuohiku/homelab/pull/123",
-      "mergedAt": "2026-08-05T01:22:18Z",
-      "headRefName": "autopilot/run17-wrapup"
     }
   ]
 }

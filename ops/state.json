@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T10:30:00Z",
+  "updated": "2026-08-05T11:56:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T08:23:09Z"
+    "last_read": "2026-08-05T11:49:24Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -535,6 +535,19 @@
       "summary": "オープン PR・autopilot ブランチとも無く中断なし（run #46 が残した孤児ブランチ autopilot/T-0088-tailscale-1.102.2 は main との diff ゼロと確認、回収不要）。issue #56 に未読フィードバックなし。ops-health-report で ArgoCD 全10アプリ Synced/Healthy、pvc_usage の実使用量はいずれも小さく（immich-library 348MB 等）T-0079 の逼迫はまだ実害化していない。backlog の todo が0件だったため subagent に調査を投げ3件発見: T-0094（apps/README.md の ArgoCD Application 出力例が10件中4件のみ、完遂・#187）、T-0095（同ファイルの旧ブートストラップ手順が実行すると失敗する状態のまま案内されている、todo）、T-0096（ドキュメントの `just <recipe>` 参照を CI で検証する仕組みが無い、todo）",
       "prs": [
         187
+      ]
+    },
+    {
+      "n": 48,
+      "at": "2026-08-05T11:20:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "前回の中断: PR #188（run #47 の記録更新）が open のまま残っていたため CI green を確認して merge。issue #56 の未読フィードバック1件（10:29:40、重要）を反映: 直近4件がドキュメント修正に偏っていた点を指摘され、『blocked/needs-humanはタスク全体でなくタスクのどの部分かで見る』をCHARTER §3に反映（#190）。誤ってこの新規タスクに既存タスクと同じ id『T-0095』を使ってしまった（本来のT-0095は run #47 起票の apps/README.md 旧ブートストラップ削除で、backlog.json自体に重複エントリは作っていないが commit/PRタイトルでの誤表記が残る。次回以降 id 割当前に既存 id との重複を確認すること）。続けてT-0069（vaultwarden restic backup CronJob）に着手: sqlite3 Online Backup APIで一貫コピー→restic経由でBackblaze B2へ、週次retentionも実装、Dopplerキー名を決めてT-0067に反映（#191）。構築セッションのレビュー（11:38:23）でinitContainerの`apk add sqlite`が実行時にAlpineパッケージリポジトリへ依存する点を指摘され、既に監視対象のpython:3.12-alpine（標準ライブラリのsqlite3.Connection.backup()）に置き換えて解消（#192, check_version_sync.pyのGROUPSにも追加）。実際のバックアップ成功確認はT-0067（credential登録）待ちのためT-0097として起票、restic imageタグの同一ファイル内重複監視はT-0098として起票。並行セッションが起票・実装していた本来のT-0095（apps/README.md dead bootstrap）も検証のうえ merge（#189）。ops-health-report は前回観測から変化なし（ArgoCD全10アプリSynced/Healthy、pod_issuesは既知の再起動カウントのみ）",
+      "prs": [
+        190,
+        191,
+        192,
+        189
       ]
     }
   ]
