@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T12:26:00Z",
+  "updated": "2026-08-05T12:47:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T11:49:24Z"
+    "last_read": "2026-08-05T12:35:47Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -555,11 +555,12 @@
       "at": "2026-08-05T12:26:00Z",
       "kind": "scheduled",
       "by": "cloud routine",
-      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。backlog の todo（priority昇順）から T-0070（coder-postgres 用 restic backup CronJob）に着手・完遂。T-0069（vaultwarden）と同じ設計思想を PostgreSQL 向けに適用し、initContainer の pg_dump -Fc でネットワーク経由の一貫したダンプを取ってから restic で Backblaze B2 へ push する。pg_dump の initContainer は apps/coder/postgres.yaml と同じ postgres:17.10 を再利用し、新規 image pin を増やさない代わりに ops/inventory.json の mirrors + check_version_sync.py の GROUP を新設した（意図的にタグをずらして CI が exit 1 になることを確認済み）。credential は vaultwarden と同じ Doppler キーを再利用するため追加の登録依頼は無し。実際の push 成功確認は T-0067（credential 登録）待ちのため T-0099 として分離、T-0098（restic image tag 重複監視）の対象を coder-postgres 分に拡張した（#195, merged）。続けて T-0068（immich 用 restic backup CronJob）に着手・完遂。着手前に subagent へ immich v2.7.5 タグの実ソース確認を依頼し、内蔵 Database Backup がデフォルト有効（毎日02:00 UTC, keepLastAmount:14）で immich-library PVC 内に pg_dump 相当のフルダンプを atomic write で書き出すことを裏取り。これにより immich-library PVC を restic で1本取るだけでライブラリ本体とDBダンプが同時に取れると確定し、coder-postgres のような専用 pg_dump initContainer は不要と判断した。immich 自身のダンプ完了を待つため backup スケジュールを 02:45 UTC にした。T-0098 の対象を immich 分（3ファイル×2箇所=6箇所）にも拡張し、T-0100（実成功確認、T-0067 待ち）を新規起票した（#196, merged）。続けて T-0098（restic/restic イメージタグ重複の CI 監視）を完遂: extract_all_action_tags と同じ考え方の extract_image_tag_all を新設し、vaultwarden/coder-postgres/immich の3ファイルを1つの GROUP にまとめた。ファイル内不一致・ファイル間不一致の両方を意図的に発生させて検出できることを確認済み（#197）",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。backlog の todo（priority昇順）から T-0070（coder-postgres 用 restic backup CronJob）に着手・完遂。T-0069（vaultwarden）と同じ設計思想を PostgreSQL 向けに適用し、initContainer の pg_dump -Fc でネットワーク経由の一貫したダンプを取ってから restic で Backblaze B2 へ push する。pg_dump の initContainer は apps/coder/postgres.yaml と同じ postgres:17.10 を再利用し、新規 image pin を増やさない代わりに ops/inventory.json の mirrors + check_version_sync.py の GROUP を新設した（意図的にタグをずらして CI が exit 1 になることを確認済み）。credential は vaultwarden と同じ Doppler キーを再利用するため追加の登録依頼は無し。実際の push 成功確認は T-0067（credential 登録）待ちのため T-0099 として分離、T-0098（restic image tag 重複監視）の対象を coder-postgres 分に拡張した（#195, merged）。続けて T-0068（immich 用 restic backup CronJob）に着手・完遂。着手前に subagent へ immich v2.7.5 タグの実ソース確認を依頼し、内蔵 Database Backup がデフォルト有効（毎日02:00 UTC, keepLastAmount:14）で immich-library PVC 内に pg_dump 相当のフルダンプを atomic write で書き出すことを裏取り。これにより immich-library PVC を restic で1本取るだけでライブラリ本体とDBダンプが同時に取れると確定し、coder-postgres のような専用 pg_dump initContainer は不要と判断した。immich 自身のダンプ完了を待つため backup スケジュールを 02:45 UTC にした。T-0098 の対象を immich 分（3ファイル×2箇所=6箇所）にも拡張し、T-0100（実成功確認、T-0067 待ち）を新規起票した（#196, merged）。続けて T-0098（restic/restic イメージタグ重複の CI 監視）を完遂: extract_all_action_tags と同じ考え方の extract_image_tag_all を新設し、vaultwarden/coder-postgres/immich の3ファイルを1つの GROUP にまとめた。ファイル内不一致・ファイル間不一致の両方を意図的に発生させて検出できることを確認済み（#197）。ラップアップ中に issue #56 の未読フィードバック1件（12:35:47）を発見: #196（immich）の前提（内蔵 DB ダンプが UPLOAD_LOCATION/backups/ に落ちている）がソース確認のみで実機未検証という指摘。T-0100（T-0067 待ちで blocked）とは独立に pvc-usage-reporter（T-0080）で検証できると気づき、共通スクリプトに任意の BACKUP_LISTING_DIR 対応を追加（immich のみ有効化、vaultwarden/coder は無影響）し backup_listing を ops-health-report に書き戻すようにした（#198）。CHARTER §2 に読む手順を追記し、次回確認する T-0101 を起票。issue に返信し last_read を更新した",
       "prs": [
         195,
         196,
-        197
+        197,
+        198
       ]
     }
   ]

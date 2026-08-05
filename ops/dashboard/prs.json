@@ -1,21 +1,28 @@
 {
   "open": [
     {
-      "number": 197,
-      "title": "restic/restic イメージタグの重複を check_version_sync.py の監視対象に追加 (T-0098)",
-      "url": "https://github.com/hikuohiku/homelab/pull/197",
+      "number": 198,
+      "title": "immich 内蔵バックアップの実在検証を pvc-usage-reporter に追加 (T-0068 follow-up)",
+      "url": "https://github.com/hikuohiku/homelab/pull/198",
       "isDraft": false,
-      "createdAt": "2026-08-05T12:39:01Z",
+      "createdAt": "2026-08-05T12:46:36Z",
       "statusCheckRollup": [
         {
           "conclusion": "PENDING"
         }
       ],
-      "headRefName": "autopilot/T-0098-restic-image-tag-ci",
+      "headRefName": "autopilot/T-0068-followup-verify-immich-backup-dump",
       "autoMergeRequest": null
     }
   ],
   "merged": [
+    {
+      "number": 197,
+      "title": "restic/restic イメージタグの重複を check_version_sync.py の監視対象に追加 (T-0098)",
+      "url": "https://github.com/hikuohiku/homelab/pull/197",
+      "mergedAt": "2026-08-05T12:41:04Z",
+      "headRefName": "autopilot/T-0098-restic-image-tag-ci"
+    },
     {
       "number": 196,
       "title": "immich-library 用 restic backup CronJob を追加 (T-0068)",
@@ -428,13 +435,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/132",
       "mergedAt": "2026-08-05T02:51:02Z",
       "headRefName": "autopilot/T-0055-immich-resources"
-    },
-    {
-      "number": 131,
-      "title": "docs: .gitignore の secrets/ エントリを実態に合わせる (T-0054)",
-      "url": "https://github.com/hikuohiku/homelab/pull/131",
-      "mergedAt": "2026-08-05T02:48:13Z",
-      "headRefName": "autopilot/T-0054-gitignore-secrets-path"
     }
   ]
 }
