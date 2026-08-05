@@ -609,6 +609,16 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 の未読4件（構築セッション経由）を反映。#205 close 依頼は run #53 の merge と時刻が交錯していたが、直後のコメントで両修正が噛み合い3 namespace とも SecretSynced に復帰したと確認できたためやり直し不要と判断。immich の restic backup 検証（T-0104, #207由来）が実際に成功した報告（82 files/332.200 MiB, snapshot c57eb36c、内蔵DBダンプ14世代も同梱確認）を受け T-0068/T-0100/T-0101 を done に。Doppler の重複 credential 削除を T-0105（needs-human）、B2 credential の append-only 鍵分離を T-0106（blocked_by: T-0071）として起票。vaultwarden/coder-postgres 分の検証 Job 結果はまだ未報告のため issue #56 で追加確認を依頼した",
+      "prs": [
+        209
+      ]
+    },
+    {
+      "n": 55,
+      "at": "2026-08-05T16:40:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "同じ cron から並行して起動していた別セッション（run #54 として先に #209 を merge）と、issue #56 の同じフィードバックを同時に処理してしまい、内容が完全重複した PR #210 を作成・push 後に発覚。#210 は base 乖離で dirty になっており、merge すると backlog.json に T-0100/T-0105/T-0106 の重複エントリを作る危険があったため merge せず close した（run #13/#44/#46 と同型の重複）。#209 の方が T-0068/T-0101 の done 化まで含み内容が広いため、origin/main への追加反映は不要と判断。PR キャッシュ（ops/dashboard/prs.json）に #209 を追加し、run #54 の記録に漏れていた pr 番号（#209）も補完した",
       "prs": []
     }
   ]
