@@ -138,7 +138,7 @@
       "match": "vectorchord",
       "upstream": "github:tensorchord/VectorChord-images",
       "policy": "manual",
-      "note": "Immich のベクタ DB。データを持つため拡張のメジャー更新は自動追随せず、都度 CHARTER §4 の高リスク手順（バックアップ復元確認 + ALTER EXTENSION UPDATE/REINDEX を伴う専用 Job）を踏む（T-0029）。16.14-1.1.1 は #244 で一度 merge したが immich-postgres が CrashLoopBackOff（コンテナ起動時に `exec: \"-c\": executable file not found in $PATH`）になり #247 で revert した（run #72 続き）。イメージの ENTRYPOINT/CMD が 16.9-0.4.3 と 16.14-1.1.1 の間で変わっており、`args: [-c, shared_preload_libraries=...]` だけを渡す既存の manifest では 16.14-1.1.1 を起動できない。再着手する場合はまずこのイメージの Dockerfile/entrypoint スクリプトの差分を確認し、必要なら `command:` を明示する"
+      "note": "Immich のベクタ DB。データを持つため拡張のメジャー更新は自動追随せず、都度 CHARTER §4 の高リスク手順（バックアップ復元確認 + ALTER EXTENSION UPDATE/REINDEX を伴う専用 Job）を踏む（T-0029）。16.14-1.1.1 は #244 で一度 merge したが immich-postgres が CrashLoopBackOff（コンテナ起動時に `exec: \"-c\": executable file not found in $PATH`）になり #247 で revert した（run #72 続き）。run #73 で GHCR の実イメージ config を確認し根本原因を確定: 2025-11-12 のベースイメージ変更（`postgresql:$CNPG_TAG-bookworm` → `-system-bookworm`）で `16.10-1.0.0` 以降（`16.14-1.1.1` を含む）は docker-library 系 postgres（`ENTRYPOINT docker-entrypoint.sh` / `CMD postgres`）ではなく CloudNativePG operand 系イメージ（ENTRYPOINT 無し、`CMD bash`）に切り替わっており、`docker-entrypoint.sh` 自体が同梱されなくなった。`command: [\"postgres\"]` を明示すれば既存の初期化済み PGDATA に対する起動は通る見込みだが、**initdb によるブートストラップ機能が丸ごと無くなっている**ため、PVC を新規作成し直す（災害復旧）シナリオでは `postgres` コマンドだけでは空の PGDATA を初期化できず起動しない。T-0071 で確立した復元手順（immich-library PVC 復元後、稼働中の immich-postgres へ psql でダンプを流し込む）はこの『稼働中の postgres』を新規 PVC 上でどう用意するかに暗黙に依存しており、16.10-1.0.0 系以降ではこの前提が崩れる。T-0111（initdb 相当のブートストラップ経路を用意する）が解決してから再着手する"
     },
     {
       "id": "busybox",
