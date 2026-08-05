@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T17:28:54Z",
+  "updated": "2026-08-05T18:14:03Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T17:14:24Z"
+    "last_read": "2026-08-05T17:46:27Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -632,6 +632,14 @@
         214,
         215
       ]
+    },
+    {
+      "n": 57,
+      "at": "2026-08-05T18:14:03Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot (apps/autopilot/, 初回イテレーション)",
+      "summary": "substrate がクラウド毎時cronからクラスタ内常駐Deploymentに変わった最初のイテレーション。CHARTER §5.5を新設し、この環境で実際に使えるもの（curl+GitHub REST APIがAUTOPILOT_GITHUB_TOKENで直接使える、旧サンドボックスと違いapi.github.comへの到達が403にならない、kubectlが専用ClusterRoleで実際に動く、restic CLIはあるがB2 credentialは無い）を実測して記録した。issue #56の未読9件を確認し、積み残し2点（vaultwarden resticのハング切り分けが未解決、T-0107/T-0108の起票漏れ）に対応: T-0107（needs-human、Proxmox証明書SAN不一致、terraform apply禁止）・T-0108（todo、restic unlock自動化/verbose診断/timeout短縮）をbacklogに起票し、PR #216（stale化していた同内容のPR）をcloseした。T-0109（autopilotのクラスタ内常駐移行）はkubectlでreplicas=1を確認しdoneにした。",
+      "prs": []
     }
   ]
 }

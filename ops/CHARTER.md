@@ -210,11 +210,9 @@ backlog が空、または全部 `blocked` のときは**調査タスクを自�
 | `medium` | 実インフラに影響するが可逆。patch/minor のバージョン更新、manifest の整合性修正、リソース調整 | CI green **かつ** ロールバック手順を PR 本文に明記していれば **auto-merge** |
 | `high` | 不可逆な変更、データを失いうる変更、到達性を失いうる変更、メジャーバージョン更新 | **自分で判断して進める。** ただし着手前に「戻せる形」に落とすこと（下記） |
 
-この実行環境に `gh` CLI は無い（command not found）。GitHub 操作はすべて `mcp__github__*` ツールで行う
-（`list_pull_requests` / `create_pull_request` / `add_issue_comment` 等）。auto-merge は
-**`mcp__github__enable_pr_auto_merge`**（このリポジトリは squash / rebase マージを許可していないので `mergeMethod: MERGE`）。
-CI が既に green で PR が clean（pending チェックが無い）状態だと「auto-merge 不要、直接マージ可」のエラーになるので、
-その場合は `mcp__github__merge_pull_request`（`merge_method: merge`）でそのままマージしてよい。
+GitHub 操作の具体的な手段（`gh` CLI の有無、MCP ツールの有無、REST API 直叩きの可否）は実行環境
+（クラウド定期実行 or クラスタ内常駐）によって異なる。**§5.5 に実行環境ごとの事実を記録する。**
+どちらの環境でも、squash/rebase マージは無効化されているので merge は `merge_method: merge` 固定。
 
 `main` には ruleset「main: CI 必須」が掛かっていて、`kustomize build` / `terraform validate` /
 `ops state validate` の 3 つが green でないとマージできない。**これが auto-merge の安全性の根拠**であり、
@@ -442,6 +440,66 @@ upstream リポジトリのファイル（例: `deploy/crds/bundle.yaml` のよ�
   v22 固有ではなく、更新前の floating `@main` から既に同じだった
 - 検証しきれない・実ソースを読んでも判断がつかない場合は、**このファイルへの変更を auto-merge の対象から
   外し**、PR 本文に「次回の手動実行（人間によるリリース操作）まで動作未確認」と明記する
+
+### 5.5 実行環境がクラスタ内常駐 (2026-08-05〜) に変わった
+
+**§5.1/§5.2 は旧・クラウド定期実行（毎時 cron）サンドボックスの事実記録。** 人間の指示（issue #56,
+2026-08-05 17:46:27「クラスタ内にサービスを立てていい」）を受け、autopilot は `apps/autopilot/`
+（Deployment + `loop.sh` の常駐ループ、`claude -p --permission-mode bypassPermissions` を
+`INTERVAL_SECONDS` ごとに回す）に移った。**この節を読んでいる自分は、そのクラスタ内 Pod の中で
+動いている。** クラウド routine（`ops/state.json` の `routines`）は「保険」として残る想定だが、
+まだ頻度は下げられていない（着手すればできる。VISION 段階3の一部）。
+
+旧サンドボックスとの違いで、他の節の前提を崩すもの:
+
+- **`gh` CLI も `mcp__github__*` ツールも無い。** §4/§5.2 に書かれた「`mcp__github__*` で代替する」は
+  この substrate には適用できない。代わりに **`curl` + GitHub REST API を直接叩く**（`AUTOPILOT_GITHUB_TOKEN`
+  を `Authorization: Bearer` で渡す。`git push`/PR 作成/コミットの credential は `loop.sh` の
+  `setup_git()` が起動時に `credential.helper` として設定済みなので、`git push` はそのまま使える）。
+  **`api.github.com` への到達は旧サンドボックスと違い 403 にならない**（in-cluster の egress は
+  組織の cloud サンドボックスポリシーの対象外。2026-08-05 実測、`curl -H "Authorization: Bearer
+  ${AUTOPILOT_GITHUB_TOKEN}" https://api.github.com/repos/hikuohiku/homelab` が 200）
+  - open PR 一覧: `GET /repos/hikuohiku/homelab/pulls?state=open&per_page=100`
+  - issue コメント（§6 のページネーションの罠は継続。`per_page=100` を明示する）:
+    `GET /repos/hikuohiku/homelab/issues/56/comments?per_page=100`
+  - コメント投稿: `POST /repos/hikuohiku/homelab/issues/56/comments` body `{"body": "..."}`
+  - PR 作成: `POST /repos/hikuohiku/homelab/pulls` body `{"title","head","base","body"}`
+  - CI 状態: `GET /repos/.../commits/{sha}/check-runs` と `GET /repos/.../commits/{sha}/status`
+    の両方を見る（Actions の workflow は check-runs 経由、GitGuardian 等の外部 App は状況によって
+    片方にしか出ないことがある。2026-08-05、run #56 由来の古い PR #216 では `check-runs` に
+    GitGuardian の 1 件しか出ず、`actions/runs?head_sha=` も 0 件だった。base が 100 コミット以上
+    古いブランチで CI が本当に一度も走っていないのか、API 側の表示の問題かは未確認。**この
+    ずれに気づいたら、そのブランチは stale とみなして作り直しを優先し、原因究明に時間を使わない**）
+  - merge: `PUT /repos/.../pulls/{number}/merge` body `{"merge_method":"merge"}`
+    （squash/rebase は無効化済みなので `merge` 固定、旧サンドボックスと同じ）
+  - auto-merge: REST に直接の相当エンドポイントが無い。GraphQL の
+    `enablePullRequestAutoMerge(input: {pullRequestId, mergeMethod: MERGE})` を使う想定だが
+    **この substrate ではまだ実行して確かめていない**。確かめるまでは「CI green を待って
+    `merge` を直接呼ぶ」（ポーリングになるが、この pod は 2 分間隔でループが回るので次の
+    イテレーションが拾える）で代替してよい
+  - ブランチ削除: `DELETE /repos/.../git/refs/heads/<branch>` が使えるか未確認
+    （旧サンドボックスは 403 だった。API 到達性自体が変わったので、この制約も
+    再検証の余地がある。**孤児ブランチの掃除を試すときに合わせて確認する**）
+- **`kubectl` が実際に動く。** in-cluster ServiceAccount `autopilot` + 専用 ClusterRole
+  `autopilot-reader`（`apps/autopilot/rbac.yaml`）で、`get`/`list` のみ・書き込み動詞は無し。
+  読めるもの: `pods`/`persistentvolumeclaims`/`nodes`/`namespaces`/`events`、
+  `deployments`/`statefulsets`/`daemonsets`、`cronjobs`/`jobs`、`argoproj.io` の `applications`、
+  `external-secrets.io` の `externalsecrets`/`clustersecretstores`、`metrics.k8s.io` の
+  `pods`/`nodes`。**読めないもの**: `secrets`、**Pod のログ**（`pods/log` サブリソースは
+  ClusterRole に含めていない。`kubectl auth can-i get pods --subresource=log` は `no`。ログが
+  要る調査（restic のハング原因など）は自分では完結できず、構築セッション（Coder ワークスペース、
+  より広い kubectl 権限を持つ）に issue #56 経由で頼む）。ArgoCD/cluster の健全性は
+  `ops-health-report` ブランチ（30分毎の断面、履歴が要るとき用）と、この直接 kubectl
+  （いま・ここの断面が要るとき用）の両方が使える
+- **`restic` CLI はイメージに入っているが、この Pod に B2/restic の credential は無い**
+  （`apps/autopilot/external-secret.yaml` は `CLAUDE_CODE_OAUTH_TOKEN`/`AUTOPILOT_GITHUB_TOKEN`
+  の 2 つのみ）。バックアップの実 push を自分で検証することはできない。これも構築セッションに頼む
+- 旧 §5.2 のうち引き続き成り立つ（イメージに無い）もの: `terraform` / `kustomize` / `nix` / `just` /
+  `direnv` / `sops` / `docker` / `jq`。`node` は入っている
+
+**この節も他の節と同じ理由で古びる。** substrate がまた変わったら（イメージの中身を変える、
+RBAC を広げる等）、ここを実測し直して更新すること。実測せずに前節の記述を信じない
+（§5.2 冒頭に書いた原則そのもの）。
 
 ---
 

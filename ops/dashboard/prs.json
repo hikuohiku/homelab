@@ -1,6 +1,51 @@
 {
-  "open": [],
+  "open": [
+    {
+      "number": 216,
+      "title": "ops: T-0107/T-0108 の起票漏れを埋め、run #56 の記録を追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/216",
+      "isDraft": false,
+      "createdAt": "2026-08-05T17:29:46Z",
+      "statusCheckRollup": [
+        {
+          "conclusion": "SUCCESS"
+        }
+      ],
+      "headRefName": "autopilot/T-0107-T-0108-node01-tls-and-vaultwarden-deadline",
+      "autoMergeRequest": {
+        "enabledAt": "true"
+      }
+    }
+  ],
   "merged": [
+    {
+      "number": 220,
+      "title": "feat(autopilot): クラスタ内 autopilot を起動する",
+      "url": "https://github.com/hikuohiku/homelab/pull/220",
+      "mergedAt": "2026-08-05T18:05:14Z",
+      "headRefName": "autopilot/enable-in-cluster"
+    },
+    {
+      "number": 219,
+      "title": "feat(autopilot): クラスタ内常駐 autopilot のマニフェストを追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/219",
+      "mergedAt": "2026-08-05T18:03:34Z",
+      "headRefName": "autopilot/in-cluster-substrate"
+    },
+    {
+      "number": 218,
+      "title": "feat(autopilot): クラスタ内常駐 autopilot のイメージとビルド経路を追加する",
+      "url": "https://github.com/hikuohiku/homelab/pull/218",
+      "mergedAt": "2026-08-05T17:53:39Z",
+      "headRefName": "autopilot/incluster-image"
+    },
+    {
+      "number": 217,
+      "title": "ops: run #56 の記録更新（journal・state・PRキャッシュ、ダッシュボード再公開）",
+      "url": "https://github.com/hikuohiku/homelab/pull/217",
+      "mergedAt": "2026-08-05T17:32:06Z",
+      "headRefName": "autopilot/run56-wrapup"
+    },
     {
       "number": 215,
       "title": "security(dex,argocd): OIDC client secret を Doppler 経由の ExternalSecret に切り替える",
@@ -371,6 +416,27 @@
       "url": "https://github.com/hikuohiku/homelab/pull/156",
       "mergedAt": "2026-08-05T05:27:17Z",
       "headRefName": "autopilot/run30-feedback"
+    },
+    {
+      "number": 152,
+      "title": "docs: terraform plan の CI 化を調査する (T-0073)",
+      "url": "https://github.com/hikuohiku/homelab/pull/152",
+      "mergedAt": "2026-08-05T05:23:45Z",
+      "headRefName": "autopilot/T-0073-terraform-plan-ci-feasibility"
+    },
+    {
+      "number": 153,
+      "title": "T-0015: ArgoCD/k8s の健全性を homelab から repo へ書き戻す CronJob を追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/153",
+      "mergedAt": "2026-08-05T05:21:50Z",
+      "headRefName": "autopilot/T-0015-ops-health-reporter"
+    },
+    {
+      "number": 154,
+      "title": "ops: run #29 の記録をまとめ、ダッシュボードを再生成する",
+      "url": "https://github.com/hikuohiku/homelab/pull/154",
+      "mergedAt": "2026-08-05T05:16:19Z",
+      "headRefName": "autopilot/run29-wrapup"
     }
   ]
 }
