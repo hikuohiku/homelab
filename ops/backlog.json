@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 109,
-  "updated": "2026-08-05T17:45:00Z",
+  "next_id": 110,
+  "updated": "2026-08-05",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -1980,6 +1980,25 @@
       ],
       "created": "2026-08-05",
       "pr": null
+    },
+    {
+      "id": "T-0109",
+      "domain": "homelab",
+      "title": "autopilot をクラウドの毎時 cron からクラスタ内常駐に移す",
+      "kind": "infra",
+      "risk": "medium",
+      "status": "in_progress",
+      "priority": 5,
+      "why": "毎時 cron でクラウドサンドボックスを起動する方式は、起動のたびにリポジトリを取り直し、実機（k8s / Proxmox / Doppler）にも到達できない。クラスタ内に常駐させれば起動待ちが消え、実機に直接届く。VISION.md のステージ3『常駐基盤を自前に持つ』にあたる。",
+      "dod": "autopilot namespace の Deployment が Running で、claude -p のループが回り、そこから PR が作れている。クラウドの routine はバックストップとして残す（クラスタが壊れたとき autopilot も道連れになるため、消さない）。",
+      "refs": [
+        "apps/autopilot/",
+        "images/autopilot/Dockerfile",
+        ".github/workflows/build-autopilot-image.yml"
+      ],
+      "created": "2026-08-05",
+      "pr": 219,
+      "notes": "構築セッションで実施。検証済み: (1) claude -p が CLAUDE_CODE_OAUTH_TOKEN だけ（クリーンな env・空の HOME）で認証できる、(2) クラスタ内の Pod から api.anthropic.com に到達できる（このワークスペース自身が node01 上の k3s Pod）、(3) image は ghcr に publish 済みで digest pin、(4) AUTOPILOT_GITHUB_TOKEN が Contents/PR/Issues すべて書き込み可であることを API で確認。既存の GITHUB_HEALTH_REPORTER_TOKEN は pull_requests:write が無く（POST /pulls が 403）流用できないため専用トークンを分けた。PR #219 は replicas: 0 で入れ、本 PR で 1 に上げる。"
     }
   ]
 }
