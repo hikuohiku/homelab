@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 49,
-  "updated": "2026-08-05T01:12:00Z",
+  "updated": "2026-08-05T01:25:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -830,7 +830,7 @@
       "title": "hashicorp/setup-terraform を v3 → v4 に上げる",
       "kind": "ci",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 27,
       "why": "T-0043 (run #16) の調査で判明。現在 v3、最新は v4（Node.js 24 へのランタイム更新が唯一の破壊的変更）",
       "dod": "ci.yml の hashicorp/setup-terraform@v3 が v4 になり CI が green",
@@ -838,7 +838,8 @@
         ".github/workflows/ci.yml"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": 120,
+      "notes": "run #17: subagent に v3.0.0〜v4.0.1 の changelog を原文確認させた。破壊的変更は Node24 ランタイム更新のみ。v3.0.0 時点のラッパー由来 stdout 挙動変更は terraform_wrapper: false のため元から無関係。terraform_version(1.15.0) 等の入力は変更なし"
     },
     {
       "id": "T-0047",

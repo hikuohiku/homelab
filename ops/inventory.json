@@ -217,12 +217,12 @@
       "id": "gha-hashicorp-setup-terraform",
       "kind": "github-action",
       "name": "hashicorp/setup-terraform",
-      "current": "v3",
+      "current": "v4",
       "file": ".github/workflows/ci.yml",
       "match": "hashicorp/setup-terraform@",
       "upstream": "github:hashicorp/setup-terraform",
       "policy": "auto",
-      "note": "T-0043 (run #16) で発見。最新 v4 は Node24 ランタイム更新のみ → T-0046"
+      "note": "T-0046 (run #17) で v3→v4 に更新。破壊的変更は Node24 ランタイムのみ。terraform_wrapper: false のためラッパー由来の stdout 挙動変更（v3.0.0 時点の話）とも無関係"
     },
     {
       "id": "gha-cachix-install-nix-action",
