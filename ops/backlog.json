@@ -691,7 +691,7 @@
         "apps/vaultwarden/deployment.yaml"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 111,
       "notes": "run #14: subagent に dani-garcia/vaultwarden の実ソース（tag 1.37.1、このリポジトリの pin と一致）を確認させた。`IP_HEADER_TRUSTED_PROXIES` は 1.37.0 で追加された実在の設定でカンマ区切りの IP/CIDR を受け付ける（`local` は private アドレス全体を信頼、`all` は誰でも信頼）。この k3s クラスタは `--cluster-cidr` を指定していないデフォルト flannel 構成で、service CIDR が 10.43.0.0/16（ts-nameserver-fixed.yaml の clusterIP で確認済み）と k3s のデフォルト組であることから pod CIDR は 10.42.0.0/16 と判断した。`IP_HEADER_TRUSTED_PROXIES=10.42.0.0/16` を設定し、`local`（10/8, 172.16/12, 192.168/16 全体を信頼）から pod CIDR 単体への絞り込みとした。誤って絞りすぎた場合の失敗方向は「信頼されず IP_HEADER が無視されレート制限が proxy pod IP に付く」という以前と同じ安全側の挙動であり、正規アクセスを弾く方向には倒れない"
     }
   ]
