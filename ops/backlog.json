@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 81,
-  "updated": "2026-08-05T07:15:00Z",
+  "next_id": 82,
+  "updated": "2026-08-05T07:25:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1462,6 +1462,27 @@
       "created": "2026-08-05",
       "pr": 163,
       "notes": "run #33: 実装前に2つ blocked にした。(1) このタスク自体が既に認識している namespace 分散の課題に加え、既存 Pod（immich-server 等）が `securityContext.fsGroup` を設定している場合、新しい CronJob Pod が同じ PVC を readOnly でマウントしても kubelet がマウント時にボリューム全体へ再帰的な chown を試みることがある（fsGroup が Pod ごとの設定のため、chart のデフォルト値をこのサンドボックスから確認できていない）。immich-library だけで 50Gi あり、ディスクが逼迫している疑いのある状況（T-0079）でこの走査を追加するとディスク I/O 負荷が増え悪化させるリスクがある。(2) 実装しても実機で動作確認する手段が無く（kubectl 不可）、fsGroup の挙動を机上でしか検証できないため、着手前に T-0079 で実際の空き容量の余裕を確認しておきたい。T-0079 の df -h/lsblk 報告が来たら、fsGroup の値を values.yaml 等で明示指定してから実装するか検討する | run #34: 実装を完了し #163 として PR 化した。3 namespace (immich/vaultwarden/coder) それぞれに pvc-usage-reporter CronJob を追加し、対象 PVC を readOnly マウントして 標準ライブラリのみでディレクトリサイズを合計、自 namespace の ConfigMap へ書き戻す設計。#162（run #33、並行セッション）が指摘した fsGroup 再帰 chown リスクは、この実装が pod レベルの securityContext.fsGroup を一切設定しない（所有者違いのファイルは runAsUser: 0 の DAC_OVERRIDE で読む）ことで構造的に回避しており該当しないと #163 に コメントで説明した。ただし #162 のもう一つの懸念（T-0079 未解決のままディスクへ新しい I/O 負荷をかけるべきではない）は独立した妥当な慎重さのため踏襲し、blocked_by は T-0079 のまま維持。実装は完了済みなので T-0079 解決後は即 merge 可能 | run #35: 構築セッションのレビュー（issue #56, 06:38:17）を受け2点反映。(1) `capabilities: {drop: [ALL], add: [DAC_READ_SEARCH]}` を3つの CronJob 全てに追加し、`runAsUser: 0` を読み取り専用のパーミッションチェック回避のみに絞った。(2) `blocked_by: T-0079` を解除した。根拠: この走査は `os.lstat` によるサイズ合計のみでファイル内容を読まず書き込みも行わず、ディスク容量も消費しない。T-0079 が懸念する『書き込み系 I/O がディスク逼迫を悪化させる』とは負荷の性質が異なるため、解決を待つ理由が無いと判断した。CI green と issue #56 に新しい異議が無いことを確認し #163 を merge。done とする"
+    },
+    {
+      "id": "T-0081",
+      "domain": "homelab",
+      "title": "pvc-usage-reporter の埋め込みスクリプトが3ファイルで揃っているか CI で検証する",
+      "kind": "ci",
+      "risk": "low",
+      "status": "done",
+      "priority": 6,
+      "why": "run #35 の subagent 調査で発見。T-0080 (#163) で apps/{immich,vaultwarden,coder}/pvc-usage-cronjob.yaml の3ファイルに同一の pvc_usage.py スクリプト（約90行、ConfigMap の data ブロック内）をコピーして持ち込んだ。namespace ごとにマウントできる PVC が異なるため単一ファイルへの統合はできない構成上、将来どれか1つだけを直して他を直し忘れる drift が起きうる（ops/CHARTER.md が警戒する『同じ事実が2箇所に書かれている』の3箇所版）",
+      "dod": "3ファイルの埋め込みスクリプトが一致することを検証する CI チェックがあり、既存の必須チェック（ops job）に含まれる。わざと1ファイルだけ変えて CI が落ちることを確認する",
+      "refs": [
+        "ops/check_pvc_usage_script_sync.py",
+        ".github/workflows/ci.yml",
+        "apps/immich/pvc-usage-cronjob.yaml",
+        "apps/vaultwarden/pvc-usage-cronjob.yaml",
+        "apps/coder/pvc-usage-cronjob.yaml"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #35: ops/check_version_sync.py と同じ標準ライブラリのみの方針で ops/check_pvc_usage_script_sync.py を作成。ブロックスカラー（`pvc_usage.py: |`）をインデント境界で抽出し3ファイル間で完全一致を検証する。既存の ops job（ruleset の必須チェックの1つ）にステップとして追加したため、新しい required check の登録依頼は不要（既存job内の追加ステップのため）。手元で1ファイルだけ書き換えて非0終了することを確認済み。フル共有化（Kustomize component 化等のアーキテクチャ変更）は見送り、drift の機械検出のみに留めた（CHARTER『器を太らせる前に使い切る』、既存パターンの横展開で足りるため）"
     }
   ]
 }
