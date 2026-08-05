@@ -331,7 +331,8 @@
       "by": "cloud routine",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 の未読フィードバック2件を反映: (1) 時刻表記はJSTがいいという指摘を受け CHARTER §7.2 を新設し、journal 見出し・ダッシュボードの人間向け表示を JST に変更（内部データは UTC のまま）。(2) #100（tailscale-operator/k8s-nameserver）が実機で問題なかったという報告を受け inventory.json に確認済みの事実を記録し、『PR の残った不確実性は同じ PR で backlog に needs-human タスクとして起票する』運用を CHARTER §4 に追加した（T-0061, #147, auto-merged）。#147 merge 後、T-0049（nix flake update）と T-0030（terraform provider 更新）の2件が人間により直接 #146・#145 として merge 済みだったが、どちらも backlog が needs-human のまま乖離していたのを発見し done に修正。#146 の PR 本文の依頼どおり、伴う k3s 1.34.2→1.35.6 の影響確認を T-0062 として起票・subagent で調査し apps/ への影響なしと確認（manifest 変更不要）。唯一の懸念点（node01 の cgroup v2 実機確認）は T-0063 として needs-human に切り出した。#145 の PR 本文の依頼どおり、新たに出るようになった非推奨警告（proxmox_virtual_environment_download_file の改名）を T-0064 として起票した",
       "prs": [
-        147
+        147,
+        148
       ]
     }
   ]

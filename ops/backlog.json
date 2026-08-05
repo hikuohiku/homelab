@@ -1130,7 +1130,7 @@
         "nix/images/proxmox-cloud/k3s-manifests.nix"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 148,
       "notes": "run #27: subagent に k8s 1.35 の公式リリースノート・deprecation guide の原文確認と、apps/ 全 8 アプリ・nix/images/proxmox-cloud の全 manifest とのクロスチェックを実施させた。結論: apps/ 配下で使われている apiVersion/kind（v1, apps/v1, rbac.authorization.k8s.io/v1, networking.k8s.io/v1, external-secrets.io/v1, tailscale.com/v1alpha1, argoproj.io/v1alpha1, helm.cattle.io/v1 等）はいずれも 1.35 の削除対象と無関係で、manifest 側の変更は不要。1.35 で唯一の破壊的変更は cgroup v1 サポート除去（KEP-5573、kubelet がノード起動時に cgroup v1 なら起動を拒否）で、これはノード/OS レベルの話であり manifest には現れない。nix/ 配下に cgroup ドライバ/バージョンの明示指定が無く NixOS/systemd の既定（v2 のはず）に暗黙依存しているため、実機確認が要る点のみ T-0063（needs-human）として切り出した。副次的な forward note（1.35 が containerd 1.x サポートの最終版、次のホップ k3s 1.36 で containerd 2.x が必須になる）は ops/inventory.json の nixpkgs エントリに記録した"
     },
     {
