@@ -222,6 +222,30 @@
       "observability_impact": "kustomize build job (--enable-helm) が使用。壊れると manifest-diff / kustomize build の CI が動かなくなる"
     },
     {
+      "id": "ci-helm-cli",
+      "kind": "cli-tool",
+      "name": "helm CLI（azure/setup-helm の `with: version:` input で指定するバイナリ本体のバージョン）",
+      "current": "v3.16.4",
+      "file": ".github/workflows/ci.yml",
+      "match": "version:",
+      "upstream": "github:helm/helm",
+      "policy": "auto",
+      "note": "T-0090: gha-azure-setup-helm（Action 自体のバージョン `azure/setup-helm@v5`）とは別物。manifests job / manifest-diff job の2箇所に独立して `version: v3.16.4` と書かれており、ops/check_version_sync.py の GROUPS でファイル内の一致を検証している",
+      "observability_impact": "kustomize build job (--enable-helm) が使用。壊れると manifest-diff / kustomize build の CI が動かなくなる"
+    },
+    {
+      "id": "ci-kustomize-binary",
+      "kind": "cli-tool",
+      "name": "kustomize（CI が curl でダウンロードする static binary）",
+      "current": "v5.8.1",
+      "file": ".github/workflows/ci.yml",
+      "match": "kustomize%2Fv",
+      "upstream": "github:kubernetes-sigs/kustomize",
+      "policy": "auto",
+      "note": "T-0090: manifests job / manifest-diff job の2箇所に独立して同じ curl コマンドが書かれており、ops/check_version_sync.py の GROUPS でファイル内の一致を検証している",
+      "observability_impact": "kustomize build job が使用。壊れると manifest-diff / kustomize build の CI が動かなくなる"
+    },
+    {
       "id": "gha-hashicorp-setup-terraform",
       "kind": "github-action",
       "name": "hashicorp/setup-terraform",

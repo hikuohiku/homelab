@@ -55,6 +55,21 @@ def extract_tag_in_block(path: str, top_key: str) -> str:
     return v.group(1)
 
 
+def extract_all_regex_matches(path: str, pattern: str) -> str:
+    """pattern（capture group 1つ）の全マッチが完全一致することを確認して返す。
+    `extract_all_action_tags` の一般化版。`uses: name@tag` 以外の形（`with: version:` の
+    バイナリバージョン、curl URL に埋め込まれたバージョン等）で、1 ファイル内の複数箇所の
+    割れを検出する（T-0090）。"""
+    text = read(path)
+    matches = re.findall(pattern, text)
+    if not matches:
+        raise ValueError(f"{path}: パターンにマッチする箇所が見つからない: {pattern}")
+    uniq = sorted(set(matches))
+    if len(uniq) > 1:
+        raise ValueError(f"{path}: 値がファイル内で不一致 ({uniq})")
+    return uniq[0]
+
+
 def extract_all_action_tags(path: str, action_name: str) -> str:
     """`uses: <action_name>@<tag>` を全箇所拾い、ファイル内で全て一致することを確認して返す。
     1 ファイルに同じ Action が複数回 (`uses:`) 出てくる場合（例: ci.yml の複数 job）でも、
@@ -185,6 +200,24 @@ GROUPS = [
             )),
             (".github/workflows/release-image.yml", lambda: extract_all_action_tags(
                 ".github/workflows/release-image.yml", "actions/checkout"
+            )),
+        ],
+    },
+    {
+        "name": "helm CLI version via azure/setup-helm `with: version:` (T-0090, inventory: ci-helm-cli)",
+        "targets": [
+            (".github/workflows/ci.yml (manifests / manifest-diff job)", lambda: extract_all_regex_matches(
+                ".github/workflows/ci.yml",
+                r"azure/setup-helm@v5\s*\n\s*with:\s*\n\s*version:\s*(\S+)",
+            )),
+        ],
+    },
+    {
+        "name": "kustomize static binary version (T-0090, inventory: ci-kustomize-binary)",
+        "targets": [
+            (".github/workflows/ci.yml (manifests / manifest-diff job)", lambda: extract_all_regex_matches(
+                ".github/workflows/ci.yml",
+                r"kustomize_v(\S+?)_linux_amd64\.tar\.gz",
             )),
         ],
     },
