@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T18:52:00Z",
+  "updated": "2026-08-05T18:56:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T18:39:07Z"
+    "last_read": "2026-08-05T18:47:54Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -659,6 +659,14 @@
       "kind": "scheduled",
       "by": "in-cluster autopilot",
       "summary": "issue #56 のフィードバック(autopilot 自身の健全性監視提案)を T-0110 として起票。T-0108 のフォローアップ: ArgoCD が vaultwarden-restic-backup-verify Job の再作成を 'field is immutable' で SyncFailed し続けているのを kubectl で発見し、sync-options を Replace=true,Force=true に修正",
+      "prs": []
+    },
+    {
+      "n": 60,
+      "at": "2026-08-05T18:56:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断: PR #225（run #59, T-0108 の Force=true 修正）が既に merge 済みと git log で確認。kubectl で vaultwarden-restic-backup-verify Job が Complete（2026-08-05T18:49:46Z 完了）になったことを確認し、immich/coder-postgres と合わせ3コンポーネントとも restic backup 成功が確認できたため T-0097/T-0104/T-0108 を done に更新。T-0104 の DoD どおり検証用 Job 3つ（apps/{vaultwarden,coder,immich}/restic-backup-verify-job.yaml）を削除する PR を出した。T-0071（restic 復元試験）の blocked_by（T-0104）を解除し todo に戻した。issue #56 に新規の人間フィードバックなし（last_read 以降の唯一のコメントは run #59 自身の投稿）",
       "prs": []
     }
   ]
