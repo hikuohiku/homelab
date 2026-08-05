@@ -2,10 +2,31 @@
   "open": [],
   "merged": [
     {
+      "number": 132,
+      "title": "refactor(immich): server/machine-learning/valkey に resources を設定する (T-0055)",
+      "url": "https://github.com/hikuohiku/homelab/pull/132",
+      "mergedAt": "2026-08-05T02:51:02Z",
+      "headRefName": "autopilot/T-0055-immich-resources"
+    },
+    {
+      "number": 131,
+      "title": "docs: .gitignore の secrets/ エントリを実態に合わせる (T-0054)",
+      "url": "https://github.com/hikuohiku/homelab/pull/131",
+      "mergedAt": "2026-08-05T02:48:13Z",
+      "headRefName": "autopilot/T-0054-gitignore-secrets-path"
+    },
+    {
+      "number": 130,
+      "title": "ops: run #22 の記録をまとめ、ダッシュボードを再生成する",
+      "url": "https://github.com/hikuohiku/homelab/pull/130",
+      "mergedAt": "2026-08-05T02:27:08Z",
+      "headRefName": "autopilot/run22-wrapup"
+    },
+    {
       "number": 129,
       "title": "refactor(terraform): node01 の静的 IP の二重記述を locals に一本化する (T-0053)",
       "url": "https://github.com/hikuohiku/homelab/pull/129",
-      "mergedAt": "2026-08-05T02:25:00Z",
+      "mergedAt": "2026-08-05T02:25:20Z",
       "headRefName": "autopilot/T-0053-node01-ip-dedup"
     },
     {
@@ -392,41 +413,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/73",
       "mergedAt": "2026-08-04T19:56:23Z",
       "headRefName": "autopilot/feedback-tool-availability"
-    },
-    {
-      "number": 72,
-      "title": "fix(ops): PR 一覧がキャッシュのときダッシュボードに明示する",
-      "url": "https://github.com/hikuohiku/homelab/pull/72",
-      "mergedAt": "2026-08-04T19:42:31Z",
-      "headRefName": "autopilot/dashboard-stale-warning"
-    },
-    {
-      "number": 71,
-      "title": "fix(tailscale): k8s-nameserver の floating tag unstable を固定する",
-      "url": "https://github.com/hikuohiku/homelab/pull/71",
-      "mergedAt": "2026-08-04T19:40:33Z",
-      "headRefName": "autopilot/T-0001-pin-tailscale-nameserver"
-    },
-    {
-      "number": 70,
-      "title": "fix(ci): direct-push-guard のレビュー指摘3点を修正",
-      "url": "https://github.com/hikuohiku/homelab/pull/70",
-      "mergedAt": "2026-08-04T19:34:27Z",
-      "headRefName": "autopilot/T-0014-fix-direct-push-guard-review"
-    },
-    {
-      "number": 69,
-      "title": "fix(ops): ダッシュボードに起動間隔が出ない退行を直す",
-      "url": "https://github.com/hikuohiku/homelab/pull/69",
-      "mergedAt": "2026-08-04T19:26:25Z",
-      "headRefName": "autopilot/fix-dashboard-cadence"
-    },
-    {
-      "number": 68,
-      "title": "fix(terraform): .terraform.lock.hcl から未宣言の tailscale provider を除去する",
-      "url": "https://github.com/hikuohiku/homelab/pull/68",
-      "mergedAt": "2026-08-04T19:25:17Z",
-      "headRefName": "autopilot/T-0004-tf-lock-cleanup"
     }
   ]
 }

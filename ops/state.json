@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T03:10:00Z",
+  "updated": "2026-08-05T02:52:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -277,6 +277,17 @@
       "summary": "前回の中断（PR #128, T-0052）がオープンのまま残っていたのを拾い、auto-merge 有効化・購読して merge を見届けた。issue #56 に未読フィードバックなし。backlog の todo が 0 件だったため subagent に新しい調査観点探しを投げ、terraform/proxmox/vm-nixos.tf で node01 の静的 IP が ip_config と output の2箇所に独立したリテラルとして書かれている重複を発見。T-0053 として起票・完遂し、locals に一本化した（#129, auto-merge）",
       "prs": [
         129
+      ]
+    },
+    {
+      "n": 23,
+      "at": "2026-08-05T02:47:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。backlog の todo が 0 件だったため subagent に新しい調査観点探しを投げ、2 件発見。T-0054: .gitignore の secrets/ エントリが T-0052 で直したドキュメントと同型に実在しないパスを指したまま残っていた。削除し実際の secrets.yaml が意図的に git 管理されている旨のコメントに置き換えた（#131, auto-merge）。T-0055: apps/immich/values.yaml だけ他コンポーネント（vaultwarden/coder/coder-postgres/immich-postgres/argocd）と違って resources（requests/limits）が未設定で、node01（4c/11.7GiB 単一ノード）上で無制限にリソースを使いうる状態だった。immich-server・machine-learning・valkey に requests/limits を追加し、既存 requests 合計に対して余裕があることを確認した上で着手（#132, auto-merge）",
+      "prs": [
+        131,
+        132
       ]
     }
   ]
