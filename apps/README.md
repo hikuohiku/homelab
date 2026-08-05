@@ -68,11 +68,18 @@ kubectl --context=tailscale-operator-context get application -n argocd
 ```
 NAME                 SYNC STATUS   HEALTH STATUS
 apps                 Synced        Healthy
+agent-rbac           Synced        Healthy
 argocd               Synced        Healthy
+coder                Synced        Healthy
+dex                  Synced        Healthy
 external-secrets     Synced        Healthy
-
+immich               Synced        Healthy
+ops-health-reporter  Synced        Healthy
 tailscale-operator   Synced        Healthy
+vaultwarden          Synced        Healthy
 ```
+
+（`apps` が root App of Apps。子 Application の一覧は `apps/kustomization.yaml` を参照）
 
 ## ArgoCD UI アクセス
 
