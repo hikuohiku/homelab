@@ -1,0 +1,206 @@
+{
+  "generated_at": "2026-08-05T05:30:09Z",
+  "applications": [
+    {
+      "name": "agent-rbac",
+      "namespace": "argocd",
+      "sync": "Synced",
+      "health": "Healthy"
+    },
+    {
+      "name": "apps",
+      "namespace": "argocd",
+      "sync": "Synced",
+      "health": "Healthy"
+    },
+    {
+      "name": "argocd",
+      "namespace": "argocd",
+      "sync": "Synced",
+      "health": "Healthy"
+    },
+    {
+      "name": "coder",
+      "namespace": "argocd",
+      "sync": "Synced",
+      "health": "Healthy"
+    },
+    {
+      "name": "dex",
+      "namespace": "argocd",
+      "sync": "Synced",
+      "health": "Healthy"
+    },
+    {
+      "name": "external-secrets",
+      "namespace": "argocd",
+      "sync": "Synced",
+      "health": "Healthy"
+    },
+    {
+      "name": "immich",
+      "namespace": "argocd",
+      "sync": "Synced",
+      "health": "Healthy"
+    },
+    {
+      "name": "ops-health-reporter",
+      "namespace": "argocd",
+      "sync": "Synced",
+      "health": "Healthy"
+    },
+    {
+      "name": "tailscale-operator",
+      "namespace": "argocd",
+      "sync": "Synced",
+      "health": "Healthy"
+    },
+    {
+      "name": "vaultwarden",
+      "namespace": "argocd",
+      "sync": "Synced",
+      "health": "Healthy"
+    }
+  ],
+  "pod_issues": [
+    {
+      "name": "argocd-applicationset-controller-85ddf4b49b-nclkw",
+      "namespace": "argocd",
+      "phase": "Running",
+      "restarts": 19,
+      "waiting_reasons": []
+    },
+    {
+      "name": "argocd-dex-server-5d9c7d5d9f-f6sdz",
+      "namespace": "argocd",
+      "phase": "Running",
+      "restarts": 19,
+      "waiting_reasons": []
+    },
+    {
+      "name": "argocd-notifications-controller-78bcc778c8-l7c6l",
+      "namespace": "argocd",
+      "phase": "Running",
+      "restarts": 19,
+      "waiting_reasons": []
+    },
+    {
+      "name": "argocd-redis-88d84b6bb-dmm4z",
+      "namespace": "argocd",
+      "phase": "Running",
+      "restarts": 19,
+      "waiting_reasons": []
+    },
+    {
+      "name": "argocd-repo-server-c546cd6b-zxrlx",
+      "namespace": "argocd",
+      "phase": "Running",
+      "restarts": 5,
+      "waiting_reasons": []
+    },
+    {
+      "name": "coredns-557cc8c59-fgmdt",
+      "namespace": "kube-system",
+      "phase": "Running",
+      "restarts": 19,
+      "waiting_reasons": []
+    },
+    {
+      "name": "local-path-provisioner-578895bd58-k6p8x",
+      "namespace": "kube-system",
+      "phase": "Running",
+      "restarts": 19,
+      "waiting_reasons": []
+    },
+    {
+      "name": "metrics-server-7b9c9c4b9c-t5n7b",
+      "namespace": "kube-system",
+      "phase": "Running",
+      "restarts": 19,
+      "waiting_reasons": []
+    }
+  ],
+  "pvcs": [
+    {
+      "name": "coder-0cd09458-ec4b-4b17-9039-f4e4f5927305-home",
+      "namespace": "coder",
+      "phase": "Bound",
+      "requested": "128Gi",
+      "capacity": "128Gi"
+    },
+    {
+      "name": "coder-7fdb7787-e2b7-4a6d-b54f-1640b5d9b587-home",
+      "namespace": "coder",
+      "phase": "Bound",
+      "requested": "10Gi",
+      "capacity": "10Gi"
+    },
+    {
+      "name": "coder-postgres-data",
+      "namespace": "coder",
+      "phase": "Bound",
+      "requested": "1Gi",
+      "capacity": "1Gi"
+    },
+    {
+      "name": "immich-library",
+      "namespace": "immich",
+      "phase": "Bound",
+      "requested": "50Gi",
+      "capacity": "50Gi"
+    },
+    {
+      "name": "immich-machine-learning",
+      "namespace": "immich",
+      "phase": "Bound",
+      "requested": "10Gi",
+      "capacity": "10Gi"
+    },
+    {
+      "name": "immich-postgres-data",
+      "namespace": "immich",
+      "phase": "Bound",
+      "requested": "10Gi",
+      "capacity": "10Gi"
+    },
+    {
+      "name": "immich-valkey",
+      "namespace": "immich",
+      "phase": "Bound",
+      "requested": "1Gi",
+      "capacity": "1Gi"
+    },
+    {
+      "name": "vaultwarden-data",
+      "namespace": "vaultwarden",
+      "phase": "Bound",
+      "requested": "5Gi",
+      "capacity": "5Gi"
+    }
+  ],
+  "nodes": [
+    {
+      "name": "nixos",
+      "allocatable": {
+        "cpu": "4",
+        "ephemeral-storage": "49856147827",
+        "hugepages-1Gi": "0",
+        "hugepages-2Mi": "0",
+        "memory": "12252032Ki",
+        "pods": "110"
+      },
+      "capacity": {
+        "cpu": "4",
+        "ephemeral-storage": "51250152Ki",
+        "hugepages-1Gi": "0",
+        "hugepages-2Mi": "0",
+        "memory": "12252032Ki",
+        "pods": "110"
+      },
+      "ready": "True",
+      "diskPressure": "False",
+      "memoryPressure": "False"
+    }
+  ],
+  "notes": "実使用量（ディスク/メモリの実消費）は metrics-server / kubelet stats 依存のため未収集。RBAC は get/list のみ、write 系の verb は含まない。"
+}
