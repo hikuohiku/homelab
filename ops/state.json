@@ -483,8 +483,11 @@
       "at": "2026-08-05T08:42:00Z",
       "kind": "scheduled",
       "by": "cloud routine",
-      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし（last_read 以降新規コメント0件、全64件を機械的に確認）。ops-health-report (generated_at 08:30:04Z、#171 merge 後) で immich アプリ Synced/Healthy かつ pod_issues に immich-server/machine-learning が出現しないことを確認し T-0087 を done に。backlog の todo が0件だったため subagent に調査を投げ3件発見: T-0088（ops/inventory.json の tf-provider-proxmox.current が 0.89.1 のまま古く、実際の pin (providers.tf) は 0.111.1 と一致していなかった、即完遂）、T-0089（CLAUDE.md の Apps 一覧・ディレクトリ構造が nextcloud/ 記載のまま immich/coder/vaultwarden 等5ディレクトリ未記載、この起動内で直列に着手予定）、T-0090（ci.yml の kustomize/azure-setup-helm バイナリ版が監視対象外、次回以降の todo）",
-      "prs": []
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし（last_read 以降新規コメント0件、全64件を機械的に確認）。ops-health-report (generated_at 08:30:04Z、#171 merge 後) で immich アプリ Synced/Healthy かつ pod_issues に immich-server/machine-learning が出現しないことを確認し T-0087 を done に。backlog の todo が0件だったため subagent に調査を投げ3件発見: T-0088（ops/inventory.json の tf-provider-proxmox.current が 0.89.1 のまま古く、実際の pin (providers.tf) は 0.111.1 と一致していなかった、即完遂・#175）、T-0089（CLAUDE.md の Apps 一覧・ディレクトリ構造が nextcloud/ 記載のまま immich/coder/vaultwarden 等5ディレクトリ未記載、直列に着手・完遂・#176）、T-0090（ci.yml の kustomize/azure-setup-helm バイナリ版が監視対象外、次回以降の todo）",
+      "prs": [
+        175,
+        176
+      ]
     }
   ]
 }
