@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 75,
+  "next_id": 76,
   "updated": "2026-08-05T05:10:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
@@ -271,10 +271,10 @@
       ],
       "created": "2026-08-04",
       "pr": 153,
-      "notes": "T-0010 を置き換える形の具体案。run #29: issue #56 (04:51:25、構築セッション経由) で GITHUB_HEALTH_REPORTER_TOKEN が Doppler に登録されたと判明し着手。apps/ops-health-reporter/ に Namespace・ServiceAccount・ClusterRole(get/list のみ)・ClusterRoleBinding・ExternalSecret・CronJob（30分毎, python:3.12-alpine, 標準ライブラリのみ）を実装した。スクリプトは k8s API (Application CRD / Pods / PVC / Nodes) を SA トークンで直接読み、GitHub Contents API で ops-health-report ブランチ (main と別、専用) の ops/health/latest.json を作成・更新する。CronJob に memory limits (256Mi) と securityContext (runAsNonRoot/runAsUser: 65534) を新設したため CHARTER §4 の『縛る変更』クールダウンの対象と判断し、この起動では merge しない（PR #153 open のまま）。DoD のうち『autopilot が起動のたびにそれを読む』は未実施 — CronJob が実際に動作し書き込めることを確認してから CHARTER §2 に読む手順を追加する（T-0074）。実使用量（ディスク/メモリ）は metrics-server 依存のため今回のスコープ外とし、応答スクリプトの notes フィールドに明記した"
+      "notes": "T-0010 を置き換える形の具体案。run #29: issue #56 (04:51:25、構築セッション経由) で GITHUB_HEALTH_REPORTER_TOKEN が Doppler に登録されたと判明し着手。apps/ops-health-reporter/ に Namespace・ServiceAccount・ClusterRole(get/list のみ)・ClusterRoleBinding・ExternalSecret・CronJob（30分毎, python:3.12-alpine, 標準ライブラリのみ）を実装した。スクリプトは k8s API (Application CRD / Pods / PVC / Nodes) を SA トークンで直接読み、GitHub Contents API で ops-health-report ブランチ (main と別、専用) の ops/health/latest.json を作成・更新する。CronJob に memory limits (256Mi) と securityContext (runAsNonRoot/runAsUser: 65534) を新設したため CHARTER §4 の『縛る変更』クールダウンの対象と判断し、この起動では merge しない（PR #153 open のまま）。DoD のうち『autopilot が起動のたびにそれを読む』は未実施 — CronJob が実際に動作し書き込めることを確認してから CHARTER §2 に読む手順を追加する（T-0075）。実使用量（ディスク/メモリ）は metrics-server 依存のため今回のスコープ外とし、応答スクリプトの notes フィールドに明記した"
     },
     {
-      "id": "T-0074",
+      "id": "T-0075",
       "domain": "homelab",
       "title": "ops-health-reporter CronJob が実際に動作し ops-health-report ブランチへ書き込めているか確認する",
       "kind": "investigate",
