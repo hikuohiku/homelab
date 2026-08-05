@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 50,
-  "updated": "2026-08-05T01:23:49Z",
+  "next_id": 51,
+  "updated": "2026-08-05T02:10:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -893,6 +893,25 @@
       "created": "2026-08-05",
       "pr": null,
       "notes": "run #18: flake.lock の `locked.lastModified`（unix epoch）を4入力とも確認し、2025-11-21〜2025-12-12 止まりと判明。T-0040 の DoD に『manual policy かつ離散リリース無しの対象も経年チェックだけは行う』を追記し、今後は自動的に再検出されるようにした"
+    },
+    {
+      "id": "T-0050",
+      "domain": "homelab",
+      "title": "release-image.yml が CI の検証対象外であることを明記し、T-0047 で保留にした cachix push 挙動の懸念を実ソースで確定させる",
+      "kind": "docs",
+      "risk": "low",
+      "status": "done",
+      "priority": 5,
+      "why": "issue #56 (2026-08-05 01:18:49) の指摘。T-0042/T-0044/T-0047/T-0048 で release-image.yml の Action を更新したが、この workflow は workflow_dispatch 専用で CI（PR/push）が一度も実行しない。CHARTER §4『CI が検証できない領域の変更を auto-merge してはならない』に反する形で進めていた。T-0047 の notes に残っていた「次回の手動実行で push 失敗が顕在化する可能性」という未決着の懸念も、実際に push するかどうかさえ確認していなかった",
+      "dod": "ops/CHARTER.md に release-image.yml が CI 対象外である事実と、ここでしか使われない Action を更新するときの手順（changelog 要約でなく実ソースで確認する）を明記する。cachix/cachix-action の push 挙動を action 本体のソースで確認し、ops/inventory.json の該当 note を確定した結論に書き換える",
+      "refs": [
+        "ops/CHARTER.md",
+        "ops/inventory.json",
+        ".github/workflows/release-image.yml"
+      ],
+      "created": "2026-08-05",
+      "pr": 125,
+      "notes": "run #19: subagent に cachix/cachix-action・softprops/action-gh-release・DeterminateSystems/nix-installer-action・actions/checkout の実ソース/action.yml/changelog を原文確認させた。結論: 4 件とも現状の使い方（release-image.yml が実際に渡す input）に対して安全。cachix-action は authToken/signingKey が無いと pushMode=None で push を一切行わないため、v17 の『push 失敗が job 失敗として伝播する』変更はそもそも発火しない。revert は不要と判断し、CHARTER §5.4 として release-image.yml の CI 非カバレッジと今後の確認手順を明文化した。着手時点では T-0049 として起票したが、同時に走っていた別セッションが T-0049（nixpkgs flake.lock の経年、#124）を先にマージしたため、rebase 時に T-0050 へ採番し直した（本 run 自身も run #18 と自称したが同じ理由で run #19 に採番し直した）"
     }
   ]
 }

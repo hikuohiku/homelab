@@ -269,6 +269,29 @@ upstream リポジトリのファイル（例: `deploy/crds/bundle.yaml` のよ�
 正しかったが、方法として再現性が無い）。CRD やオブジェクトの実体を確認したいなら、chart がレンダリングされた
 結果（`manifest-diff` の出力、または手元に `kustomize`/`helm` があればその場でレンダリングした結果）を見る。
 
+### 5.4 `.github/workflows/release-image.yml` は CI の検証対象外
+
+この workflow は `workflow_dispatch` 専用（人間の手動実行のみ）で、PR にも push にも反応しない。
+`kustomize build` / `terraform validate` / `ops state validate` / `manifest-diff` / `nix flake check` の
+どれもこのファイルの中身を一度も実行しない。**§4 の「CI が検証できない領域」に該当する**（issue #56,
+2026-08-05 01:18:49。T-0042/T-0044/T-0047/T-0048 でここに使われる Action（`DeterminateSystems/nix-installer-action`
+`cachix/cachix-action` `softprops/action-gh-release`）を CI 側と同じ感覚で「release notes 上は Node ランタイム
+更新のみ」と結論して merge したが、実際に動かして確かめた回数はゼロだった）。
+
+対処方針（§4 の一般則をこのファイルに適用したもの）:
+
+- ここでしか使われていない Action（`nix-installer-action` / `cachix-action` / `action-gh-release`。
+  `actions/checkout` は `ci.yml` 等でも使われ間接的に実exercisedされるので対象外）を更新するときは、
+  changelog の要約だけで判断しない。**その Action の実ソース（`action.yml`、本体コード）を読み、
+  このファイルが実際に渡している input（例: `cachix-action` は `name:` のみで `authToken` 無し）で
+  何が起きるかを具体的に確かめる**（§5.3 と同じ「レンダリングされた実体を見る」原則）
+- 2026-08-05 時点で確認済み: `cachix/cachix-action` は `authToken`/`signingKey` が無いと push を一切行わない
+  （`pushMode = None`）ため、v17 で入った「push 失敗が job 失敗として伝播する」変更はこの workflow には
+  影響しない（push 自体が発生しない）。`nix-installer-action` の `determinate: true` デフォルトは
+  v22 固有ではなく、更新前の floating `@main` から既に同じだった
+- 検証しきれない・実ソースを読んでも判断がつかない場合は、**このファイルへの変更を auto-merge の対象から
+  外し**、PR 本文に「次回の手動実行（人間によるリリース操作）まで動作未確認」と明記する
+
 ---
 
 ## 6. 人間からのフィードバック
@@ -291,6 +314,8 @@ upstream リポジトリのファイル（例: `deploy/crds/bundle.yaml` のよ�
 PR に付いたレビューコメントも同じ扱い。**指摘を受けたら、その PR を直すだけでなく、再発しない形（CHARTER・CI・チェックリスト）に落とす。**
 
 **過去の指摘を反映するときは、指摘された時点の前提が今も成り立つか自分で確かめる。** 状態は変わりうる（ruleset の設定、権限、上流のバージョンなど）。「無かった」「まだ塞がっていない」は「まだ見えていない」「もう解消済み」と区別がつかないことがある（issue #56, 2026-08-04 の 2 件の事例）。
+
+**指摘を受けたら、それが自分の環境で実行可能かも同じように確かめる。** 指摘する側（人間・構築セッションいずれも）は、こちらの実行環境の制約（§5.1/§5.2 のツール有無・権限）を知らずに書いてくることがある。実行できない指摘は、黙って諦めるのでも無理に試すのでもなく、「できない、代わりにこう対処する」と issue に返す。今回できないと分かっているなら、次に同じ指摘を受けたときのために CHARTER の該当箇所（§5.1/§5.2）にその旨が既に書いてあるか確認し、無ければ足す（issue #56, 2026-08-05 01:08:27。ブランチ削除を求められたが `git push origin --delete` は 403 で実行不能、§5.1 に既知の事実として記録済みだった）。
 
 ---
 
