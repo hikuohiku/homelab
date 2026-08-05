@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 60,
-  "updated": "2026-08-05T04:05:00Z",
+  "next_id": 61,
+  "updated": "2026-08-05T04:11:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1074,6 +1074,26 @@
       "created": "2026-08-05",
       "pr": 140,
       "notes": "run #25: ops/inventory.json に observability_impact フィールドを追加。CHARTER §4 で名指しされている観測・操作経路（ArgoCD, Dex, Tailscale operator/nameserver, Coder, coder-postgres, GitHub Actions 7件）に該当する対象にのみ設定し、該当しないものは省略（無指定＝未評価であって『影響なし確認済み』ではないと _comment に明記）。自動チェックまでは実装せず、まず判断材料として持たせる段階に留めた（DoD どおり）"
+    },
+    {
+      "id": "T-0060",
+      "domain": "homelab",
+      "title": "Dex↔ArgoCD の OIDC client secret がプレーンテキストでハードコード・2箇所重複している（Doppler 経由に切り替える）",
+      "kind": "security",
+      "risk": "high",
+      "status": "needs-human",
+      "priority": 20,
+      "why": "run #26: subagent の調査で発見。apps/dex/values.yaml の staticClients[0].secret と apps/argocd/values.yaml の configs.cm.oidc.config.clientSecret が、どちらも同じリテラル文字列 `argocd-dex-client-secret` を平文でハードコードしている（ランダム値ではなく名前のような文字列で、実質的に推測可能な固定値）。この repo の他の全credential（Google OAuth, Tailscale OAuth, vaultwarden ADMIN_TOKEN, coder/immich の postgres パスワード）は Doppler → ExternalSecret 経由で調達しており、CLAUDE.md の『シークレットは SOPS で暗号化して Git 管理』という方針にも反する唯一の例外。dex/values.yaml 自身も2行上で Google コネクタの clientID/clientSecret を `$GOOGLE_CLIENT_ID`/`$GOOGLE_CLIENT_SECRET`（envFrom 経由）にしており、この staticClients エントリだけが取り残されている",
+      "dod": "apps/dex と apps/argocd 双方が Doppler 由来の ExternalSecret を経由して client secret を取得し、git 管理下のファイルにプレーンテキストの秘密値が存在しない。実装は次の順で行う（詳細は notes の一次ソース調査結果を参照）:\n1. (needs-human, このタスク自体) 新しいランダムな秘密文字列を生成し、Doppler に新規キー DEX_ARGOCD_CLIENT_SECRET として登録する\n2. Doppler 登録確認後、次の変更を1PRで行う:\n   - apps/dex: 新しい ExternalSecret（またはdex-google-oauthへのキー追加）で Secret を作り、dex Deployment の envFrom に追加。apps/dex/values.yaml の staticClients エントリは `secret: <literal>` ではなく `secretEnv: DEX_ARGOCD_CLIENT_SECRET` を使う（`secret: $VAR` ではない。dex は connector config にしか $VAR 展開をせず、staticClients は idEnv/secretEnv という別フィールドで env var 名を直接指定する専用の仕組み。ソース: dexidp/dex の cmd/dex/config.go, storage/storage.go, cmd/dex/serve.go）\n   - apps/argocd: 新しい ExternalSecret で Secret `argocd-dex-client-secret`（key: `secret`）を作り、target.template.metadata.labels に `app.kubernetes.io/part-of: argocd` を必ず付ける（このラベルが無いと ArgoCD の secret informer から見えず解決されない）。apps/argocd/values.yaml の oidc.config.clientSecret を `$argocd-dex-client-secret:secret` にする（argocd-secret 本体は触らない。ソース: argoproj/argo-cd の util/settings/settings.go の oidcConfig()/ReplaceMapSecrets/getSecrets/partOfArgoCDSelector）\n3. 適用順序に注意: dex 側は envFrom が参照する Secret が存在しないと Pod が CreateContainerConfigError で起動しない（Dex 自体が全ログインの単一障害点になるため、Doppler 登録が先に完了していることが必須）。ArgoCD 側は secret が無くても argocd-server はクラッシュせず OIDC ログインだけが失敗する（グレースフル）ので dex 側ほど繊細ではない。したがって Doppler 登録（手順1）が確実に完了してから手順2に進むこと\n4. PR 本文に CHARTER §4『到達性を失いうる変更』の復旧手順を明記する: 失敗した場合は git revert + ArgoCD self-heal で旧設定（同じ弱い共有値だが動作する）に戻せる。Dex が起動しなくなった場合、autopilot はクラスタに到達できないため自分では直せず、人間が Tailscale 経由の kubectl で Secret を作るか revert の反映を確認する必要がある旨も明記する",
+      "needs_human_reason": "手順1（Doppler への新しい秘密値の登録）はエージェントから手が届かない、CHARTER §4 の『人間に渡してよいもの』の credential 登録に該当する。任意の強いランダム文字列で構わないので、Doppler の homelab/prd プロジェクトに新規シークレット `DEX_ARGOCD_CLIENT_SECRET` として登録してほしい（既存の External Secrets Operator の ClusterSecretStore が読む場所と同じプロジェクト）。登録が確認でき次第、手順2以降（ExternalSecret 追加 + values.yaml 切り替え、1PR）はこちらで実施する",
+      "refs": [
+        "apps/dex/values.yaml",
+        "apps/argocd/values.yaml",
+        "apps/dex/dex-google-oauth-external-secret.yaml"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #26: subagent 2件で調査。(1) 発見自体は repo 横断調査の subagent（apps/dex, apps/argocd の値ファイルを実際に Read して確認）。(2) 修正方式は別の subagent に dexidp/dex と argoproj/argo-cd の実ソース（GitHub 上のソースコード、changelogではなく）を直接確認させた。dex の $VAR 展開が staticClients には効かない（idEnv/secretEnv という別フィールドが必要、dexidp/dex#4212 で明示的に未実装と確認された既知のギャップ）という誤りやすい落とし穴を事前に潰せた。ArgoCD 側は `$secret-name:key` 構文と `app.kubernetes.io/part-of=argocd` ラベル要件をソースコード（util/settings/settings.go）で確認済み。着手前に Doppler 登録が必須という順序性（dex の envFrom は Secret 不在だと Pod が起動しないため）が高リスクの核心なので、needs-human とし、手順2以降はこちらの続きの起動で行う"
     }
   ]
 }

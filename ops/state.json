@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T03:30:00Z",
+  "updated": "2026-08-05T04:11:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T03:45:46Z"
+    "last_read": "2026-08-05T03:50:30Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -313,6 +313,14 @@
         140,
         141
       ]
+    },
+    {
+      "n": 26,
+      "at": "2026-08-05T04:11:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "前回の中断: state.json 記録済みの run #25 (#139-141) より後に #142/#143 が別セッションと思われる主体により既に merge 済みだったが journal に記述が無かった。ローカル main を追従させ prs.json キャッシュに反映。issue #56 に人間からの新規フィードバックなし（last_read 以降の唯一のコメントは run #25 自身の返信）。backlog の todo が 0 件だったため subagent 2件（発見 → 修正方式の一次ソース検証）を直列に投入し、apps/dex/values.yaml と apps/argocd/values.yaml が同一の Dex↔ArgoCD OIDC client secret を平文で2箇所に重複ハードコードしていることを発見。dexidp/dex と argoproj/argo-cd の実ソースを確認し、dex の $VAR 展開は staticClients には効かず idEnv/secretEnv という専用フィールドが必要という誤りやすい落とし穴を事前に特定できた。Dex が全ログインの単一障害点であり、Doppler への新しい秘密値の登録という credential 手作業が手順の先頭に必須のため T-0060 として起票し needs-human とした（コード変更は無し、記録更新のみ）",
+      "prs": []
     }
   ]
 }
