@@ -1345,7 +1345,7 @@
         "docs/terraform-plan-in-ci.md"
       ],
       "created": "2026-08-05",
-      "pr": 151,
+      "pr": 152,
       "notes": "run #28: subagent に HCP Terraform 公式ドキュメント・tailscale/github-action の README・bpg/terraform-provider-proxmox の実ソースを直接確認させた。結論: HCP Terraform の `cloud` ブロックは既定で Remote 実行モード（plan/apply は HCP Terraform 自身の VM 上で実行され、呼び出し元では実行されない）で、これは workspace 設定でありリポジトリのファイルからは変更できない。到達性を得るには (A) k3s 内に HCP Terraform Agent を配置し execution mode を Agent に切り替える、(B) `tailscale/github-action` で GitHub-hosted runner を一時的に tailnet に参加させ execution mode を Local に切り替える、のいずれかが要り、どちらも Tailscale 管理コンソール・HCP Terraform org 設定という repo 外での新規 credential 発行が要る。bpg/proxmox provider の Read（plan 相当）経路は実ソース上 GET/list のみで PVEAuditor 相当の監査権限で足りそうと確認したが、provider 自身の公式文書には権限区分の記載は無い。詳細は docs/terraform-plan-in-ci.md。実装は T-0074（needs-human）として起票した"
     },
     {
