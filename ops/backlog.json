@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 105,
-  "updated": "2026-08-05T16:19:00Z",
+  "updated": "2026-08-05T16:20:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -1939,8 +1939,8 @@
         "apps/immich/restic-backup-verify-job.yaml"
       ],
       "created": "2026-08-05",
-      "pr": null,
-      "notes": "run #53: risk を medium とした理由: 実データを外部（B2）へ初めて書き込む操作だが、ソース側（PVC/DB）には読み取り専用でしか触れず（restic backup は非破壊）、Job はいつでも削除できる。CronJob の jobTemplate をそのままコピーしただけで新しいロジックは無いため『縛る変更』（CHARTER §4）には該当しない。ロールバック手順: Job 3つを削除する PR を出せば良い。B2 側に作られたオブジェクトは残るが、追加コストは実質ゼロ（無料枠 10GB 以内）で害はない"
+      "pr": 207,
+      "notes": "run #53: risk を medium とした理由: 実データを外部（B2）へ初めて書き込む操作だが、ソース側（PVC/DB）には読み取り専用でしか触れず（restic backup は非破壊）、Job はいつでも削除できる。CronJob の jobTemplate をそのままコピーしただけで新しいロジックは無いため『縛る変更』（CHARTER §4）には該当しない。ロールバック手順: Job 3つを削除する PR を出せば良い。B2 側に作られたオブジェクトは残るが、追加コストは実質ゼロ（無料枠 10GB 以内）で害はない。CI green を確認し即マージした（#207）。副次的な確認: T-0103 (#205) merge 直後（16:00:04Z）の ops-health-report で vaultwarden/coder/immich が既に Synced/Healthy に戻っていることを確認した——ExternalSecret の同期自体は Job の実行を待たずに直った（remoteRef 修正だけで解決する話だったため、これは想定どおり）。Job 自体（初回の実際の B2 書き込み）が成功したかどうかは、この Job が #207 merge 後に ArgoCD で同期されるのを待つ必要があり、この run の時点ではまだ反映前のため確認できていない。次回以降の起動で ops-health-report の pod_issues を確認すること"
     }
   ]
 }

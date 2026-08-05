@@ -1,59 +1,425 @@
 {
   "open": [],
   "merged": [
-    {"number": 202, "title": "feat(ops): ダッシュボードを作り直す — 主役を「何をすればいいか」にする", "url": "https://github.com/hikuohiku/homelab/pull/202", "mergedAt": "2026-08-05T15:10:23Z", "headRefName": "autopilot/dashboard-redesign"},
-    {"number": 201, "title": "ops: run #51 の記録更新（T-0102 完遂・journal・state・PRキャッシュ）", "url": "https://github.com/hikuohiku/homelab/pull/201", "mergedAt": "2026-08-05T14:42:43Z", "headRefName": "autopilot/run51-record"},
-    {"number": 200, "title": "ci: helm バイナリを v3.16.4 → v3.21.3 に更新 (T-0102)", "url": "https://github.com/hikuohiku/homelab/pull/200", "mergedAt": "2026-08-05T14:38:46Z", "headRefName": "autopilot/T-0102-helm-binary-3.21.3"},
-    {"number": 199, "title": "ドキュメントが案内する just recipe の実在を CI で検証する (T-0096)", "url": "https://github.com/hikuohiku/homelab/pull/199", "mergedAt": "2026-08-05T13:41:09Z", "headRefName": "autopilot/T-0096-doc-just-recipe-check"},
-    {"number": 198, "title": "immich 内蔵バックアップの実在検証を pvc-usage-reporter に追加 (T-0068 follow-up)", "url": "https://github.com/hikuohiku/homelab/pull/198", "mergedAt": "2026-08-05T12:49:06Z", "headRefName": "autopilot/T-0068-followup-verify-immich-backup-dump"},
-    {"number": 197, "title": "restic/restic イメージタグの重複を check_version_sync.py の監視対象に追加 (T-0098)", "url": "https://github.com/hikuohiku/homelab/pull/197", "mergedAt": "2026-08-05T12:41:04Z", "headRefName": "autopilot/T-0098-restic-image-tag-ci"},
-    {"number": 196, "title": "immich-library 用 restic backup CronJob を追加 (T-0068)", "url": "https://github.com/hikuohiku/homelab/pull/196", "mergedAt": "2026-08-05T12:37:04Z", "headRefName": "autopilot/T-0068-immich-restic-backup"},
-    {"number": 195, "title": "coder-postgres 用 restic backup CronJob を追加 (T-0070)", "url": "https://github.com/hikuohiku/homelab/pull/195", "mergedAt": "2026-08-05T12:28:53Z", "headRefName": "autopilot/T-0070-coder-postgres-restic-backup"},
-    {"number": 194, "title": "ops: run #48 の記録更新（journal・state・PRキャッシュ、T-0095 id重複の再発防止）", "url": "https://github.com/hikuohiku/homelab/pull/194", "mergedAt": "2026-08-05T12:03:09Z", "headRefName": "autopilot/run48-record"},
-    {"number": 189, "title": "docs: apps/README.md の使われていない旧ブートストラップ手順を削除する (T-0095)", "url": "https://github.com/hikuohiku/homelab/pull/189", "mergedAt": "2026-08-05T11:55:33Z", "headRefName": "autopilot/T-0095-apps-readme-dead-bootstrap"},
-    {"number": 192, "title": "fix: vaultwarden backupのsqlite-snapshotをapk依存からpython標準ライブラリへ (T-0069 follow-up)", "url": "https://github.com/hikuohiku/homelab/pull/192", "mergedAt": "2026-08-05T11:54:12Z", "headRefName": "autopilot/T-0069-followup-drop-apk-dep"},
-    {"number": 191, "title": "feat: vaultwarden用restic backup CronJobを追加 (T-0069)", "url": "https://github.com/hikuohiku/homelab/pull/191", "mergedAt": "2026-08-05T11:41:15Z", "headRefName": "autopilot/T-0069-vaultwarden-restic-backup"},
-    {"number": 190, "title": "CHARTER: blocked/needs-humanをタスク全体でなく部分で見る (T-0095)", "url": "https://github.com/hikuohiku/homelab/pull/190", "mergedAt": "2026-08-05T11:32:44Z", "headRefName": "autopilot/T-0095-blocked-granularity"},
-    {"number": 188, "title": "ops: run #47 の記録更新（PR番号反映・journal・state・PRキャッシュ）", "url": "https://github.com/hikuohiku/homelab/pull/188", "mergedAt": "2026-08-05T11:23:58Z", "headRefName": "autopilot/run47-record"},
-    {"number": 187, "title": "docs: apps/README.md の ArgoCD Application 出力例を実態に合わせる (T-0094)", "url": "https://github.com/hikuohiku/homelab/pull/187", "mergedAt": "2026-08-05T10:29:02Z", "headRefName": "autopilot/T-0094-apps-readme-app-list"},
-    {"number": 186, "title": "docs: CLAUDE.md の autopilot 定期実行間隔記述を実態に合わせる (T-0093)", "url": "https://github.com/hikuohiku/homelab/pull/186", "mergedAt": "2026-08-05T09:29:57Z", "headRefName": "autopilot/T-0093-claude-md-schedule-interval"},
-    {"number": 183, "title": "docs: README.md の insecure 手順を実態に合わせる (T-0092)", "url": "https://github.com/hikuohiku/homelab/pull/183", "mergedAt": "2026-08-05T09:25:25Z", "headRefName": "autopilot/T-0092-readme-insecure-fix"},
-    {"number": 182, "title": "ops: T-0091 の PR 番号反映、PR キャッシュ最新化 (run #43)", "url": "https://github.com/hikuohiku/homelab/pull/182", "mergedAt": "2026-08-05T09:04:43Z", "headRefName": "autopilot/run43-pr-numbers"},
-    {"number": 180, "title": "ci: terraform_version を 1.15.0 → 1.15.8 に更新 (T-0091)", "url": "https://github.com/hikuohiku/homelab/pull/180", "mergedAt": "2026-08-05T09:01:37Z", "headRefName": "autopilot/T-0091-terraform-binary-version"},
-    {"number": 178, "title": "ci: kustomize/helm バイナリ版を version_sync の監視対象に追加 (T-0090)", "url": "https://github.com/hikuohiku/homelab/pull/178", "mergedAt": "2026-08-05T08:53:29Z", "headRefName": "autopilot/T-0090-ci-binary-version-tracking"},
-    {"number": 177, "title": "ops: run #42 のラップアップ（PR #175/#176 反映）", "url": "https://github.com/hikuohiku/homelab/pull/177", "mergedAt": "2026-08-05T08:48:16Z", "headRefName": "autopilot/run42-wrapup"},
-    {"number": 176, "title": "docs: CLAUDE.md の Apps/ディレクトリ構造を実態に合わせる (T-0089)", "url": "https://github.com/hikuohiku/homelab/pull/176", "mergedAt": "2026-08-05T08:46:20Z", "headRefName": "autopilot/T-0089-claude-md-apps"},
-    {"number": 175, "title": "ops: T-0087/T-0088 完遂の記録、T-0090 起票 (run #42)", "url": "https://github.com/hikuohiku/homelab/pull/175", "mergedAt": "2026-08-05T08:44:20Z", "headRefName": "autopilot/T-0087-record"},
-    {"number": 174, "title": "ops: tailscale-operator/k8s-nameserver の v1.102.2 更新調査結果を記録 (run #41)", "url": "https://github.com/hikuohiku/homelab/pull/174", "mergedAt": "2026-08-05T08:37:19Z", "headRefName": "autopilot/tailscale-v1102-investigation"},
-    {"number": 173, "title": "ops: run #40 の記録漏れ(state.json/last_read)を埋め合わせ、PRキャッシュ更新", "url": "https://github.com/hikuohiku/homelab/pull/173", "mergedAt": "2026-08-05T08:30:59Z", "headRefName": "autopilot/records-run40-catchup"},
-    {"number": 172, "title": "issue #56 のフィードバックを反映: DB コンポーネントのロールバック手順にスキーマの扱いを明記する規則を追加", "url": "https://github.com/hikuohiku/homelab/pull/172", "mergedAt": "2026-08-05T08:23:29Z", "headRefName": "autopilot/T-0086-rollback-wording"},
-    {"number": 171, "title": "immich server/machine-learning を v2.6.3 → v2.7.5 に更新 (T-0086)", "url": "https://github.com/hikuohiku/homelab/pull/171", "mergedAt": "2026-08-05T08:16:43Z", "headRefName": "autopilot/T-0086-immich-v2.7.5"},
-    {"number": 170, "title": "ops: T-0085 の PR番号(#169)を記録に反映", "url": "https://github.com/hikuohiku/homelab/pull/170", "mergedAt": "2026-08-05T07:50:37Z", "headRefName": "autopilot/T-0085-pr-record"},
-    {"number": 169, "title": "T-0085: pvc_usage 404 の想定内/異常の区別基準を CHARTER に明記", "url": "https://github.com/hikuohiku/homelab/pull/169", "mergedAt": "2026-08-05T07:48:58Z", "headRefName": "autopilot/T-0085-pvc-usage-404-criterion"},
-    {"number": 168, "title": "T-0083: ops-health-reporter に履歴（history/YYYY-MM-DD.jsonl）を追加", "url": "https://github.com/hikuohiku/homelab/pull/168", "mergedAt": "2026-08-05T07:43:01Z", "headRefName": "autopilot/T-0083-health-report-history"},
-    {"number": 167, "title": "T-0082: pvc-usage-reporter の python イメージを inventory 監視対象に追加", "url": "https://github.com/hikuohiku/homelab/pull/167", "mergedAt": "2026-08-05T07:26:09Z", "headRefName": "autopilot/T-0082-pvc-usage-reporter-image-inventory"},
-    {"number": 166, "title": "ci: pvc-usage-reporter の埋め込みスクリプト3ファイルの一致を検証する (T-0081)", "url": "https://github.com/hikuohiku/homelab/pull/166", "mergedAt": "2026-08-05T07:09:53Z", "headRefName": "autopilot/T-0081-pvc-usage-script-sync"},
-    {"number": 165, "title": "run #35: T-0080 完遂の記録更新", "url": "https://github.com/hikuohiku/homelab/pull/165", "mergedAt": "2026-08-05T07:03:37Z", "headRefName": "autopilot/T-0080-records-2"},
-    {"number": 163, "title": "PVC の実使用量を計測する namespace 別 CronJob を追加 (T-0080)", "url": "https://github.com/hikuohiku/homelab/pull/163", "mergedAt": "2026-08-05T06:59:02Z", "headRefName": "autopilot/T-0080-pvc-usage"},
-    {"number": 164, "title": "run #34: T-0080 の並行セッション調整反映、記録更新", "url": "https://github.com/hikuohiku/homelab/pull/164", "mergedAt": "2026-08-05T06:37:26Z", "headRefName": "autopilot/T-0080-records"},
-    {"number": 162, "title": "ops: T-0080 に fsGroup 再帰 chown リスクを追記 (run #33)", "url": "https://github.com/hikuohiku/homelab/pull/162", "mergedAt": "2026-08-05T06:33:03Z", "headRefName": "autopilot/T-0080-fsgroup-risk-note"},
-    {"number": 161, "title": "ops-health-reporter に metrics-server 経由のコンテナ実メモリ/CPU 収集を追加", "url": "https://github.com/hikuohiku/homelab/pull/161", "mergedAt": "2026-08-05T06:27:26Z", "headRefName": "autopilot/T-0077-metrics-collect"},
-    {"number": 160, "title": "ops: node01 実ディスク容量の食い違いを起票、PR作り直し時の規則を追記 (T-0079)", "url": "https://github.com/hikuohiku/homelab/pull/160", "mergedAt": "2026-08-05T06:05:50Z", "headRefName": "autopilot/T-0079-node01-disk-discrepancy"},
-    {"number": 159, "title": "ops: 取り残された cooldown/直列化の衝突対策を CHARTER に戻す", "url": "https://github.com/hikuohiku/homelab/pull/159", "mergedAt": "2026-08-05T05:56:52Z", "headRefName": "autopilot/recover-charter-cooldown-rule"},
-    {"number": 158, "title": "T-0015/T-0075: ops-health-reporter の動作確認、run #30 のラップアップ", "url": "https://github.com/hikuohiku/homelab/pull/158", "mergedAt": "2026-08-05T05:39:41Z", "headRefName": "autopilot/T-0075-health-reporter-confirmed"},
-    {"number": 157, "title": "T-0065: IaC 完全性の棚卸し — node01 揮発時の未カバー領域を確認", "url": "https://github.com/hikuohiku/homelab/pull/157", "mergedAt": "2026-08-05T05:34:05Z", "headRefName": "autopilot/T-0065-iac-completeness"},
-    {"number": 156, "title": "run #30: issue #56 のフィードバック2件を反映（cooldown/直列化の規則衝突、#153 レビュー）", "url": "https://github.com/hikuohiku/homelab/pull/156", "mergedAt": "2026-08-05T05:27:17Z", "headRefName": "autopilot/run30-feedback"},
-    {"number": 152, "title": "docs: terraform plan の CI 化を調査する (T-0073)", "url": "https://github.com/hikuohiku/homelab/pull/152", "mergedAt": "2026-08-05T05:23:45Z", "headRefName": "autopilot/T-0073-terraform-plan-ci-feasibility"},
-    {"number": 153, "title": "T-0015: ArgoCD/k8s の健全性を homelab から repo へ書き戻す CronJob を追加", "url": "https://github.com/hikuohiku/homelab/pull/153", "mergedAt": "2026-08-05T05:21:50Z", "headRefName": "autopilot/T-0015-ops-health-reporter"},
-    {"number": 154, "title": "ops: run #29 の記録をまとめ、ダッシュボードを再生成する", "url": "https://github.com/hikuohiku/homelab/pull/154", "mergedAt": "2026-08-05T05:16:19Z", "headRefName": "autopilot/run29-wrapup"},
-    {"number": 151, "title": "T-0011: vaultwarden ADMIN_TOKEN の Argon2 PHC 化を完了扱いにする", "url": "https://github.com/hikuohiku/homelab/pull/151", "mergedAt": "2026-08-05T05:06:53Z", "headRefName": "autopilot/T-0011-vaultwarden-admin-token-done"},
-    {"number": 150, "title": "ops: run #28 の記録をまとめる（T-0064 merge、backup 方針転換の反映）", "url": "https://github.com/hikuohiku/homelab/pull/150", "mergedAt": "2026-08-05T04:59:11Z", "headRefName": "autopilot/run28-wrapup"},
-    {"number": 149, "title": "T-0064: proxmox_virtual_environment_download_file を proxmox_download_file に改名", "url": "https://github.com/hikuohiku/homelab/pull/149", "mergedAt": "2026-08-05T04:52:53Z", "headRefName": "autopilot/T-0064-terraform-download-file-rename"},
-    {"number": 148, "title": "T-0062: k3s 1.34→1.35の非推奨API影響確認、および人間merge分の記録同期", "url": "https://github.com/hikuohiku/homelab/pull/148", "mergedAt": "2026-08-05T04:35:42Z", "headRefName": "autopilot/T-0062-k3s-1.35-deprecation-check"},
-    {"number": 147, "title": "T-0061: 時刻表示のJST化と、残った不確実性のbacklog追跡", "url": "https://github.com/hikuohiku/homelab/pull/147", "mergedAt": "2026-08-05T04:25:47Z", "headRefName": "autopilot/T-0061-jst-time-and-uncertainty-tracking"},
-    {"number": 146, "title": "chore(nix): flake.lock を更新する（nixpkgs 2025-12-08 → 2026-08-04）", "url": "https://github.com/hikuohiku/homelab/pull/146", "mergedAt": "2026-08-05T04:24:50Z", "headRefName": "autopilot/T-0049-nix-flake-update"},
-    {"number": 145, "title": "chore(terraform): bpg/proxmox provider を 0.89.1 → 0.111.1 に上げる", "url": "https://github.com/hikuohiku/homelab/pull/145", "mergedAt": "2026-08-05T04:22:12Z", "headRefName": "autopilot/T-0030-tf-provider-0.111.1"},
-    {"number": 144, "title": "ops: run #26 の記録をまとめ、T-0060 を起票する", "url": "https://github.com/hikuohiku/homelab/pull/144", "mergedAt": "2026-08-05T04:14:29Z", "headRefName": "autopilot/T-0060-dex-argocd-secret-plaintext"},
-    {"number": 143, "title": "feat(ops): ダッシュボードにストリーム分類とガントを追加する", "url": "https://github.com/hikuohiku/homelab/pull/143", "mergedAt": "2026-08-05T04:05:35Z", "headRefName": "autopilot/dashboard-streams-gantt"}
+    {
+      "number": 207,
+      "title": "feat: 一度きりの Job で restic backup を即時検証する (T-0104)",
+      "url": "https://github.com/hikuohiku/homelab/pull/207",
+      "mergedAt": "2026-08-05T16:09:10Z",
+      "headRefName": "autopilot/T-0104-restic-backup-verify-once"
+    },
+    {
+      "number": 206,
+      "title": "ops: issue #56 フィードバック反映 (T-0063 done, T-0079 dropped, T-0067 done)",
+      "url": "https://github.com/hikuohiku/homelab/pull/206",
+      "mergedAt": "2026-08-05T16:02:15Z",
+      "headRefName": "autopilot/run53-feedback-and-records"
+    },
+    {
+      "number": 205,
+      "title": "fix: restic ExternalSecret の remoteRef を実際の Doppler キー名に合わせる (T-0103)",
+      "url": "https://github.com/hikuohiku/homelab/pull/205",
+      "mergedAt": "2026-08-05T15:54:48Z",
+      "headRefName": "autopilot/T-0103-restic-doppler-key-mismatch"
+    },
+    {
+      "number": 203,
+      "title": "ops: run #52 の記録更新（issue #56 フィードバック反映・PRキャッシュ・ダッシュボード再公開）",
+      "url": "https://github.com/hikuohiku/homelab/pull/203",
+      "mergedAt": "2026-08-05T15:33:35Z",
+      "headRefName": "autopilot/run52-record"
+    },
+    {
+      "number": 202,
+      "title": "feat(ops): ダッシュボードを作り直す — 主役を「何をすればいいか」にする",
+      "url": "https://github.com/hikuohiku/homelab/pull/202",
+      "mergedAt": "2026-08-05T15:10:23Z",
+      "headRefName": "autopilot/dashboard-redesign"
+    },
+    {
+      "number": 201,
+      "title": "ops: run #51 の記録更新（T-0102 完遂・journal・state・PRキャッシュ）",
+      "url": "https://github.com/hikuohiku/homelab/pull/201",
+      "mergedAt": "2026-08-05T14:42:43Z",
+      "headRefName": "autopilot/run51-record"
+    },
+    {
+      "number": 200,
+      "title": "ci: helm バイナリを v3.16.4 → v3.21.3 に更新 (T-0102)",
+      "url": "https://github.com/hikuohiku/homelab/pull/200",
+      "mergedAt": "2026-08-05T14:38:46Z",
+      "headRefName": "autopilot/T-0102-helm-binary-3.21.3"
+    },
+    {
+      "number": 199,
+      "title": "ドキュメントが案内する just recipe の実在を CI で検証する (T-0096)",
+      "url": "https://github.com/hikuohiku/homelab/pull/199",
+      "mergedAt": "2026-08-05T13:41:09Z",
+      "headRefName": "autopilot/T-0096-doc-just-recipe-check"
+    },
+    {
+      "number": 198,
+      "title": "immich 内蔵バックアップの実在検証を pvc-usage-reporter に追加 (T-0068 follow-up)",
+      "url": "https://github.com/hikuohiku/homelab/pull/198",
+      "mergedAt": "2026-08-05T12:49:06Z",
+      "headRefName": "autopilot/T-0068-followup-verify-immich-backup-dump"
+    },
+    {
+      "number": 197,
+      "title": "restic/restic イメージタグの重複を check_version_sync.py の監視対象に追加 (T-0098)",
+      "url": "https://github.com/hikuohiku/homelab/pull/197",
+      "mergedAt": "2026-08-05T12:41:04Z",
+      "headRefName": "autopilot/T-0098-restic-image-tag-ci"
+    },
+    {
+      "number": 196,
+      "title": "immich-library 用 restic backup CronJob を追加 (T-0068)",
+      "url": "https://github.com/hikuohiku/homelab/pull/196",
+      "mergedAt": "2026-08-05T12:37:04Z",
+      "headRefName": "autopilot/T-0068-immich-restic-backup"
+    },
+    {
+      "number": 195,
+      "title": "coder-postgres 用 restic backup CronJob を追加 (T-0070)",
+      "url": "https://github.com/hikuohiku/homelab/pull/195",
+      "mergedAt": "2026-08-05T12:28:53Z",
+      "headRefName": "autopilot/T-0070-coder-postgres-restic-backup"
+    },
+    {
+      "number": 194,
+      "title": "ops: run #48 の記録更新（journal・state・PRキャッシュ、T-0095 id重複の再発防止）",
+      "url": "https://github.com/hikuohiku/homelab/pull/194",
+      "mergedAt": "2026-08-05T12:03:09Z",
+      "headRefName": "autopilot/run48-record"
+    },
+    {
+      "number": 189,
+      "title": "docs: apps/README.md の使われていない旧ブートストラップ手順を削除する (T-0095)",
+      "url": "https://github.com/hikuohiku/homelab/pull/189",
+      "mergedAt": "2026-08-05T11:55:33Z",
+      "headRefName": "autopilot/T-0095-apps-readme-dead-bootstrap"
+    },
+    {
+      "number": 192,
+      "title": "fix: vaultwarden backupのsqlite-snapshotをapk依存からpython標準ライブラリへ (T-0069 follow-up)",
+      "url": "https://github.com/hikuohiku/homelab/pull/192",
+      "mergedAt": "2026-08-05T11:54:12Z",
+      "headRefName": "autopilot/T-0069-followup-drop-apk-dep"
+    },
+    {
+      "number": 191,
+      "title": "feat: vaultwarden用restic backup CronJobを追加 (T-0069)",
+      "url": "https://github.com/hikuohiku/homelab/pull/191",
+      "mergedAt": "2026-08-05T11:41:15Z",
+      "headRefName": "autopilot/T-0069-vaultwarden-restic-backup"
+    },
+    {
+      "number": 190,
+      "title": "CHARTER: blocked/needs-humanをタスク全体でなく部分で見る (T-0095)",
+      "url": "https://github.com/hikuohiku/homelab/pull/190",
+      "mergedAt": "2026-08-05T11:32:44Z",
+      "headRefName": "autopilot/T-0095-blocked-granularity"
+    },
+    {
+      "number": 188,
+      "title": "ops: run #47 の記録更新（PR番号反映・journal・state・PRキャッシュ）",
+      "url": "https://github.com/hikuohiku/homelab/pull/188",
+      "mergedAt": "2026-08-05T11:23:58Z",
+      "headRefName": "autopilot/run47-record"
+    },
+    {
+      "number": 187,
+      "title": "docs: apps/README.md の ArgoCD Application 出力例を実態に合わせる (T-0094)",
+      "url": "https://github.com/hikuohiku/homelab/pull/187",
+      "mergedAt": "2026-08-05T10:29:02Z",
+      "headRefName": "autopilot/T-0094-apps-readme-app-list"
+    },
+    {
+      "number": 186,
+      "title": "docs: CLAUDE.md の autopilot 定期実行間隔記述を実態に合わせる (T-0093)",
+      "url": "https://github.com/hikuohiku/homelab/pull/186",
+      "mergedAt": "2026-08-05T09:29:57Z",
+      "headRefName": "autopilot/T-0093-claude-md-schedule-interval"
+    },
+    {
+      "number": 183,
+      "title": "docs: README.md の insecure 手順を実態に合わせる (T-0092)",
+      "url": "https://github.com/hikuohiku/homelab/pull/183",
+      "mergedAt": "2026-08-05T09:25:25Z",
+      "headRefName": "autopilot/T-0092-readme-insecure-fix"
+    },
+    {
+      "number": 182,
+      "title": "ops: T-0091 の PR 番号反映、PR キャッシュ最新化 (run #43)",
+      "url": "https://github.com/hikuohiku/homelab/pull/182",
+      "mergedAt": "2026-08-05T09:04:43Z",
+      "headRefName": "autopilot/run43-pr-numbers"
+    },
+    {
+      "number": 180,
+      "title": "ci: terraform_version を 1.15.0 → 1.15.8 に更新 (T-0091)",
+      "url": "https://github.com/hikuohiku/homelab/pull/180",
+      "mergedAt": "2026-08-05T09:01:37Z",
+      "headRefName": "autopilot/T-0091-terraform-binary-version"
+    },
+    {
+      "number": 178,
+      "title": "ci: kustomize/helm バイナリ版を version_sync の監視対象に追加 (T-0090)",
+      "url": "https://github.com/hikuohiku/homelab/pull/178",
+      "mergedAt": "2026-08-05T08:53:29Z",
+      "headRefName": "autopilot/T-0090-ci-binary-version-tracking"
+    },
+    {
+      "number": 177,
+      "title": "ops: run #42 のラップアップ（PR #175/#176 反映）",
+      "url": "https://github.com/hikuohiku/homelab/pull/177",
+      "mergedAt": "2026-08-05T08:48:16Z",
+      "headRefName": "autopilot/run42-wrapup"
+    },
+    {
+      "number": 176,
+      "title": "docs: CLAUDE.md の Apps/ディレクトリ構造を実態に合わせる (T-0089)",
+      "url": "https://github.com/hikuohiku/homelab/pull/176",
+      "mergedAt": "2026-08-05T08:46:20Z",
+      "headRefName": "autopilot/T-0089-claude-md-apps"
+    },
+    {
+      "number": 175,
+      "title": "ops: T-0087/T-0088 完遂の記録、T-0090 起票 (run #42)",
+      "url": "https://github.com/hikuohiku/homelab/pull/175",
+      "mergedAt": "2026-08-05T08:44:20Z",
+      "headRefName": "autopilot/T-0087-record"
+    },
+    {
+      "number": 174,
+      "title": "ops: tailscale-operator/k8s-nameserver の v1.102.2 更新調査結果を記録 (run #41)",
+      "url": "https://github.com/hikuohiku/homelab/pull/174",
+      "mergedAt": "2026-08-05T08:37:19Z",
+      "headRefName": "autopilot/tailscale-v1102-investigation"
+    },
+    {
+      "number": 173,
+      "title": "ops: run #40 の記録漏れ(state.json/last_read)を埋め合わせ、PRキャッシュ更新",
+      "url": "https://github.com/hikuohiku/homelab/pull/173",
+      "mergedAt": "2026-08-05T08:30:59Z",
+      "headRefName": "autopilot/records-run40-catchup"
+    },
+    {
+      "number": 172,
+      "title": "issue #56 のフィードバックを反映: DB コンポーネントのロールバック手順にスキーマの扱いを明記する規則を追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/172",
+      "mergedAt": "2026-08-05T08:23:29Z",
+      "headRefName": "autopilot/T-0086-rollback-wording"
+    },
+    {
+      "number": 171,
+      "title": "immich server/machine-learning を v2.6.3 → v2.7.5 に更新 (T-0086)",
+      "url": "https://github.com/hikuohiku/homelab/pull/171",
+      "mergedAt": "2026-08-05T08:16:43Z",
+      "headRefName": "autopilot/T-0086-immich-v2.7.5"
+    },
+    {
+      "number": 170,
+      "title": "ops: T-0085 の PR番号(#169)を記録に反映",
+      "url": "https://github.com/hikuohiku/homelab/pull/170",
+      "mergedAt": "2026-08-05T07:50:37Z",
+      "headRefName": "autopilot/T-0085-pr-record"
+    },
+    {
+      "number": 169,
+      "title": "T-0085: pvc_usage 404 の想定内/異常の区別基準を CHARTER に明記",
+      "url": "https://github.com/hikuohiku/homelab/pull/169",
+      "mergedAt": "2026-08-05T07:48:58Z",
+      "headRefName": "autopilot/T-0085-pvc-usage-404-criterion"
+    },
+    {
+      "number": 168,
+      "title": "T-0083: ops-health-reporter に履歴（history/YYYY-MM-DD.jsonl）を追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/168",
+      "mergedAt": "2026-08-05T07:43:01Z",
+      "headRefName": "autopilot/T-0083-health-report-history"
+    },
+    {
+      "number": 167,
+      "title": "T-0082: pvc-usage-reporter の python イメージを inventory 監視対象に追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/167",
+      "mergedAt": "2026-08-05T07:26:09Z",
+      "headRefName": "autopilot/T-0082-pvc-usage-reporter-image-inventory"
+    },
+    {
+      "number": 166,
+      "title": "ci: pvc-usage-reporter の埋め込みスクリプト3ファイルの一致を検証する (T-0081)",
+      "url": "https://github.com/hikuohiku/homelab/pull/166",
+      "mergedAt": "2026-08-05T07:09:53Z",
+      "headRefName": "autopilot/T-0081-pvc-usage-script-sync"
+    },
+    {
+      "number": 165,
+      "title": "run #35: T-0080 完遂の記録更新",
+      "url": "https://github.com/hikuohiku/homelab/pull/165",
+      "mergedAt": "2026-08-05T07:03:37Z",
+      "headRefName": "autopilot/T-0080-records-2"
+    },
+    {
+      "number": 163,
+      "title": "PVC の実使用量を計測する namespace 別 CronJob を追加 (T-0080)",
+      "url": "https://github.com/hikuohiku/homelab/pull/163",
+      "mergedAt": "2026-08-05T06:59:02Z",
+      "headRefName": "autopilot/T-0080-pvc-usage"
+    },
+    {
+      "number": 164,
+      "title": "run #34: T-0080 の並行セッション調整反映、記録更新",
+      "url": "https://github.com/hikuohiku/homelab/pull/164",
+      "mergedAt": "2026-08-05T06:37:26Z",
+      "headRefName": "autopilot/T-0080-records"
+    },
+    {
+      "number": 162,
+      "title": "ops: T-0080 に fsGroup 再帰 chown リスクを追記 (run #33)",
+      "url": "https://github.com/hikuohiku/homelab/pull/162",
+      "mergedAt": "2026-08-05T06:33:03Z",
+      "headRefName": "autopilot/T-0080-fsgroup-risk-note"
+    },
+    {
+      "number": 161,
+      "title": "ops-health-reporter に metrics-server 経由のコンテナ実メモリ/CPU 収集を追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/161",
+      "mergedAt": "2026-08-05T06:27:26Z",
+      "headRefName": "autopilot/T-0077-metrics-collect"
+    },
+    {
+      "number": 160,
+      "title": "ops: node01 実ディスク容量の食い違いを起票、PR作り直し時の規則を追記 (T-0079)",
+      "url": "https://github.com/hikuohiku/homelab/pull/160",
+      "mergedAt": "2026-08-05T06:05:50Z",
+      "headRefName": "autopilot/T-0079-node01-disk-discrepancy"
+    },
+    {
+      "number": 159,
+      "title": "ops: 取り残された cooldown/直列化の衝突対策を CHARTER に戻す",
+      "url": "https://github.com/hikuohiku/homelab/pull/159",
+      "mergedAt": "2026-08-05T05:56:52Z",
+      "headRefName": "autopilot/recover-charter-cooldown-rule"
+    },
+    {
+      "number": 158,
+      "title": "T-0015/T-0075: ops-health-reporter の動作確認、run #30 のラップアップ",
+      "url": "https://github.com/hikuohiku/homelab/pull/158",
+      "mergedAt": "2026-08-05T05:39:41Z",
+      "headRefName": "autopilot/T-0075-health-reporter-confirmed"
+    },
+    {
+      "number": 157,
+      "title": "T-0065: IaC 完全性の棚卸し — node01 揮発時の未カバー領域を確認",
+      "url": "https://github.com/hikuohiku/homelab/pull/157",
+      "mergedAt": "2026-08-05T05:34:05Z",
+      "headRefName": "autopilot/T-0065-iac-completeness"
+    },
+    {
+      "number": 156,
+      "title": "run #30: issue #56 のフィードバック2件を反映（cooldown/直列化の規則衝突、#153 レビュー）",
+      "url": "https://github.com/hikuohiku/homelab/pull/156",
+      "mergedAt": "2026-08-05T05:27:17Z",
+      "headRefName": "autopilot/run30-feedback"
+    },
+    {
+      "number": 152,
+      "title": "docs: terraform plan の CI 化を調査する (T-0073)",
+      "url": "https://github.com/hikuohiku/homelab/pull/152",
+      "mergedAt": "2026-08-05T05:23:45Z",
+      "headRefName": "autopilot/T-0073-terraform-plan-ci-feasibility"
+    },
+    {
+      "number": 153,
+      "title": "T-0015: ArgoCD/k8s の健全性を homelab から repo へ書き戻す CronJob を追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/153",
+      "mergedAt": "2026-08-05T05:21:50Z",
+      "headRefName": "autopilot/T-0015-ops-health-reporter"
+    },
+    {
+      "number": 154,
+      "title": "ops: run #29 の記録をまとめ、ダッシュボードを再生成する",
+      "url": "https://github.com/hikuohiku/homelab/pull/154",
+      "mergedAt": "2026-08-05T05:16:19Z",
+      "headRefName": "autopilot/run29-wrapup"
+    },
+    {
+      "number": 151,
+      "title": "T-0011: vaultwarden ADMIN_TOKEN の Argon2 PHC 化を完了扱いにする",
+      "url": "https://github.com/hikuohiku/homelab/pull/151",
+      "mergedAt": "2026-08-05T05:06:53Z",
+      "headRefName": "autopilot/T-0011-vaultwarden-admin-token-done"
+    },
+    {
+      "number": 150,
+      "title": "ops: run #28 の記録をまとめる（T-0064 merge、backup 方針転換の反映）",
+      "url": "https://github.com/hikuohiku/homelab/pull/150",
+      "mergedAt": "2026-08-05T04:59:11Z",
+      "headRefName": "autopilot/run28-wrapup"
+    },
+    {
+      "number": 149,
+      "title": "T-0064: proxmox_virtual_environment_download_file を proxmox_download_file に改名",
+      "url": "https://github.com/hikuohiku/homelab/pull/149",
+      "mergedAt": "2026-08-05T04:52:53Z",
+      "headRefName": "autopilot/T-0064-terraform-download-file-rename"
+    },
+    {
+      "number": 148,
+      "title": "T-0062: k3s 1.34→1.35の非推奨API影響確認、および人間merge分の記録同期",
+      "url": "https://github.com/hikuohiku/homelab/pull/148",
+      "mergedAt": "2026-08-05T04:35:42Z",
+      "headRefName": "autopilot/T-0062-k3s-1.35-deprecation-check"
+    },
+    {
+      "number": 147,
+      "title": "T-0061: 時刻表示のJST化と、残った不確実性のbacklog追跡",
+      "url": "https://github.com/hikuohiku/homelab/pull/147",
+      "mergedAt": "2026-08-05T04:25:47Z",
+      "headRefName": "autopilot/T-0061-jst-time-and-uncertainty-tracking"
+    },
+    {
+      "number": 146,
+      "title": "chore(nix): flake.lock を更新する（nixpkgs 2025-12-08 → 2026-08-04）",
+      "url": "https://github.com/hikuohiku/homelab/pull/146",
+      "mergedAt": "2026-08-05T04:24:50Z",
+      "headRefName": "autopilot/T-0049-nix-flake-update"
+    },
+    {
+      "number": 145,
+      "title": "chore(terraform): bpg/proxmox provider を 0.89.1 → 0.111.1 に上げる",
+      "url": "https://github.com/hikuohiku/homelab/pull/145",
+      "mergedAt": "2026-08-05T04:22:12Z",
+      "headRefName": "autopilot/T-0030-tf-provider-0.111.1"
+    },
+    {
+      "number": 144,
+      "title": "ops: run #26 の記録をまとめ、T-0060 を起票する",
+      "url": "https://github.com/hikuohiku/homelab/pull/144",
+      "mergedAt": "2026-08-05T04:14:29Z",
+      "headRefName": "autopilot/T-0060-dex-argocd-secret-plaintext"
+    },
+    {
+      "number": 143,
+      "title": "feat(ops): ダッシュボードにストリーム分類とガントを追加する",
+      "url": "https://github.com/hikuohiku/homelab/pull/143",
+      "mergedAt": "2026-08-05T04:05:35Z",
+      "headRefName": "autopilot/dashboard-streams-gantt"
+    },
+    {
+      "number": 142,
+      "title": "ops: run #25 の PR 番号一覧・キャッシュを確定させる",
+      "url": "https://github.com/hikuohiku/homelab/pull/142",
+      "mergedAt": "2026-08-05T04:00:22Z",
+      "headRefName": "autopilot/run25-wrapup-final"
+    },
+    {
+      "number": 141,
+      "title": "ops: run #25 の記録をまとめ、ダッシュボードを再生成する",
+      "url": "https://github.com/hikuohiku/homelab/pull/141",
+      "mergedAt": "2026-08-05T03:58:37Z",
+      "headRefName": "autopilot/run25-wrapup"
+    }
   ]
 }
