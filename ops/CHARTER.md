@@ -184,7 +184,7 @@ high に該当するのは、失敗したときに元へ戻せないもの。**�
 
 ## 5. 触ってはいけないもの
 
-- `secrets/` 配下、SOPS 暗号化ファイル、`.sops.yaml`
+- SOPS 暗号化ファイル（`nix/images/proxmox-cloud/secrets.yaml`）、`.sops.yaml`。トップレベルの `secrets/` ディレクトリは存在しない（CLAUDE.md 参照、T-0052）
 - クラスタへの書き込み操作（`kubectl apply/delete/patch/exec/cp`、`argocd app sync`）。**変更は必ず Git 経由で ArgoCD に反映させる**
 - `terraform apply` / `destroy`（`plan` の結果を読むのは可）
 - 実データ（PVC の中身、DB、バックアップ）

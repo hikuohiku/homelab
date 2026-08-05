@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 52,
-  "updated": "2026-08-05T01:51:30Z",
+  "next_id": 53,
+  "updated": "2026-08-05T02:19:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -930,6 +930,24 @@
       "created": "2026-08-05",
       "pr": 126,
       "notes": "run #20: PAIRS を GROUPS（targets: [(path, fn), ...] を N 件受け付け、先頭を canonical として全件比較）に一般化。busybox は 3 ファイルとも extract_image_tag（単純な prefix 直後の値）、immich-server/machine-learning は同一ファイル内の 2 ブロックを新設の extract_yaml_top_level_block（0-indent のトップレベルキーで区切る、nix 側の brace 境界と同じ考え方）+ extract_tag_in_block で構造的に分離、actions/checkout は extract_all_action_tags で 1 ファイル内の全 `uses:` 出現を集めてファイル内不一致も検出できるようにした。4 グループとも意図的に値をずらして exit 1 になることを確認済み（busybox 3 ファイル中 1 つ、immich machine-learning のみ、ci.yml 内 1 箇所のみ、の 3 パターン）。手元で `python3 ops/check_version_sync.py` が exit 0 で通ることも確認済み（stdlib のみ、CHARTER §5.2 のサンドボックスでも検証可能）"
+    },
+    {
+      "id": "T-0052",
+      "domain": "homelab",
+      "title": "CLAUDE.md / ops/CHARTER.md の `secrets/` ディレクトリ記述を実態に合わせる",
+      "kind": "docs",
+      "risk": "low",
+      "status": "done",
+      "priority": 8,
+      "why": "run #20 の調査で発見（backlog には未起票のまま journal に候補として残っていた）。CLAUDE.md の Directory Structure がトップレベルに `secrets/ — Encrypted secrets (SOPS)` という架空のディレクトリを記載しているが、実際の SOPS 暗号化ファイルは `nix/images/proxmox-cloud/secrets.yaml` という単一ファイルで、トップレベルの `secrets/` は存在しない。ops/CHARTER.md §5『触ってはいけないもの』も `secrets/` 配下という文言で、実在しないパスを指しているため、パス一致で機械的にガードするツールを将来作ったときに実際のファイルを保護し損なう空振りの記述になっていた",
+      "dod": "CLAUDE.md の Directory Structure と ops/CHARTER.md §5 が、実際のパス（`nix/images/proxmox-cloud/secrets.yaml`, `.sops.yaml`）を指す",
+      "refs": [
+        "CLAUDE.md",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #21: find で secrets 関連ファイルを実測（`.sops.yaml` はリポジトリルート、暗号化データは `nix/images/proxmox-cloud/secrets.yaml` の 1 ファイルのみ。apps/*/*-external-secret.yaml は ExternalSecret リソースであり SOPS 暗号化ではないため対象外）。CLAUDE.md の該当行を実際のパスに書き換え、CHARTER §5 の該当行も同様に修正した"
     }
   ]
 }

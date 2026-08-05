@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T01:58:51Z",
+  "updated": "2026-08-05T02:19:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T01:18:49Z"
+    "last_read": "2026-08-05T01:32:24Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -258,6 +258,14 @@
       "prs": [
         126
       ]
+    },
+    {
+      "n": 21,
+      "at": "2026-08-05T02:19:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし（最新は自分自身の返信）。backlog の todo が 0 件だったため run #20 が journal に残した調査候補（CLAUDE.md/CHARTER.md の `secrets/` ディレクトリ記述が実態とずれている）を拾った。find で実測し、SOPS 暗号化データは `nix/images/proxmox-cloud/secrets.yaml` という単一ファイルのみでトップレベルの `secrets/` は存在しないと確認。T-0052 として起票・完遂し、CLAUDE.md と ops/CHARTER.md §5 の該当行を実在パスに書き換えた",
+      "prs": []
     }
   ]
 }

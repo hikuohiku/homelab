@@ -27,7 +27,8 @@ apps/                — Kubernetes manifests (ArgoCD applications)
   dex/               — Dex OIDC provider
   external-secrets/  — External Secrets Operator
   tailscale-operator/ — Tailscale networking
-secrets/             — Encrypted secrets (SOPS)
+.sops.yaml            — SOPS 設定（暗号鍵の対象範囲）
+nix/images/proxmox-cloud/secrets.yaml — SOPS 暗号化ファイル（単一ファイル、トップレベルの secrets/ ディレクトリは存在しない）
 ```
 
 ## Development Commands
