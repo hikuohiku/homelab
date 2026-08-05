@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-05T07:35:00Z",
+  "updated": "2026-08-05T07:50:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T06:58:34Z"
+    "last_read": "2026-08-05T07:25:18Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -429,6 +429,14 @@
       "prs": [
         167
       ]
+    },
+    {
+      "n": 37,
+      "at": "2026-08-05T07:50:00Z",
+      "kind": "scheduled",
+      "by": "cloud routine",
+      "summary": "issue #56 の未読1件（07:25:18）を反映。ops-health-reporter の latest.json が単点観測で上書きされ続け、ピーク値の傾向が永久に見えないという指摘を受け、report.py に ops/health/history/YYYY-MM-DD.jsonl への追記処理を追加（T-0083）。Contents API の1MB制限を raw メディアタイプで回避。CHARTER §2 にも history ファイルの案内を追記。残った不確実性（1日分の蓄積サイズ）は T-0084 として起票",
+      "prs": []
     }
   ]
 }
