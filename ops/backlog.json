@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 54,
+  "next_id": 56,
   "updated": "2026-08-05T03:10:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
@@ -965,6 +965,40 @@
       "created": "2026-08-05",
       "pr": 129,
       "notes": "run #22: subagent に新しい調査観点探しを投げ、terraform/proxmox/vm-nixos.tf 内の IP 重複を発見（リポジトリ全体を grep し他にこの IP を参照する箇所が無いことも確認済み）。`locals { node01_ip = \"192.168.0.129\" }` を追加し、`ip_config.ipv4.address = \"${local.node01_ip}/24\"` と `output \"node01_ip\" { value = local.node01_ip }` に置き換えた。値は不変のため CI (`terraform fmt -check`/`validate`) で挙動が変わらないことを確認できる想定"
+    },
+    {
+      "id": "T-0054",
+      "domain": "homelab",
+      "title": ".gitignore の `secrets/` エントリが実在しないパスを指したまま残っている（T-0052 の続き）",
+      "kind": "docs",
+      "risk": "low",
+      "status": "done",
+      "priority": 8,
+      "why": "T-0052（run #21）で CLAUDE.md / ops/CHARTER.md の `secrets/` 記述は実在パス（`nix/images/proxmox-cloud/secrets.yaml`）に修正したが、`.gitignore` 自身の `secrets/` エントリは直していなかった。トップレベルに `secrets/` ディレクトリは存在しないため、このパターンは一度も何かを ignore したことが無い死んだルールで、コメント「Secrets (not tracked in git)」も実態（SOPS 暗号化ファイルは意図的に git 管理されている）と矛盾している",
+      "dod": ".gitignore の該当行が実在しないパスを参照しない。実際の secrets.yaml が意図的に追跡対象であることが分かるコメントに置き換える",
+      "refs": [
+        ".gitignore"
+      ],
+      "created": "2026-08-05",
+      "pr": null,
+      "notes": "run #23: subagent に新しい調査観点探しを投げて発見。`secrets/` エントリを削除し、実際の SOPS 暗号化ファイル（nix/images/proxmox-cloud/secrets.yaml）は意図的に git 管理されている旨のコメントに置き換えた"
+    },
+    {
+      "id": "T-0055",
+      "domain": "homelab",
+      "title": "immich (server / machine-learning / valkey) に CPU/メモリの requests・limits を設定する",
+      "kind": "refactor",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 20,
+      "why": "run #23: subagent の調査で発見。この repo の手書き Deployment（vaultwarden, coder, coder-postgres, immich-postgres）と argocd の Helm values はすべて resources.requests/limits を設定しているが、apps/immich/values.yaml だけ controllers.main（server）・machine-learning.controllers.main・valkey.controllers.main のいずれも resources ブロックが無い。node01 は 4c/11.7GiB の単一ノードで、他コンポーネントの requests 合計は約 700m/1.2GiB（vaultwarden 50m/128Mi + coder-postgres 50m/128Mi + coder 100m/256Mi + argocd server/controller/repoServer 400m/448Mi + immich-postgres 100m/256Mi）に留まり、まだ十分な余地がある。とくに immich-machine-learning は CLIP 等のモデルをロードするため、requests/limits が無いと単一ノード上の他 Pod（vaultwarden や coder 含む、自分や人間の観測経路も同居している）を無制限に圧迫しうる",
+      "dod": "apps/immich/values.yaml の controllers.main（immich-server）・machine-learning.controllers.main・valkey.controllers.main に requests/limits を追加する。既存コンポーネント（coder の実装コメントが参考になる: requests は保証したい最低限、limits は他 Pod を圧迫しない上限）に倣い、node01 の総容量（4c/11.7GiB）に対して既存 requests 合計＋追加分が安全に収まることを PR 本文に書く。kustomize build --enable-helm apps/immich が CI で green であること（このサンドボックスには kustomize が無いため手元検証は不可、CHARTER §5.2）",
+      "refs": [
+        "apps/immich/values.yaml",
+        "apps/coder/deployment.yaml"
+      ],
+      "created": "2026-08-05",
+      "pr": null
     }
   ]
 }
