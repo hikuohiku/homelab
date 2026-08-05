@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 76,
-  "updated": "2026-08-05T05:10:00Z",
+  "updated": "2026-08-05T05:40:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1335,13 +1335,33 @@
       "title": "terraform plan を CI で実行できないか調査する",
       "kind": "investigate",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 33,
       "why": "issue #56 (2026-08-05 04:45:21) の指摘。`terraform validate` は構文・型のみで、実際に何が変わるか（replace/destroy が出るか）は誰も CI で見ていない。現状「実インフラの変更が誰にも事前確認されないまま main に入り続ける」穴が残っている。ただし plan には Proxmox（homelab 内部）への到達も要るため、クラウドの GitHub Actions runner から届くかは未確認",
       "dod": "GitHub Actions の runner から Proxmox API（Tailscale 経由）に到達できるか、Terraform Cloud の read-only API トークンで plan だけを回せるか、を調査する。到達できないなら『届かない』という結論と理由を記録する。到達できるなら、read-only credential での plan 専用 CI job を追加する（apply 権限は絶対に渡さない）",
       "refs": [
         ".github/workflows/ci.yml",
-        "terraform/proxmox/"
+        "terraform/proxmox/",
+        "docs/terraform-plan-in-ci.md"
+      ],
+      "created": "2026-08-05",
+      "pr": 151,
+      "notes": "run #28: subagent に HCP Terraform 公式ドキュメント・tailscale/github-action の README・bpg/terraform-provider-proxmox の実ソースを直接確認させた。結論: HCP Terraform の `cloud` ブロックは既定で Remote 実行モード（plan/apply は HCP Terraform 自身の VM 上で実行され、呼び出し元では実行されない）で、これは workspace 設定でありリポジトリのファイルからは変更できない。到達性を得るには (A) k3s 内に HCP Terraform Agent を配置し execution mode を Agent に切り替える、(B) `tailscale/github-action` で GitHub-hosted runner を一時的に tailnet に参加させ execution mode を Local に切り替える、のいずれかが要り、どちらも Tailscale 管理コンソール・HCP Terraform org 設定という repo 外での新規 credential 発行が要る。bpg/proxmox provider の Read（plan 相当）経路は実ソース上 GET/list のみで PVEAuditor 相当の監査権限で足りそうと確認したが、provider 自身の公式文書には権限区分の記載は無い。詳細は docs/terraform-plan-in-ci.md。実装は T-0074（needs-human）として起票した"
+    },
+    {
+      "id": "T-0074",
+      "domain": "homelab",
+      "title": "terraform plan を CI で検証できるようにする（HCP Terraform 実行モード変更 + Tailscale credential 発行）",
+      "kind": "feature",
+      "risk": "medium",
+      "status": "needs-human",
+      "priority": 34,
+      "why": "T-0073 の調査結果（docs/terraform-plan-in-ci.md）。CI に `terraform plan` の検証を追加するには、HCP Terraform workspace（org `hikuohiku`, workspace `homelab`）の execution mode 変更と、新規 credential の発行が要る。どちらもこのリポジトリの外側（Tailscale 管理コンソール、HCP Terraform org 設定）での操作でエージェントからは手が届かない",
+      "dod": "T-0073 の docs/terraform-plan-in-ci.md にある方式B（推奨: 恒久ワークロード不要、影響範囲が小さい）を採用する場合: (1) HCP Terraform workspace `homelab` の execution mode を Local に変更、(2) Tailscale 管理コンソールで CI 専用の OAuth client（`writable auth_keys` スコープ、専用タグ、ACL で Proxmox ホストの 8006 番のみ許可）を発行、(3) Proxmox 側に CI 専用の PVEAuditor スコープ API token を発行。3つとも Doppler/GitHub Actions secrets に登録されたら、CI ワークフローへの `plan` job 追加はこちらで実施する。方式A（HCP Terraform Agent を k3s に常駐）を選ぶ場合は Agent Pool・Agent Token の発行が代わりに要る（判断は人間に委ねる）",
+      "needs_human_reason": "HCP Terraform org の execution mode 変更・Tailscale OAuth client の発行はどちらも管理コンソールでの手作業で、CHARTER §4『人間に渡してよいもの』の権限・認証の手作業に該当する",
+      "refs": [
+        "docs/terraform-plan-in-ci.md",
+        ".github/workflows/ci.yml"
       ],
       "created": "2026-08-05",
       "pr": null
