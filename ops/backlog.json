@@ -1156,10 +1156,10 @@
       "domain": "homelab",
       "title": "terraform: proxmox_virtual_environment_download_file → proxmox_download_file へのリソース改名に対応する（v1.0で削除予定の非推奨警告）",
       "kind": "refactor",
-      "risk": "medium",
-      "status": "todo",
+      "risk": "high",
+      "status": "in_progress",
       "priority": 30,
-      "why": "T-0030（#145, bpg/proxmox provider 0.89.1→0.111.1 更新）で新たに出るようになった非推奨警告。`proxmox_virtual_environment_download_file` は `proxmox_download_file` に改名され、旧リソース名は provider v1.0 で削除される予定。terraform/proxmox/vm-nixos.tf と terraform/proxmox/nixos-image.tf の2ファイルで使用中。リソースアドレスの変更を伴うため `moved` ブロックか `terraform state mv` による state 移行が必要で、#145 の PR 本文で人間から明示的に『issue #56 経由で別タスクとして起票させる』と依頼された",
+      "why": "T-0030（#145, bpg/proxmox provider 0.89.1→0.111.1 更新）で新たに出るようになった非推奨警告。`proxmox_virtual_environment_download_file` は `proxmox_download_file` に改名され、旧リソース名は provider v1.0 で削除される予定。terraform/proxmox/vm-nixos.tf と terraform/proxmox/nixos-image.tf の2ファイルで使用中。リソースアドレスの変更を伴うため `moved` ブロックか `terraform state mv` による state 移行が必要で、#145 の PR 本文で人間から明示的に『issue #56 経由で別タスクとして起票させる』と依頼された。risk を medium→high に見直した理由: `vm-nixos.tf` の node01 VM 定義が `lifecycle.replace_triggered_by = [proxmox_virtual_environment_download_file.nixos_image.id]` でこのリソースの id に紐付いており、state move が想定通りに動かず id が変わったとみなされると node01 VM 自体が replace（削除→再作成）される。node01 は唯一のノードで local-path PVC の実データが乗っているため、これは『データを失いうる変更』（CHARTER §4）に該当する",
       "dod": "bpg/proxmox provider が新旧リソース間の state migration をどう扱うか（`moved` ブロックでのリソースタイプ変更をサポートしているか、provider の実ソース/CHANGELOG/upgrade guide で確認する）を調べる。安全に移行できる方法が分かれば `.tf` に反映し、`terraform validate`（CI, `-backend=false`）で構文エラーが無いことを確認する。**実際の state migration の反映確認（`terraform plan`/`apply`）は autopilot のサンドボックスに terraform CLI が無く実行できないため、反映確認は人間の作業になる旨を PR 本文に明記する**（T-0030 と同型の制約）",
       "refs": [
         "terraform/proxmox/vm-nixos.tf",
@@ -1167,7 +1167,7 @@
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": "run #27: #145（T-0030 の実行部分、人間が直接 terraform init -upgrade して merge）の PR 本文の依頼により起票"
+      "notes": "run #27: #145（T-0030 の実行部分、人間が直接 terraform init -upgrade して merge）の PR 本文の依頼により起票。subagent に bpg/proxmox provider の実ソース（fwprovider/nodes/resource_download_file_short.go, fwprovider/migration/migration.go）と ADR-007（docs/adr/007-resource-type-name-migration.md）を直接確認させた。結論: `proxmox_download_file` は別実装ではなく `downloadFileResource` を embed した alias で、スキーマ・ID・状態形状は完全に同一。provider は Terraform Plugin Framework の `ResourceWithMoveState`（`MoveState` フック、`migration.PrefixMoveState` で raw state をそのままコピー）を実装済みで、`moved` ブロック（Terraform >= 1.8、このリポジトリの `required_version = ~> 1.15` は満たす）による cross-type move が provider 公式の移行手段であり `terraform state mv` は不要と確認。これに基づき `.tf` を編集済み（PR 参照）。`replace_triggered_by` 経由で node01 VM に波及するリスクがあるため risk=high としたが、**autopilot は terraform apply を一度も実行しない**（CHARTER §5）ため、この PR が main に merge されること自体は実インフラに一切影響しない。実際に危険なのは人間が `terraform apply` を実行する瞬間であり、その手前に必ず `terraform plan` を見る人間のレビューが挟まる。したがって『戻せる形に落とす』（CHARTER §4）は満たしていると判断し、CI green を確認したうえで自分の判断で merge する。PR 本文に『plan は moved のみ・0 changes になるはずで、それ以外（replace/destroy）が出たら apply せず調査してほしい』という具体的な確認事項を明記する"
     }
   ]
 }
