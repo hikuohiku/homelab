@@ -1502,7 +1502,7 @@
         "apps/vaultwarden/pvc-usage-cronjob.yaml"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 167,
       "notes": "run #36: inventory.json に pvc-usage-reporter-image（current: 3.12-alpine, mirrors: coder/vaultwarden の2ファイル）を追加し、check_version_sync.py の GROUPS に対応する3ファイルの mirror group を追加した。手元で apps/coder/pvc-usage-cronjob.yaml だけタグを 3.13-alpine に変えて非0終了することを確認済み（変更後は元に戻した）。バージョン更新自体はスコープ外（現行 3.12-alpine のまま、監視の仕組みのみ追加）"
     }
   ]

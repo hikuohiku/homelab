@@ -1,21 +1,35 @@
 {
   "open": [
     {
-      "number": 166,
-      "title": "ci: pvc-usage-reporter の埋め込みスクリプト3ファイルの一致を検証する (T-0081)",
-      "url": "https://github.com/hikuohiku/homelab/pull/166",
+      "number": 167,
+      "title": "T-0082: pvc-usage-reporter の python イメージを inventory 監視対象に追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/167",
       "isDraft": false,
-      "createdAt": "2026-08-05T07:07:00Z",
+      "createdAt": "2026-08-05T07:24:22Z",
       "statusCheckRollup": [
         {
           "conclusion": "PENDING"
         }
       ],
-      "headRefName": "autopilot/T-0081-pvc-usage-script-sync",
-      "autoMergeRequest": true
+      "headRefName": "autopilot/T-0082-pvc-usage-reporter-image-inventory",
+      "autoMergeRequest": null
     }
   ],
   "merged": [
+    {
+      "number": 166,
+      "title": "ci: pvc-usage-reporter の埋め込みスクリプト3ファイルの一致を検証する (T-0081)",
+      "url": "https://github.com/hikuohiku/homelab/pull/166",
+      "mergedAt": "2026-08-05T07:09:53Z",
+      "headRefName": "autopilot/T-0081-pvc-usage-script-sync"
+    },
+    {
+      "number": 165,
+      "title": "run #35: T-0080 完遂の記録更新",
+      "url": "https://github.com/hikuohiku/homelab/pull/165",
+      "mergedAt": "2026-08-05T07:03:37Z",
+      "headRefName": "autopilot/T-0080-records-2"
+    },
     {
       "number": 163,
       "title": "PVC の実使用量を計測する namespace 別 CronJob を追加 (T-0080)",
@@ -414,6 +428,13 @@
       "url": "https://github.com/hikuohiku/homelab/pull/107",
       "mergedAt": "2026-08-04T23:38:46Z",
       "headRefName": "autopilot/t0032-vaultwarden-ip-header"
+    },
+    {
+      "number": 106,
+      "title": "external-secrets chart を 1.3.2 → 2.8.0 に上げる (T-0037)",
+      "url": "https://github.com/hikuohiku/homelab/pull/106",
+      "mergedAt": "2026-08-04T23:35:52Z",
+      "headRefName": "autopilot/t0037-external-secrets-2.8.0"
     }
   ]
 }

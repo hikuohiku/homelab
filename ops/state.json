@@ -426,7 +426,9 @@
       "kind": "scheduled",
       "by": "cloud routine",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読の人間フィードバックなし（4件表示されたが全て run #31/#35 が既に返信済みのやり取りで、last_read (05:56:49) が更新されていなかっただけのブックキーピング漏れ。06:58:34 に更新）。ops-health-report ブランチ（generated_at 07:00:04Z）で ArgoCD 全10アプリ Synced/Healthy、node ephemeral-storage は引き続き約48.9GiBのままで T-0079 は人間の df -h/lsblk 報告待ち。backlog の todo が0件だったため CHARTER §3 に従い調査し、T-0080 (#163) が追加した3つの pvc-usage-reporter CronJob (python:3.12-alpine) が ops-health-reporter-image と違い ops/inventory.json の監視対象・check_version_sync.py の GROUPS のどちらにも入っていない抜けを発見。T-0082 として起票・即完遂した",
-      "prs": []
+      "prs": [
+        167
+      ]
     }
   ]
 }
