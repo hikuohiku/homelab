@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 80,
-  "updated": "2026-08-05T05:58:50Z",
+  "next_id": 81,
+  "updated": "2026-08-05T06:35:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）",
   "tasks": [
     {
@@ -1389,20 +1389,20 @@
     {
       "id": "T-0077",
       "domain": "homelab",
-      "title": "ops-health-reporter に PVC 実使用量（du -sb）とコンテナ実メモリ/CPU（metrics-server）の取得を追加する",
+      "title": "ops-health-reporter に metrics-server 経由のコンテナ実メモリ/CPU 収集を追加する",
       "kind": "feature",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 5,
       "why": "issue #56 (2026-08-05 05:12:43) の指摘。T-0015 (#153) の ops-health-reporter は ArgoCD sync/health・Pod 異常・Node 状態は取れるが、PVC の `capacity`（宣言値）しか読んでおらず実使用量は取れない。コンテナの実メモリ/CPU 使用量も取れていない。この2つが無いと T-0066（immich ライブラリの実サイズ測定、restic 保存先の選定に必要）と、#132 で差し戻された resource limits の実測が永久に手に入らない",
-      "dod": "(1) 対象 PVC を `readOnly: true` でマウントし `du -sb` を実行する専用 CronJob（追加 RBAC 不要、既存の ops-health-reporter ClusterRole とは分離してよい）を追加し、結果を `ops/health/` 配下に書き戻す。(2) `metrics.k8s.io`（k3s 同梱の metrics-server）への read 権限を ops-health-reporter の ClusterRole に追加し、コンテナ単位の実メモリ/CPU 使用量を収集する。(2) は `nodes/proxy` のような広い権限を避け、`metrics.k8s.io` の `pods`/`nodes` read のみに絞る。T-0066 が求める実サイズがこれで得られることを確認する",
+      "dod": "ops-health-reporter の ClusterRole に metrics.k8s.io の pods/nodes read (get/list) を追加し、report.py が pod_metrics/node_metrics としてコンテナ単位の実メモリ/CPU 使用量を収集する。PVC の実ディスク使用量（du 相当）は T-0080 に分離した",
       "refs": [
         "apps/ops-health-reporter/",
         "ops/backlog.json"
       ],
       "created": "2026-08-05",
-      "pr": null,
-      "notes": "run #30: issue #56 (05:12:43) の提案をそのまま起票。実装自体はブロックされていないが、T-0075（CronJob が実際に動いているかの確認）が先に通ってから着手するのが安全（土台が動いていない状態に機能を足しても検証できない） | run #31: T-0075 は既に完了済み（着手可能）。T-0079 で node01 の実ディスクが 48.9GiB しか無いと判明し、PVC 実使用量が緊急の情報になったため priority を 36→5 に引き上げた（issue #56, 2026-08-05 05:35:04）"
+      "pr": 161,
+      "notes": "run #30: issue #56 (05:12:43) の提案をそのまま起票。実装自体はブロックされていないが、T-0075（CronJob が実際に動いているかの確認）が先に通ってから着手するのが安全（土台が動いていない状態に機能を足しても検証できない） | run #31: T-0075 は既に完了済み（着手可能）。T-0079 で node01 の実ディスクが 48.9GiB しか無いと判明し、PVC 実使用量が緊急の情報になったため priority を 36→5 に引き上げた（issue #56, 2026-08-05 05:35:04） | run #32: スコープを分割した。PVC ごとに namespace が異なる（immich/vaultwarden/coder）ため du -sb を実行する専用 CronJob は単一 Pod からの読み取りマウントで完結せず、namespace ごとの 設計が別途必要と判明。CHARTER『大きく感じたら分割する』に従い、metrics-server 経由のコンテナ 実メモリ/CPU 収集のみをこのタスクで完了し、PVC 実使用量の収集は T-0080 として新規起票した"
     },
     {
       "id": "T-0078",
@@ -1441,6 +1441,26 @@
       "created": "2026-08-05",
       "pr": null,
       "notes": "run #31: issue #56 (05:35:04) の指摘をそのまま起票。判断材料は ops-health-report ブランチの ops/health/latest.json（generated_at: 2026-08-05T05:30:09Z）。T-0066 の上限確定（B2 確定、Hetzner比較不要）にも直結。T-0077（PVC実使用量の取得）と合わせて実施すると、ディスク逼迫の全体像（容量×使用量）が揃う"
+    },
+    {
+      "id": "T-0080",
+      "domain": "homelab",
+      "title": "ops-health-reporter に PVC 実使用量（du -sb 相当）の収集を追加する",
+      "kind": "feature",
+      "risk": "low",
+      "status": "todo",
+      "priority": 5,
+      "why": "T-0077 (run #32) の分割で起票。PVC (immich-library, immich-postgres-data, vaultwarden-data, coder-postgres-data) はそれぞれ別 namespace (immich/vaultwarden/coder) にあり、Pod は自 namespace の PVC しかマウントできないため、既存の cluster-wide な ops-health-reporter CronJob 1 個には収まらない。namespace ごとに小さな CronJob を置き、結果をどう ops-health-reporter 側に集約するか（ConfigMap 経由 read 等）を設計してから実装する必要がある。T-0079（node01 実ディスク容量の食い違い）の裏付けとして も緊急度が高い",
+      "dod": "対象 4 PVC の実使用量が ops/health/latest.json（または別ファイル）から読める。namespace ごとの CronJob は読み取り専用マウント (readOnly: true) のみで PVC への書き込み権限を持たない。追加する RBAC は最小限（ConfigMap 経由にするなら該当 namespace 内の configmaps get/list/create/update のみに絞り、cluster-wide にしない）",
+      "refs": [
+        "apps/ops-health-reporter/",
+        "apps/immich/library-pvc.yaml",
+        "apps/immich/postgres.yaml",
+        "apps/vaultwarden/pvc.yaml",
+        "apps/coder/postgres.yaml"
+      ],
+      "created": "2026-08-05",
+      "pr": null
     }
   ]
 }

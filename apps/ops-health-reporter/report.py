@@ -101,6 +101,44 @@ def collect_pvcs():
     return out
 
 
+def collect_pod_metrics():
+    data = k8s_get("/apis/metrics.k8s.io/v1beta1/pods")
+    out = []
+    for item in data.get("items", []):
+        meta = item.get("metadata", {})
+        out.append(
+            {
+                "namespace": meta.get("namespace"),
+                "name": meta.get("name"),
+                "containers": [
+                    {
+                        "name": c.get("name"),
+                        "cpu": c.get("usage", {}).get("cpu"),
+                        "memory": c.get("usage", {}).get("memory"),
+                    }
+                    for c in item.get("containers", [])
+                ],
+            }
+        )
+    return out
+
+
+def collect_node_metrics():
+    data = k8s_get("/apis/metrics.k8s.io/v1beta1/nodes")
+    out = []
+    for item in data.get("items", []):
+        meta = item.get("metadata", {})
+        usage = item.get("usage", {})
+        out.append(
+            {
+                "name": meta.get("name"),
+                "cpu": usage.get("cpu"),
+                "memory": usage.get("memory"),
+            }
+        )
+    return out
+
+
 def collect_nodes():
     data = k8s_get("/api/v1/nodes")
     out = []
@@ -196,9 +234,12 @@ def main():
         "pod_issues": collect(collect_pod_issues),
         "pvcs": collect(collect_pvcs),
         "nodes": collect(collect_nodes),
+        "pod_metrics": collect(collect_pod_metrics),
+        "node_metrics": collect(collect_node_metrics),
         "notes": (
-            "実使用量（ディスク/メモリの実消費）は metrics-server / kubelet stats 依存のため未収集。"
-            "RBAC は get/list のみ、write 系の verb は含まない。"
+            "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 "
+            "(pod_metrics/node_metrics)。PVC の実ディスク使用量（du 相当）は別 CronJob 化が必要なため "
+            "未収集（T-0080）。RBAC は get/list のみ、write 系の verb は含まない。"
         ),
     }
 
