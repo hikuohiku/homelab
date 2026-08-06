@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 134,
-  "updated": "2026-08-06T06:49:21Z",
+  "next_id": 135,
+  "updated": "2026-08-06T07:30:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2532,6 +2532,24 @@
       "created": "2026-08-06",
       "pr": 313,
       "notes": "run #121（計画役）: T-0117 が時刻待ちの todo であるにも関わらず loop.sh の actionable 判定がそれを考慮せず、実行役の起動を12時間規模で空振りさせている実態を journal（run #116〜#119）から発見して起票。VISION §『判断に迷ったときの原則』の『器を太らせる前に、器を使い切る』との整合は検討済み——既存の next_review フィールドは recurring タスクの再オープン判定にのみ使われており（T-0012）、todo タスクの着手可否そのものを表す用途では使われていないため、新規フィールドが必要と判断した。run #122（実行役）: `ops/backlog.json` に `not_before` を追加し `ops/validate.py` に ISO8601 形式検証を実装、`loop.sh` の actionable 判定スニペットを not_before 対応に書き換え、T-0117 に `not_before: \"2026-08-06T18:30:00Z\"` を付与。境界条件（無し/過去/未来/壊れた文字列）の妥当性は PR 本文に記載。loop.sh の変更は Pod 再作成まで反映されない点も PR 本文に明記"
+    },
+    {
+      "id": "T-0134",
+      "domain": "homelab",
+      "title": "CLAUDE.md の Apps 一覧・ディレクトリ構造に apps/ops-dashboard/ が未記載",
+      "kind": "docs",
+      "risk": "low",
+      "status": "todo",
+      "priority": 40,
+      "why": "計画役 run #125 で発見。T-0127/T-0128 で追加された apps/ops-dashboard/（application.yaml, deployment.yaml, service.yaml, ingress.yaml — ops-dashboard ブランチの index.html を Tailscale ingress 経由で配信する Deployment）が、CLAUDE.md 16行目の『Apps』一覧（ArgoCD, Dex, External Secrets Operator, Tailscale Operator, Immich, Vaultwarden, Coder, ops-health-reporter, autopilot の9つ）にも、23〜37行目のディレクトリ構造図にも入っていない。T-0057/T-0089/T-0094 と同型のドキュメントdrift。",
+      "dod": "CLAUDE.md の Apps 一覧に ops-dashboard を追加し、ディレクトリ構造図に `ops-dashboard/ — 人間向けダッシュボードの配信（Deployment、ops-dashboard ブランチの index.html を fetch して http.server で配信）`相当の1行を追加する",
+      "refs": [
+        "CLAUDE.md",
+        "apps/ops-dashboard/"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": null
     }
   ]
 }
