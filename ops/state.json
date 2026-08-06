@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-06T05:14:00Z",
+  "updated": "2026-08-06T05:23:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-06T03:19:42Z"
+    "last_read": "2026-08-06T05:23:00Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -1139,6 +1139,16 @@
       "by": "cluster-resident (autopilot Pod)",
       "summary": "実行役。オープン PR・autopilot ブランチとも無く前回の中断なし。backlog の todo は T-0117 のみで CronJob 初回実行（2026-08-06T18:30Z）が未到来のため引き続き着手不可、blocked/needs-human 9件も run #107 から前提の変化なしと確認。着手可能なタスクが無かったため journal 記録のみ。",
       "prs": []
+    },
+    {
+      "n": 109,
+      "at": "2026-08-06T14:23:00+09:00",
+      "kind": "scheduled",
+      "by": "cluster-resident (autopilot Pod)",
+      "summary": "計画役。前回の中断（PR #299, run #108 の記録用 PR）を CI green 確認のうえ merge。issue #56 に新規フィードバックなし、ops-health-report・autopilot heartbeat とも正常。ops/inbox.md の引き継ぎ（T-0128 dashboard URL 未実測）を T-0130 として起票し、issue #56 に構築セッションへの確認依頼を投稿。backlog の blocked/needs-human 全件の前提を棚卸しし変化なしと確認。新たに2件起票: T-0131（ops/state.json の routines がクラウド routine 無効化後も『1時間ごと』のまま表示され、実際の in-cluster loop の2分間隔とダッシュボード表示が乖離）、T-0132（CHARTER.md『VISION段階2』とVISION.md自身の段階表・ops/state.jsonのvision_stage=1が食い違っている）。計画役のためコード・マニフェストは変更していない",
+      "prs": [
+        299
+      ]
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 130,
+  "next_id": 133,
   "updated": "2026-08-06T04:46:58Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
@@ -2448,6 +2448,69 @@
       "created": "2026-08-06",
       "pr": 287,
       "notes": "run #99: この Pod（autopilot-7786d96c58-nj7sn, 起動 2026-08-05T18:23:23Z）はロールを指定しないプロンプトを受け取っており、CHARTER §3 の計画役/実行役の判別ができない状態で稼働していたことから発覚した。merge 後、この Pod は SIGTERM を受けて終了する見込み（strategy: Recreate, terminationGracePeriodSeconds: 60s）。ops/ 記録の更新は途中で打ち切られる可能性があるため、この run はコード変更のコミットを最優先で push し、journal/state 更新も同じブランチに追加コミットしてから merge する順序で進める。 run #99 続き: PR #287 を CI green 確認後 merge した。孤立していた origin/autopilot/plan-execute-split（main との diff ゼロを確認済み）は削除した。この Pod（autopilot-7786d96c58-nj7sn）は merge 直後もまだ生きており、この記録更新自体を続けて実行できている——ArgoCD の sync 検出にはまだ数分の遅延があると見られる。次回起動（新 Pod）の heartbeat で実際に入れ替わったことを確認すること。"
+    },
+    {
+      "id": "T-0130",
+      "domain": "homelab",
+      "title": "T-0128 の dashboard 配信 URL (ops-dashboard) の実際の MagicDNS ホスト名を確認し ops/state.json に反映する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "needs-human",
+      "priority": 45,
+      "why": "T-0128（run #100-104, #290/#293/#295）で apps/ops-dashboard/ を実装し kubectl で 2/2 Running を実機確認したが、DoD が求める『ops/state.json の dashboard.artifact_url もしくは新しいフィールドを URL に更新』だけ未達のまま run #104 が ops/inbox.md に引き継ぎを残した（計画役の run #109 がこれを拾った）。autopilot-reader ClusterRole に networking.k8s.io/ingresses の read 権限が無く `kubectl get ingress -n ops-dashboard` が Forbidden、この Pod には tailscale credential も無いため、実際の MagicDNS ホスト名を実測できない。apps/{immich,vaultwarden,dex,argocd,coder}/ingress.yaml の tls.hosts 短縮名パターンから類推すると https://ops-dashboard.tailae6c2.ts.net/ の可能性が高いが未検証",
+      "dod": "構築セッション（Coder ワークスペース、tailscale 到達可能）に issue #56 経由で ops-dashboard の実際の URL（推定: https://ops-dashboard.tailae6c2.ts.net/）への到達性を確かめてもらう。確かめられたら ops/state.json の dashboard フィールド（artifact_url をこの URL に置き換えるか、新フィールドを追加して両方残すかは実装時に判断）に反映し、CHARTER §7.1 の記述もあわせて更新する",
+      "blocked_by": null,
+      "needs_human_reason": "autopilot の ClusterRole（autopilot-reader）に ingresses の read 権限が無く Forbidden、この Pod には tailscale credential も無いため実際の MagicDNS ホスト名を実測できない。構築セッション（Coder ワークスペース、tailscale 到達可能）に issue #56 経由で https://ops-dashboard.tailae6c2.ts.net/ への到達性の実測を依頼する",
+      "refs": [
+        "ops/state.json",
+        "apps/ops-dashboard/",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #109 (計画役): ops/inbox.md の引き継ぎ（run #104 が残した）を起票。恒久対応として autopilot-reader ClusterRole に ingresses read を足す案もあるが、単発の確認で足りるため、まずは構築セッションへの確認依頼で解決を図る。権限追加が必要になったら別タスクにする"
+    },
+    {
+      "id": "T-0131",
+      "domain": "homelab",
+      "title": "ops/state.json の routines / dashboard 表示が『クラウド定期実行 毎時』のまま、実際の常駐ループ（2分間隔）と乖離している",
+      "kind": "chore",
+      "risk": "low",
+      "status": "todo",
+      "priority": 20,
+      "why": "issue #56 (2026-08-05T18:32:03Z) で構築セッションから『autopilot はクラスタ内 Deployment として常駐するようになり、クラウドの routine は enabled: false にした（バックストップとして残置）』と報告されたが、ops/state.json の routines[0] には enabled 相当のフィールドが無いまま cron/cron_human（『1時間ごと（毎時19分）』）だけが残っている。ops/dashboard/build.py の cadence 表示（build.py:600, state['routines'][0]['cron_human'] をそのまま『定期実行』として人間に見せる）はこの値をそのまま使うため、ダッシュボードは実際には無効化されたクラウド routine の頻度を『今の定期実行』として表示し続けている。実際の稼働頻度は apps/autopilot/deployment.yaml の INTERVAL_SECONDS=120（2分間隔、loop.sh 既定と一致）で、ops-health-report の autopilot.heartbeat の last_start/last_end 間隔とも一致する。VISION.md は『人間への報告はダッシュボードに集約する』ことを原則としており、この乖離は CHARTER §1 の健全性基準（実態とドキュメントが乖離していない）に反する",
+      "dod": "ops/state.json の routines[0] に、無効化されたことが分かるフィールド（例: enabled: false, disabled_at, disabled_reason）を追加するか、cluster-resident loop の実際の cadence（INTERVAL_SECONDS 由来、2分間隔）を表す新しいフィールドを追加する。ops/dashboard/build.py の cadence 表示ロジックを、クラウド routine が無効な間は in-cluster loop の間隔を優先して表示するように直す（または両方を区別して表示する）。CHARTER §5.5 か VISION.md のどちらか適切な方に、クラウド routine が現在バックストップとして無効化されている事実を明記する",
+      "blocked_by": null,
+      "refs": [
+        "ops/state.json",
+        "ops/dashboard/build.py",
+        "ops/CHARTER.md",
+        "apps/autopilot/deployment.yaml"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #109 (計画役): CHARTER §3 の指示（backlog の blocked/needs-human の前提が古くないか確かめる）に沿って issue #56 の過去コメントを読み返す過程で発見。routines フィールド自体は substrate 移行後の PR 群のどれでも更新されておらず（git log 確認済み）、2026-08-05T18:32:03Z の実測報告以降ずっとこのまま。ダッシュボード（人間が朝に見る唯一の画面, CHARTER §7.1）に出る値のため優先度は中程度とした"
+    },
+    {
+      "id": "T-0132",
+      "domain": "homelab",
+      "title": "VISION.md の段階表・ops/state.json の vision_stage・CHARTER.md の自己申告が三者で食い違っている",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 25,
+      "why": "CHARTER.md 冒頭は『現在の対象ドメインは homelab ひとつ（VISION 段階 2）』と明言しているが、VISION.md 自身の段階表は段階2（homelabドメインで器を安定させる）を依然『未着手』のままにしており、ops/state.json の vision_stage は 1（vision_stage_label: 器を作る）のまま（dashboard の見出しにそのまま表示される, ops/dashboard/build.py:631）。実態としては100件超のタスクが人間の介入なく完遂し、クラスタ内常駐（§5.5）・ダッシュボード自前配信（T-0127/T-0128）まで進んでおり、少なくとも段階2の一部・段階3の一部の実証は既に起きている。3ファイルが同じ事実について異なる状態を主張しているのは CHARTER §1 の健全性基準（同じ事実が2箇所に書かれていない）に反する",
+      "dod": "VISION.md の段階表・ops/state.json の vision_stage/vision_stage_label・CHARTER.md 冒頭の記述を突き合わせ、現時点で各段階のどこまでが実証済みと言えるかを根拠（完了タスク数、実測した健全性確認の継続実績など）とともに判断し、3ファイルを一致させる。VISION.md の『次のドメインの入り口』にある『段階2が済むまで手を出さない』の判断基準に影響するため、段階2を完了と見なせるかどうかは慎重に判断する（見なせないなら、何が欠けているかを VISION.md に具体的に書く）",
+      "blocked_by": null,
+      "refs": [
+        "ops/VISION.md",
+        "ops/state.json",
+        "ops/CHARTER.md",
+        "ops/dashboard/build.py"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #109 (計画役): CHARTER §3 の調査観点探しの一環で発見。判断の中身（段階2は完了と言えるか）はこちらの仕事であり人間に投げない（CHARTER §4 の『判断はこちらの仕事』）。実行役が着手する際は本文の三者を機械的に揃えるだけでなく、実際に何が達成されたか/されていないかを一度書き出してから判定すること"
     }
   ]
 }
