@@ -395,6 +395,18 @@
       "policy": "auto",
       "note": "T-0068 で新設。vaultwarden-restic-image / coder-postgres-restic-image と同じタグ (0.19.1) を使う設計。同一ファイル内に immich-restic-backup と immich-restic-retention の2箇所、かつ他2ファイルともファイル間で重複しているが、T-0098 (run #49) で check_version_sync.py の GROUPS に登録済み（vaultwarden-restic-image の note 参照）",
       "observability_impact": "immich の restic バックアップ・retention CronJob が使用。壊れるとバックアップが取れなくなるが immich 本体の可用性には影響しない"
+    },
+    {
+      "id": "coder-workspace-home-restic-image",
+      "kind": "image",
+      "name": "restic/restic (backup CronJob)",
+      "current": "0.19.1",
+      "file": "apps/coder/workspace-home-backup-cronjob.yaml",
+      "match": "restic/restic:",
+      "upstream": "github:restic/restic",
+      "policy": "auto",
+      "note": "T-0078 で新設。他3ファイルと同じタグ (0.19.1) を使う設計。ファイル内では coder-workspace-home-backup-retention CronJob の image 行の1箇所のみが check_version_sync.py の regex に検出される（オーケストレータ script 内の RESTIC_IMAGE 定数はリポジトリ名とタグを分けて保持し、regex の誤検出を避けている。詳細はファイル内コメント参照）。タグを上げるときは retention CronJob の image 行と RESTIC_IMAGE_TAG 定数の両方を揃えること。check_version_sync.py の GROUPS に4ファイル目として登録済み（vaultwarden-restic-image の note 参照）",
+      "observability_impact": "coder workspace home (coder-<workspace-id>-home PVC) の restic バックアップ・retention CronJob が使用。壊れるとバックアップが取れなくなるが coder workspace 本体の可用性には影響しない"
     }
   ]
 }

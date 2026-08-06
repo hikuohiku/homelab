@@ -303,6 +303,9 @@ GROUPS = [
             ("apps/immich/restic-backup-cronjob.yaml", lambda: extract_image_tag_all(
                 "apps/immich/restic-backup-cronjob.yaml", "image: restic/restic:"
             )),
+            ("apps/coder/workspace-home-backup-cronjob.yaml", lambda: extract_image_tag_all(
+                "apps/coder/workspace-home-backup-cronjob.yaml", "image: restic/restic:"
+            )),
         ],
     },
 ]
