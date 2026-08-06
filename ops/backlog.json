@@ -2476,7 +2476,7 @@
       "title": "ops/state.json の routines / dashboard 表示が『クラウド定期実行 毎時』のまま、実際の常駐ループ（2分間隔）と乖離している",
       "kind": "chore",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 20,
       "why": "issue #56 (2026-08-05T18:32:03Z) で構築セッションから『autopilot はクラスタ内 Deployment として常駐するようになり、クラウドの routine は enabled: false にした（バックストップとして残置）』と報告されたが、ops/state.json の routines[0] には enabled 相当のフィールドが無いまま cron/cron_human（『1時間ごと（毎時19分）』）だけが残っている。ops/dashboard/build.py の cadence 表示（build.py:600, state['routines'][0]['cron_human'] をそのまま『定期実行』として人間に見せる）はこの値をそのまま使うため、ダッシュボードは実際には無効化されたクラウド routine の頻度を『今の定期実行』として表示し続けている。実際の稼働頻度は apps/autopilot/deployment.yaml の INTERVAL_SECONDS=120（2分間隔、loop.sh 既定と一致）で、ops-health-report の autopilot.heartbeat の last_start/last_end 間隔とも一致する。VISION.md は『人間への報告はダッシュボードに集約する』ことを原則としており、この乖離は CHARTER §1 の健全性基準（実態とドキュメントが乖離していない）に反する",
       "dod": "ops/state.json の routines[0] に、無効化されたことが分かるフィールド（例: enabled: false, disabled_at, disabled_reason）を追加するか、cluster-resident loop の実際の cadence（INTERVAL_SECONDS 由来、2分間隔）を表す新しいフィールドを追加する。ops/dashboard/build.py の cadence 表示ロジックを、クラウド routine が無効な間は in-cluster loop の間隔を優先して表示するように直す（または両方を区別して表示する）。CHARTER §5.5 か VISION.md のどちらか適切な方に、クラウド routine が現在バックストップとして無効化されている事実を明記する",
@@ -2488,8 +2488,8 @@
         "apps/autopilot/deployment.yaml"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #109 (計画役): CHARTER §3 の指示（backlog の blocked/needs-human の前提が古くないか確かめる）に沿って issue #56 の過去コメントを読み返す過程で発見。routines フィールド自体は substrate 移行後の PR 群のどれでも更新されておらず（git log 確認済み）、2026-08-05T18:32:03Z の実測報告以降ずっとこのまま。ダッシュボード（人間が朝に見る唯一の画面, CHARTER §7.1）に出る値のため優先度は中程度とした"
+      "pr": 301,
+      "notes": "run #109 (計画役): CHARTER §3 の指示（backlog の blocked/needs-human の前提が古くないか確かめる）に沿って issue #56 の過去コメントを読み返す過程で発見。routines フィールド自体は substrate 移行後の PR 群のどれでも更新されておらず（git log 確認済み）、2026-08-05T18:32:03Z の実測報告以降ずっとこのまま。ダッシュボード（人間が朝に見る唯一の画面, CHARTER §7.1）に出る値のため優先度は中程度とした。run #110 (実行役): ops/state.json の routines[0] に enabled/disabled_at/disabled_reason を追加し、新規フィールド in_cluster_loop（interval_seconds: 120, interval_human）を追加。ops/dashboard/build.py に resolve_cadence() を追加し、無効化された routine があれば in_cluster_loop を優先しつつクラウド routine をバックストップとして併記するよう修正。CHARTER §5.5 の該当箇所（『まだ頻度は下げられていない』という古い記述）を実態に合わせて訂正"
     },
     {
       "id": "T-0132",

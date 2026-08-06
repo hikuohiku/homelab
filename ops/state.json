@@ -19,9 +19,18 @@
       "cron_human": "1 時間ごと（毎時 19 分）",
       "model": "claude-sonnet-5",
       "url": "https://claude.ai/code/routines/trig_01LyC3zdzPCF8WLSpLpWDVsr",
-      "note": "立ち上げ期は頻度を上げて安定性を見る。落ち着いたら間隔を空ける"
+      "note": "立ち上げ期は頻度を上げて安定性を見る。落ち着いたら間隔を空ける",
+      "enabled": false,
+      "disabled_at": "2026-08-05T18:32:03Z",
+      "disabled_reason": "autopilot が autopilot namespace の Deployment として常駐するようになったため無効化。クラスタが壊れたときのバックストップとして残置（issue #56, 2026-08-05T18:32:03Z）"
     }
   ],
+  "in_cluster_loop": {
+    "substrate": "in-cluster Deployment (apps/autopilot/deployment.yaml)",
+    "interval_seconds": 120,
+    "interval_human": "2 分間隔",
+    "since": "2026-08-05"
+  },
   "runs": [
     {
       "n": 0,

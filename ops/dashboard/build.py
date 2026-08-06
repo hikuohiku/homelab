@@ -583,6 +583,24 @@ def render_now(prs, health, runs, cadence_min):
             f'</p>')
 
 
+def resolve_cadence(state):
+    """人間に見せる実行間隔。無効化されたクラウド routine の頻度をそのまま出さない。"""
+    routines = state.get("routines") or []
+    active = [r for r in routines if r.get("enabled", True)]
+    if active:
+        return active[0].get("cron_human") or active[0].get("cron")
+    loop_cfg = state.get("in_cluster_loop") or {}
+    cadence = loop_cfg.get("interval_human")
+    if not cadence:
+        return None
+    disabled = [r for r in routines if not r.get("enabled", True)]
+    if disabled:
+        backup = disabled[0].get("cron_human") or disabled[0].get("cron")
+        if backup:
+            cadence = f"{cadence} ・ バックストップ: {backup}"
+    return cadence
+
+
 def build() -> str:
     state = load("state.json", {}) or {}
     backlog = load("backlog.json", {"tasks": []}) or {"tasks": []}
@@ -596,8 +614,7 @@ def build() -> str:
     asks_html, n_asks = render_asks(tasks)
     auto_merged = [p for p in merged if str(p.get("headRefName", "")).startswith("autopilot/")]
     last_run = runs[-1] if runs else {}
-    routines = state.get("routines") or []
-    cadence = (routines[0].get("cron_human") or routines[0].get("cron")) if routines else None
+    cadence = resolve_cadence(state)
     fb = state.get("feedback", {}) or {}
 
     alive_tone, alive_text = "idle", "起動の記録がありません"
