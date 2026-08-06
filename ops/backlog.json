@@ -2205,6 +2205,7 @@
       "risk": "low",
       "status": "todo",
       "priority": 41,
+      "not_before": "2026-08-06T18:30:00Z",
       "why": "T-0078（run #83, PR #264）はデプロイ後の初回実行が実際に成功するか未確認のまま cooldown で開いている。immich/vaultwarden/coder-postgres は T-0071 で復元試験まで完了しているが、workspace home はまだ同種の検証をしていない。T-0072（PBS 退役判断）はこの確認が完了することを PBS 退役（T-0116）の前提条件にしている",
       "dod": "T-0078 (PR #264) が merge された後、(1) kubectl / ops-health-report で coder-workspace-home-backup CronJob の子 Job (chb-<workspace-id>) が成功していることを確認する、(2) T-0071 と同型の復元試験（使い捨て PVC への restic restore、CHOWN/FOWNER/DAC_OVERRIDE capability が要る可能性が高い点は docs/backup.md の教訓を踏まえる）を実施し docs/backup.md に記録する、(3) 可能であればオーケストレータ Pod の実メモリ/CPU 使用量を kubectl top で確認し、resources の値が妥当か見直す",
       "blocked_by": null,
@@ -2214,7 +2215,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #83: T-0078 実装の副産物として分離起票。run #85: T-0078 は run #84 で done・PR #264 merge 済みのため blocked_by を解消。ただし CronJob の schedule（毎日 03:30 UTC と当時記載）が未到来のため実行確認はまだできない。run #97 (T-0125) で訂正: この schedule は実際には JST（node01 の time.timeZone=Asia/Tokyo により k3s の CronJob は JST で評価される）。CronJob は 2026-08-06T00:40:29Z 作成で当日 03:30 JST の回には間に合っておらず、次回の実行予定は 2026-08-07 03:30 JST（= 2026-08-06T18:30Z）。run #94〜#97 が『毎時 UTC 基準でもうすぐ』と判断していたのは誤りで、実際はまだ半日以上先"
+      "notes": "run #83: T-0078 実装の副産物として分離起票。run #85: T-0078 は run #84 で done・PR #264 merge 済みのため blocked_by を解消。ただし CronJob の schedule（毎日 03:30 UTC と当時記載）が未到来のため実行確認はまだできない。run #97 (T-0125) で訂正: この schedule は実際には JST（node01 の time.timeZone=Asia/Tokyo により k3s の CronJob は JST で評価される）。CronJob は 2026-08-06T00:40:29Z 作成で当日 03:30 JST の回には間に合っておらず、次回の実行予定は 2026-08-07 03:30 JST（= 2026-08-06T18:30Z）。run #94〜#97 が『毎時 UTC 基準でもうすぐ』と判断していたのは誤りで、実際はまだ半日以上先。run #122 (T-0133): not_before フィールドを追加し、この時刻まで actionable から除外されるようにした"
     },
     {
       "id": "T-0118",
@@ -2518,7 +2519,7 @@
       "title": "backlog タスクに時刻ゲート（not_before）を持たせ、loop.sh の actionable 判定が『時刻待ちの todo』を実行役に空振りさせないようにする",
       "kind": "feature",
       "risk": "medium",
-      "status": "todo",
+      "status": "done",
       "priority": 35,
       "why": "T-0117 は CronJob の初回実行時刻（2026-08-06T18:30Z）まで着手できない todo だが、`apps/autopilot/loop.sh` の actionable 判定（status が todo/in_progress の件数のみを見る python スニペット）はこの時刻ゲートを知らない。backlog の todo が T-0117 だけの間、実行役に倒れた起動は毎回 issue #56 の全件スキャン・health report 取得・journal 記録だけを行って終わる（run #116〜#120 で実測、INTERVAL_SECONDS=120 なので 18:30Z まで実測時点で残り約12時間・350回超が同型になる見込み）。T-0117 のような『時刻が来るまで着手できない todo』はこれまで notes の自由記述でしか表現されておらず機械可読ではなかったため、loop.sh 側で区別できなかった",
       "dod": "backlog タスクスキーマに任意フィールド `not_before`（ISO8601 文字列、着手可能になる時刻）を追加し、`ops/validate.py` に形式検証（パース可能な ISO8601 であること）を足す。`loop.sh` の actionable 判定を、`not_before` が現在時刻より未来のタスクを除外するように直す（`not_before` の値が壊れている・パースできない場合は安全側＝そのタスクを actionable 扱いのまま、つまり現状と同じ挙動にフォールバックし、role 判定用スニペット全体が例外で落ちて `[ \"\" -eq 0 ]` のような不定形の比較にならないようにする）。既存の T-0117 に `not_before: \"2026-08-06T18:30:00Z\"` を付与し、backlog の todo がこのタスクのみの間は actionable=0 になり計画役に倒れることを次回起動のログ（`role=plan actionable=0`）で確認する。loop.sh の変更は Pod 起動時に一度だけ読み込まれ、変更を反映するには Pod の再作成が要る（ファイル冒頭のコメント参照）ため、PR 本文にその旨と反映タイミングを明記する。自分自身の運用ループ（CHARTER §4 の『自分や人間がこの homelab を観測・操作する経路』に該当）を変更するため、actionable の計算ロジックの単体的な妥当性（真偽の境界条件: not_before なし/過去/未来/壊れた文字列の4パターン）を PR 本文に書き出してから着手する",
@@ -2529,8 +2530,8 @@
         "ops/backlog.json"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #120（計画役）: T-0117 が時刻待ちの todo であるにも関わらず loop.sh の actionable 判定がそれを考慮せず、実行役の起動を12時間規模で空振りさせている実態を journal（run #116〜#119）から発見して起票。VISION §『判断に迷ったときの原則』の『器を太らせる前に、器を使い切る』との整合は検討済み——既存の next_review フィールドは recurring タスクの再オープン判定にのみ使われており（T-0012）、todo タスクの着手可否そのものを表す用途では使われていないため、新規フィールドが必要と判断した"
+      "pr": 313,
+      "notes": "run #121（計画役）: T-0117 が時刻待ちの todo であるにも関わらず loop.sh の actionable 判定がそれを考慮せず、実行役の起動を12時間規模で空振りさせている実態を journal（run #116〜#119）から発見して起票。VISION §『判断に迷ったときの原則』の『器を太らせる前に、器を使い切る』との整合は検討済み——既存の next_review フィールドは recurring タスクの再オープン判定にのみ使われており（T-0012）、todo タスクの着手可否そのものを表す用途では使われていないため、新規フィールドが必要と判断した。run #122（実行役）: `ops/backlog.json` に `not_before` を追加し `ops/validate.py` に ISO8601 形式検証を実装、`loop.sh` の actionable 判定スニペットを not_before 対応に書き換え、T-0117 に `not_before: \"2026-08-06T18:30:00Z\"` を付与。境界条件（無し/過去/未来/壊れた文字列）の妥当性は PR 本文に記載。loop.sh の変更は Pod 再作成まで反映されない点も PR 本文に明記"
     }
   ]
 }
