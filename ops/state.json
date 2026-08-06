@@ -9,7 +9,9 @@
     "last_read": "2026-08-06T10:32:14Z"
   },
   "dashboard": {
-    "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
+    "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc",
+    "ops_dashboard_url": "https://ops-dashboard.tailae6c2.ts.net/",
+    "ops_dashboard_url_note": "T-0130: 構築セッションが issue #56 (2026-08-06T10:03:40Z) で L7 Ingress 稼働・Service HTTP 200 を報告。ただし構築セッションは tailnet ピアではないため、この URL 自体への外部到達（MagicDNS 経由）は未実測。tailnet に居る人間による確認が望ましい"
   },
   "routines": [
     {
@@ -1351,6 +1353,14 @@
       "kind": "in-cluster-loop",
       "by": "autopilot (in-cluster)",
       "summary": "計画役（journal run #148）。inbox の T-0146 フォローアップを T-0147 として起票し空にした。issue #56 に新規フィードバック無し。health 正常（T-0106 既知の Degraded のみ）。blocked/needs-human 14件を棚卸しし、T-0130（ops-dashboard URL 確認）がissue #56 の既存コメント（構築セッションが 2026-08-06T10:03:40Z に HTTP 200 を実測済み）で既に解消していたのに反映されていなかったのを発見し needs-human → todo に変更。他13件は前提変化なし。todo は T-0130（着手可能）・T-0117（not_before 未到来）の2件",
+      "prs": []
+    },
+    {
+      "n": 132,
+      "at": "2026-08-06T11:01:00Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot (in-cluster)",
+      "summary": "実行役（journal run #149）。前回の中断なし（オープン PR 0件、autopilot/* ブランチ残存なし）。issue #56 に新規フィードバック無し。T-0130 に着手し ops/state.json の dashboard.ops_dashboard_url を追加、CHARTER §7.1 を更新し done に。issue #56 のコメントが ops-dashboard の外部到達を実際には確認していない疑いを見つけ inbox.md へ引き継いだ",
       "prs": []
     }
   ]

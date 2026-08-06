@@ -712,10 +712,19 @@ commit していたが、全タスク PR がこのファイルに触るため相
 
 Artifact ツールが使えるときは、`ops/state.json` の `dashboard.artifact_url` を `url` に渡して
 同じ URL へ再公開する（新しい URL を発行しないこと。人間はブックマークしている）。これは
-`ops-dashboard` ブランチへの push とは独立した経路で、当面どちらも並行して更新する
-（T-0128 で `ops-dashboard` ブランチを配信する経路が整うまでは、人間が実際に見られるのは
-Artifact 版だけ）。Artifact が使えない・失敗した場合は journal に「publish できなかった」と
+`ops-dashboard` ブランチへの push とは独立した経路で、当面どちらも並行して更新する。
+Artifact が使えない・失敗した場合は journal に「publish できなかった」と
 一行だけ書けばよい。**ここで止まらないこと。**
+
+**T-0128 の `ops-dashboard`（`apps/ops-dashboard/`）は稼働している。** `ops/state.json` の
+`dashboard.ops_dashboard_url`（`https://ops-dashboard.tailae6c2.ts.net/`）がその配信先。
+構築セッションが issue #56（2026-08-06T10:03:40Z）で L7 Ingress の稼働と Service の HTTP 200 を
+報告している（T-0130, run #148/#149）。**ただし構築セッションは tailnet のピアではないため、
+この URL 自体への外部到達（MagicDNS 経由）は未実測**（同じ issue コメントで syncthing の GUI L7
+Ingress について「このワークスペースは tailnet のノードではないため判定不能」と明記されており、
+同じ制約が `ops-dashboard.tailae6c2.ts.net` にも及ぶ可能性がある。§5.5 参照）。tailnet に居る
+人間が実際にブラウザで開いて確認するまでは「Service 自体は動いている」までしか裏付けが無いと
+扱うこと。
 
 HTML を repo に置かなくなった代わりに、CI (`ops` job) が `python3 ops/dashboard/build.py` を実行して
 例外なく終わることだけを毎回検証する。壊れたまま気づかない事態を防ぐのはこれで十分で、
