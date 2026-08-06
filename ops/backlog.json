@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 138,
-  "updated": "2026-08-06T08:19:48Z",
+  "next_id": 143,
+  "updated": "2026-08-06T09:05:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2606,6 +2606,104 @@
       "created": "2026-08-06",
       "pr": 325,
       "notes": "run #132（計画役）: Plans.md M2 の『移行可否検討が未了』が T-0006（run #7, docs のみ）以降も検討タスクとして起票されていなかったため、ここで実行可能な investigate タスクに変換した run #134（実行役）: 移行可否を調査し実現可能と判断。技術的根拠を Plans.md M2 に追記し、issue #31/#38 に結論を返信。実装タスクへの分割起票は計画役の仕事のため ops/inbox.md に引き継ぎ。"
+    },
+    {
+      "id": "T-0138",
+      "domain": "homelab",
+      "title": "syncthing の PVC + Deployment/Service manifest を新規作成する（apps/syncthing/）",
+      "kind": "feature",
+      "risk": "low",
+      "status": "todo",
+      "priority": 68,
+      "why": "T-0137（syncthing の k8s 移行可否検討, 2026-08-06 完了・PR #325）で技術的に実現可能と判断した。Plans.md M2 は「検討完了・実装待ち」。CHARTER §3 の起票の粒度（1タスク=1PR=1論点）に従い、まず manifest 作成のみを独立させる。実データ移行（旧 LXC 101 からの config/データ移行）は別タスク T-0140、Tailscale 公開は別タスク T-0139 に分けた",
+      "dod": "apps/syncthing/ ディレクトリを新設し、kustomization.yaml・deployment.yaml（syncthing 公式イメージ）・service.yaml（この時点では ClusterIP のみ。外部公開の方式は T-0139 で決める）・pvc.yaml（local-path StorageClass。node01 は単一ノードのためノード固定制約は問題にならない、T-0137 の根拠を参照）を作成する。apps/apps.yaml の App of Apps に登録する。ops/inventory.json にバージョン監視対象として追加する（他アプリと同様、check_version_sync.py の対象にするかも検討）。kustomize build（CI）が green であることを確認する。この時点では空の PVC で新規デバイスとして起動するだけで、旧 LXC 101 の既存データ・ピア関係とは無関係（そちらは T-0140）",
+      "blocked_by": null,
+      "refs": [
+        "Plans.md",
+        "apps/apps.yaml",
+        "ops/inventory.json"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #136（計画役）: T-0137 完了を受け ops/inbox.md の引き継ぎ（実装タスクへの分割）をここで起票。"
+    },
+    {
+      "id": "T-0139",
+      "domain": "homelab",
+      "title": "syncthing を Tailscale 経由で公開する（sync ポート/GUI の公開方式を決めて実装）",
+      "kind": "feature",
+      "risk": "low",
+      "status": "todo",
+      "priority": 69,
+      "why": "T-0137 の技術的検討で、sync プロトコル（TCP 22000、discovery UDP 21027 等）は既存アプリが使う Tailscale operator の L7 Ingress（ingressClassName: tailscale）では転送できず、L3 ingress（Service に tailscale.com/expose: \"true\" または loadBalancerClass: tailscale）が必要と判明した。この repo では L3 Service 公開の前例が無い。GUI(8384) を公開するかどうかも Plans.md M2 で未決定のまま残っている",
+      "dod": "T-0138 で作成した Service（または追加の Service）に L3 ingress を設定し、sync ポートを tailnet 上で到達可能にする。GUI(8384) は人間が使う想定があるかで公開要否を判断し、公開する場合は既存の L7 Ingress パターンを別 Service で流用する（sync 用の L3 と GUI 用の L7 は別 Service に分けるのが自然）。前例が無い変更のため、kustomize build（CI）で構文の妥当性は確認できても実際の到達性は確認できない前提を PR 本文に明記する（実機到達性確認は次タスクの範囲か、構築セッション/人間に委ねる）",
+      "blocked_by": "T-0138（apps/syncthing/ の Service manifest が存在すること）",
+      "refs": [
+        "Plans.md",
+        "apps/syncthing/",
+        "apps/tailscale-operator/"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #136（計画役）: T-0137 完了を受け ops/inbox.md の引き継ぎ（実装タスクへの分割）をここで起票。"
+    },
+    {
+      "id": "T-0140",
+      "domain": "homelab",
+      "title": "旧 LXC 101 (syncthing) の config/データを新 PVC へ移行する",
+      "kind": "migrate",
+      "risk": "high",
+      "status": "needs-human",
+      "priority": 70,
+      "why": "T-0137 の検討で、device ID/証明書（cert.pem/key.pem、syncthing の config ディレクトリに保存）を移さないと既存ピアから別デバイスとして再認識されると判明した。CHARTER §4「データを失いうる変更」に該当するため、戻せることを確かめてから着手する必要がある。LXC 101 のファイルシステムへの直接アクセス（pct exec や Proxmox コンソール等）は、autopilot（Proxmox は PVEAuditor=監査専用、kubectl は k8s 内 read-only）にも構築セッション（kubectl read-only のみ、Proxmox/LXC への到達経路なし）にも無い",
+      "dod": "(1) LXC 101 の実際の config パス（`/var/lib/syncthing` 想定、要確認）の中身一式（cert.pem/key.pem/config.xml/index データ）を人間が取得し、構築セッションまたは autopilot が使える経路（例: 一時的な到達手段、Doppler 等）で引き渡す。(2) T-0138 で作成した PVC へそのデータを配置する（kubectl cp 等の書き込み操作は構築セッションか人間が実施。autopilot 自身の ClusterRole は書き込み動詞を持たない、CHARTER §5.5）。(3) 新しい syncthing Pod が既存ピアと再認証なしに同期を再開できることを確認する。(4) 確認できたら旧 LXC 101 を停止し、一定期間の観察後に破棄する（M1 vaultwarden 移行と同じ順序、Plans.md 参照）",
+      "needs_human_reason": "LXC 101 (`/var/lib/syncthing` 想定パス、要確認) の config ディレクトリ一式（cert.pem/key.pem 含む）を取得し、新 PVC へ配置できる形で提供してほしい。自動化された経路（autopilot・構築セッションいずれの credential）でもこのファイルシステムには到達できない",
+      "blocked_by": "T-0138/T-0139 が完了し、移行先の PVC/Service が用意されていること",
+      "refs": [
+        "Plans.md",
+        "apps/syncthing/"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #136（計画役）: T-0137 完了を受け ops/inbox.md の引き継ぎ（実装タスクへの分割）をここで起票。データ移行部分は human 専有（物理的にLXC上のファイルへアクセスする経路が無い）と判断し needs-human で起票。manifest 側（T-0138/T-0139）は着手可能な todo として分離した（CHARTER §3「blocked/needs-human はタスク全体ではなくどの部分かで見る」）"
+    },
+    {
+      "id": "T-0141",
+      "domain": "homelab",
+      "title": "Doppler の Tailscale OAuth credential 3種類の重複・上書き問題を調査する（issue #37）",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "needs-human",
+      "priority": 75,
+      "why": "issue #37（2026-05-19、autopilot 発足前）。Doppler に TAILSCALE_OAUTH_CLIENT_ID/SECRET（旧, auth_keys スコープ）・TAILSCALE_AGENT_CLIENT_ID/SECRET（エージェント専用, devices:core:read）・TAILSCALE_CLIENT_ID/SECRET（不明）の3種類が存在し、.envrc の読み込み順序により対話セッションの Tailscale MCP が意図せず旧 credential（auth_keys スコープ）を使ってしまう、という報告。CLAUDE.md の Agent Operations 節は現在 TAILSCALE_AGENT_CLIENT_ID/SECRET → .envrc → TAILSCALE_OAUTH_CLIENT_ID/SECRET というマッピングを明記しており、これが既に修正済みの状態を指しているのか、報告時点のままなのか、この in-cluster 実行環境からは判別できない",
+      "dod": ".envrc（gitignore 対象で this repo checkout には無い）の実際の内容と、対話セッションで Tailscale MCP が実際にどの credential を使っているかを確認する。既に解消済みなら issue #37 をその根拠とともに close する。未解消なら .envrc の読み込み順序を修正し、TAILSCALE_CLIENT_ID/SECRET（用途不明）が本当に不要なら Doppler から削除する（削除は人間の Doppler 操作）",
+      "needs_human_reason": ".envrc は gitignore 対象でこの in-cluster 実行環境（autopilot pod）からは読めない。また対話セッションの MCP 起動時の環境変数読み込み順序という、autopilot 自身の運用経路（REST API 直叩き、MCP 不使用、CHARTER §5.5）とは別物のため、人間または対話セッションでの再現確認が必要",
+      "blocked_by": null,
+      "refs": [
+        "CLAUDE.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #136（計画役）: run #132 が拾った「#56 以外の open issue」棚卸しの引き継ぎで確認。autopilot からは検証不能なため needs-human で起票"
+    },
+    {
+      "id": "T-0142",
+      "domain": "homelab",
+      "title": "手動 credential 作成手順（Proxmox/Doppler/Tailscale の UI 操作）の IaC 化可否を調査する（issue #35）",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 76,
+      "why": "issue #35（2026-05-19、autopilot 発足前）。エージェント用 read-only credential 分離（CLAUDE.md Agent Operations）で必要な手動手順が4つ（Proxmox agent@pve ユーザー/トークン作成 他）あり、再現性のため IaC 化したいという要望。着手されないまま残っている",
+      "dod": "issue #35 に列挙された4手順それぞれについて、Terraform 等での自動化が技術的に可能か（例: Proxmox provider の pve_user/pve_acl リソースは、それ自体を作るのに十分な権限を持つ既存 credential が要るという鶏卵問題がありうる）を調査する。自動化可能な部分があれば実装タスクとして分割起票する。ブートストラップ性質上どうしても人間の初回手作業が要る部分は、その理由を issue #35 と CLAUDE.md に明記した上で、再現性を上げる次善策（手順をスクリプト化してコピペミスを防ぐ等）を検討する。全て自動化不能と判断した場合はその根拠を issue #35 に返信し、CHARTER の『人間に渡してよいもの』の実例として記録する",
+      "blocked_by": null,
+      "refs": [
+        "CLAUDE.md",
+        "terraform/proxmox/"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #136（計画役）: run #132 が拾った「#56 以外の open issue」棚卸しの引き継ぎで起票"
     }
   ]
 }
