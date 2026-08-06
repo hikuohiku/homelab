@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 143,
-  "updated": "2026-08-06T09:05:00Z",
+  "next_id": 146,
+  "updated": "2026-08-06T09:58:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2704,6 +2704,68 @@
       "created": "2026-08-06",
       "pr": 331,
       "notes": "run #136（計画役）: run #132 が拾った「#56 以外の open issue」棚卸しの引き継ぎで起票 run #139（実行役）: bpg/proxmox（user/acl/user_token）、tailscale/tailscale（oauth_client、実ソース tailscale/resource_oauth_client.go まで確認）、DopplerHQ/doppler（secret）の各 provider ドキュメント・実装を確認し、4手順とも技術的には自動化可能と判断。bpg/proxmox の推奨ロール例に Realm.AllocateUser/User.Modify/Permissions.Modify が含まれる点から、既存 terraform Proxmox token がそのまま bootstrap credential として使える可能性が高いことを発見。ただし (1) その既存トークンのロール、(2) 既存 TAILSCALE_CLIENT_ID のスコープの2点は autopilot・構築セッションどちらからも確認不能なため issue #35 に結論とあわせて確認依頼を投稿（issuecomment-5202903809）。自動化不能の結論には至らなかったため CLAUDE.md への反映は見送り。実装タスクへの分割起票は計画役の仕事のため ops/inbox.md に引き継いだ。"
+    },
+    {
+      "id": "T-0143",
+      "domain": "homelab",
+      "title": "syncthing (T-0139) の tailnet 実到達性を構築セッションに確認してもらう",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "needs-human",
+      "priority": 77,
+      "why": "T-0139（PR #329）で syncthing の sync ポート（L3, Service tailscale.com/hostname: syncthing-sync）と GUI（L7 Ingress, syncthing）を tailnet に公開したが、この autopilot 実行環境（in-cluster、kubectl read-only + tailscale devices:core:read のみ）からは実際の到達性を検証できない。tailscale MCP は疎通確認ができず、kubectl でも Service/Ingress の存在は見えても実際に tailnet 上でデバイスとして解決できるかは見えない",
+      "dod": "構築セッション（Coder ワークスペース、tailnet 到達可能）または人間に (1) tailscale status で syncthing / syncthing-sync デバイスが見えるか、(2) GUI（https://syncthing.<tailnet>.ts.net/）にブラウザ/curl から到達できるかを確認してもらう。到達できていれば T-0139 の残った不確実性を解消して journal に記録、できていなければ原因調査タスクを新規起票する",
+      "needs_human_reason": "autopilot・構築セッションいずれの credential でも tailnet の実疎通確認ができない（tailscale MCP は devices:core:read のみで疎通確認不可、read-only kubectl は Service/Ingress の存在確認のみ）。構築セッションが実際に tailnet 上のマシンから tailscale status やブラウザアクセスを試せるなら、それは construction session の範囲内（人間専有ではない）だが、実行の可否自体は issue #56 経由で確認する必要がある",
+      "blocked_by": null,
+      "refs": [
+        "apps/syncthing/",
+        "ops/inbox.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #141（計画役）: ops/inbox.md の引き継ぎ（run #138 実行役が残したもの）を起票。issue #56 に確認依頼を投稿済み（https://github.com/hikuohiku/homelab/issues/56#issuecomment-5203057784）"
+    },
+    {
+      "id": "T-0144",
+      "domain": "homelab",
+      "title": "T-0142 (credential 作成手順の IaC 化, issue #35) の人間回答を待って実装タスクに分割する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "needs-human",
+      "priority": 78,
+      "why": "T-0142 の調査で手動 credential 作成4手順（Proxmox ユーザー/ACL/トークン、Tailscale OAuth client、Doppler provider 導入）は技術的に全て自動化可能と判明したが、着手前に確認が必要な人間専有の情報が2点残っている: (1) 既存 Proxmox terraform トークンのロールに Realm.AllocateUser/User.Modify/Permissions.Modify が含まれるか、(2) 既存 TAILSCALE_CLIENT_ID のスコープが他の OAuth client を作成できるものか。いずれも Proxmox/Tailscale の管理コンソールでしか確認できず、autopilot・構築セッションのどちらの credential にも書き込み権限が無い",
+      "dod": "issue #35（issuecomment-5202903809 で確認依頼済み）への人間の回答を待つ。回答が揃ったら、Proxmox 自動化・Tailscale 自動化・Doppler provider 導入（新規 service token 発行込み）をそれぞれ1タスクずつ（1 PR 1 コンポーネントの粒度、CHARTER §3）に分割して起票し、このタスクは done にする",
+      "needs_human_reason": "既存 Proxmox terraform トークンのロールと既存 TAILSCALE_CLIENT_ID のスコープの確認は Proxmox/Tailscale の管理コンソールでのみ可能で、autopilot・構築セッションいずれの credential にも参照権限が無い。確認依頼は issue #35 に投稿済み（T-0142 で実施）",
+      "blocked_by": null,
+      "refs": [
+        "docs/",
+        "ops/inbox.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #141（計画役）: ops/inbox.md の引き継ぎ（run #139 実行役が残したもの）を起票。issue #35 への確認依頼は T-0142 で既に投稿済み（issuecomment-5202903809）のため追加の投稿はしない。2026-08-06T09:35 時点で issue #35 に人間の回答なし（自分の調査コメントのみ）"
+    },
+    {
+      "id": "T-0145",
+      "domain": "homelab",
+      "title": "ops/state.json の runs 配列が journal の run 番号に追随せず抜け続けている（CI での機械検出を追加）",
+      "kind": "chore",
+      "risk": "low",
+      "status": "todo",
+      "priority": 60,
+      "why": "ops/dashboard/build.py はダッシュボードの活動タイムライン・gantt・n_runs 統計を ops/state.json の runs 配列から生成するが、この配列は journal の run 番号に対して2回連続で大きく欠落していた（run #125→#133 の間の7回分、run #138〜#140 の3回分）。CHARTER §7 は journal への毎回追記を明記するが、state.json runs への追記は暗黙の前提のまま明文化されておらず、機械的な検出も無いため、抜けても誰も気づかない。VISION の『人間への報告はダッシュボードに集約する』『同じ事実が2箇所に書かれていない』に反する状態が放置され続けていた（run #141 計画役が run #138〜#140 の3件のみ手で埋め合わせたが、run #126〜#132 の7件は未回収のまま）",
+      "dod": "ops/validate.py に、直近の journal（ops/journal/YYYY-MM.md）から見出し `## ... — run #N` の最大 N を抽出し、ops/state.json の runs 配列がその run 番号まで（欠落なく）追随しているかを検証するチェックを追加する。厳密な1:1対応が前提と分かれば欠落を error、前提が崩れていれば（例: 同一 cron からの並行起動で run 番号が重複するケースがある、run #33 参照）warning に留める。あわせて CHARTER §7 に『journal と同じタイミングで state.json の runs 配列にも追記する』ことを明記する。run #126〜#132 の7件の内容復元は本タスクの範囲外とし、優先度が上がれば別タスクに分ける",
+      "needs_human_reason": null,
+      "blocked_by": null,
+      "refs": [
+        "ops/validate.py",
+        "ops/state.json",
+        "ops/journal/2026-08.md",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #141（計画役）: state.json 棚卸し中に発見。runs 配列の最終更新コミットが T-0138（run #137 相当、8bb31ed）で止まっており、その後の run #138〜#140（PR #329/#331/#332）が追記していなかった。この3件は本 run で手動バックフィル済み（n=121〜123）。さらに遡ると n=118（journal run #125）→ n=119（journal run #133）の間も7回分（run #126〜#132）が欠落しており、これは今回バックフィルしていない（内容の正確な復元には該当run群の journal 全文精読が要るため、再発防止の仕組み化を先に済める判断）"
     }
   ]
 }

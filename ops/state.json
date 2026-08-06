@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-06T09:12:44Z",
+  "updated": "2026-08-06T09:58:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-06T06:49:21Z"
+    "last_read": "2026-08-06T09:51:55Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -1252,6 +1252,42 @@
       "prs": [
         328
       ]
+    },
+    {
+      "n": 121,
+      "at": "2026-08-06T18:22:00+09:00",
+      "kind": "in-cluster",
+      "by": "autopilot loop (実行役)",
+      "summary": "実行役（journal run #138）。前回中断（T-0138, PR #328）が main に merge 済みと確認。T-0139（syncthing の sync/GUI ポートを tailnet に公開）を実装: sync プロトコル用に L3 Service（loadBalancerClass: tailscale）を新設、GUI は既存パターンの L7 Ingress。risk を low→medium に修正（実インフラへの到達性新設）。PR #329 を同起動内で CI green 確認のうえ merge。実機の tailnet 到達性は未確認のため ops/inbox.md に確認依頼を追記。backlog T-0139 を done に更新",
+      "prs": [
+        329
+      ]
+    },
+    {
+      "n": 122,
+      "at": "2026-08-06T18:30:00+09:00",
+      "kind": "in-cluster",
+      "by": "autopilot loop (実行役)",
+      "summary": "実行役（journal run #139）。前回中断（run #138 の記録専用 PR #330）を merge。T-0142（issue #35 の credential 手動作成手順、IaC 化可否）を調査: Proxmox/Tailscale/Doppler 各 provider のドキュメント・実ソースを確認し技術的には全て自動化可能と判断。ただし既存 Proxmox terraform トークンのロールと既存 TAILSCALE_CLIENT_ID のスコープの2点は自動化された経路から確認できないため issue #35 に確認依頼を投稿（issuecomment-5202903809）。実装タスクへの分割は計画役の仕事のため ops/inbox.md に引き継いだ。backlog T-0142 を done に更新",
+      "prs": [
+        331
+      ]
+    },
+    {
+      "n": 123,
+      "at": "2026-08-06T18:41:00+09:00",
+      "kind": "in-cluster",
+      "by": "autopilot loop (実行役)",
+      "summary": "実行役（journal run #140）。前回中断（T-0142 記録 PR #331）を merge。backlog の todo は T-0117 のみで not_before 未到来のため着手可能なタスク無し。issue #56 に新規フィードバックなし、ops-health-report にも新規異常なし（既知の T-0106 由来 Degraded のみ）。実装は行わず中断の後始末とフィードバック・健全性確認のみ",
+      "prs": []
+    },
+    {
+      "n": 124,
+      "at": "2026-08-06T18:55:00+09:00",
+      "kind": "in-cluster",
+      "by": "autopilot loop (計画役)",
+      "summary": "計画役（journal run #141）。ops/inbox.md の2件を backlog に変換: T-0143（syncthing tailnet 到達性の構築セッション確認依頼、issue #56 に投稿済み）、T-0144（T-0142/issue #35 の人間回答待ち追跡）。issue #56 に新規フィードバック無し（last_read を投稿時刻に更新）。ops-health-report で新規異常無しを確認。blocked/needs-human 13件を棚卸し、前提の変化無しを確認（azure/setup-helm v5.0.1 の README も実読）。副次的に ops/state.json の runs 配列が journal run #138〜#140 分（さらに遡り #126〜#132 分）追随していなかったのを発見し、直近3件をバックフィル、再発防止を T-0145 として起票",
+      "prs": []
     }
   ]
 }
