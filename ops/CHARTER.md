@@ -617,9 +617,15 @@ PR に付いたレビューコメントも同じ扱い。**指摘を受けたら
 
 人間が朝に見る唯一の画面。`ops/` を更新したら**必ず**次を実行する。
 
-`ops/dashboard/build.py` の `fetch_prs()` は内部で `gh pr list` を呼ぶが、このクラウドサンドボックスに
-`gh` は無いので必ず失敗し、`ops/dashboard/prs.json` のキャッシュにフォールバックする（CHARTER §5.2）。
-**キャッシュは自動更新されない。** ビルド前に次の手順でキャッシュを最新化する（T-0016）。
+**T-0126（run #98）以降**、`ops/dashboard/build.py` の `fetch_prs()` は `gh` CLI に依存せず、
+`AUTOPILOT_GITHUB_TOKEN` で GitHub REST API を直接叩いて `ops/dashboard/prs.json` を自分で
+最新化してから読む。クラスタ内常駐（§5.5）ではこのトークンが使えるため、**手動でキャッシュを
+組み立てる手順は不要になった。** `python3 ops/dashboard/build.py` を実行するだけで PR 一覧も
+併せて最新化される。
+
+`AUTOPILOT_GITHUB_TOKEN` が無い実行環境（旧・クラウド定期実行サンドボックス等）では、
+`fetch_prs()` は例外を送出前提のまま `ops/dashboard/prs.json` のキャッシュにフォールバックする。
+その場合のみ、以下の手順でキャッシュを手で最新化してからビルドする。
 
 1. `mcp__github__list_pull_requests`（`state: open`）と（`state: closed`, `sort: updated`, `direction: desc`）
    で取得する。**`merged` フィールドは信用しない**（closed の全件で `false` を返すことがある実測済みの不具合。

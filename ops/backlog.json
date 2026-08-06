@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 126,
-  "updated": "2026-08-06T03:15:00Z",
+  "next_id": 129,
+  "updated": "2026-08-06T03:17:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2369,6 +2369,66 @@
       "created": "2026-08-06",
       "pr": 283,
       "notes": "run #97: kubectl での実測（pvc-usage-reporter 3件・immich/vaultwarden/coder-restic-backup/retention・coder-workspace-home-backup の lastScheduleTime）に基づき着手・完遂。コード変更は無くドキュメント訂正のみ、機能影響なし"
+    },
+    {
+      "id": "T-0126",
+      "domain": "homelab",
+      "title": "dashboard build.py の fetch_prs() を gh CLI 依存から GitHub REST API 直叩きに置き換え",
+      "kind": "chore",
+      "risk": "low",
+      "status": "done",
+      "priority": 10,
+      "why": "issue #56 (2026-08-06T03:07:26Z) の指摘。ops/dashboard/build.py の fetch_prs() は `gh pr list` を呼ぶが、この実行環境（クラウド定期実行サンドボックス・クラスタ内常駐いずれも）に `gh` は入っておらず必ず失敗し、ops/dashboard/prs.json の古いキャッシュにフォールバックしていた（CHARTER §5.2/§5.5）。ダッシュボードのPR一覧が『最新』の顔をして古いまま出るのが一番まずいとの指摘で、優先して直すよう明記されていた。クラスタ内常駐（§5.5）では AUTOPILOT_GITHUB_TOKEN で api.github.com に到達できることが実測済みなので、gh 依存を削って urllib（標準ライブラリのみという build.py の設計方針に合わせる）で置き換えた",
+      "dod": "fetch_prs() が gh CLI を使わず GitHub REST API（/pulls, /commits/{sha}/check-runs, /commits/{sha}/status）を AUTOPILOT_GITHUB_TOKEN で直接叩き、open/merged PR 一覧と CI 状態を組み立てて ops/dashboard/prs.json を自分で最新化する。トークンが無い環境では例外を投げて既存キャッシュへフォールバックする（後方互換）。CHARTER §7.1 の手順説明をこの変更に合わせて更新する",
+      "blocked_by": null,
+      "refs": [
+        "ops/dashboard/build.py",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #98: 実装・ops/validate.py 0 error・ops/dashboard/build.py 実行で open 0件/merged 60件（PR #283 が最新として反映）を実機（この実行環境）で確認済み。PR番号は同じPRのマージ後に追記する。"
+    },
+    {
+      "id": "T-0127",
+      "domain": "homelab",
+      "title": "autopilot が生成した dashboard HTML を専用ブランチへ push する仕組みを追加",
+      "kind": "feature",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 20,
+      "why": "issue #56 (2026-08-06T03:07:26Z) の指摘。クラスタ内常駐 (§5.5) の autopilot には Artifact ツールが無く、毎イテレーション ops/dashboard/build.py で HTML は作れているのに公開できず、journal に一行残して先へ進んでいた（CHARTER §7.1 どおりの正しい振る舞いだが、結果としてダッシュボードは常駐化直前（2026-08-05 17:32 UTC 版）で 9 時間半以上止まっていた）。ops-health-reporter が ops-health-reportブランチへ書き戻す（CHARTER §2）のと同型のパターンを、autopilot 自身の dashboard 生成にも適用する。T-0128（配信側）の前提",
+      "dod": "autopilot の loop（apps/autopilot/、または各イテレーションの Claude セッション）が ops/dashboard/build.py 実行後、生成された index.html を ops-dashboard のような専用ブランチへ commit・push する。push は既存の git credential（loop.sh の setup_git()）を使い、main への直 push にはならないことを確認する。100KB 近いファイルなので ConfigMap には埋めない（issue #56 の指摘どおり）",
+      "blocked_by": null,
+      "refs": [
+        "apps/autopilot/",
+        "ops/dashboard/build.py",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #98 で起票。T-0128（配信側の Deployment/tailscale-operator 公開）とセットだが CHARTER §3 の起票の粒度（1 タスク = 1 PR = 1 論点）に従い分割した。この T-0127 が先。"
+    },
+    {
+      "id": "T-0128",
+      "domain": "homelab",
+      "title": "dashboard 配信用の静的ファイルサーバーを apps/ に追加し tailscale-operator で公開する",
+      "kind": "feature",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 21,
+      "why": "issue #56 (2026-08-06T03:07:26Z) の指摘。claude.ai の Artifact は対話セッションの存在を前提にした置き場所で、常駐基盤（クラスタ内 autopilot）とは噛み合わない。coder が tailscale-operator 経由でcoder.tailae6c2.ts.net として公開されているのと同じパターンで、dashboard も自前でホストし、対話セッションの有無に依存せず autopilot 自身が更新できるようにする",
+      "dod": "T-0127 が push する専用ブランチ（例: ops-dashboard）の index.html を定期的に取得して配信するDeployment（nginx か python -m http.server）+ Service を apps/ 配下に追加し、tailscale-operator 経由で公開する。ops/state.json の dashboard.artifact_url もしくは新しいフィールドをこの URL に更新し、Artifact 版は当面残しつつ正とするのはこちらにする（issue #56 の指摘どおり）",
+      "blocked_by": "T-0127",
+      "refs": [
+        "apps/",
+        "apps/tailscale-operator/",
+        "apps/coder/",
+        "ops/state.json"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #98 で起票。T-0127（push 側）が先。"
     }
   ]
 }

@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-06T03:15:00Z",
+  "updated": "2026-08-06T03:20:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-06T01:26:31Z"
+    "last_read": "2026-08-06T03:07:26Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -1024,7 +1024,9 @@
       "kind": "scheduled",
       "by": "in-cluster autopilot",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。ops-health-report・autopilot heartbeat とも正常、既知の Degraded 3件のみ。backlog の唯一の todo（T-0117）は CronJob schedule（03:30 UTC）未到来のため引き続き着手不能、needs-human 4件・blocked 5件も前提未変化で追加対応不可。新しい調査観点は見つからず、進捗なしのまま記録のみ更新",
-      "prs": [281]
+      "prs": [
+        281
+      ]
     },
     {
       "n": 97,
@@ -1032,7 +1034,17 @@
       "kind": "scheduled",
       "by": "in-cluster autopilot",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。ops-health-report・autopilot heartbeat とも正常、既知の Degraded 3件のみ。backlog の唯一の todo（T-0117）の未着手理由を kubectl で裏取りする過程で、CHARTER §2・docs/backup.md が CronJob の schedule を「UTC」と誤記していたと発見（実際は node01 の time.timeZone=Asia/Tokyo により JST で評価される。9時間ずれ）。immich サーバー内蔵の backup.database は対象外で UTC のままと区別して確認。CHARTER・docs/backup.md（計9箇所）を訂正し、T-0117 の notes に正しい次回実行予定（2026-08-07 03:30 JST）を追記した（T-0125）",
-      "prs": [283]
+      "prs": [
+        283
+      ]
+    },
+    {
+      "n": 98,
+      "at": "2026-08-06T03:20:00Z",
+      "kind": "scheduled",
+      "by": "cluster-resident (autopilot Pod)",
+      "summary": "前回の中断: オープン PR・autopilot ブランチとも無し。issue #56 の未読フィードバック1件（2026-08-06T03:07:26Z）を反映。get_comments 相当のページネーションの罠（per_page=100 で1ページ目が100件ちょうど返り、2ページ目に3件の未読が隠れていた）を実際に踏んで発見・回避した。内容は2点: (1) ops/dashboard/build.py の fetch_prs() が gh CLI 依存で常に失敗しキャッシュにフォールバックしていた点を、AUTOPILOT_GITHUB_TOKEN による GitHub REST API 直叩き（urllib、標準ライブラリのみ）に置き換え（T-0126, 完遂）。実行して open 0件・merged 60件（PR #283 が最新として反映）を確認した。(2) dashboard の Artifact 公開がクラスタ内常駐では機能しない（Artifact ツールが無い）ため 9 時間半止まっていたという指摘を受け、自前ホスト（HTML を専用ブランチへ push する仕組み T-0127 + tailscale-operator 経由で配信する Deployment T-0128）に分割して起票（直列化ルールに従い、この起動では設計のみで着手せず次回以降に回す）",
+      "prs": []
     }
   ]
 }
