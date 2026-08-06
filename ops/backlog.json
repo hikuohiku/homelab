@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 117,
+  "next_id": 118,
   "updated": "2026-08-06T00:05:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
@@ -1437,7 +1437,7 @@
       "title": "Coder workspace ごとの home PVC (`coder-<workspace-id>-home`) 用の backup CronJob を追加する",
       "kind": "feature",
       "risk": "medium",
-      "status": "todo",
+      "status": "in_progress",
       "priority": 40,
       "why": "T-0065（run #30）の調査で発見。`apps/coder/templates/personal/main.tf` が Coder の Terraform プロビジョナー経由で workspace 作成のたびに `coder-<workspace-id>-home` という PVC を動的作成しており（`/home/coder` にマウント、dotfiles・`ghq` clone・code-server 設定等のユーザーデータが載る）、これは `apps/coder/*.yaml` の静的マニフェストには現れないため T-0070（coder-postgres の backup）ではカバーされない。node01 揮発時に失われる実データの5つ目の対象",
       "dod": "workspace ごとに動的作成される `coder-<workspace-id>-home` PVC を列挙し（PVC 名は `coder-<workspace-id>-home` の命名規則で特定可能）、pg_dump 同様の考え方でファイルシステムスナップショット（tar もしくは直接 restic でファイルシステムを対象にする、DB とは異なりファイルなのでオンライン中でも整合性の問題は薄い）を restic で T-0067 の保存先へ push する CronJob を追加する。workspace は増減するため、対象 PVC の列挙は動的（`kubectl get pvc -l` 相当のラベルセレクタ、または命名パターンでのマッチ）にする",
@@ -1447,8 +1447,8 @@
         "docs/backup.md"
       ],
       "created": "2026-08-05",
-      "pr": null,
-      "notes": "run #82: blocked_by（T-0067）が run #53 時点で既に done になっていたにも関わらず放置されていたのに気づき todo に戻した（T-0072 の判断作業の副産物）"
+      "pr": 264,
+      "notes": "run #83: apps/coder/workspace-home-backup-cronjob.yaml を実装（オーケストレータ Pod が app.kubernetes.io/name=coder-pvc ラベルで対象 PVC を毎回列挙し、PVC ごとに使い捨ての restic backup Job を Kubernetes API 経由で生成する方式）。credential は coder-postgres 用 (T-0070) の coder-restic-credentials を流用し新規登録不要。新しい write RBAC （Job の create）と実測なしの resources/securityContext を持ち込むため CHARTER §4 の 『縛る変更には実測か裏付けが要る』cooldown 対象と判断し、PR #264 は CI green を確認した 上で merge せず open のまま起動を終える。次の起動で issue #56 に新しい異議が無いことを 確認して merge すること。デプロイ後の初回実行確認・復元試験は T-0117 として分離起票"
     },
     {
       "id": "T-0079",
@@ -2196,6 +2196,25 @@
       "created": "2026-08-06",
       "pr": null,
       "notes": "run #82: T-0072（PBS 退役判断）から実行タスクとして分離起票"
+    },
+    {
+      "id": "T-0117",
+      "domain": "homelab",
+      "title": "coder workspace home backup (T-0078) の初回実行確認・復元試験",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 41,
+      "why": "T-0078（run #83, PR #264）はデプロイ後の初回実行が実際に成功するか未確認のまま cooldown で開いている。immich/vaultwarden/coder-postgres は T-0071 で復元試験まで完了しているが、workspace home はまだ同種の検証をしていない。T-0072（PBS 退役判断）はこの確認が完了することを PBS 退役（T-0116）の前提条件にしている",
+      "dod": "T-0078 (PR #264) が merge された後、(1) kubectl / ops-health-report で coder-workspace-home-backup CronJob の子 Job (chb-<workspace-id>) が成功していることを確認する、(2) T-0071 と同型の復元試験（使い捨て PVC への restic restore、CHOWN/FOWNER/DAC_OVERRIDE capability が要る可能性が高い点は docs/backup.md の教訓を踏まえる）を実施し docs/backup.md に記録する、(3) 可能であればオーケストレータ Pod の実メモリ/CPU 使用量を kubectl top で確認し、resources の値が妥当か見直す",
+      "blocked_by": "T-0078（PR #264 の merge 待ち）",
+      "refs": [
+        "apps/coder/workspace-home-backup-cronjob.yaml",
+        "docs/backup.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #83: T-0078 実装の副産物として分離起票"
     }
   ]
 }
