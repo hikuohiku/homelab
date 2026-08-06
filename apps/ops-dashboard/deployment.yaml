@@ -16,6 +16,10 @@ spec:
     metadata:
       labels:
         app: ops-dashboard
+      annotations:
+        # server.py は起動時にしか読まれない。ConfigMap の中身を変えても Deployment の
+        # spec は変わらず Pod は作り直されないので、変えたらこの値を上げる
+        ops-dashboard/server-revision: "1"
     spec:
       securityContext:
         runAsNonRoot: true
@@ -85,9 +89,32 @@ spec:
         # 側にのみ存在）CrashLoopBackOff (exitCode 127) になった (#291, run #101 で revert)。
         # apps/ops-health-reporter・apps/{coder,vaultwarden,immich}/pvc-usage-cronjob.yaml
         # で既に実績のある python:3.14-alpine の標準ライブラリ http.server に置き換える。
+        #
+        # 配信そのものは `python3 -m http.server` と同じ SimpleHTTPRequestHandler のまま。
+        # server.py はそれを継承して `POST /feedback` だけを足し、ダッシュボードの
+        # フォームから来た文章を GitHub issue #56（人間からのフィードバック窓口、
+        # CHARTER §6）へコメントとして投稿する。窓口は増やさない
         - name: httpd
           image: python:3.14-alpine
-          command: ["python3", "-m", "http.server", "8080", "--directory", "/www"]
+          command: ["python3", "/config/server.py"]
+          env:
+            - name: WWW_ROOT
+              value: /www
+            - name: PORT
+              value: "8080"
+            - name: FEEDBACK_REPO
+              value: hikuohiku/homelab
+            # ops/state.json の feedback.issue と一致させる（窓口を移すときは両方直す）
+            - name: FEEDBACK_ISSUE
+              value: "56"
+            - name: GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: ops-dashboard-github-token
+                  key: token
+                  # Secret がまだ無くても静的配信は動かす（投稿だけが 503 になり、
+                  # 画面にその旨が出る）。起動できない条件を増やさない
+                  optional: true
           ports:
             - name: http
               containerPort: 8080
@@ -95,6 +122,9 @@ spec:
           volumeMounts:
             - name: www
               mountPath: /www
+              readOnly: true
+            - name: server
+              mountPath: /config
               readOnly: true
           resources:
             requests:
@@ -121,3 +151,6 @@ spec:
       volumes:
         - name: www
           emptyDir: {}
+        - name: server
+          configMap:
+            name: ops-dashboard-server
