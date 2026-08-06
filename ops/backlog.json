@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 122,
+  "next_id": 123,
   "updated": "2026-08-06T01:50:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
@@ -1984,7 +1984,7 @@
       ],
       "created": "2026-08-05",
       "pr": 271,
-      "notes": "run #29: T-0071（復元試験）完了を待つ方針で blocked に。run #88: T-0071 が既に done（2026-08-06 完了）と確認しblocked_by を解消。manifest（backup専用ExternalSecret 3ファイル分）を実装し、credential 発行のみを残す needs-human に変更（#271）。CronJob 側の参照切り替えは新しい鍵の存在確認が要るため T-0120 として分離"
+      "notes": "run #29: T-0071（復元試験）完了を待つ方針で blocked に。run #88: T-0071 が既に done（2026-08-06 完了）と確認しblocked_by を解消。manifest（backup専用ExternalSecret 3ファイル分）を実装し、credential 発行のみを残す needs-human に変更（#271）。CronJob 側の参照切り替えは新しい鍵の存在確認が要るため T-0120 として分離。run #91: 追加した ExternalSecret が SecretSyncedError のまま存在すること自体が coder/immich/vaultwarden の ArgoCD Application health を Degraded に引き上げる副作用を発見（Pod 自体は無事）。CHARTER §2 に既知事象として記録（T-0122）。Doppler 登録が済み次第、この Degraded も自然解消するはず"
     },
     {
       "id": "T-0109",
@@ -2294,7 +2294,26 @@
       ],
       "created": "2026-08-06",
       "pr": 272,
-      "notes": "run #89 で発見・即完遂。修正後の実効性確認（次回 CronJob 実行後の latest.json）は次の起動で見る"
+      "notes": "run #89 で発見・即完遂。run #91: 実効性確認完了。02:00:04Z の ops-health-report で autopilot.heartbeat.last_start/last_end とも null ではなく iteration #36/#37 の実値を返すことを確認した"
+    },
+    {
+      "id": "T-0122",
+      "domain": "homelab",
+      "title": "T-0106 が追加した backup credential ExternalSecret の SecretSyncedError が coder/immich/vaultwarden の ArgoCD health を Degraded にする副作用を CHARTER に記録する",
+      "kind": "docs",
+      "risk": "low",
+      "status": "done",
+      "priority": 42,
+      "why": "run #91 で ops-health-report（02:00:04Z 断面）を確認中、coder/immich/vaultwarden の Application health が揃って Degraded になっているのを発見した。kubectl で調査したところ 3 namespace とも Pod は全て Running/Ready で異常無く、原因は T-0106（run #88, PR #271）が追加した `<app>-restic-backup-credentials` ExternalSecret が、まだ登録されていない Doppler キー（B2_ACCOUNT_ID_APPEND_ONLY/B2_ACCOUNT_KEY_APPEND_ONLY）を参照しているため SecretSyncedError のままで、この 1 リソースの不健全が ArgoCD の health 集約ロジックで親 Application 全体に波及していたと判明した。CHARTER §2 の健全性確認手順（`applications` が全て Synced/Healthy か確認する）はこの状態を『壊れている』と誤検知し続けてしまうため、既知事象として記録しないと毎回同じ調査をやり直すことになる",
+      "dod": "CHARTER §2 に、T-0106 が needs-human のままの間は coder/immich/vaultwarden の Degraded がこの ExternalSecret 由来である可能性を先に疑い、`kubectl get externalsecret -n <ns>` で `<app>-restic-backup-credentials` だけが SecretSyncedError であることを確認する手順を追記する。T-0106 の notes にもこの副作用を追記する",
+      "blocked_by": null,
+      "refs": [
+        "ops/CHARTER.md",
+        "ops/backlog.json"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #91 で発見・即完遂。実際の Degraded 状態を解消するには T-0106 の Doppler 登録（人間専有）が要る。この task 自体は既知事象化のドキュメント更新のみ"
     }
   ]
 }
