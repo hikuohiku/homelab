@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: syncthing
+  namespace: syncthing
+  annotations:
+    # immich/vaultwarden パターン流用: クラスタ内トラフィックを Ingress 経由で転送
+    tailscale.com/experimental-forward-cluster-traffic-via-ingress: "true"
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: syncthing
+      port:
+        number: 8384
+  tls:
+    # tailscale Ingress は tls.hosts の短縮名から MagicDNS 名 syncthing.<tailnet>.ts.net を発行する
+    # (immich/vaultwarden と同様)。sync ポート用の syncthing-sync とは別デバイス
+    - hosts:
+        - syncthing
