@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 130,
-  "updated": "2026-08-06T03:52:00Z",
+  "updated": "2026-08-06T04:35:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2188,14 +2188,14 @@
       "priority": 43,
       "why": "T-0072（run #82）の判断: T-0065 が挙げた実データ5対象のうち、restic backup + 復元試験まで完了しているのは immich/vaultwarden/coder-postgres 系の4対象のみで、`coder-<workspace-id>-home`（T-0078）が未実装の間は PBS の VM 単位バックアップが唯一の（未確認だが）保険になっている。T-0078 が完了し、workspace home も復元試験まで確認できたら、node01 の全実データがアプリレベルの restic backup でカバーされ、PBS の VM 単位バックアップは完全に冗長になる（node01 VM 自体は Terraform+NixOS で宣言的に再現可能なため）",
       "dod": "T-0078 が done になった後、(1) workspace home の restic backup が実際に成功し復元試験も通ることを確認する、(2) PBS 上に他に依存しているジョブ・データが無いか最終確認する、(3) `terraform/proxmox/pbs.tf.ignore` にこの記録を残しつつ PBS VM (qemu/112) の停止・削除手順を明記する。実際の VM 停止・削除は Proxmox 管理コンソールでの操作が要り、autopilot の Proxmox credential（PVEAuditor、読み取り専用）では実行できないため、この最終手順は needs-human として人間に引き継ぐ",
-      "blocked_by": "T-0078（coder workspace home PVC の backup 実装・復元試験）",
+      "blocked_by": "T-0117（coder workspace home backup の初回実行確認・復元試験）",
       "refs": [
         "docs/backup.md",
         "terraform/proxmox/pbs.tf.ignore"
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #82: T-0072（PBS 退役判断）から実行タスクとして分離起票"
+      "notes": "run #82: T-0072（PBS 退役判断）から実行タスクとして分離起票 | run #102 (計画役): blocked_by が T-0078 のままだったが、T-0078 は run #84 で done・PR #264 merge 済み（実装は完了済み）。実際に残っているのは復元試験（分離済みの T-0117、CronJob 初回実行が 2026-08-07 03:30 JST まで到来しないため未実施）で、blocked_by を T-0117 に訂正した（CHARTER §2 計画役の作業『blocked/needs-human の理由が古い前提のままになっていないか確かめる』）。"
     },
     {
       "id": "T-0117",
