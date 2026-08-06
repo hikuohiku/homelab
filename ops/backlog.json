@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 147,
-  "updated": "2026-08-06T10:24:03Z",
+  "next_id": 148,
+  "updated": "2026-08-06T10:55:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2456,12 +2456,11 @@
       "title": "T-0128 の dashboard 配信 URL (ops-dashboard) の実際の MagicDNS ホスト名を確認し ops/state.json に反映する",
       "kind": "investigate",
       "risk": "low",
-      "status": "needs-human",
+      "status": "todo",
       "priority": 45,
       "why": "T-0128（run #100-104, #290/#293/#295）で apps/ops-dashboard/ を実装し kubectl で 2/2 Running を実機確認したが、DoD が求める『ops/state.json の dashboard.artifact_url もしくは新しいフィールドを URL に更新』だけ未達のまま run #104 が ops/inbox.md に引き継ぎを残した（計画役の run #109 がこれを拾った）。autopilot-reader ClusterRole に networking.k8s.io/ingresses の read 権限が無く `kubectl get ingress -n ops-dashboard` が Forbidden、この Pod には tailscale credential も無いため、実際の MagicDNS ホスト名を実測できない。apps/{immich,vaultwarden,dex,argocd,coder}/ingress.yaml の tls.hosts 短縮名パターンから類推すると https://ops-dashboard.tailae6c2.ts.net/ の可能性が高いが未検証",
       "dod": "構築セッション（Coder ワークスペース、tailscale 到達可能）に issue #56 経由で ops-dashboard の実際の URL（推定: https://ops-dashboard.tailae6c2.ts.net/）への到達性を確かめてもらう。確かめられたら ops/state.json の dashboard フィールド（artifact_url をこの URL に置き換えるか、新フィールドを追加して両方残すかは実装時に判断）に反映し、CHARTER §7.1 の記述もあわせて更新する",
       "blocked_by": null,
-      "needs_human_reason": "autopilot の ClusterRole（autopilot-reader）に ingresses の read 権限が無く Forbidden、この Pod には tailscale credential も無いため実際の MagicDNS ホスト名を実測できない。構築セッション（Coder ワークスペース、tailscale 到達可能）に issue #56 経由で https://ops-dashboard.tailae6c2.ts.net/ への到達性の実測を依頼する",
       "refs": [
         "ops/state.json",
         "apps/ops-dashboard/",
@@ -2469,7 +2468,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #109 (計画役): ops/inbox.md の引き継ぎ（run #104 が残した）を起票。恒久対応として autopilot-reader ClusterRole に ingresses read を足す案もあるが、単発の確認で足りるため、まずは構築セッションへの確認依頼で解決を図る。権限追加が必要になったら別タスクにする"
+      "notes": "run #109 (計画役): ops/inbox.md の引き継ぎ（run #104 が残した）を起票。恒久対応として autopilot-reader ClusterRole に ingresses read を足す案もあるが、単発の確認で足りるため、まずは構築セッションへの確認依頼で解決を図る。権限追加が必要になったら別タスクにする | run #148（計画役）: 構築セッションが issue #56（2026-08-06T10:03:40Z）で https://ops-dashboard.tailae6c2.ts.net/ の L7 Ingress 到達（HTTP 200）を実測・報告済み。 DoD の確認待ち部分が解消したため needs-human → todo に変更。 次の実行役は ops/state.json の dashboard フィールドにこの URL を反映し、 CHARTER §7.1 の記述もあわせて更新すること"
     },
     {
       "id": "T-0131",
@@ -2787,6 +2786,25 @@
       "created": "2026-08-06",
       "pr": null,
       "notes": "run #144（計画役）: backlog の todo が T-0117（not_before 未到来）のみで実行役の着手可能タスクが枯渇していたため、CHARTER §3 に従い未トリアージの open issue を洗い出して起票。issue #26 は autopilot 発足前（2025-12-14）から誰にも拾われていなかった。T-0050/T-0047 が cachix-action の push 挙動は確認済みだが pull 側の実効性は未検証という隙間を埋める。run #146（実行役）: DoD (1) は確認完了（cachix 公式メタデータ API で `hikuohiku` cache が `isPublic: true` と実測、`cachix-action@v17` は `skipAddingSubstituter` 既定 false のため authToken 無しでもデフォルトで substituter を追加すると実ソースで確認、設定面では pull が機能する構成）。DoD (2)(3) は達成できなかった: release-image.yml の過去実行 12 件は全て 2025-12-16 以前で、GitHub Actions ジョブログは保持期限切れのため 410 Gone で取得不能、実際の hit/miss は確認不能だった。新規実行のトリガー（workflow_dispatch）は実際に GitHub Release を作成する副作用があるため autopilot からは行わなかった。issue #26 に結果を報告済み（DoD (4) 達成）。未確認事項は ops/inbox.md に引き継ぎ、次に人間が手動実行する機会があればログ保持期限内に確認する調査タスクの起票を計画役の判断に委ねる"
+    },
+    {
+      "id": "T-0147",
+      "domain": "homelab",
+      "title": "release-image.yml 次回手動実行時に cachix pull の hit/miss をログで確認する（T-0146 フォローアップ）",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "blocked",
+      "priority": 90,
+      "why": "T-0146（run #146）で hikuohiku cachix cache が public であり cachix-action@v17 がデフォルトで substituter を追加する設定であることは確認できたが、実際に pull が hit しているかは release-image.yml の過去実行ログが全て 410 Gone（保持期限切れ、最終実行 2025-12-16）で 確認できなかった。次に人間がこの workflow を手動実行する機会があれば、ログ保持期限が 切れる前に確認する価値がある",
+      "dod": "release-image.yml が次に実行された（workflow_dispatch）ことを確認したら、できるだけ早く（GitHub Actions のログ保持期限内）そのジョブログを取得し、nix build のステップで `copying path`（cache miss、自前でビルド）と `fetching`/`querying`（cache hit）の比率を見て cachix pull が実際に機能しているかを判定する。機能していなければ authToken 登録等の 対処を検討し新タスクを起票する。機能していれば done にする",
+      "blocked_by": "release-image.yml の次回手動実行（workflow_dispatch は人間のみがトリガー可能、CHARTER §5.4）。実行予定は無いため、この時点で自ら急いで実行を働きかける必要はない",
+      "refs": [
+        ".github/workflows/release-image.yml",
+        "ops/inventory.json"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #148（計画役）: ops/inbox.md の引き継ぎ（run #146 実行役が残したもの）を起票。急ぎではない（次回実行の予定自体が無い）ため blocked とし、needs-human の依頼は出さない"
     }
   ]
 }

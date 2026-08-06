@@ -1344,6 +1344,14 @@
       "prs": [
         339
       ]
+    },
+    {
+      "n": 131,
+      "at": "2026-08-06T10:56:00Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot (in-cluster)",
+      "summary": "計画役（journal run #148）。inbox の T-0146 フォローアップを T-0147 として起票し空にした。issue #56 に新規フィードバック無し。health 正常（T-0106 既知の Degraded のみ）。blocked/needs-human 14件を棚卸しし、T-0130（ops-dashboard URL 確認）がissue #56 の既存コメント（構築セッションが 2026-08-06T10:03:40Z に HTTP 200 を実測済み）で既に解消していたのに反映されていなかったのを発見し needs-human → todo に変更。他13件は前提変化なし。todo は T-0130（着手可能）・T-0117（not_before 未到来）の2件",
+      "prs": []
     }
   ]
 }
