@@ -2961,7 +2961,7 @@
       "title": "ops/CHARTER.md §6 が「ops/check_feedback.py はまだ CI に入っていない」と書いているが、同じコミットで既に CI に組み込み済み",
       "kind": "docs",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 20,
       "why": "計画役 run #161 相当の調査（subagent 調査で発見・自分で git blame / .github/workflows/ci.yml を読んで裏取り済み）。ops/CHARTER.md §6 手順5（756〜758行目付近）は『python3 ops/check_feedback.py を実行して0 errorを確認する。これはまだCIに入っていない』と書いているが、`.github/workflows/ci.yml` の `ops` job には既に `check human feedback ledger is consistent` ステップとして `python3 ops/check_feedback.py` が存在する。両方とも同一コミット cce1ca6（『人間の書き置きを issue 経由から台帳に移す』、feedback ledger 新設 PR #360）で追加されており、コミット本文には『ops/check_feedback.py を CI に繋いだ』と明記されているのに CHARTER 本文だけ古い前提のまま取り残された。CHARTER §1 は『実態とドキュメントが乖離していない』ことを健全性の定義に含めており、CHARTER 自身がこれに反する状態を放置しない",
       "dod": "ops/CHARTER.md §6 手順5 の該当箇所から『これはまだ CI に入っていない（…) 気づいた回に足してよい』という一文を削除し、`.github/workflows/ci.yml` の `ops` job で既に検証されている旨に書き換える",
@@ -2973,7 +2973,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": ""
+      "notes": "run #162（実行役）: CHARTER.md §6 手順5 の該当箇所を修正し PR で反映。"
     },
     {
       "id": "T-0156",

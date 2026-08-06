@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T13:00:00Z",
+  "updated": "2026-08-06T13:11:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -1467,6 +1467,14 @@
       "kind": "in_cluster_loop",
       "by": "autopilot pod (計画役)",
       "summary": "計画役（journal run #161）。inbox 空、フィードバック新規無し、健全性は既知の T-0106 由来 Degraded のみで新規異常無し。backlog blocked/needs-human 全14件の前提変化なし。todo が枯れていたため調査し、T-0155（CHARTER §6 の自己矛盾: check_feedback.py は既にCI配線済みなのに『まだ』と記述）・T-0156（アプリ一覧drift5回目、CI検証を新設するDoD）を起票。",
+      "prs": []
+    },
+    {
+      "n": 162,
+      "at": "2026-08-06T13:11:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #162）。T-0155（CHARTER §6 の自己矛盾: check_feedback.py は既にCI配線済みなのに「まだ」と記述していた）を修正。",
       "prs": []
     }
   ]
