@@ -2395,7 +2395,7 @@
       "title": "autopilot が生成した dashboard HTML を専用ブランチへ push する仕組みを追加",
       "kind": "feature",
       "risk": "medium",
-      "status": "todo",
+      "status": "done",
       "priority": 20,
       "why": "issue #56 (2026-08-06T03:07:26Z) の指摘。クラスタ内常駐 (§5.5) の autopilot には Artifact ツールが無く、毎イテレーション ops/dashboard/build.py で HTML は作れているのに公開できず、journal に一行残して先へ進んでいた（CHARTER §7.1 どおりの正しい振る舞いだが、結果としてダッシュボードは常駐化直前（2026-08-05 17:32 UTC 版）で 9 時間半以上止まっていた）。ops-health-reporter が ops-health-reportブランチへ書き戻す（CHARTER §2）のと同型のパターンを、autopilot 自身の dashboard 生成にも適用する。T-0128（配信側）の前提",
       "dod": "autopilot の loop（apps/autopilot/、または各イテレーションの Claude セッション）が ops/dashboard/build.py 実行後、生成された index.html を ops-dashboard のような専用ブランチへ commit・push する。push は既存の git credential（loop.sh の setup_git()）を使い、main への直 push にはならないことを確認する。100KB 近いファイルなので ConfigMap には埋めない（issue #56 の指摘どおり）",
@@ -2407,7 +2407,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #98 で起票。T-0128（配信側の Deployment/tailscale-operator 公開）とセットだが CHARTER §3 の起票の粒度（1 タスク = 1 PR = 1 論点）に従い分割した。この T-0127 が先。"
+      "notes": "run #98 で起票。T-0128（配信側の Deployment/tailscale-operator 公開）とセットだが CHARTER §3 の起票の粒度（1 タスク = 1 PR = 1 論点）に従い分割した。この T-0127 が先。 run #100 で実装。build.py に publish() を追加し、AUTOPILOT_GITHUB_TOKEN があれば生成した index.html を ops-dashboard ブランチへ Contents API で push する（ops-health-report と同型）。token が無い環境（CI・手元実行）では静かにスキップする。実機で ops-dashboard ブランチへの push を確認済み。T-0128（配信側）が次点。"
     },
     {
       "id": "T-0128",

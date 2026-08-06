@@ -3,7 +3,12 @@
 
     python3 ops/dashboard/build.py
 
-出力: ops/dashboard/index.html （Artifact として publish される）
+出力: ops/dashboard/index.html。`AUTOPILOT_GITHUB_TOKEN` があれば
+`ops-dashboard` ブランチの index.html へも push する（T-0127。クラスタ内常駐の
+autopilot には Artifact ツールが無いため、ops-health-reporter が
+ops-health-report ブランチへ書き戻すのと同型の経路で人間に公開する）。
+token が無い環境（CI、手元実行）では push をスキップし、HTML の生成自体は
+従来どおり成功として扱う。
 
 設計方針:
   - 主役は「人間が何をすればいいか」と「何が動いているか」。個々のタスクは既定で隠す
@@ -16,6 +21,7 @@
 
 from __future__ import annotations
 
+import base64
 import html
 import json
 import os
@@ -1034,6 +1040,81 @@ footer {{ color:var(--muted); font-size:.75rem; font-family:var(--mono);
 """
 
 
+DASHBOARD_BRANCH = os.environ.get("DASHBOARD_BRANCH", "ops-dashboard")
+
+
+def _gh_write(method: str, path: str, token: str, body: dict | None = None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(
+        f"{API}{path}",
+        data=data,
+        method=method,
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "homelab-autopilot-dashboard",
+            "Content-Type": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+            raw = resp.read()
+            return resp.status, (json.loads(raw) if raw else None)
+    except urllib.error.HTTPError as e:
+        raw = e.read()
+        return e.code, (json.loads(raw) if raw else None)
+
+
+def _ensure_branch(token: str, branch: str, base_branch: str = "main") -> None:
+    status, _ = _gh_write("GET", f"/repos/{REPO}/git/ref/heads/{branch}", token)
+    if status == 200:
+        return
+    status, base = _gh_write("GET", f"/repos/{REPO}/git/ref/heads/{base_branch}", token)
+    if status != 200:
+        raise RuntimeError(f"base branch ref の取得に失敗: {status} {base}")
+    base_sha = base["object"]["sha"]
+    status, resp = _gh_write(
+        "POST", f"/repos/{REPO}/git/refs", token,
+        {"ref": f"refs/heads/{branch}", "sha": base_sha},
+    )
+    if status not in (200, 201):
+        raise RuntimeError(f"branch 作成に失敗: {status} {resp}")
+
+
+def publish(html_bytes: bytes) -> None:
+    """生成した index.html を DASHBOARD_BRANCH へ push する（T-0127）。
+
+    main へは直 push せず、ops-health-report と同じ「専用ブランチへの Contents API
+    書き込み」パターンを使う。token が無ければ静かに何もしない（CI・手元実行対策）。
+    """
+    token = os.environ.get("AUTOPILOT_GITHUB_TOKEN")
+    if not token:
+        return
+    _ensure_branch(token, DASHBOARD_BRANCH)
+    status, existing = _gh_write(
+        "GET", f"/repos/{REPO}/contents/index.html?ref={DASHBOARD_BRANCH}", token
+    )
+    sha = existing.get("sha") if status == 200 and isinstance(existing, dict) else None
+    payload = {
+        "message": f"dashboard {datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}",
+        "content": base64.b64encode(html_bytes).decode(),
+        "branch": DASHBOARD_BRANCH,
+    }
+    if sha:
+        payload["sha"] = sha
+    status, resp = _gh_write("PUT", f"/repos/{REPO}/contents/index.html", token, payload)
+    if status not in (200, 201):
+        raise RuntimeError(f"index.html の push に失敗: {status} {resp}")
+
+
 if __name__ == "__main__":
-    OUT.write_text(build())
+    rendered = build()
+    OUT.write_text(rendered)
     print(f"wrote {OUT.relative_to(ROOT)} ({OUT.stat().st_size} bytes)")
+    if os.environ.get("AUTOPILOT_GITHUB_TOKEN"):
+        try:
+            publish(rendered.encode("utf-8"))
+        except Exception as e:  # noqa: BLE001 — push 失敗させても HTML 生成自体は成功のまま終える
+            print(f"warning: {DASHBOARD_BRANCH} への publish に失敗 ({e})", file=sys.stderr)
+        else:
+            print(f"published to {DASHBOARD_BRANCH} branch")

@@ -667,9 +667,18 @@ commit していたが、全タスク PR がこのファイルに触るため相
 （issue #56 2026-08-04 20:54:53。直列化はこちらの中でしか効かず、構築セッションなど他の主体との
 衝突までは防げなかった）。
 
+**T-0127（run #99）以降**、`AUTOPILOT_GITHUB_TOKEN` があれば `build.py` は生成した
+`index.html` を `ops-dashboard` ブランチ（`ops-health-report` と同型の専用ブランチ、main へは
+直 push しない）へ自分で push する。`python3 ops/dashboard/build.py` を実行するだけで完結し、
+別途 publish の手順を踏む必要は無い。token が無い環境（CI、手元実行）では push を静かに
+スキップし、HTML の生成自体は成功のまま終える。
+
 Artifact ツールが使えるときは、`ops/state.json` の `dashboard.artifact_url` を `url` に渡して
-同じ URL へ再公開する（新しい URL を発行しないこと。人間はブックマークしている）。
-使えないときは journal に「publish できなかった」と一行だけ書けばよい。**ここで止まらないこと。**
+同じ URL へ再公開する（新しい URL を発行しないこと。人間はブックマークしている）。これは
+`ops-dashboard` ブランチへの push とは独立した経路で、当面どちらも並行して更新する
+（T-0128 で `ops-dashboard` ブランチを配信する経路が整うまでは、人間が実際に見られるのは
+Artifact 版だけ）。Artifact が使えない・失敗した場合は journal に「publish できなかった」と
+一行だけ書けばよい。**ここで止まらないこと。**
 
 HTML を repo に置かなくなった代わりに、CI (`ops` job) が `python3 ops/dashboard/build.py` を実行して
 例外なく終わることだけを毎回検証する。壊れたまま気づかない事態を防ぐのはこれで十分で、
