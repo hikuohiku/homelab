@@ -325,6 +325,30 @@
       "observability_impact": "壊れるとその namespace の PVC 実使用量が pvc-usage-report ConfigMap に書き戻されなくなり、ops-health-reporter が集約する pvc_usage が古いまま止まる。読み取り専用 CronJob であり、壊れても homelab 本体の到達性・稼働には影響しない"
     },
     {
+      "id": "ops-dashboard-image",
+      "kind": "image",
+      "name": "python (ops-dashboard httpd container)",
+      "current": "3.14-alpine",
+      "file": "apps/ops-dashboard/deployment.yaml",
+      "match": "image: python:",
+      "upstream": "dockerhub:library/python",
+      "policy": "auto",
+      "note": "T-0151 で新設。ops-health-reporter-image/pvc-usage-reporter-image とは別ファイル・別用途（`python3 -m http.server` での静的ファイル配信のみ）のため、mirrors に混ぜず単独エントリにした。標準ライブラリの http.server のみを使うため patch/minor 更新はほぼ無害",
+      "observability_impact": "壊れると人間向けダッシュボードの配信が止まる。読み取り専用の配信コンテナであり、壊れても homelab 本体の到達性・稼働には影響しない"
+    },
+    {
+      "id": "coder-workspace-home-backup-image",
+      "kind": "image",
+      "name": "python (coder workspace-home-backup オーケストレータ)",
+      "current": "3.14-alpine",
+      "file": "apps/coder/workspace-home-backup-cronjob.yaml",
+      "match": "image: python:",
+      "upstream": "dockerhub:library/python",
+      "policy": "auto",
+      "note": "T-0151 で新設。ops-health-reporter-image/pvc-usage-reporter-image とは別ファイル・別用途（K8s API 経由で PVC ごとの restic backup Job を動的生成するオーケストレータ、json/os/ssl/time/urllib のみ使用）のため、mirrors に混ぜず単独エントリにした",
+      "observability_impact": "壊れると coder workspace home の backup Job が新規に作られなくなり、workspace データの復元手段が失われうる。ただし backup 自体は restic/restic イメージの子 Job が担うため、オーケストレータの一時的な不調が既存バックアップを壊すことはない"
+    },
+    {
       "id": "gha-setup-helm-version",
       "kind": "binary",
       "name": "helm (azure/setup-helm version input)",

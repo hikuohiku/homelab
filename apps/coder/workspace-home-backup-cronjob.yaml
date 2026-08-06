@@ -4,7 +4,7 @@
 # Backblaze B2 へバックアップする (T-0078)。docs/backup.md 参照。
 #
 # workspace は増減するため対象 PVC を静的にマニフェストへ書けない。この CronJob は
-# オーケストレータ役の Pod 1 個（python:3.12-alpine、標準ライブラリのみ）が
+# オーケストレータ役の Pod 1 個（python:3.14-alpine、標準ライブラリのみ）が
 # `app.kubernetes.io/name=coder-pvc` ラベルで対象 PVC を毎回列挙し、PVC ごとに
 # 使い捨ての Job（restic/restic イメージ、対象 PVC のみを readOnly マウント）を
 # Kubernetes API 経由で生成する。生成された Job は ttlSecondsAfterFinished で自動 GC
@@ -299,7 +299,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: spawn-backup-jobs
-              image: python:3.12-alpine
+              image: python:3.14-alpine
               command: ["python", "/scripts/spawn_backup_jobs.py"]
               env:
                 - name: PYTHONDONTWRITEBYTECODE
