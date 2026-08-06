@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 135,
-  "updated": "2026-08-06T07:30:00Z",
+  "next_id": 136,
+  "updated": "2026-08-06T08:00:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2550,6 +2550,25 @@
       "created": "2026-08-06",
       "pr": 317,
       "notes": "run #126: CLAUDE.md の Apps 一覧・ディレクトリ構造図に ops-dashboard を追加して done"
+    },
+    {
+      "id": "T-0135",
+      "domain": "homelab",
+      "title": "main に統合済みで残っている孤児ブランチ 2 件（origin/claude/create-immich-manifest-FpCGe, origin/feat/coder-dev-server）の掃除",
+      "kind": "chore",
+      "risk": "low",
+      "status": "todo",
+      "priority": 60,
+      "why": "計画役 run #129 で `git branch -r` を確認したところ、`autopilot/*` 以外に2件の見覚えのないリモートブランチが残っていた。`origin/claude/create-immich-manifest-FpCGe`（最終コミット 2025-12-19、immich の初期 kustomize/helmChart 構成）と `origin/feat/coder-dev-server`（最終コミット 2026-05-22、coder の初期構成 + Plans.md/terraform 差分）で、いずれも autopilot 発足（2026-08-04）より前の手作業期の draft ブランチ。両ブランチの `kustomization.yaml`/ファイル構成は現行 `apps/immich/`・`apps/coder/`（helmCharts 名・バージョンは古いが同じ resources 構成）とほぼ一致しており、その後の拡張（restic-backup, pvc-usage-cronjob 等）を含む現行 main に内容が包含されている。CHARTER §4/§5.5 の『内容が main と重複していることを確認できたものから順に削除してよい』の考え方（元々は autopilot 自身の孤児ブランチ向けだが、検証手順自体はこの2件にも同型で適用できる）に沿って掃除する",
+      "dod": "各ブランチについて `git diff origin/main...<branch>` を取り、追加・変更されているファイルが全て現行 main の同名ファイルに機能的に包含されている（同じリソースが定義済み、または明確に旧版で置き換わっている）ことを確認する。差分が現行 main に無い独自の変更（例: `feat/coder-dev-server` の `terraform/proxmox/vm-nixos.tf` 差分, `Plans.md` 差分）を含む場合は、その内容が既に別の形で反映済みかを individually 確認してから判断する。包含が確認できたら `DELETE /repos/hikuohiku/homelab/git/refs/heads/<branch>`（§5.5 で実測済み、204 が返る）でブランチを削除し、journal に削除したブランチ名と確認した根拠を記録する。念のため削除前に `git rev-parse origin/<branch>` を journal に残し、誤削除時に復元の足がかりを残す",
+      "blocked_by": null,
+      "refs": [
+        "apps/immich/",
+        "apps/coder/"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #129（計画役）: `git branch -r` の再確認から新規発見。autopilot 自身のブランチではないため即削除はせず、実行役が差分の包含を確認したうえで削除する起票に留めた"
     }
   ]
 }
