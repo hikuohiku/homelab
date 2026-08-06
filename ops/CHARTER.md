@@ -79,9 +79,18 @@ T-0068 のバックアップは実質機能していないとみなして調査�
 
 **`pvc_usage` の `error`（404 相当）は「まだ」と「ずっと」を区別すること**（issue #56, 2026-08-05
 07:41:02 の指摘）。対象の `pvc-usage-reporter` CronJob（`immich`/`vaultwarden`/`coder`、schedule は
-それぞれ `5 */6 * * *` / `15 */6 * * *` / `25 */6 * * *`、つまり毎日 00:05・06:05・12:05・18:05 UTC
-+ namespace ごとに 0/10/20 分）がまだ一度もその時刻を迎えていなければ 404 は正常。`generated_at` を
+それぞれ `5 */6 * * *` / `15 */6 * * *` / `25 */6 * * *`、つまり毎日 00:05・06:05・12:05・18:05
+**JST**（namespace ごとに 0/10/20 分。UTC 換算では 03:05・09:05・15:05・21:05 が起点、以下 6 時間毎
++ 0/10/20 分）がまだ一度もその時刻を迎えていなければ 404 は正常。`generated_at` を
 これらの実行予定時刻と比較し、直近の予定時刻を過ぎてもなお 404 が続く場合にのみ CronJob の異常を疑う。
+**この節はかつて誤って「UTC」と書いていた**（T-0125, run #97 で訂正）。node01 の
+`time.timeZone = "Asia/Tokyo"`（`nix/images/proxmox-cloud/configuration.nix`）により、k3s の
+kube-controller-manager は `spec.timeZone` を明示していない CronJob の schedule 文字列を
+ホストのローカル時刻（JST）で評価する。これはこの CronJob に限らず、node01 上の全ての
+Kubernetes CronJob リソースに共通する（`spec.timeZone` を明示しているものは無い、2026-08-06 実測）。
+**アプリケーション内部のタイマー（例: immich サーバー自身の `backup.database` 機能、後述）はこの
+対象外で、コンテナ内プロセスの挙動に依存する** — immich の内蔵バックアップは `backup_listing` の
+ファイル名・`mtime` が実際に UTC 02:00 で揃っており、こちらは訂正不要（2026-08-06 実測）。
 
 **`coder`/`immich`/`vaultwarden` の ArgoCD Application health が `Degraded` でも、T-0106 が
 `needs-human` のままの間は新規異常ではない**（run #91 で発見）。T-0106（run #88, PR #263）が
