@@ -1014,7 +1014,9 @@
       "kind": "scheduled",
       "by": "in-cluster autopilot",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。ops-health-report・autopilot heartbeat とも正常、既知の Degraded 3件のみ。backlog の唯一の todo（T-0117）は CronJob schedule（03:30 UTC）未到来のため引き続き着手不能、needs-human 4件も追加対応不可。CHARTER §3 に従い調査し、apps/autopilot/deployment.yaml の image ダイジェストコメントが「ビルド経路が固まった時点で差し替えるプレースホルダ」のまま実態（run #57 以降このダイジェストで継続稼働中）と乖離していたのを発見し実態に即した内容へ書き換えた（T-0124）",
-      "prs": []
+      "prs": [
+        280
+      ]
     }
   ]
 }
