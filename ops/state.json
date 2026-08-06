@@ -1205,7 +1205,7 @@
       "kind": "scheduled",
       "by": "cluster-resident (autopilot Pod)",
       "summary": "実行役（journal run #122）。T-0133 を実装: ops/backlog.json のタスクスキーマに任意フィールド not_before（ISO8601）を追加、ops/validate.py に形式検証を追加、apps/autopilot/loop.sh の actionable 判定を not_before 対応に書き換え（値が無い/過去/壊れている場合は従来通り actionable 扱いのフォールバックを維持、境界条件は手元スクリプトで確認済み）。T-0117 に not_before: 2026-08-06T18:30:00Z を付与し、現在の backlog で actionable=0 になることを確認した。loop.sh 冒頭のコメントが reexec_if_updated 導入前のまま Pod 再作成が必要と書いていた点も実態に合わせて修正（commit 2f92db4 以降は自己 exec で再読み込みされる）。",
-      "prs": []
+      "prs": [313]
     }
   ]
 }

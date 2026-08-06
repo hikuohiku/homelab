@@ -2530,7 +2530,7 @@
         "ops/backlog.json"
       ],
       "created": "2026-08-06",
-      "pr": null,
+      "pr": 313,
       "notes": "run #121（計画役）: T-0117 が時刻待ちの todo であるにも関わらず loop.sh の actionable 判定がそれを考慮せず、実行役の起動を12時間規模で空振りさせている実態を journal（run #116〜#119）から発見して起票。VISION §『判断に迷ったときの原則』の『器を太らせる前に、器を使い切る』との整合は検討済み——既存の next_review フィールドは recurring タスクの再オープン判定にのみ使われており（T-0012）、todo タスクの着手可否そのものを表す用途では使われていないため、新規フィールドが必要と判断した。run #122（実行役）: `ops/backlog.json` に `not_before` を追加し `ops/validate.py` に ISO8601 形式検証を実装、`loop.sh` の actionable 判定スニペットを not_before 対応に書き換え、T-0117 に `not_before: \"2026-08-06T18:30:00Z\"` を付与。境界条件（無し/過去/未来/壊れた文字列）の妥当性は PR 本文に記載。loop.sh の変更は Pod 再作成まで反映されない点も PR 本文に明記"
     }
   ]
