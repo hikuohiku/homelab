@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T03:40:00Z",
+  "updated": "2026-08-06T04:53:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -1067,6 +1067,54 @@
       "prs": [
         290
       ]
+    },
+    {
+      "n": 101,
+      "at": "2026-08-06T13:12:00+09:00",
+      "kind": "scheduled",
+      "by": "cluster-resident (autopilot Pod)",
+      "summary": "journal 運用のみで state.json 記録が run #104 まで抜けていた（この run 自身が run #104 の一環で事後に埋め合わせ）。実行役。T-0128（run #100, #291）の ops-dashboard Pod が CrashLoopBackOff（httpd コンテナ、alpine busybox に httpd applet が無い）と判明し、CHARTER §9 に従い即ロールバック PR を作成（#292）。T-0128 を todo に戻し、次の実装で busybox を避ける旨を notes に記録",
+      "prs": [
+        292
+      ]
+    },
+    {
+      "n": 102,
+      "at": "2026-08-06T13:21:00+09:00",
+      "kind": "scheduled",
+      "by": "cluster-resident (autopilot Pod)",
+      "summary": "実行役。#292 の revert 反映（ops-dashboard Pod 消滅）を確認し、T-0128 を httpd コンテナを python:3.12-alpine の python3 -m http.server に置き換えて再実装（#293、この時点では未 merge）",
+      "prs": [
+        293
+      ]
+    },
+    {
+      "n": 103,
+      "at": "2026-08-06T13:31:00+09:00",
+      "kind": "scheduled",
+      "by": "cluster-resident (autopilot Pod)",
+      "summary": "計画役（prompt-plan.md）。T-0116 の blocked_by が T-0078（done 済み）のまま古かったのを T-0117 に訂正。inventory.json の更新記録が薄い5件（dex chart, immich valkey, coder-postgres image, coder stable channel, tailscale-operator/k8s-nameserver）を上流と突き合わせ、いずれも最新で新規起票なしと確認（#294）",
+      "prs": [
+        294
+      ]
+    },
+    {
+      "n": 104,
+      "at": "2026-08-06T13:46:00+09:00",
+      "kind": "scheduled",
+      "by": "cluster-resident (autopilot Pod)",
+      "summary": "実行役。前回の中断（PR #293 が #294 merge により mergeable_state: dirty）を rebase で解消し merge（eb5f9aa）。ArgoCD sync 後 kubectl get pods -n ops-dashboard で 2/2 Running・restartCount 0 を確認し T-0128 を done に（#295）。dashboard.artifact_url の tailscale URL 反映は ingress read 権限と tailscale credential が無く実測できず見送り、ops/inbox.md に引き継ぎを残した",
+      "prs": [
+        295
+      ]
+    },
+    {
+      "n": 105,
+      "at": "2026-08-06T13:53:00+09:00",
+      "kind": "scheduled",
+      "by": "cluster-resident (autopilot Pod)",
+      "summary": "実行役。issue #56 に未読フィードバックなし、オープン PR・autopilot ブランチとも無し。backlog の todo は T-0117 のみで、kubectl get cronjob -n coder で coder-workspace-home-backup が LAST SCHEDULE <none> と実測し、初回実行予定（2026-08-06T18:30Z）未到来のため着手不可と確認。blocked/needs-human 9件も前提の変化なしと確認済み。着手可能なタスクが無かったため journal 記録のみ（CHARTER §2）。あわせて run #101〜#104 分の state.json runs 記録漏れを journal から復元した",
+      "prs": []
     }
   ]
 }
