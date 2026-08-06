@@ -2832,7 +2832,7 @@
       "title": "ghcr.io/coder/coder を v2.35.3 → v2.36.0 に上げる",
       "kind": "update",
       "risk": "medium",
-      "status": "todo",
+      "status": "dropped",
       "priority": 40,
       "why": "計画役の run #150 の inventory 定期調査（policy: auto 全対象の上流最新版チェック）で発見。ghcr.io の実タグ・GitHub Releases API で v2.36.0 (2026-08-04 公開) が存在し、v2.35.3 より新しいことを確認済み。",
       "dod": "CHARTER §4「バージョン更新の作法」に従い v2.35.3 → v2.36.0 のリリースノートを原文で確認し、破壊的変更が無いことを確かめたうえで apps/coder/ の image タグと ops/inventory.json を更新する。",
@@ -2843,7 +2843,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #150（計画役）: GitHub の `/repos/coder/coder/releases/latest` は make_latest フラグの都合で v2.35.3 を指したままだが、v2.36.0 のリリース自体は実在し ghcr.io に イメージも存在する（agent 調査で確認）。実装時は `/releases/latest` を鵜呑みにせず、tag 指定（`/repos/coder/coder/releases/tags/v2.36.0`）でリリースノートを取得すること。"
+      "notes": "run #150（計画役）: GitHub の `/repos/coder/coder/releases/latest` は make_latest フラグの都合で v2.35.3 を指したままだが、v2.36.0 のリリース自体は実在し ghcr.io に イメージも存在する（agent 調査で確認）。実装時は `/releases/latest` を鵜呑みにせず、tag 指定（`/repos/coder/coder/releases/tags/v2.36.0`）でリリースノートを取得すること。 run #152（実行役）: 着手前に `ops/inventory.json` の coder エントリの note（『stable チャンネルを追う（mainline の v2.36.0 系は避ける）』）を読み直し、v2.36.0 自体がその note が名指しで避けよと書いている対象そのものだと気づいた。GitHub の v2.36.0 リリースノート原文でも「ステージング環境が無い企業ユーザーは、この版ではなく最新の stable をインストールすること」と明記されている。Coder 公式ドキュメント（coder.com/docs/install/releases）の channel モデルは mainline=N、stable=N-1、security=N-2 で、直近リリース列（v2.32.10/v2.33.11/v2.34.7/v2.35.3/v2.36.0、いずれも2026-08-06時点で published_at 実測）と突き合わせると、v2.36.0 発行時点で v2.35.3（現行 pin）はまさに stable 相当になる。つまり現行 pin は既に policy 通り stable の最新であり、v2.36.0 への更新はこの note が防ごうとしていた行為そのもの。当タスクは起票時の inventory 自動チェックが「新しいタグがある」というシグナルだけを見て、同じ inventory エントリ内の note（避けるべき対象）を突き合わせていなかったために生まれた誤検知と判断し dropped にした。再発防止の提案は ops/inbox.md に引き継いだ。"
     },
     {
       "id": "T-0150",
