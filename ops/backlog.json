@@ -2585,7 +2585,7 @@
         "apps/tailscale-operator/"
       ],
       "created": "2026-08-06",
-      "pr": null,
+      "pr": 324,
       "notes": "run #132（計画役）: issue #204 が起票から約1日、backlog・journal のどこにも変換されていなかったため起票。#56 以外の open issue も『まだ観測していないもの』の一つとして毎回確認する価値がある。run #133（実行役）: Tailscale Docs（kubernetes-operator/concepts/proxygroup, manage-and-configure/high-availability）を一次情報源で確認。Services(VIP)/ProxyGroup は主目的が複数ノード間でのプロキシ HA だが、node01 のみの単一ノード構成（`kubectl get nodes` で `nixos` 1台のみ実測）では複数レプリカを立てても同一ノード上に載るためフェイルオーバーの実利益が無い。副次効果のリソース集約（1 Ingress = 1 専用 proxy pod → ProxyGroup で共有 pod に集約）は実在し、`kubectl get pods -n tailscale`/`kubectl top pods -n tailscale` で現在 6 個の ts-* pod が稼働（各 26〜44Mi・2〜7m、合計約 150Mi/22m）と実測したが、集約すると「1 アプリの ingress 障害が他アプリに波及しない」という現状の独立性を失い、CHARTER §4 の到達性を失いうる変更に該当する。ACL/grants の許可設定は Tailscale 管理コンソール（人間専有の外部サービス操作）が要る点も踏まえ、約150Mi（node容量の1.3%程度）の節約のために波及リスクと人間の手作業を払う価値は薄いと判断し、追加実装タスクは起票せず結論を issue #204 に返信した（見送りの再検討条件: ノード追加でHA需要が生じる、またはメモリ逼迫が実際に問題化する場合）"
     },
     {

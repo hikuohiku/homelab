@@ -1239,7 +1239,9 @@
       "kind": "in-cluster",
       "by": "autopilot loop (実行役)",
       "summary": "実行役（journal run #133）。T-0136（Tailscale Services/ProxyGroup 調査）を完遂。node01 が単一ノードのため HA 目的での導入効果は無く、副次効果のリソース集約（ts-* proxy pod 6→少数、実測で合計約150Mi/22m）も独立性喪失（到達性リスク）と人間専有の ACL/grants 設定を天秤にかけると見送りが妥当と判断し、issue #204 に結論を返信した。新規実装タスクの起票なし",
-      "prs": []
+      "prs": [
+        324
+      ]
     }
   ]
 }
