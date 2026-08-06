@@ -1,23 +1,20 @@
 {
   "open": [
     {
-      "number": 358,
-      "title": "fix(ops): 実ブラウザで見つかった描画の破綻を直す",
-      "url": "https://github.com/hikuohiku/homelab/pull/358",
+      "number": 363,
+      "title": "docs: apps/kustomization.yaml のアプリ一覧をCLAUDE.md/apps/README.mdへ反映 (T-0156)",
+      "url": "https://github.com/hikuohiku/homelab/pull/363",
       "isDraft": false,
-      "createdAt": "2026-08-06T12:51:46Z",
+      "createdAt": "2026-08-06T13:20:47Z",
       "statusCheckRollup": [
         {
-          "conclusion": "QUEUED"
-        },
-        {
-          "conclusion": "QUEUED"
-        },
-        {
           "conclusion": "IN_PROGRESS"
         },
         {
-          "conclusion": "IN_PROGRESS"
+          "conclusion": "SUCCESS"
+        },
+        {
+          "conclusion": "SUCCESS"
         },
         {
           "conclusion": "IN_PROGRESS"
@@ -26,36 +23,46 @@
           "conclusion": "IN_PROGRESS"
         }
       ],
-      "headRefName": "autopilot/dashboard-render-fixes",
-      "autoMergeRequest": {
-        "enabled_by": {
-          "login": "hikuohiku",
-          "id": 105905033,
-          "node_id": "U_kgDOBk_7iQ",
-          "avatar_url": "https://avatars.githubusercontent.com/u/105905033?v=4",
-          "gravatar_id": "",
-          "url": "https://api.github.com/users/hikuohiku",
-          "html_url": "https://github.com/hikuohiku",
-          "followers_url": "https://api.github.com/users/hikuohiku/followers",
-          "following_url": "https://api.github.com/users/hikuohiku/following{/other_user}",
-          "gists_url": "https://api.github.com/users/hikuohiku/gists{/gist_id}",
-          "starred_url": "https://api.github.com/users/hikuohiku/starred{/owner}{/repo}",
-          "subscriptions_url": "https://api.github.com/users/hikuohiku/subscriptions",
-          "organizations_url": "https://api.github.com/users/hikuohiku/orgs",
-          "repos_url": "https://api.github.com/users/hikuohiku/repos",
-          "events_url": "https://api.github.com/users/hikuohiku/events{/privacy}",
-          "received_events_url": "https://api.github.com/users/hikuohiku/received_events",
-          "type": "User",
-          "user_view_type": "public",
-          "site_admin": false
-        },
-        "merge_method": "merge",
-        "commit_title": null,
-        "commit_message": null
-      }
+      "headRefName": "autopilot/T-0156-app-list-doc-drift",
+      "autoMergeRequest": null
     }
   ],
   "merged": [
+    {
+      "number": 362,
+      "title": "docs(ops): CHARTER.md の check_feedback.py CI記述を実態に合わせる (T-0155)",
+      "url": "https://github.com/hikuohiku/homelab/pull/362",
+      "mergedAt": "2026-08-06T13:13:59Z",
+      "headRefName": "autopilot/T-0155-charter-check-feedback-ci"
+    },
+    {
+      "number": 361,
+      "title": "ops(run #161): T-0155/T-0156 を起票（計画役の記録）",
+      "url": "https://github.com/hikuohiku/homelab/pull/361",
+      "mergedAt": "2026-08-06T13:07:07Z",
+      "headRefName": "autopilot/T-0155-T-0156-planning-record"
+    },
+    {
+      "number": 360,
+      "title": "feat(ops): 人間の書き置きを issue 経由から台帳に移す",
+      "url": "https://github.com/hikuohiku/homelab/pull/360",
+      "mergedAt": "2026-08-06T12:54:49Z",
+      "headRefName": "autopilot/feedback-ledger"
+    },
+    {
+      "number": 359,
+      "title": "feat(ops): review-log.md と backlog の R-NNN 参照食い違いを機械検証する",
+      "url": "https://github.com/hikuohiku/homelab/pull/359",
+      "mergedAt": "2026-08-06T12:54:35Z",
+      "headRefName": "autopilot/T-0154-review-log-validate-check"
+    },
+    {
+      "number": 358,
+      "title": "fix(ops): 実ブラウザで見つかった描画の破綻を直す",
+      "url": "https://github.com/hikuohiku/homelab/pull/358",
+      "mergedAt": "2026-08-06T12:52:26Z",
+      "headRefName": "autopilot/dashboard-render-fixes"
+    },
     {
       "number": 356,
       "title": "ci(autopilot): images/autopilot 変更時の digest 更新漏れ検出スクリプトを追加",
@@ -440,41 +447,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/302",
       "mergedAt": "2026-08-06T05:48:35Z",
       "headRefName": "autopilot/T-0132-vision-stage-mismatch"
-    },
-    {
-      "number": 301,
-      "title": "fix(ops): dashboard の定期実行間隔表示をクラスタ内常駐の実態に合わせる (T-0131)",
-      "url": "https://github.com/hikuohiku/homelab/pull/301",
-      "mergedAt": "2026-08-06T05:36:58Z",
-      "headRefName": "autopilot/T-0131-routines-cadence-drift"
-    },
-    {
-      "number": 300,
-      "title": "docs(ops): run #109 記録更新（計画役、T-0130/T-0131/T-0132 起票）",
-      "url": "https://github.com/hikuohiku/homelab/pull/300",
-      "mergedAt": "2026-08-06T05:28:24Z",
-      "headRefName": "autopilot/run109-plan-T-0130-T-0131-T-0132"
-    },
-    {
-      "number": 299,
-      "title": "docs(ops): run #108 記録更新（着手可能タスクなし）",
-      "url": "https://github.com/hikuohiku/homelab/pull/299",
-      "mergedAt": "2026-08-06T05:21:03Z",
-      "headRefName": "autopilot/run108-nothing-actionable"
-    },
-    {
-      "number": 298,
-      "title": "docs(ops): run #107 記録更新（着手可能タスクなし）",
-      "url": "https://github.com/hikuohiku/homelab/pull/298",
-      "mergedAt": "2026-08-06T05:10:51Z",
-      "headRefName": "autopilot/run107-nothing-actionable"
-    },
-    {
-      "number": 297,
-      "title": "docs(ops): run #106 記録更新（着手可能タスクなし）",
-      "url": "https://github.com/hikuohiku/homelab/pull/297",
-      "mergedAt": "2026-08-06T05:03:23Z",
-      "headRefName": "autopilot/run106-nothing-actionable"
     }
   ]
 }

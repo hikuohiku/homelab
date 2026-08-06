@@ -13,7 +13,7 @@ Terraform で VM プロビジョニング、NixOS でOS構成、Kubernetes (Argo
 - **Networking**: Tailscale
 - **Secrets**: SOPS, External Secrets Operator
 - **Auth**: Dex (Google OAuth)
-- **Apps**: ArgoCD, Dex, External Secrets Operator, Tailscale Operator, Immich, Vaultwarden, Coder, ops-health-reporter, autopilot, ops-dashboard
+- **Apps**: ArgoCD, agent-rbac, Dex, External Secrets Operator, Tailscale Operator, Immich, Vaultwarden, Coder, ops-health-reporter, autopilot, ops-dashboard, syncthing
 
 ## Directory Structure
 
@@ -33,6 +33,7 @@ apps/                — Kubernetes manifests (ArgoCD applications)
   ops-health-reporter/ — autopilot 向け ArgoCD/k8s 健全性レポーター（CronJob）
   autopilot/           — 自律運用エージェント本体（Deployment + loop.sh の常駐ループ）
   ops-dashboard/       — 人間向けダッシュボードの配信（Deployment、ops-dashboard ブランチの index.html を fetch して http.server で配信）
+  syncthing/           — Syncthing（P2P ファイル同期）
 .sops.yaml            — SOPS 設定（暗号鍵の対象範囲）
 nix/images/proxmox-cloud/secrets.yaml — SOPS 暗号化ファイル（単一ファイル、トップレベルの secrets/ ディレクトリは存在しない）
 ```

@@ -75,7 +75,9 @@ coder                Synced        Healthy
 dex                  Synced        Healthy
 external-secrets     Synced        Healthy
 immich               Synced        Healthy
+ops-dashboard        Synced        Healthy
 ops-health-reporter  Synced        Healthy
+syncthing            Synced        Healthy
 tailscale-operator   Synced        Healthy
 vaultwarden          Synced        Healthy
 ```
@@ -127,7 +129,9 @@ apps/
 ├── vaultwarden/
 ├── coder/
 ├── ops-health-reporter/
-└── autopilot/
+├── autopilot/
+├── ops-dashboard/
+└── syncthing/
 ```
 
 各アプリは以下の構造:
