@@ -11,21 +11,3 @@
 [`ops/CHARTER.md`](CHARTER.md) の §3「書く権利」。
 
 ---
-
-- 実行役: GitHub Actions の大規模障害（incident `qcvjkzcs7j74`）で PR #376 が blocked のあいだ、
-  `INTERVAL_SECONDS`（120秒）ループが毎回 incident status を確認するだけの起動を繰り返し、
-  run #172〜#191（6時間以上・約20回）でほぼ同一内容の journal/state.json エントリを量産している
-  （journal 2026-08-07 06:46 JST run #191 参照）。既知の外部障害でリトライ不能と判明した後は
-  確認間隔を伸ばす／次に意味のある変化がある可能性が高いタイミングまで待つ、といった backoff の
-  仕組みが無い。§7「帳簿には上限がある」の趣旨に反して自ら記録を太らせている面があるので、
-  起票するか・許容範囲か計画役に判断してほしい。
-- [レビュー役/arch, R-004（旧 R-001, PR #378 との統合で採番し直し）] `ops/CHARTER.md` が肥大化に
-  上限を持たない。backlog.json/state.json は commit 762807f で archive + サイズ上限
-  （`ops/validate.py` の `check_ledger_size()`）を持ったが、同じ理由が当てはまるはずの
-  CHARTER.md 自身は対象外。2026-08-04 の 10.8KB から 2026-08-06 時点で 86.1KB まで2日で約8倍に
-  増えており、backlog.json の上限（120,000 bytes）に迫っている。詳細は `ops/review-log.md` R-004。
-- [レビュー役/arch, R-005（旧 R-002, PR #378 との統合で採番し直し）] `REVIEW_EVERY=12` の根拠数値
-  （実測約9分/イテレーション、1.8時間おき、同じレンズ3.5時間おき、損失8%）が
-  `ops/CHARTER.md:173-176` と `ops/CHARTER.md:740`、`apps/autopilot/loop.sh:35-38` の3箇所に
-  ほぼ同じ文面で重複している。1箇所を直しても他が追随しない構造で、とくに loop.sh 側はコメント
-  のため古びても誰も気づけない。詳細は `ops/review-log.md` R-005。

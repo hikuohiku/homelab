@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 163,
-  "updated": "2026-08-06T21:30:00Z",
+  "next_id": 166,
+  "updated": "2026-08-06T22:25:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -622,6 +622,65 @@
       "created": "2026-08-06",
       "pr": null,
       "notes": "run #187（計画役）: ops/review-log.md R-003 を起票。R-003 の状態を『起票済 T-0162』に更新した。"
+    },
+    {
+      "id": "T-0163",
+      "domain": "homelab",
+      "title": "既知の外部障害でリトライ不能と判明した後、確認間隔を伸ばす backoff の仕組みを作る",
+      "kind": "feature",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 50,
+      "why": "実行役の気づき（ops/inbox.md、R-NNN無し）。GitHub Actions の大規模障害（incident qcvjkzcs7j74、2026-08-06 15:22 UTC〜、22:00 UTC 時点も investigating 継続）でPR #376がblockedのあいだ、INTERVAL_SECONDS（120秒）ループが毎回incident statusを確認するだけの起動を繰り返し、run #172〜#193（6時間以上・約20回）でほぼ同一内容のjournal/state.jsonエントリを量産した。CHARTER §7「帳簿には上限がある」が指摘する読み込みコスト問題を自ら悪化させている。既知の外部障害でリトライ不能と判明した後は、確認間隔を伸ばす／次に意味のある変化がある可能性が高いタイミングまで待つ、といった仕組みが無い",
+      "dod": "(1) 最小の対処として、CHARTERに「同一の既知ブロッカー（例: 同一incident id、同一reason）を前回確認時と同内容のまま連続して確認しただけの回は、journal/state.jsonへのエントリを簡潔な1〜2行（前回runへの参照＋『変化なし』のみ）に留めてよい」というルールを追加し、run #172〜#193のような冗長な記録の繰り返しを防ぐ。(2) より根本的な対処として、apps/autopilot/loop.shにconsecutive no-op回数を数え、一定回数を超えたらINTERVAL_SECONDSを段階的に伸ばす（上限を設けてunboundedにはしない）backoff機構の追加を検討する。(2)はloop.shというautopilot自身の生存に関わるコア機構の変更のため、1 PR 1コンポーネントで刻み、変更前後でPodが正常に起動・ループし続けることを実機で確認してから展開する",
+      "blocked_by": null,
+      "refs": [
+        "apps/autopilot/loop.sh",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #172-193統合時の計画役（journal run #173相当の統合作業）が起票。inbox（R-NNN無し、実行役の気づき）より"
+    },
+    {
+      "id": "T-0164",
+      "domain": "homelab",
+      "title": "ops/CHARTER.md の肥大化に上限・圧縮の仕組みを作る（backlog/state と同型、R-004）",
+      "kind": "chore",
+      "risk": "low",
+      "status": "todo",
+      "priority": 51,
+      "why": "レビュー役・アーキテクチャレンズ R-004（ops/review-log.md参照）。commit 762807fは「autopilot は毎イテレーション VISION/CHARTER/backlog/state を全部読み直す。9割が二度と行動につながらない過去の記録」という問題意識でbacklog.json/state.jsonにarchive機構とサイズ上限（ops/validate.pyのcheck_ledger_size()）を導入したが、同じ理由が当てはまるはずのCHARTER.md自身は対象外のまま。2026-08-04の10.8KBから2026-08-06時点で86.1KBまで2日で約8倍に増えており、backlog.jsonの上限（120,000 bytes）に迫っている",
+      "dod": "CHARTER.mdを読み、各ルールに付随する『指摘を受けた日時・経緯』の長い引用部分（例: 'issue #56, 2026-08-05 xx:xx:xxの指摘。...'という詳細な事例説明）と、実際に守るべき『ルール本体』を切り分ける。ルール本体はCHARTER.mdに残し、詳細な経緯・事例は新設する ops/CHARTER-history.md （または同種のarchiveファイル）へ移し、CHARTER.md側には1行の要約とそちらへのポインタだけを残す。移した後もCHARTER.mdの各ルールが単体で意味が通ることを確認する（経緯を読まないと理解できないルールにしない）。ops/validate.pyにCHARTER.mdのサイズ上限チェックを追加する（閾値は実装時にbacklog.jsonの120,000 bytesを参考に決める）。ops/ledger.pyと同様、圧縮操作は繰り返し実行できるようにする",
+      "blocked_by": null,
+      "refs": [
+        "ops/CHARTER.md",
+        "ops/validate.py",
+        "ops/ledger.py",
+        "ops/review-log.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "PR #378（レビュー役・アーキテクチャ初回実行）のR-001が、PR #376との統合時にR-004として採番し直された。起票は統合作業を行った計画役による"
+    },
+    {
+      "id": "T-0165",
+      "domain": "homelab",
+      "title": "REVIEW_EVERY の根拠数値が CHARTER.md 2箇所と loop.sh に三重化しているのを一本化する（R-005）",
+      "kind": "chore",
+      "risk": "low",
+      "status": "todo",
+      "priority": 52,
+      "why": "レビュー役・アーキテクチャレンズ R-005（ops/review-log.md参照）。REVIEW_EVERY=12の根拠数値（実測約9分/イテレーション、journal run #126〜#155の30起動で264分、レビューは約1.8時間おき、同じレンズは約3.5時間おき、実作業損失8%）が ops/CHARTER.md:173-176（§3）・ops/CHARTER.md:740（§6冒頭の再掲）・apps/autopilot/loop.sh:35-38（REVIEW_EVERYのコメント）の3箇所にほぼ同じ文面で重複している。1箇所を直しても他が追随しない構造で、とくにloop.sh側はコード上の意味を持たないコメントのため、値がズレてもCIにも起動時ログにも表れず気づけない",
+      "dod": "根拠の測定値（実測約9分/イテレーション等）の記述をCHARTER.md §3の1箇所にのみ残し、CHARTER.md §6冒頭の再掲は削除してCHARTER §3への参照（例: 'REVIEW_EVERYの根拠は§3参照'）に置き換える。apps/autopilot/loop.shのコメントも同様に、数値の再掲ではなくCHARTER §3への参照コメントに置き換える。再測定が必要になったとき1箇所を直せば済む状態にする",
+      "blocked_by": null,
+      "refs": [
+        "ops/CHARTER.md",
+        "apps/autopilot/loop.sh"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "PR #378（レビュー役・アーキテクチャ初回実行）のR-002が、PR #376との統合時にR-005として採番し直された。起票は統合作業を行った計画役による"
     }
   ]
 }

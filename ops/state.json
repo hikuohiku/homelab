@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T22:00:00Z",
+  "updated": "2026-08-06T22:25:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -373,6 +373,14 @@
       "kind": "in_cluster_loop",
       "by": "autopilot pod (レビュー役・アーキテクチャ)",
       "summary": "レビュー役・アーキテクチャレンズ（journal run #173、PR #378 → #376 へ統合）。REVIEW_EVERY到達後の初回レビュー実行のためreview-log.mdは突き合わせ対象0件。フィードバック新規無し。git logとCHARTER.md/loop.sh/validate.py/ledger.pyを読み、R-004（旧R-001、CHARTER.mdが肥大化に上限を持たず2日で10.8KB→86.1KBへ増加、backlog/stateのarchive+上限機構の対象外）とR-005（旧R-002、REVIEW_EVERY=12の根拠数値がCHARTER.md 2箇所とloop.shに三重化）をops/inbox.md・ops/review-log.mdに記録。実装・起票はせず（書く権利の分離）。",
+      "prs": []
+    },
+    {
+      "n": 195,
+      "at": "2026-08-06T22:25:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (計画役)",
+      "summary": "計画役（journal run #194）。PR #376/#378 を統合（run #187 と同型の手動merge、review-log.mdのR-001/R-002衝突をR-004/R-005へ採番し直し）。GitHub Actions incident（qcvjkzcs7j74）は引き続きinvestigating。feedback新規なし、健全性異常なし。inbox 3件（backoff未整備・R-004・R-005）をT-0163〜T-0165として起票、inboxを空にした。backlog 24→27件、todoは9件（T-0117/T-0158〜T-0165）でいずれも本PR未マージのため着手せず。",
       "prs": []
     }
   ]
