@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 153,
+  "next_id": 155,
   "updated": "2026-08-06T11:49:11Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
@@ -2908,6 +2908,51 @@
       "created": "2026-08-06",
       "pr": 348,
       "notes": "run #153（計画役）: ops/inbox.md の引き継ぎ（run #152 実行役の気づき、T-0149 dropped の教訓）を起票。 実行役（run #156）: CHARTER §4 バージョン更新の作法に、inventory.json の note の除外指定を新タグ発見時に必ず読み合わせる旨を明文化して完遂。専用の自動チェックスクリプトは対象外（『新しいタグの有無』の判定自体が upstream 調査に依存し機械的な突き合わせの対象データが無いため、CHARTER の手順記述のみで DoD を満たす）。"
+    },
+    {
+      "id": "T-0153",
+      "domain": "homelab",
+      "title": "autopilot 自身のコンテナイメージ (apps/autopilot/deployment.yaml) が ops/inventory.json の監視対象外で、Dockerfile 変更と digest pin のずれを誰も検出できない",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 15,
+      "why": "apps/autopilot/deployment.yaml は images/autopilot/Dockerfile を .github/workflows/build-autopilot-image.yml でビルドした ghcr.io/hikuohiku/homelab-autopilot の digest を手動 pin している（コメントに『Dockerfile の内容を変えたら、ビルドが終わった後この digest も手で更新する』と明記）。ops-health-reporter-image/ops-dashboard-image/pvc-usage-reporter-image は ops/inventory.json に登録され check_version_sync.py 相当の監視対象だが、autopilot 自身のこのイメージだけ inventory.json にエントリが無く、CI にも images/autopilot/** の変更と deployment.yaml の image 行変更を突き合わせる仕組みが無い。Dockerfile を変えた PR で digest 更新を忘れると、ワークフローは新しいイメージを push するのに Deployment は古いイメージを参照し続け、クラスタは古い autopilot のまま気づかれずに動く。全システムの正しさの根拠となる自分自身のイメージがこの唯一の抜けになっている（計画役 run #157 相当、subagent 調査で発見）",
+      "dod": "images/autopilot/** を変更した PR で apps/autopilot/deployment.yaml の image 行（digest）も同じ PR で変更されていることを CI で検証する仕組みを追加する（ops/check_manifest_deletions.py や check_version_sync.py に相乗りさせるか新規スクリプトにするかは実装時に判断してよい）。あわせて ops/inventory.json に autopilot-image エントリを追加するか、digest pin の性質上 inventory.json のフォーマット（current/upstream 比較）に馴染まないなら理由を notes に書いて見送る。意図的に Dockerfile だけ変えて digest を更新しない diff を作り、CI が検出することを確認する",
+      "needs_human_reason": null,
+      "blocked_by": null,
+      "refs": [
+        "apps/autopilot/deployment.yaml",
+        "images/autopilot/Dockerfile",
+        ".github/workflows/build-autopilot-image.yml",
+        "ops/inventory.json",
+        "ops/check_version_sync.py"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": null
+    },
+    {
+      "id": "T-0154",
+      "domain": "homelab",
+      "title": "ops/review-log.md の R-NNN と backlog タスクの起票状態の突き合わせが手作業（LLM 判断）任せで、機械検証が無い",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 55,
+      "why": "PR #353（人間、run #157 直後に merge）で追加されたレビュー役の仕組み（ops/CHARTER.md §3、ops/review-log.md）は、レビュー役が書く R-NNN エントリの `状態`（未処理/起票済 T-XXXX/完了/却下）と、計画役が起票する task の `why` に含める R-NNN 参照が食い違わないことを、CHARTER の手順記述と計画役の注意力だけに頼っている。T-0145（journal run 番号と state.json runs 配列の追随）と構造的に同型の『2箇所が一致しているはずだが機械検証が無い』パターンで、review-log.md/inbox.md/ops/validate.py いずれにも R-NNN や review-log.md への参照は無い（計画役 run #157 相当、subagent 調査で確認）。レビュー役はまだ一度も実行されていない（REVIEW_EVERY=12、直近の run は #157）ため今は実害が無いが、初回実行後に放置すると T-0145 と同じ経路で気づかれないまま乖離する",
+      "dod": "ops/validate.py に ops/review-log.md をパースし、(a) `状態: 起票済 T-XXXX` のエントリについて対応する task が backlog.json に存在し、task の `why` にその R-NNN が含まれているか、(b) backlog.json の task の `why` に R-NNN 参照があるのに review-log.md 側にその id のエントリが無い、の食い違いを検出するチェックを追加する。レビュー役がまだ一度も実行されておらず review-log.md に実データが無いため、意図的に食い違うダミーエントリを一時的に追加して検出できることを確認したうえで元に戻す。初回は warning 扱いとし（新しい運用のため誤検出の余地を残す）、数サイクル運用して安定したら error 昇格を検討する旨を notes に残す",
+      "needs_human_reason": null,
+      "blocked_by": null,
+      "refs": [
+        "ops/review-log.md",
+        "ops/inbox.md",
+        "ops/validate.py",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": null
     }
   ]
 }
