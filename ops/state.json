@@ -273,6 +273,22 @@
       "by": "autopilot pod (計画役)",
       "summary": "計画役（journal run #181）。PR #376/#377はGitHub Actions major_outageで依然blocked（文面はrun#178〜180から変化なし）、今回もリトライ見送り。ops/inbox.md（このブランチ、run#174実行役の記録）にあったgit fetch失敗の観測をT-0158として起票しinboxをクリア。PR #377（レビュー役初回実行）のR-001/R-002/R-003は別ブランチのため未処理のまま確認のみ（R-002はautopilot自身のimage digestがchromium追加コミット以降未更新という現在進行形の事実）。feedback/健全性とも新規変化なし、T-0117はnot_before通過済みだが直列化ルールに従い今回も着手せず。",
       "prs": []
+    },
+    {
+      "n": 182,
+      "at": "2026-08-06T20:34:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #182、記録追いつき）。githubstatus.com incident更新（20:34:17Z、job成功率65%まで改善の記述）を根拠にresolved/monitoring待ちの方針を一時的に緩め、PR #376/#377へ空コミットでリトライ（6f41818ほか）。journal追記が遅れた分をrun #183が補完。",
+      "prs": []
+    },
+    {
+      "n": 183,
+      "at": "2026-08-06T20:51:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #183）。run #182のリトライ後もactions/runs?head_sha=は両PRともtotal_count:0（webhook未達）で不発。incidentは依然investigatingのため、run #178〜181のresolved/monitoring待ち方針に戻す。T-0117は着手せずkubectlで読み取り専用の事前調査のみ実施：本日のcoder-workspace-home-backupオーケストレータはComplete 1/1だが子Job(chb-*)はttlSecondsAfterFinished=3600で確認前にGC済み・pods/log権限も無く成否確認不能と判明、次回の着手回向けにops/inbox.mdへ1行残した。feedback/健全性とも新規変化なし。",
+      "prs": []
     }
   ]
 }
