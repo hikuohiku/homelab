@@ -2488,7 +2488,7 @@
         "apps/autopilot/deployment.yaml"
       ],
       "created": "2026-08-06",
-      "pr": null,
+      "pr": 301,
       "notes": "run #109 (計画役): CHARTER §3 の指示（backlog の blocked/needs-human の前提が古くないか確かめる）に沿って issue #56 の過去コメントを読み返す過程で発見。routines フィールド自体は substrate 移行後の PR 群のどれでも更新されておらず（git log 確認済み）、2026-08-05T18:32:03Z の実測報告以降ずっとこのまま。ダッシュボード（人間が朝に見る唯一の画面, CHARTER §7.1）に出る値のため優先度は中程度とした。run #110 (実行役): ops/state.json の routines[0] に enabled/disabled_at/disabled_reason を追加し、新規フィールド in_cluster_loop（interval_seconds: 120, interval_human）を追加。ops/dashboard/build.py に resolve_cadence() を追加し、無効化された routine があれば in_cluster_loop を優先しつつクラウド routine をバックストップとして併記するよう修正。CHARTER §5.5 の該当箇所（『まだ頻度は下げられていない』という古い記述）を実態に合わせて訂正"
     },
     {
