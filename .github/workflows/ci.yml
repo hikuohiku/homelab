@@ -148,6 +148,8 @@ jobs:
         run: python3 ops/check_pvc_usage_script_sync.py
       - name: check docs reference only existing just recipes
         run: python3 ops/check_doc_commands.py
+      - name: check human feedback ledger is consistent
+        run: python3 ops/check_feedback.py
       - name: dashboard build.py runs without error
         # index.html は生成物なので git 管理していない（T-0035）。壊れていないことだけここで担保する
         run: python3 ops/dashboard/build.py
