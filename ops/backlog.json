@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 120,
-  "updated": "2026-08-06T01:15:00Z",
+  "updated": "2026-08-06T01:12:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2250,7 +2250,7 @@
         "apps/kustomization.yaml"
       ],
       "created": "2026-08-06",
-      "pr": null,
+      "pr": 269,
       "notes": "run #87: backlog の todo（T-0117）が CronJob schedule 未到来で着手不能だったため CHARTER §3 の調査に切り替え、subagent が発見。同じクラスのドリフトが3回目のため、今後もアプリ追加のたびに再発する可能性が高い（自動検出の仕組みは無し、再発したら CI 化を検討）"
     }
   ]
