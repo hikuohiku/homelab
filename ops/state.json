@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-06T12:50:00Z",
+  "updated": "2026-08-06T13:00:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-06T12:34:00Z"
+    "last_read": "2026-08-06T13:00:00Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc",
@@ -1459,6 +1459,14 @@
       "kind": "in_cluster_loop",
       "by": "autopilot pod (実行役)",
       "summary": "実行役（journal run #160）。T-0154（review-log.md と backlog の突き合わせに機械検証が無い）に着手し ops/validate.py に check_review_log() を追加。R-NNN の起票済参照と task why の食い違いを warning で検出する。ダミーエントリで両方向の検出を確認したうえで元に戻した。",
+      "prs": []
+    },
+    {
+      "n": 161,
+      "at": "2026-08-06T13:00:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (計画役)",
+      "summary": "計画役（journal run #161）。inbox 空、フィードバック新規無し、健全性は既知の T-0106 由来 Degraded のみで新規異常無し。backlog blocked/needs-human 全14件の前提変化なし。todo が枯れていたため調査し、T-0155（CHARTER §6 の自己矛盾: check_feedback.py は既にCI配線済みなのに『まだ』と記述）・T-0156（アプリ一覧drift5回目、CI検証を新設するDoD）を起票。",
       "prs": []
     }
   ]
