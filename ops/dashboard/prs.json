@@ -1,36 +1,20 @@
 {
-  "open": [
+  "open": [],
+  "merged": [
     {
       "number": 293,
       "title": "feat(ops-dashboard): httpd を python:3.12-alpine の http.server に置き換えて再実装 (T-0128)",
       "url": "https://github.com/hikuohiku/homelab/pull/293",
-      "isDraft": false,
-      "createdAt": "2026-08-06T04:22:24Z",
-      "statusCheckRollup": [
-        {
-          "conclusion": "SUCCESS"
-        },
-        {
-          "conclusion": "SUCCESS"
-        },
-        {
-          "conclusion": "SUCCESS"
-        },
-        {
-          "conclusion": "SUCCESS"
-        },
-        {
-          "conclusion": "SUCCESS"
-        },
-        {
-          "conclusion": "SUCCESS"
-        }
-      ],
-      "headRefName": "autopilot/T-0128-python-http-server",
-      "autoMergeRequest": null
-    }
-  ],
-  "merged": [
+      "mergedAt": "2026-08-06T04:39:35Z",
+      "headRefName": "autopilot/T-0128-python-http-server"
+    },
+    {
+      "number": 294,
+      "title": "docs(ops): 計画役 run #102 の記録更新（backlog 見直し・inventory 調査）",
+      "url": "https://github.com/hikuohiku/homelab/pull/294",
+      "mergedAt": "2026-08-06T04:34:12Z",
+      "headRefName": "autopilot/plan-run102-backlog-review"
+    },
     {
       "number": 292,
       "title": "revert: ops-dashboard httpd CrashLoopBackOff を revert (T-0128)",
@@ -436,20 +420,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/233",
       "mergedAt": "2026-08-05T20:05:10Z",
       "headRefName": "autopilot/T-0071-immich-restore-cap-simplify"
-    },
-    {
-      "number": 232,
-      "title": "fix(immich): restic restore-verify Job に CAP_FOWNER も足してタイムスタンプ復元エラーを解消する (T-0071)",
-      "url": "https://github.com/hikuohiku/homelab/pull/232",
-      "mergedAt": "2026-08-05T19:58:40Z",
-      "headRefName": "autopilot/T-0071-immich-restore-fowner-fix"
-    },
-    {
-      "number": 231,
-      "title": "fix(immich): restic restore-verify Job に CAP_CHOWN を足して所有者復元エラーを解消する (T-0071)",
-      "url": "https://github.com/hikuohiku/homelab/pull/231",
-      "mergedAt": "2026-08-05T19:50:17Z",
-      "headRefName": "autopilot/T-0071-immich-restore-chown-fix"
     }
   ]
 }
