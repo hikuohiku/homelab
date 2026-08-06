@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T00:11:00Z",
+  "updated": "2026-08-06T00:40:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -899,6 +899,16 @@
       "summary": "前回の中断: PR #263（T-0072, run #82 が open のまま終了）を CI green・mergeable_state clean を確認して merge。issue #56 に未読フィードバックなし。backlog の唯一の todo だった T-0078（coder workspace home PVC の backup）に着手し、オーケストレータ Pod が workspace ごとの PVC を動的に列挙して使い捨ての restic backup Job を Kubernetes API 経由で生成する方式で実装した（credential は coder-postgres 用を流用、新規登録不要）。新しい write RBAC・実測なしの resources/securityContext を持ち込むため CHARTER §4 の cooldown 対象と判断し、PR #264 は CI green 確認まで進めたが merge せず open のまま終える。T-0078 は in_progress、初回実行確認・復元試験は T-0117 として分離起票",
       "prs": [
         264
+      ]
+    },
+    {
+      "n": 84,
+      "at": "2026-08-06T00:40:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断: PR #264（T-0078, cooldown で open のまま終了）・#265（run #83 の記録）を発見。issue #56 に新しい異議が無いことを確認し両方を merge（#264: d40c7f7, #265: 12e3d7f）。ArgoCD が新 revision に自動 sync し、coder-workspace-home-backup/-retention CronJob の実在を kubectl で確認（schedule 未到来のため初回実行はこれから）。T-0078 を done にした",
+      "prs": [
+        266
       ]
     }
   ]
