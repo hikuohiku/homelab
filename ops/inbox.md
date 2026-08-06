@@ -7,3 +7,9 @@
 [`ops/CHARTER.md`](CHARTER.md) の §3「書く権利」。
 
 ---
+
+- T-0146（cachix pull 検証, run #146）: cache が public でありデフォルトで substituter も追加される
+  ことは確認できたが、実際の hit/miss は release-image.yml の過去実行ログが全て 410 Gone（retention
+  切れ、最終実行 2025-12-16）で確認不能だった。issue #26 に報告済み。次に人間が release-image.yml
+  を手動実行する機会があれば、その直後（ログ保持期限が切れる前）にログで `copying path`/`fetching`
+  の比率を見る調査タスクを起票する価値があるかもしれない。急ぎではない（実行の予定自体が無いため）
