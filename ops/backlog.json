@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 123,
+  "next_id": 124,
   "updated": "2026-08-06T01:50:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
@@ -1619,12 +1619,11 @@
       "dod": "T-0086 の PR が merge・ArgoCD に反映されてから1起動以上後、ops-health-report ブランチの pod_issues に immich-machine-learning の CrashLoopBackOff/Error が無いことを確認する。問題が無ければ done、あれば v2.6.3 への revert PR を出す",
       "blocked_by": "T-0086 の反映待ち（ArgoCD sync + 次回 health report、CronJob は30分毎）",
       "refs": [
-        "apps/immich/values.yaml",
-        "ops/health/latest.json"
+        "apps/immich/values.yaml"
       ],
       "created": "2026-08-05",
       "pr": null,
-      "notes": "run #42: #171 merge (08:16:43Z) 後の ops-health-report (generated_at 08:30:04Z) を確認。immich アプリは Synced/Healthy、pod_issues に immich-server/immich-machine-learning のいずれも出現せず（restarts の載っている pod は argocd/coredns/local-path-provisioner/metrics-server の常駐系のみで、いずれもノード再起動由来の既知の値。immich 側に新規のクラッシュ兆候なし）。v2.7.0/v2.7.1 の numpy クラッシュは node01 で再発していないと確認できたため done"
+      "notes": "run #42: #171 merge (08:16:43Z) 後の ops-health-report (generated_at 08:30:04Z) を確認。immich アプリは Synced/Healthy、pod_issues に immich-server/immich-machine-learning のいずれも出現せず（restarts の載っている pod は argocd/coredns/local-path-provisioner/metrics-server の常駐系のみで、いずれもノード再起動由来の既知の値。immich 側に新規のクラッシュ兆候なし）。v2.7.0/v2.7.1 の numpy クラッシュは node01 で再発していないと確認できたため done | run #92: refs の ops/health/latest.json は main とは別ブランチ（ops-health-report）にしか存在しないファイルで、validate.py のチェックは main の working tree しか見ないため常に警告になっていた。参照先を documentation として残す価値が薄いため refs から削除した"
     },
     {
       "id": "T-0088",
@@ -2314,6 +2313,24 @@
       "created": "2026-08-06",
       "pr": 275,
       "notes": "run #91 で発見・即完遂。実際の Degraded 状態を解消するには T-0106 の Doppler 登録（人間専有）が要る。この task 自体は既知事象化のドキュメント更新のみ"
+    },
+    {
+      "id": "T-0123",
+      "domain": "homelab",
+      "title": "ops/validate.py の『done なのに pr が空』警告が notes 記載済みでも常に出るノイズを解消する",
+      "kind": "chore",
+      "risk": "low",
+      "status": "done",
+      "priority": 60,
+      "why": "同じ 10 件の warning が run #14 以降 40 回以上の起動で journal に『既存のもの、今回の変更由来の新規警告なし』と書かれ続けており、warning が実質的に意味を失っていた（新しい genuine な警告が出ても埋もれる）。全 9 件の該当タスクは既に notes に PR が無い理由が書かれており、チェック自体が notes の有無を見ていなかったのが原因",
+      "dod": "ops/validate.py の該当チェックを notes が空の場合のみ warn するよう修正し、python3 ops/validate.py が 0 warning になることを確認する。あわせて T-0087 の refs にあった ops/health/latest.json（main とは別の ops-health-report ブランチにしか存在せず常に警告の原因だった）を削除する",
+      "blocked_by": null,
+      "refs": [
+        "ops/validate.py"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #92: 着手・完遂。python3 ops/validate.py で 0 error, 0 warning を確認済み。この PR に相乗りさせる形で実施したため pr は同じ PR 番号を後で反映する"
     }
   ]
 }

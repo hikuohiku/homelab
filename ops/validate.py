@@ -91,7 +91,7 @@ def check_backlog(b) -> None:
                 )
         if t.get("status") == "blocked" and not t.get("blocked_by"):
             err(f"{where}: blocked には blocked_by が必要")
-        if t.get("status") == "done" and not t.get("pr"):
+        if t.get("status") == "done" and not t.get("pr") and not t.get("notes"):
             warn(f"{where}: done なのに pr が空（PR を伴わない完了なら理由を notes に）")
 
         for ref in t.get("refs", []):
