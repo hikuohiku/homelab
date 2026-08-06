@@ -1347,7 +1347,7 @@
         "terraform/proxmox/pbs.tf.ignore"
       ],
       "created": "2026-08-05",
-      "pr": null,
+      "pr": 263,
       "notes": "run #82: blocked_by（T-0071）が run #68 時点で既に done になっていたにも関わらず run #69〜#81 の間 blocked のまま放置されていたのに気づき着手。T-0065（IaC完全性の棚卸し）の実データ対象5つのうち、restic backup が復元試験まで完了しているのは4つ（immich/vaultwarden/coder-postgres 系）のみで、残る `coder-<workspace-id>-home`（T-0078）が未実装だったため、判断は『今は維持、T-0078 完了後に退役』とした（docs/backup.md『PBS 退役判断』節に記録）。退役の実行タスクは T-0116（blocked_by: T-0078）として分離起票。同じ run で T-0078 も blocked_by（T-0067）が既に done だったため todo に戻した"
     },
     {
