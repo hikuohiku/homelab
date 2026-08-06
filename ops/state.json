@@ -987,6 +987,16 @@
       "prs": [
         276
       ]
+    },
+    {
+      "n": 93,
+      "at": "2026-08-06T11:33:00+09:00",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断: PR #276（T-0123, 別セッションが同じ「run #92」で実装）を CI green・mergeable_state clean を確認して merge。issue #56 に未読フィードバックなし。自分のミス: #276 merge 直後にローカル main を追従させずに次のブランチを切り stale base で dirty になった（run #72 と同型）。旧 PR #277 を close・ブランチ削除し作り直した。健全性確認: coder/immich/vaultwarden の Degraded は T-0122 の既知事象どおり restic-backup-credentials ExternalSecret のみが原因と実測で再確認、autopilot 自身の heartbeat も正常。backlog の唯一の todo（T-0117）は CronJob schedule（03:30 UTC）未到来のため引き続き着手不能。run #90/#91 で広い調査が直近2回連続していたため今回は繰り返さず、CI 5 job と main ruleset の required_status_checks が完全一致していることを実測確認（変更なし）",
+      "prs": [
+        278
+      ]
     }
   ]
 }
