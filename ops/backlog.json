@@ -2539,7 +2539,7 @@
       "title": "CLAUDE.md の Apps 一覧・ディレクトリ構造に apps/ops-dashboard/ が未記載",
       "kind": "docs",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 40,
       "why": "計画役 run #125 で発見。T-0127/T-0128 で追加された apps/ops-dashboard/（application.yaml, deployment.yaml, service.yaml, ingress.yaml — ops-dashboard ブランチの index.html を Tailscale ingress 経由で配信する Deployment）が、CLAUDE.md 16行目の『Apps』一覧（ArgoCD, Dex, External Secrets Operator, Tailscale Operator, Immich, Vaultwarden, Coder, ops-health-reporter, autopilot の9つ）にも、23〜37行目のディレクトリ構造図にも入っていない。T-0057/T-0089/T-0094 と同型のドキュメントdrift。",
       "dod": "CLAUDE.md の Apps 一覧に ops-dashboard を追加し、ディレクトリ構造図に `ops-dashboard/ — 人間向けダッシュボードの配信（Deployment、ops-dashboard ブランチの index.html を fetch して http.server で配信）`相当の1行を追加する",
@@ -2548,8 +2548,8 @@
         "apps/ops-dashboard/"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": null
+      "pr": 317,
+      "notes": "run #126: CLAUDE.md の Apps 一覧・ディレクトリ構造図に ops-dashboard を追加して done"
     }
   ]
 }
