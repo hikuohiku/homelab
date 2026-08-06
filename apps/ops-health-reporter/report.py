@@ -268,8 +268,16 @@ def collect_autopilot_health():
 
     if pod_name:
         try:
+            # tailLines=200 は不十分だった（2026-08-06 run #89 で last_start/last_end が
+            # 両方 null になる事象を観測）。render.py (apps/autopilot/render.py) は
+            # claude -p の stream-json イベント（tool_use/text/result）を 1 行ずつ出すため、
+            # 込み入ったイテレーション 1 回だけで 200 行を超え、直近の
+            # "iteration #N start" 行が窓の外に押し出されうる。行数ではなく時間で窓を取り、
+            # ITERATION_TIMEOUT_SECONDS（apps/autopilot/deployment.yaml, 現行 3600s）
+            # 1 周分 + 余裕を確実にカバーする。deployment.yaml 側の値を大きく変えたら
+            # ここも合わせて見直すこと
             raw = k8s_get_text(
-                "/api/v1/namespaces/{}/pods/{}/log?tailLines=200".format(
+                "/api/v1/namespaces/{}/pods/{}/log?sinceSeconds=7200".format(
                     AUTOPILOT_NAMESPACE, pod_name
                 )
             )

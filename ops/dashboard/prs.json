@@ -1,21 +1,28 @@
 {
   "open": [
     {
-      "number": 271,
-      "title": "security(backup): restic backup 専用の append-only credential を追加 (T-0106)",
-      "url": "https://github.com/hikuohiku/homelab/pull/271",
+      "number": 272,
+      "title": "fix(ops-health-reporter): autopilot heartbeat 検出窓を tailLines から sinceSeconds に変更 (T-0121)",
+      "url": "https://github.com/hikuohiku/homelab/pull/272",
       "isDraft": false,
-      "createdAt": "2026-08-06T01:28:47Z",
+      "createdAt": "2026-08-06T01:37:58Z",
       "statusCheckRollup": [
         {
           "conclusion": "PENDING"
         }
       ],
-      "headRefName": "autopilot/T-0106-restic-backup-append-only-credential",
+      "headRefName": "autopilot/T-0121-heartbeat-tail-window",
       "autoMergeRequest": null
     }
   ],
   "merged": [
+    {
+      "number": 271,
+      "title": "security(backup): restic backup 専用の append-only credential を追加 (T-0106)",
+      "url": "https://github.com/hikuohiku/homelab/pull/271",
+      "mergedAt": "2026-08-06T01:30:35Z",
+      "headRefName": "autopilot/T-0106-restic-backup-append-only-credential"
+    },
     {
       "number": 270,
       "title": "chore(ops): run #87 の記録更新",
@@ -428,13 +435,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/209",
       "mergedAt": "2026-08-05T16:26:22Z",
       "headRefName": "autopilot/run54-record"
-    },
-    {
-      "number": 208,
-      "title": "ops: run #53 の記録更新（T-0103 修正確認、journal・state・PRキャッシュ、ダッシュボード再公開）",
-      "url": "https://github.com/hikuohiku/homelab/pull/208",
-      "mergedAt": "2026-08-05T16:15:10Z",
-      "headRefName": "autopilot/run53-record"
     }
   ]
 }
