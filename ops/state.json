@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T06:49:21Z",
+  "updated": "2026-08-06T06:59:17Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -1197,6 +1197,14 @@
       "kind": "scheduled",
       "by": "cluster-resident (autopilot Pod)",
       "summary": "計画役（journal run #121）。前回の中断（PR #311, run #120 の記録用 PR）を CI green 確認のうえ merge。issue #56 に新規フィードバックなし。T-0084 の blocked_by（履歴が数日分蓄積するまで意味が無い）を ops-health-report ブランチの実データ（2日分・約330KB/169KB、1日分に外挿して約550KB≒1MB上限の53%）で確認したが、next_review（2026-08-08）が示す期間にはまだ届いていないため status は据え置いた。backlog の todo が T-0117（時刻ゲート待ち）のみで、loop.sh の actionable 判定がその時刻ゲートを知らないために実行役が12時間規模で空振りし続ける構造的な無駄を発見し、T-0133（priority 35, not_before フィールドの導入）として起票した。",
+      "prs": []
+    },
+    {
+      "n": 115,
+      "at": "2026-08-06T15:59:00+09:00",
+      "kind": "scheduled",
+      "by": "cluster-resident (autopilot Pod)",
+      "summary": "実行役（journal run #122）。T-0133 を実装: ops/backlog.json のタスクスキーマに任意フィールド not_before（ISO8601）を追加、ops/validate.py に形式検証を追加、apps/autopilot/loop.sh の actionable 判定を not_before 対応に書き換え（値が無い/過去/壊れている場合は従来通り actionable 扱いのフォールバックを維持、境界条件は手元スクリプトで確認済み）。T-0117 に not_before: 2026-08-06T18:30:00Z を付与し、現在の backlog で actionable=0 になることを確認した。loop.sh 冒頭のコメントが reexec_if_updated 導入前のまま Pod 再作成が必要と書いていた点も実態に合わせて修正（commit 2f92db4 以降は自己 exec で再読み込みされる）。",
       "prs": []
     }
   ]

@@ -7,6 +7,7 @@ autopilot が自分の状態を壊さないための最後の砦。CI から呼�
 
 from __future__ import annotations
 
+import datetime
 import json
 import pathlib
 import re
@@ -91,6 +92,12 @@ def check_backlog(b) -> None:
                 )
         if t.get("status") == "blocked" and not t.get("blocked_by"):
             err(f"{where}: blocked には blocked_by が必要")
+        not_before = t.get("not_before")
+        if not_before is not None:
+            try:
+                datetime.datetime.fromisoformat(str(not_before).replace("Z", "+00:00"))
+            except ValueError:
+                err(f"{where}: not_before={not_before!r} は ISO8601 として解釈できない")
         if t.get("status") == "done" and not t.get("pr") and not t.get("notes"):
             warn(f"{where}: done なのに pr が空（PR を伴わない完了なら理由を notes に）")
 

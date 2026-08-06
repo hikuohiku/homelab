@@ -11,10 +11,12 @@
 # このスクリプト自体は「回し続けること」だけに責任を持つ。何をするかの判断は
 # 一切書かない（prompt.md → ops/VISION.md → ops/CHARTER.md に委ねる）。
 #
-# 注意: このファイルは Pod 起動時に 1 度だけ読み込まれる（ConfigMap の
-# disableNameSuffixHash: true のため、内容を変えても Deployment は自動で
-# 再起動しない）。loop.sh の変更を反映するには Pod の再作成が要る。
-# 一方 prompt.md は毎イテレーション読み直すので再起動なしで効く。
+# 注意: ConfigMap は disableNameSuffixHash: true のため、内容を変えても Deployment は
+# 自動で再起動しない。ただし下記 reexec_if_updated がイテレーションの合間に自分の
+# digest を見て変更を検知し、Pod を作り直さずに新しい内容で exec し直す
+# （導入した commit 2f92db4 時点で 1 回だけ Pod を作り直したのは、この仕組み自体を
+# 載せるため。以降の loop.sh 変更はこの仕組みで反映される）。
+# prompt.md は毎イテレーション読み直すので、そもそも再読み込みの仕組みが要らない。
 
 set -u
 
@@ -93,8 +95,12 @@ iterate() {
   # 役の選択。着手可能なタスクが無いか、PLAN_EVERY 回に 1 回は計画役にする。
   # 計画役と実行役を分けているのは、何をやる価値があるかを決める主体とそれをやる
   # 主体が同じだと「やりやすいこと」に寄っていくため（CHARTER §3）。
+  # not_before（ISO8601, T-0133）が未来のタスクは「時刻待ち」として actionable から除く。
+  # 値が無い/過去/壊れている場合は今まで通り actionable 扱い（壊れた値で計画役に
+  # 倒れ続けると気づけないため、安全側＝実行役に倒す）
   actionable=$(python3 - <<'EOF'
 import json
+from datetime import datetime, timezone
 
 try:
     with open("ops/backlog.json") as f:
@@ -104,7 +110,23 @@ except (OSError, ValueError, KeyError):
     # 壊れた状態で計画役に入ると何も進まないまま回り続ける）
     print(1)
 else:
-    print(sum(1 for t in tasks if t.get("status") in ("todo", "in_progress")))
+    now = datetime.now(timezone.utc)
+    count = 0
+    for t in tasks:
+        if t.get("status") not in ("todo", "in_progress"):
+            continue
+        not_before = t.get("not_before")
+        if not_before:
+            try:
+                gate = datetime.fromisoformat(str(not_before).replace("Z", "+00:00"))
+                if gate.tzinfo is None:
+                    gate = gate.replace(tzinfo=timezone.utc)
+                if gate > now:
+                    continue
+            except ValueError:
+                pass
+        count += 1
+    print(count)
 EOF
 )
   if [ "${actionable}" -eq 0 ] || [ $((i % PLAN_EVERY)) -eq 0 ]; then
