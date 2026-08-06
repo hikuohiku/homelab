@@ -2222,15 +2222,15 @@
       "title": "CI の helm バイナリ (azure/setup-helm の version input) を v3 系から v4 系への移行を検討する",
       "kind": "investigate",
       "risk": "low",
-      "status": "todo",
+      "status": "blocked",
       "priority": 55,
       "why": "run #85 の inventory 定期チェック（T-0117 が CronJob の schedule 未到来で着手不能だったため実施）で、CI が使う helm バイナリ（`gha-setup-helm-version`, 現行 v3.21.3, ops/inventory.json）の upstream (helm/helm) に v4 系（最新 v4.2.3）が存在し、v3 系の release notes に EOL 接近の告知があると判明した。v3.21.3 自体は v3 系列の最新なので inventory の『current が遅れている』判定（同一系列内の追従）には該当せず緊急性は無いが、系列そのものの移行は別論点として検討が要る",
       "dod": "helm v4 の breaking changes（release notes / migration guide）を原文で確認し、このリポジトリの CI（`kustomize build --enable-helm` を使う manifests job・manifest-diff job）が使う helm の呼び出し方（`--enable-helm` フラグの挙動、chart repo 設定等）に影響が無いか洗い出す。影響が無ければ `.github/workflows/ci.yml` の helm version input と `ops/inventory.json` の `gha-setup-helm-version` を v4 系に上げる PR を出す。影響があれば内容を記録し、blocked にする理由を明記する",
-      "blocked_by": null,
+      "blocked_by": "azure/setup-helm が v4 系の公式サポートを表明する（または実機検証で動作確認できる）まで",
       "refs": [".github/workflows/ci.yml", "ops/inventory.json"],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #85: 定期の inventory 調査（対象8件、他7件は current が最新のまま）で発見。緊急性は無い（v3.21.3 で CI は動いている）が EOL 接近の一次情報あり"
+      "notes": "run #85: 定期の inventory 調査（対象8件、他7件は current が最新のまま）で発見。緊急性は無い（v3.21.3 で CI は動いている）が EOL 接近の一次情報あり。run #86: 調査完遂。技術的な互換性のハードルは無い——kustomize v5.8.1（本リポジトリが既に使用中）は helm v4 対応の既知バグ修正（kubernetes-sigs/kustomize#6013, PR #6016）を取り込み済みで、本リポジトリが使う helmCharts の基本フィールド（repo/name/version/releaseName/namespace/valuesFile）は helm v4 の breaking changes に抵触しない（一次情報: https://helm.sh/blog/helm-4-released/ 、 https://helm.sh/docs/changelog/ ）。唯一の障害は CI が使う `azure/setup-helm` アクション自身が README で『v2+ of this action only support Helm3』と明言しており、v4 系のバージョン指定を公式サポートしていないこと（動く可能性はあるが未検証・未保証）。auto-merge のゲートである CI に根拠の薄い変更を入れないため blocked とした。再開条件: azure/setup-helm が v4 対応を明言するリリースを出す、または検証用ブランチで実機テストして動作を確認できたとき"
     }
   ]
 }
