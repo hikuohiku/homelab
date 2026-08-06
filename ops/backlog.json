@@ -2467,7 +2467,7 @@
         "ops/CHARTER.md"
       ],
       "created": "2026-08-06",
-      "pr": null,
+      "pr": 341,
       "notes": "run #109 (計画役): ops/inbox.md の引き継ぎ（run #104 が残した）を起票。恒久対応として autopilot-reader ClusterRole に ingresses read を足す案もあるが、単発の確認で足りるため、まずは構築セッションへの確認依頼で解決を図る。権限追加が必要になったら別タスクにする | run #148（計画役）: 構築セッションが issue #56（2026-08-06T10:03:40Z）で https://ops-dashboard.tailae6c2.ts.net/ の L7 Ingress 到達（HTTP 200）を実測・報告済み。 DoD の確認待ち部分が解消したため needs-human → todo に変更。 次の実行役は ops/state.json の dashboard フィールドにこの URL を反映し、 CHARTER §7.1 の記述もあわせて更新すること | run #149（実行役）: ops/state.json に dashboard.ops_dashboard_url を追加、CHARTER §7.1 を更新し done に。ただし issue #56 の同コメントは同じ制約下で syncthing の GUI L7 Ingress を『tailnet ピアでないため判定不能』と明記しており、ops-dashboard の確認も内部 Service 止まりで外部到達は未実測の疑いがあるため、その旨を state.json に注記し ops/inbox.md へ引き継いだ"
     },
     {
