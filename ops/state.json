@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T01:41:00Z",
+  "updated": "2026-08-06T02:04:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -967,6 +967,16 @@
       "by": "in-cluster autopilot",
       "summary": "前回の中断: PR #273（run #89 の記録更新）を CI green・mergeable_state clean を確認して merge。issue #56 に未読フィードバックなし。T-0121 の実効性確認は、01:30:04Z の ops-health-report がまだ null だったが ArgoCD の修正反映（01:40:52Z）より前の断面だったためと判明、次回起動で改めて確認する。T-0117 は CronJob schedule（03:30 UTC）未到来のため引き続き着手不能。subagent に新しい調査観点探しを投げたが、89回を超える起動でドリフトは概ね枯渇しており具体的な新規候補は出なかった",
       "prs": []
+    },
+    {
+      "n": 91,
+      "at": "2026-08-06T11:04:00+09:00",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。T-0121 の実効性確認完了（02:00:04Z の ops-health-report で heartbeat が iteration #36/#37 の実値を返した）。同じ断面で coder/immich/vaultwarden の Application health が揃って Degraded になっているのを発見、kubectl 調査で Pod 自体は無事、T-0106 が追加した backup credential ExternalSecret の SecretSyncedError が原因と判明。T-0122（risk: low）として起票・即完遂、CHARTER に既知事象として記録（#275）。並行して inventory 全32対象を subagent が一次ソースで確認、追従が必要な対象は無し。T-0117 は CronJob schedule（03:30 UTC）未到来のため引き続き着手不能",
+      "prs": [
+        275
+      ]
     }
   ]
 }
