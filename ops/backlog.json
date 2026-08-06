@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 120,
+  "next_id": 121,
   "updated": "2026-08-06T01:12:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
@@ -1970,20 +1970,21 @@
       "title": "B2 の restic 用 credential を append-only 鍵に分離する",
       "kind": "security",
       "risk": "medium",
-      "status": "blocked",
+      "status": "needs-human",
       "priority": 70,
       "why": "issue #56 (2026-08-05 16:02:29、構築セッション経由) の指摘。restic の動作確認で `restic forget --prune` が実際に B2 上のオブジェクトを削除できることが分かった。つまり現在発行されている B2 credential には削除権限がある。node01 が侵害された場合、攻撃者はバックアップ自体も消せてしまう（『バックアップがある』と『バックアップが守られている』は別）",
-      "dod": "restic backup（push のみ）用と retention/restore（削除・読み取りが要る）用で B2 アプリケーションキーを分離するか、backup 用キーを append-only（write専用、delete不可）にする。バックアップ用 CronJob には append-only 鍵、retention（forget --prune）用の CronJob には削除権限のある鍵を使い分ける",
-      "blocked_by": "T-0071（復元試験）が先。バックアップの仕組み自体がまだ復元まで検証できていないうちに credential 分離で複雑さを増やすと、切り分けが難しくなる（構築セッションの提案どおり優先度を後ろに置く）",
-      "needs_human_reason": "B2 の新しい append-only アプリケーションキーの発行は Backblaze 管理画面での操作が要る。manifest 側（ExternalSecret のキー参照を分ける等）の設計はこちらで先に進められる",
+      "dod": "manifest 側は完了（run #88）: apps/{vaultwarden,immich,coder}/restic-external-secret.yaml に backup 専用 ExternalSecret（<app>-restic-backup-credentials、新しい Doppler キー B2_ACCOUNT_ID_APPEND_ONLY/B2_ACCOUNT_KEY_APPEND_ONLY を参照）を追加した。残りは人間の credential 発行のみ。登録後の CronJob 切り替えは T-0120 に分離した",
+      "blocked_by": null,
+      "needs_human_reason": "Backblaze 管理コンソールで既存バケット向けの新しい Application Key を発行する。Capabilities は listBuckets/listFiles/readFiles/writeFiles のみ（deleteFiles を含めない = 真の append-only）にする。発行した keyID/applicationKey を Doppler (homelab/prd) に B2_ACCOUNT_ID_APPEND_ONLY / B2_ACCOUNT_KEY_APPEND_ONLY として登録する。登録後は ExternalSecret が自動同期し、T-0120 が拾える",
       "refs": [
-        "apps/vaultwarden/restic-backup-cronjob.yaml",
-        "apps/coder/restic-backup-cronjob.yaml",
-        "apps/immich/restic-backup-cronjob.yaml",
+        "apps/vaultwarden/restic-external-secret.yaml",
+        "apps/coder/restic-external-secret.yaml",
+        "apps/immich/restic-external-secret.yaml",
         "docs/backup.md"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": null,
+      "notes": "run #29: T-0071（復元試験）完了を待つ方針で blocked に。run #88: T-0071 が既に done（2026-08-06 完了）と確認しblocked_by を解消。manifest（backup専用ExternalSecret 3ファイル分）を実装し、credential 発行のみを残す needs-human に変更。CronJob 側の参照切り替えは新しい鍵の存在確認が要るため T-0120 として分離"
     },
     {
       "id": "T-0109",
@@ -2252,6 +2253,28 @@
       "created": "2026-08-06",
       "pr": 269,
       "notes": "run #87: backlog の todo（T-0117）が CronJob schedule 未到来で着手不能だったため CHARTER §3 の調査に切り替え、subagent が発見。同じクラスのドリフトが3回目のため、今後もアプリ追加のたびに再発する可能性が高い（自動検出の仕組みは無し、再発したら CI 化を検討）"
+    },
+    {
+      "id": "T-0120",
+      "domain": "homelab",
+      "title": "restic backup CronJob を append-only credential (T-0106) に切り替える",
+      "kind": "security",
+      "risk": "medium",
+      "status": "blocked",
+      "priority": 71,
+      "why": "T-0106 で backup 専用の append-only ExternalSecret（<app>-restic-backup-credentials）を3 namespace 分追加したが、新しい Doppler キー（B2_ACCOUNT_ID_APPEND_ONLY/B2_ACCOUNT_KEY_APPEND_ONLY）がまだ登録されておらず、4つの backup CronJob（vaultwarden-restic-backup/immich-restic-backup/coder-restic-backup/coder-workspace-home-backup）は引き続き削除権限を持つ既存credentialを参照したままになっている。credential 分離を実効化するにはこの切り替えが要る",
+      "dod": "各 namespace で `kubectl get externalsecret <app>-restic-backup-credentials -n <app>` を実行し、SecretSynced/Ready を確認する。確認できたら、4つの backup CronJob（coder-workspace-home-backup は動的 Job テンプレートのスクリプト側）の B2_ACCOUNT_ID/B2_ACCOUNT_KEY の secretKeyRef.name を <app>-restic-credentials から <app>-restic-backup-credentials に切り替える。retention CronJob（forget --prune、削除権限が要る）は変更しない。切り替え後、次回のスケジュール実行が成功することを ops-health-report の pod_issues で確認する",
+      "blocked_by": "T-0106（人間による Backblaze append-only キー発行 + Doppler 登録）",
+      "refs": [
+        "apps/vaultwarden/restic-backup-cronjob.yaml",
+        "apps/immich/restic-backup-cronjob.yaml",
+        "apps/coder/restic-backup-cronjob.yaml",
+        "apps/coder/workspace-home-backup-cronjob.yaml",
+        "docs/backup.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #88: T-0106 の manifest 実装（backup専用ExternalSecret 追加）の副産物として分離起票。credential 未登録の間に backup CronJob 側を切り替えると日次バックアップが失敗し続けるため、意図的に manifest 追加のみに留め、この切り替え作業を別タスクにした"
     }
   ]
 }
