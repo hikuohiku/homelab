@@ -333,7 +333,7 @@
       "match": "version: v3.21.3",
       "upstream": "github:helm/helm",
       "policy": "auto",
-      "note": "azure/setup-helm@v5 の `with: version:` が指定する helm バイナリ本体のバージョン。gha-azure-setup-helm（Action 自体の pin, uses: azure/setup-helm@vX）とは別物。ci.yml の manifests job と manifest-diff job の2箇所に独立して書かれている（T-0090。ops/check_version_sync.py の GROUPS で内部一致を検証）",
+      "note": "azure/setup-helm@v5 の `with: version:` が指定する helm バイナリ本体のバージョン。gha-azure-setup-helm（Action 自体の pin, uses: azure/setup-helm@vX）とは別物。ci.yml の manifests job と manifest-diff job の2箇所に独立して書かれている（T-0090。ops/check_version_sync.py の GROUPS で内部一致を検証）。upstream に v4 系列があるが azure/setup-helm 自身が README で v3 のみ公式サポートと明言しており v4 系への更新は blocked（T-0118, run #86）。v3 系列内の更新（v3.21.3 → v3 系の新しい patch/minor）は引き続き通常の auto ポリシー対象",
       "observability_impact": "kustomize build job (--enable-helm) と manifest-diff job が使用。2箇所がずれると job ごとに異なる helm バージョンでレンダリングされ、T-0036 の削除検出（manifest-diff）がツールバージョン差分由来の偽陽性/偽陰性を出しうる"
     },
     {

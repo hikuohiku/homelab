@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-06T00:40:00Z",
+  "updated": "2026-08-06T00:56:52Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-05T18:47:54Z"
+    "last_read": "2026-08-06T00:56:52Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -910,6 +910,24 @@
       "prs": [
         266
       ]
+    },
+    {
+      "n": 85,
+      "at": "2026-08-06T00:51:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。backlog の唯一の todo（T-0117）は coder-workspace-home-backup CronJob の schedule（03:30 UTC）未到来のため着手不能と判断し、ops/inventory.json の未チェック分8件を subagent で調査。8件とも current が upstream 最新のままだったが、gha-setup-helm-version の upstream (helm/helm) に v4 系があり v3 系に EOL 接近の告知があると判明したため T-0118 として起票。T-0117 の blocked_by が T-0078 done 後も stale なままだったのを解消",
+      "prs": [
+        267
+      ]
+    },
+    {
+      "n": 86,
+      "at": "2026-08-06T09:58:00+09:00",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。ops-health-report で全11 Application Synced/Healthy、新規異常なし。T-0117 は CronJob schedule（03:30 UTC）未到来のため引き続き着手不能。T-0118（helm v3→v4系への移行検討）を完遂: kustomize v5.8.1 は helm v4 対応済みだが azure/setup-helm アクション自身が v3 のみ公式サポートと明言しているため blocked にし、一次情報を backlog/inventory に記録",
+      "prs": []
     }
   ]
 }
