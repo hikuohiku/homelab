@@ -25,9 +25,22 @@ REPO_URL="${REPO_URL:-https://github.com/hikuohiku/homelab.git}"
 REPO_DIR="${REPO_DIR:-${WORKDIR}/homelab}"
 PROMPT_PLAN="${PROMPT_PLAN:-/config/prompt-plan.md}"
 PROMPT_EXECUTE="${PROMPT_EXECUTE:-/config/prompt-execute.md}"
+PROMPT_REVIEW_USER="${PROMPT_REVIEW_USER:-/config/prompt-review-user.md}"
+PROMPT_REVIEW_ARCH="${PROMPT_REVIEW_ARCH:-/config/prompt-review-arch.md}"
 # 何回に 1 回は着手可能なタスクがあっても計画回にする。優先順位が古びるのと、
 # inbox が溜まりっぱなしになるのを防ぐため。
 PLAN_EVERY="${PLAN_EVERY:-6}"
+# 何回に 1 回をレビュー回にするか。計画役は backlog に載っているものを捌き、実行役は
+# 渡されたものを作るだけで、「そもそも今あるものが良いか」を誰も見ていなかった（CHARTER §3）。
+# 12 の根拠: 1 イテレーションは実測で約 9 分（journal run #126〜#155、30 起動で 264 分）。
+# 12 回に 1 回ならレビューは約 1.8 時間おき、レンズは交互なので同じレンズは約 3.5 時間おきになる。
+# その間に十数本の PR が merge されるので毎回見るものが変わり、かつ実作業に使うイテレーションの
+# 損失は 8% に収まる。0 を入れるとレビュー回を止められる
+REVIEW_EVERY="${REVIEW_EVERY:-12}"
+# レビューのレンズを交互にするための呼び出し回数。emptyDir 上に置くので loop.sh の
+# 再 exec では失われず、Pod の作り直しでリセットされる（リセットしても利用者視点から
+# 再開するだけで、どちらかのレンズが永久に回らなくなることはない）
+REVIEW_COUNT_FILE="${REVIEW_COUNT_FILE:-${WORKDIR}/.review-count}"
 # 1 イテレーションの間隔。短すぎると PR の CI 待ちに対して空回りが増える
 INTERVAL_SECONDS="${INTERVAL_SECONDS:-120}"
 # 1 イテレーションの上限。エージェントが 1 周を終えられずに居座ると、
@@ -92,9 +105,10 @@ iterate() {
   git reset --hard --quiet origin/main || return 1
   git clean -fdq || return 1
 
-  # 役の選択。着手可能なタスクが無いか、PLAN_EVERY 回に 1 回は計画役にする。
-  # 計画役と実行役を分けているのは、何をやる価値があるかを決める主体とそれをやる
-  # 主体が同じだと「やりやすいこと」に寄っていくため（CHARTER §3）。
+  # 役の選択。REVIEW_EVERY 回に 1 回はレビュー役、着手可能なタスクが無いか
+  # PLAN_EVERY 回に 1 回は計画役、それ以外は実行役。
+  # 役を分けているのは、何をやる価値があるかを決める主体とそれをやる主体が同じだと
+  # 「やりやすいこと」に寄っていくため（CHARTER §3）。レビュー役も同じ理由で実装しない。
   # not_before（ISO8601, T-0133）が未来のタスクは「時刻待ち」として actionable から除く。
   # 値が無い/過去/壊れている場合は今まで通り actionable 扱い（壊れた値で計画役に
   # 倒れ続けると気づけないため、安全側＝実行役に倒す）
@@ -129,12 +143,27 @@ else:
     print(count)
 EOF
 )
-  if [ "${actionable}" -eq 0 ] || [ $((i % PLAN_EVERY)) -eq 0 ]; then
+  lens=""
+  # レビュー回は「計画回の直前」に置く（REVIEW_EVERY は PLAN_EVERY の倍数を想定）。
+  # レビュー役は ops/inbox.md に指摘を落とすだけなので、直後が計画回でないと指摘が
+  # 何周も寝かされる。着手可能タスクが 0 件でもレビューを優先するのは、backlog が
+  # 枯れているときこそ「見えている範囲を使い切った」状態でレビューの出番だから
+  if [ "${REVIEW_EVERY}" -gt 0 ] && [ $((i % REVIEW_EVERY)) -eq $((REVIEW_EVERY - 1)) ]; then
+    n="$(cat "${REVIEW_COUNT_FILE}" 2>/dev/null)"
+    case "${n}" in "" | *[!0-9]*) n=0 ;; esac
+    echo $((n + 1)) >"${REVIEW_COUNT_FILE}" 2>/dev/null || true
+    role=review
+    if [ $((n % 2)) -eq 0 ]; then
+      lens=user; PROMPT_FILE="${PROMPT_REVIEW_USER}"
+    else
+      lens=arch; PROMPT_FILE="${PROMPT_REVIEW_ARCH}"
+    fi
+  elif [ "${actionable}" -eq 0 ] || [ $((i % PLAN_EVERY)) -eq 0 ]; then
     role=plan; PROMPT_FILE="${PROMPT_PLAN}"
   else
     role=execute; PROMPT_FILE="${PROMPT_EXECUTE}"
   fi
-  log "role=${role} actionable=${actionable}"
+  log "role=${role}${lens:+ lens=${lens}} actionable=${actionable}"
 
   PROMPT="$(cat "${PROMPT_FILE}")" || return 1
 
