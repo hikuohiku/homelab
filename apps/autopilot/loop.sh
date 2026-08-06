@@ -21,7 +21,11 @@ set -u
 WORKDIR="${WORKDIR:-/work}"
 REPO_URL="${REPO_URL:-https://github.com/hikuohiku/homelab.git}"
 REPO_DIR="${REPO_DIR:-${WORKDIR}/homelab}"
-PROMPT_FILE="${PROMPT_FILE:-/config/prompt.md}"
+PROMPT_PLAN="${PROMPT_PLAN:-/config/prompt-plan.md}"
+PROMPT_EXECUTE="${PROMPT_EXECUTE:-/config/prompt-execute.md}"
+# 何回に 1 回は着手可能なタスクがあっても計画回にする。優先順位が古びるのと、
+# inbox が溜まりっぱなしになるのを防ぐため。
+PLAN_EVERY="${PLAN_EVERY:-6}"
 # 1 イテレーションの間隔。短すぎると PR の CI 待ちに対して空回りが増える
 INTERVAL_SECONDS="${INTERVAL_SECONDS:-120}"
 # 1 イテレーションの上限。エージェントが 1 周を終えられずに居座ると、
@@ -85,6 +89,30 @@ iterate() {
   git checkout --quiet -B main origin/main || return 1
   git reset --hard --quiet origin/main || return 1
   git clean -fdq || return 1
+
+  # 役の選択。着手可能なタスクが無いか、PLAN_EVERY 回に 1 回は計画役にする。
+  # 計画役と実行役を分けているのは、何をやる価値があるかを決める主体とそれをやる
+  # 主体が同じだと「やりやすいこと」に寄っていくため（CHARTER §3）。
+  actionable=$(python3 - <<'EOF'
+import json
+
+try:
+    with open("ops/backlog.json") as f:
+        tasks = json.load(f)["tasks"]
+except (OSError, ValueError, KeyError):
+    # 読めないときは実行役に倒す（計画役は repo を変更しないので、
+    # 壊れた状態で計画役に入ると何も進まないまま回り続ける）
+    print(1)
+else:
+    print(sum(1 for t in tasks if t.get("status") in ("todo", "in_progress")))
+EOF
+)
+  if [ "${actionable}" -eq 0 ] || [ $((i % PLAN_EVERY)) -eq 0 ]; then
+    role=plan; PROMPT_FILE="${PROMPT_PLAN}"
+  else
+    role=execute; PROMPT_FILE="${PROMPT_EXECUTE}"
+  fi
+  log "role=${role} actionable=${actionable}"
 
   PROMPT="$(cat "${PROMPT_FILE}")" || return 1
 
