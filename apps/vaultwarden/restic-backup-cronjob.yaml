@@ -8,7 +8,7 @@
 # 仕組みで稼働中でも一貫性のあるコピーが取れる) を使い、db.sqlite3 だけ emptyDir へ
 # 一貫コピーしてから、本体の restic-backup コンテナが「PVC (db.sqlite3系とicon_cacheを除く) +
 # 一貫コピー済みdb.sqlite3」の2パスをまとめて1スナップショットにする。
-# python:3.12-alpine は標準ライブラリの sqlite3 モジュールを同梱しており、apk 等での
+# python:3.14-alpine は標準ライブラリの sqlite3 モジュールを同梱しており、apk 等での
 # パッケージ追加インストールが不要（ネットワーク先のパッケージリポジトリに依存しない）。
 # 参考: https://github.com/dani-garcia/vaultwarden/wiki/Backing-up-your-vault
 apiVersion: v1
@@ -75,7 +75,7 @@ spec:
           restartPolicy: Never
           initContainers:
             - name: sqlite-snapshot
-              image: python:3.12-alpine
+              image: python:3.14-alpine
               command: ["python", "/scripts/sqlite_backup.py"]
               env:
                 - name: SRC_DB
