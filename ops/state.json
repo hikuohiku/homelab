@@ -959,6 +959,14 @@
       "prs": [
         272
       ]
+    },
+    {
+      "n": 90,
+      "at": "2026-08-06T10:49:00+09:00",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断: PR #273（run #89 の記録更新）を CI green・mergeable_state clean を確認して merge。issue #56 に未読フィードバックなし。T-0121 の実効性確認は、01:30:04Z の ops-health-report がまだ null だったが ArgoCD の修正反映（01:40:52Z）より前の断面だったためと判明、次回起動で改めて確認する。T-0117 は CronJob schedule（03:30 UTC）未到来のため引き続き着手不能。subagent に新しい調査観点探しを投げたが、89回を超える起動でドリフトは概ね枯渇しており具体的な新規候補は出なかった",
+      "prs": []
     }
   ]
 }
