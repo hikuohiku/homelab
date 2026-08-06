@@ -20,6 +20,8 @@ import pathlib
 import re
 import sys
 
+import ledger
+
 OPS = pathlib.Path(__file__).parent
 
 STATUSES = {"new", "accepted", "done", "declined"}
@@ -144,7 +146,8 @@ def main() -> int:
         return 1
 
     try:
-        backlog = json.loads((OPS / "backlog.json").read_text())
+        # done になった task は archive へ移るが、台帳からの参照は生き続ける
+        backlog = ledger.load_backlog(include_archive=True)
     except (OSError, json.JSONDecodeError):
         backlog = None  # backlog 自体の異常は ops/validate.py が報告する
 

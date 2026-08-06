@@ -13,6 +13,8 @@ import pathlib
 import re
 import sys
 
+import ledger
+
 OPS = pathlib.Path(__file__).parent
 ROOT = OPS.parent
 
@@ -276,10 +278,36 @@ def check_runs_freshness(s) -> None:
         )
 
 
+def check_ledger_size() -> None:
+    """熱い帳簿の大きさを縛る。
+
+    autopilot は毎イテレーション帳簿を全部読み直すので、太った分だけ観測の
+    余地が削られる。一度掃除するだけでは必ず再び太るため、上限そのものを
+    検査に入れる。超えたら `python3 ops/ledger.py` を実行して archive へ移す。
+    """
+    for name, limit in (
+        ("backlog.json", ledger.BACKLOG_MAX_BYTES),
+        ("state.json", ledger.STATE_MAX_BYTES),
+    ):
+        path = OPS / name
+        if not path.exists():
+            continue
+        size = path.stat().st_size
+        if size > limit:
+            err(
+                f"{name}: {size:,} bytes は上限 {limit:,} を超えている。"
+                "`python3 ops/ledger.py` で archive へ移すこと"
+            )
+
+
 def main() -> int:
-    backlog = load("backlog.json")
+    # 参照の整合（blocked_by / review-log / next_id）は archive も含めて見ないと、
+    # 済んだタスクを指す参照が「存在しない」と誤判定される。
+    backlog = ledger.load_backlog(include_archive=True)
     inventory = load("inventory.json")
     state = load("state.json")
+
+    check_ledger_size()
 
     for name in ("VISION.md", "CHARTER.md"):
         if not (OPS / name).exists():

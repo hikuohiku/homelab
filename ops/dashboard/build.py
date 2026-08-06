@@ -33,6 +33,9 @@ import pathlib
 import re
 import subprocess
 import sys
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
+import ledger
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -700,7 +703,9 @@ def resolve_cadence(state) -> str | None:
 
 def build() -> str:
     state = load("state.json", {}) or {}
-    backlog = load("backlog.json", {"tasks": []}) or {"tasks": []}
+    # 順番待ちは熱い backlog だけで足りるが、完了件数とアーカイブ表には
+    # archive も要る（ops/ledger.py が done/dropped をそちらへ移すため）
+    backlog = ledger.load_backlog(include_archive=True)
     tasks = backlog.get("tasks", [])
     prs, merged = fetch_prs()
     health = load_health()
