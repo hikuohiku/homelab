@@ -84,9 +84,9 @@ spec:
         # alpine:3.22.5 の busybox パッケージには httpd が含まれず（busybox-extras
         # 側にのみ存在）CrashLoopBackOff (exitCode 127) になった (#291, run #101 で revert)。
         # apps/ops-health-reporter・apps/{coder,vaultwarden,immich}/pvc-usage-cronjob.yaml
-        # で既に実績のある python:3.12-alpine の標準ライブラリ http.server に置き換える。
+        # で既に実績のある python:3.14-alpine の標準ライブラリ http.server に置き換える。
         - name: httpd
-          image: python:3.12-alpine
+          image: python:3.14-alpine
           command: ["python3", "-m", "http.server", "8080", "--directory", "/www"]
           ports:
             - name: http
