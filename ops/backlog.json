@@ -591,7 +591,7 @@
       "title": "apps/autopilot/deployment.yaml の image digest を chromium/フォント追加ビルドに更新する（レビュー役 R-002）",
       "kind": "fix",
       "risk": "medium",
-      "status": "todo",
+      "status": "done",
       "priority": 18,
       "why": "レビュー役 run #172（利用者視点、R-002, PR #377）の発見。`images/autopilot/Dockerfile` は commit `8eacc31`（2026-08-06T12:43:53Z、PR #357『レビュー役がダッシュボードを実際に見られるようにする』）で chromium/font-noto/font-noto-cjk を追加済みだが、`apps/autopilot/deployment.yaml` の image digest 参照はその commit 以降一度も更新されておらず、稼働中の Pod（`autopilot-854c989ffd-tp2h8`、Alpine 3.24.1）には chromium が存在しない。つまり『レビュー役が実際にダッシュボードを描画して見られるようにする』ための変更自体が、レビュー役が動く Pod にまだ配達されていない。T-0153（digest ズレを CI で機械検出する仕組み、needs-human で配線待ち）は将来の同種ドリフトの再発防止であり、この『今まさにズレている』現在の状態そのものを直すものではない",
       "dod": "`images/autopilot/Dockerfile` の commit `8eacc31` 以降の内容で `.github/workflows/build-autopilot-image.yml` がビルド・push した `ghcr.io/hikuohiku/homelab-autopilot` の digest を特定する（GitHub Actions のログ、または `.github/workflows/build-autopilot-image.yml` の trigger 条件と該当 commit の CI 実行結果を突き合わせる）。特定した digest で `apps/autopilot/deployment.yaml` の image 行を更新する。merge・ArgoCD 同期後、`kubectl -n autopilot get pod -o jsonpath='{.items[0].spec.containers[0].image}'` 等で実際に新しい digest が反映されたことと、`which chromium`（もしくは同等の確認）で chromium が入っていることを確認する。risk が medium なのは稼働中の autopilot 自身のコンテナイメージを差し替えるため（CHARTER §4 の『自分や人間がこの homelab を観測・操作する経路』に該当、ロールバック手順を PR に明記すること）",
@@ -602,8 +602,8 @@
         ".github/workflows/build-autopilot-image.yml"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #187（計画役）: ops/review-log.md R-002 を起票。R-002 の状態を『起票済 T-0161』に更新した。T-0153（CI検出の仕組み自体）とは別論点として分離。"
+      "pr": 379,
+      "notes": "run #187（計画役）: ops/review-log.md R-002 を起票。R-002 の状態を『起票済 T-0161』に更新した。T-0153（CI検出の仕組み自体）とは別論点として分離。 run #201（実行役）: PR #376 merge後の直列化ルールに従い着手。commit 8eacc31 (chromium/font追加) が main へ入った push (merge commit 72eaec33ced3847c8b9030354d04261318b675fc、workflow run 31102707031, success) が実際にghcr.ioへ push したイメージのindex digestを ghcr.io/v2/.../manifests/72eaec33... へGET（ghcr.io/tokenで取得した匿名pullトークン使用）して実測: sha256:6d0cf8b13d602f189d75b48ef654cb0cfd0fe999740782928199097b7451bf75（現行pin同様OCI image index）。deployment.yamlのdigestをこれに更新。"
     },
     {
       "id": "T-0162",
