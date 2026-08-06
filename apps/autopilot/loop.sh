@@ -131,6 +131,21 @@ EOF
   return "${rc}"
 }
 
+# ConfigMap は disableNameSuffixHash: true なので、loop.sh を書き換えても Deployment の
+# spec は変わらず Pod は作り直されない。kubelet が /config を更新したあと、自分で
+# 拾い直せるようにする。prompt-*.md が再起動なしで効くのと同じ性質を loop.sh 自身にも持たせる。
+SELF="${SELF:-/config/loop.sh}"
+self_digest() { md5sum "${SELF}" 2>/dev/null | cut -d" " -f1; }
+SELF_DIGEST="$(self_digest)"
+
+reexec_if_updated() {
+  now="$(self_digest)"
+  if [ -n "${now}" ] && [ "${now}" != "${SELF_DIGEST}" ]; then
+    log "loop.sh が更新された（${SELF_DIGEST} -> ${now}）。exec し直す"
+    exec bash "${SELF}"
+  fi
+}
+
 main() {
   # HOME は emptyDir 配下を指す（deployment.yaml 参照）。git/npm/claude が
   # ホームに書けるよう、先に実体を作っておく
@@ -142,6 +157,8 @@ main() {
 
   i=0
   while true; do
+    # イテレーションの途中では入れ替えない
+    reexec_if_updated
     i=$((i + 1))
     started_at="$(date -u '+%s')"
     log "iteration #${i} start"
