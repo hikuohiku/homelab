@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T14:15:33Z",
+  "updated": "2026-08-06T14:41:17Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -1516,6 +1516,14 @@
       "prs": [
         366
       ]
+    },
+    {
+      "n": 167,
+      "at": "2026-08-06T14:41:17Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (計画役)",
+      "summary": "計画役（journal run #167）。フィードバック F-20260806T134136Z-c5205413264（T-0107 実測訂正）を accepted にし、T-0107 の why/dod/needs_human_reason/human_action を実測どおりに書き直した（真因は CA 不信任、証明書差し替えは API 可能、残る人間作業は tailscale cert 実行のみ）。issue #56 に14:24:40Z 付けで「反映済み」という別コメントがあったが main には未反映だったと判明、実際に反映したのはこの回。needs-human 7件（T-0106/T-0140/T-0141/T-0144/T-0148/T-0153/T-0156/T-0157）に欠けていた human_action を追記。ops/inventory.json の policy:auto 全対象を upstream と突き合わせ actionable な差分無しと確認。inbox の heartbeat 単発異常は CHARTER §2 の標準手順でカバーされるため起票せず削除。",
+      "prs": []
     }
   ]
 }

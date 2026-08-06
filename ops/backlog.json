@@ -1975,6 +1975,17 @@
       "dod": "manifest 側は完了（run #88）: apps/{vaultwarden,immich,coder}/restic-external-secret.yaml に backup 専用 ExternalSecret（<app>-restic-backup-credentials、新しい Doppler キー B2_ACCOUNT_ID_APPEND_ONLY/B2_ACCOUNT_KEY_APPEND_ONLY を参照）を追加した。残りは人間の credential 発行のみ。登録後の CronJob 切り替えは T-0120 に分離した",
       "blocked_by": null,
       "needs_human_reason": "Backblaze 管理コンソールで既存バケット向けの新しい Application Key を発行する。Capabilities は listBuckets/listFiles/readFiles/writeFiles のみ（deleteFiles を含めない = 真の append-only）にする。発行した keyID/applicationKey を Doppler (homelab/prd) に B2_ACCOUNT_ID_APPEND_ONLY / B2_ACCOUNT_KEY_APPEND_ONLY として登録する。登録後は ExternalSecret が自動同期し、T-0120 が拾える",
+      "human_action": {
+        "summary": "Backblaze B2 の append-only（削除権限なし）Application Key を新規発行し、Doppler に登録してください",
+        "why": "現在の restic credential には削除権限があり、node01 が侵害されるとバックアップ自体も消される。manifest 側（backup 専用 ExternalSecret）は既に用意済みで、鍵の発行と登録だけが残っている",
+        "steps": [
+          "Backblaze 管理コンソールで対象バケット向けの新しい Application Key を作成する",
+          "Capabilities は listBuckets / listFiles / readFiles / writeFiles のみを選択する（<code>deleteFiles</code> は含めないこと。これが真の append-only の要件）",
+          "発行された keyID を Doppler (<code>homelab/prd</code>) の <code>B2_ACCOUNT_ID_APPEND_ONLY</code> に、applicationKey を <code>B2_ACCOUNT_KEY_APPEND_ONLY</code> に登録する",
+          "登録後は ExternalSecret が自動同期し、T-0120（CronJob 側の切り替え）が着手可能になる"
+        ],
+        "links": []
+      },
       "refs": [
         "apps/vaultwarden/restic-external-secret.yaml",
         "apps/coder/restic-external-secret.yaml",
@@ -2012,15 +2023,16 @@
       "risk": "high",
       "status": "needs-human",
       "priority": 2,
-      "why": "T-0074 の調査中（issue #56, 2026-08-05 16:43:19 構築セッション経由）に見つかった。構築セッションが Coder ワークスペースから `terraform plan` を実行したところ `proxmox_download_file.nixos_image` に `1 to add` が出た。この判定は Proxmox の pveproxy 証明書の SAN 不一致による TLS 検証エラー（`x509: certificate is valid for 127.0.0.1, ::1, 192.168.1.2, ..., not 192.168.0.2`）の最中に出ており、『ファイルが本当に無い』のか『TLS 検証失敗で存在確認できなかった』のかが未確定。`vm-nixos.tf` はこのリソースを `replace_triggered_by` に持つため、誤って apply すると node01 の VM が再作成されうる（不可逆・到達性を失いうる変更）。",
-      "dod": "証明書の SAN に実際の LAN IP（192.168.0.2）を含めるか、到達に使うアドレスを証明書の SAN に合わせる（Proxmox 側の設定変更）。解消後、`terraform plan` を再実行し `proxmox_download_file.nixos_image` の diff が消える（または本物の差分だと確定する）ことを確認する。",
-      "needs_human_reason": "Proxmox の pveproxy 証明書の再発行・SAN 追加は PVE 管理コンソールでの手作業。autopilot にも構築セッションにも実行できない",
+      "why": "T-0074 の調査中（issue #56, 2026-08-05 16:43:19 構築セッション経由）に見つかった。構築セッションが Coder ワークスペースから `terraform plan` を実行したところ `proxmox_download_file.nixos_image` に `1 to add` が出た。この判定は Proxmox の pveproxy 証明書の SAN 不一致による TLS 検証エラー（`x509: certificate is valid for 127.0.0.1, ::1, 192.168.1.2, ..., not 192.168.0.2`）の最中に出ており、『ファイルが本当に無い』のか『TLS 検証失敗で存在確認できなかった』のかが未確定。`vm-nixos.tf` はこのリソースを `replace_triggered_by` に持つため、誤って apply すると node01 の VM が再作成されうる（不可逆・到達性を失いうる変更）。**訂正（F-20260806T134136Z-c5205413264, issue #56 2026-08-06 13:41:36 構築セッションの実機検証）**: (1) `1 to add` は TLS 検証失敗の副産物と確定した。PVE の CA を取り出し SAN 名（`hikuo-homeserver`）で TLS 検証を通して問い合わせると、期待どおりのファイル（`nixos-proxmox-cloud-v0.2.5.qcow2`, 997720064 bytes）が実在した。provider は TLS 失敗を warning に握り潰し『ファイルが存在しない』と誤判定していた（node01 再作成の恐れ自体は前提から成り立たない。ただし TLS が直るまで apply しない判断自体は引き続き正しい）。(2) 真因は SAN 不一致ではなく『CA を誰も信頼していない』こと。SAN に実 IP (192.168.0.2) を足しても発行者（PVE クラスタ CA）が client 側で信頼されておらず `signed by unknown authority` で落ちる。SAN 追加だけでは直らない。",
+      "dod": "Proxmox の pveproxy 証明書を、クライアント側が信頼できる CA が発行した証明書に差し替える（`PROXMOX_ENDPOINT` は `https://hikuo-homeserver.tailae6c2.ts.net` なので `tailscale cert` で Let's Encrypt 証明書を発行するのが筋が良い候補、実行前に検証すること）。差し替え後、`terraform plan` を再実行し `proxmox_download_file.nixos_image` の diff が消える（TLS 検証が通ればファイルは実在するため消えるはず）ことを確認する。",
+      "needs_human_reason": "**訂正（F-20260806T134136Z-c5205413264）**: 証明書差し替え自体は `PUT /nodes/{node}/certificates/custom` で API から可能と実測済み（`PROXMOX_API_TOKEN` は `/nodes` に `Sys.Modify` を持つ）。PVE 管理コンソールでの手作業という従来の記述は誤りで、autopilot・構築セッションのどちらからでもアップロードは実行できる。残る人間専有の作業は、採用する方式次第で証明書の発行元そのもの（例: `tailscale cert` は Proxmox ホスト OS 上で実行する必要があり、これは物理/管理コンソール操作に該当する）に限られる。",
       "human_action": {
-        "summary": "Proxmox の pveproxy 証明書に実際の LAN IP (192.168.0.2) を SAN として含めてください（または到達先アドレスを証明書の SAN に合わせてください）",
-        "why": "証明書問題が解消しないと terraform plan の diff が本物か TLS エラーによる誤検知かを機械的に区別できず、誤って terraform apply すると node01 VM が再作成されうる",
+        "summary": "採用可否の検証がまだなので、まずは対応方針（`tailscale cert` 案でよいか）を確認してください。方針が決まれば、証明書の発行（ホスト OS 上での実行が必要な部分のみ）をお願いします",
+        "why": "`1 to add` は TLS 検証失敗の副産物で実害は無いことが分かったが、CA 不信任は解消しないと terraform plan が今後も誤判定を返し続け、apply の可否を機械的に判断できない",
         "steps": [
-          "対応が終わるまで、この件が解消したと確認できるまで `terraform apply` / `just apply` を実行しないでください（このタスクの最優先事項です）",
-          "証明書対応後、構築セッションに issue #56 で `terraform plan` の再実行を依頼していただくか、対応が終わった旨をコメントしてください"
+          "構築セッションが提案した方式（`tailscale cert` で `hikuo-homeserver.tailae6c2.ts.net` 向けの Let's Encrypt 証明書を発行し、Proxmox の custom cert として差し替える）でよいか確認してください",
+          "問題なければ node01（Proxmox ホスト）上で `tailscale cert hikuo-homeserver.tailae6c2.ts.net` を実行し、証明書対応が終わった旨を issue #56 にコメントしてください（アップロード自体は API 経由で自動化できるため、構築セッションに任せられます）",
+          "終わったら構築セッションに issue #56 で `terraform plan` の再実行を依頼してください"
         ],
         "links": []
       },
@@ -2657,6 +2669,17 @@
       "why": "T-0137 の検討で、device ID/証明書（cert.pem/key.pem、syncthing の config ディレクトリに保存）を移さないと既存ピアから別デバイスとして再認識されると判明した。CHARTER §4「データを失いうる変更」に該当するため、戻せることを確かめてから着手する必要がある。LXC 101 のファイルシステムへの直接アクセス（pct exec や Proxmox コンソール等）は、autopilot（Proxmox は PVEAuditor=監査専用、kubectl は k8s 内 read-only）にも構築セッション（kubectl read-only のみ、Proxmox/LXC への到達経路なし）にも無い",
       "dod": "(1) LXC 101 の実際の config パス（`/var/lib/syncthing` 想定、要確認）の中身一式（cert.pem/key.pem/config.xml/index データ）を人間が取得し、構築セッションまたは autopilot が使える経路（例: 一時的な到達手段、Doppler 等）で引き渡す。(2) T-0138 で作成した PVC へそのデータを配置する（kubectl cp 等の書き込み操作は構築セッションか人間が実施。autopilot 自身の ClusterRole は書き込み動詞を持たない、CHARTER §5.5）。(3) 新しい syncthing Pod が既存ピアと再認証なしに同期を再開できることを確認する。(4) 確認できたら旧 LXC 101 を停止し、一定期間の観察後に破棄する（M1 vaultwarden 移行と同じ順序、Plans.md 参照）",
       "needs_human_reason": "LXC 101 (`/var/lib/syncthing` 想定パス、要確認) の config ディレクトリ一式（cert.pem/key.pem 含む）を取得し、新 PVC へ配置できる形で提供してほしい。自動化された経路（autopilot・構築セッションいずれの credential）でもこのファイルシステムには到達できない",
+      "human_action": {
+        "summary": "旧 LXC 101 (syncthing) の config ディレクトリ一式（cert.pem/key.pem 含む）を取り出し、新 PVC へ配置できる形で渡してください",
+        "why": "device ID/証明書を移さずに新 syncthing を既存ピアへ接続すると別デバイスとして再認識され、同期方向次第でデータ削除が伝播しうる。自動化された経路（autopilot・構築セッション）はどちらも LXC のファイルシステムに到達できない",
+        "steps": [
+          "Proxmox で LXC 101 に接続し（<code>pct exec 101 -- bash</code> 等）、config ディレクトリ（想定パス <code>/var/lib/syncthing</code>、実際のパスは要確認）一式を確認する",
+          "cert.pem / key.pem / config.xml / index データを含む一式を取得する",
+          "構築セッションが読める経路（例: 一時的な到達手段、Doppler 等）で引き渡すか、直接新 PVC（T-0138 で作成済み）へ配置する",
+          "配置後、新しい syncthing Pod が既存ピアと再認証なしに同期を再開できることを確認してから旧 LXC 101 を停止してください"
+        ],
+        "links": []
+      },
       "blocked_by": null,
       "refs": [
         "Plans.md",
@@ -2677,6 +2700,21 @@
       "why": "issue #37（2026-05-19、autopilot 発足前）。Doppler に TAILSCALE_OAUTH_CLIENT_ID/SECRET（旧, auth_keys スコープ）・TAILSCALE_AGENT_CLIENT_ID/SECRET（エージェント専用, devices:core:read）・TAILSCALE_CLIENT_ID/SECRET（不明）の3種類が存在し、.envrc の読み込み順序により対話セッションの Tailscale MCP が意図せず旧 credential（auth_keys スコープ）を使ってしまう、という報告。CLAUDE.md の Agent Operations 節は現在 TAILSCALE_AGENT_CLIENT_ID/SECRET → .envrc → TAILSCALE_OAUTH_CLIENT_ID/SECRET というマッピングを明記しており、これが既に修正済みの状態を指しているのか、報告時点のままなのか、この in-cluster 実行環境からは判別できない",
       "dod": ".envrc（gitignore 対象で this repo checkout には無い）の実際の内容と、対話セッションで Tailscale MCP が実際にどの credential を使っているかを確認する。既に解消済みなら issue #37 をその根拠とともに close する。未解消なら .envrc の読み込み順序を修正し、TAILSCALE_CLIENT_ID/SECRET（用途不明）が本当に不要なら Doppler から削除する（削除は人間の Doppler 操作）",
       "needs_human_reason": ".envrc は gitignore 対象でこの in-cluster 実行環境（autopilot pod）からは読めない。また対話セッションの MCP 起動時の環境変数読み込み順序という、autopilot 自身の運用経路（REST API 直叩き、MCP 不使用、CHARTER §5.5）とは別物のため、人間または対話セッションでの再現確認が必要",
+      "human_action": {
+        "summary": "対話セッション（あなたのローカル環境）で .envrc の中身と、Tailscale MCP が実際にどの credential を使っているかを確認してください",
+        "why": "issue #37 の報告（Tailscale OAuth credential が3種類あり、意図せず旧credentialを使ってしまう）が今も再現するか、CLAUDE.md の記述どおり既に解消しているかを、in-cluster の autopilot からは判別できない",
+        "steps": [
+          "対話セッションで <code>cat .envrc</code>（または direnv 経由の実際の環境変数）を確認し、TAILSCALE_AGENT_CLIENT_ID/SECRET・TAILSCALE_OAUTH_CLIENT_ID/SECRET・TAILSCALE_CLIENT_ID/SECRET のうちどれが実際に Tailscale MCP に渡っているか確認する",
+          "既に CLAUDE.md の記述どおり（TAILSCALE_AGENT_CLIENT_ID/SECRET が優先）なら、issue #37 にその旨をコメントして close してよい",
+          "未解消（旧 credential が使われている）なら、.envrc の読み込み順序を修正し、用途不明な TAILSCALE_CLIENT_ID/SECRET が不要と確認できれば Doppler から削除する"
+        ],
+        "links": [
+          {
+            "label": "issue #37",
+            "url": "https://github.com/hikuohiku/homelab/issues/37"
+          }
+        ]
+      },
       "blocked_by": null,
       "refs": [
         "CLAUDE.md"
@@ -2735,6 +2773,21 @@
       "why": "T-0142 の調査で手動 credential 作成4手順（Proxmox ユーザー/ACL/トークン、Tailscale OAuth client、Doppler provider 導入）は技術的に全て自動化可能と判明したが、着手前に確認が必要な人間専有の情報が2点残っている: (1) 既存 Proxmox terraform トークンのロールに Realm.AllocateUser/User.Modify/Permissions.Modify が含まれるか、(2) 既存 TAILSCALE_CLIENT_ID のスコープが他の OAuth client を作成できるものか。いずれも Proxmox/Tailscale の管理コンソールでしか確認できず、autopilot・構築セッションのどちらの credential にも書き込み権限が無い",
       "dod": "issue #35（issuecomment-5202903809 で確認依頼済み）への人間の回答を待つ。回答が揃ったら、Proxmox 自動化・Tailscale 自動化・Doppler provider 導入（新規 service token 発行込み）をそれぞれ1タスクずつ（1 PR 1 コンポーネントの粒度、CHARTER §3）に分割して起票し、このタスクは done にする",
       "needs_human_reason": "既存 Proxmox terraform トークンのロールと既存 TAILSCALE_CLIENT_ID のスコープの確認は Proxmox/Tailscale の管理コンソールでのみ可能で、autopilot・構築セッションいずれの credential にも参照権限が無い。確認依頼は issue #35 に投稿済み（T-0142 で実施）",
+      "human_action": {
+        "summary": "issue #35（コメント issuecomment-5202903809）にある2点の確認依頼に回答してください",
+        "why": "credential 作成手順の IaC 化（T-0142）を実装タスクへ分割するには、既存 credential の権限範囲という管理コンソールでしか見えない情報が要る",
+        "steps": [
+          "Proxmox 管理コンソールで、既存の terraform 用トークンのロールに Realm.AllocateUser / User.Modify / Permissions.Modify が含まれているか確認する",
+          "Tailscale 管理コンソールで、既存 TAILSCALE_CLIENT_ID の OAuth スコープが新しい OAuth client を作成できるものか確認する",
+          "確認結果を issue #35 のコメント（issuecomment-5202903809）への返信として投稿してください"
+        ],
+        "links": [
+          {
+            "label": "issue #35 の確認依頼コメント",
+            "url": "https://github.com/hikuohiku/homelab/issues/35#issuecomment-5202903809"
+          }
+        ]
+      },
       "blocked_by": null,
       "refs": [
         "docs/",
@@ -2824,6 +2877,21 @@
       "created": "2026-08-06",
       "pr": null,
       "needs_human_reason": "ops-dashboard.tailae6c2.ts.net への実際の外部到達確認は tailnet に参加しているブラウザからのアクセスが要る。autopilot（in-cluster、tailnet 到達性なし）にも構築セッション（tailnet 非ピア、既に内部確認済み）にも実行できない。",
+      "human_action": {
+        "summary": "tailnet に接続した端末のブラウザで https://ops-dashboard.tailae6c2.ts.net/ を開いて表示できるか確認してください",
+        "why": "内部 Service への到達（HTTP 200）は構築セッションが確認済みだが、tailnet 経由の実際の外部到達（MagicDNS 名前解決 + L7 Ingress 経由）はまだ誰も確認していない",
+        "steps": [
+          "tailnet に参加している端末で <code>https://ops-dashboard.tailae6c2.ts.net/</code> をブラウザで開く",
+          "ダッシュボードが表示されれば issue #56 にその旨をコメントしてください",
+          "表示できない場合は、症状（DNS 解決失敗 / 接続拒否 / 証明書エラー等）を添えて issue #56 にコメントしてください"
+        ],
+        "links": [
+          {
+            "label": "issue #56",
+            "url": "https://github.com/hikuohiku/homelab/issues/56"
+          }
+        ]
+      },
       "notes": "run #149（計画役）: ops/inbox.md の引き継ぎ（実行役の気づき）を起票。T-0130 の内部確認と今回求める外部到達確認は別物であるため、T-0130 を re-open せず新規タスクとして分離した。"
     },
     {
@@ -2920,6 +2988,22 @@
       "why": "apps/autopilot/deployment.yaml は images/autopilot/Dockerfile を .github/workflows/build-autopilot-image.yml でビルドした ghcr.io/hikuohiku/homelab-autopilot の digest を手動 pin している（コメントに『Dockerfile の内容を変えたら、ビルドが終わった後この digest も手で更新する』と明記）。ops-health-reporter-image/ops-dashboard-image/pvc-usage-reporter-image は ops/inventory.json に登録され check_version_sync.py 相当の監視対象だが、autopilot 自身のこのイメージだけ inventory.json にエントリが無く、CI にも images/autopilot/** の変更と deployment.yaml の image 行変更を突き合わせる仕組みが無い。Dockerfile を変えた PR で digest 更新を忘れると、ワークフローは新しいイメージを push するのに Deployment は古いイメージを参照し続け、クラスタは古い autopilot のまま気づかれずに動く。全システムの正しさの根拠となる自分自身のイメージがこの唯一の抜けになっている（計画役 run #157 相当、subagent 調査で発見）",
       "dod": "images/autopilot/** を変更した PR で apps/autopilot/deployment.yaml の image 行（digest）も同じ PR で変更されていることを CI で検証する仕組みを追加する（ops/check_manifest_deletions.py や check_version_sync.py に相乗りさせるか新規スクリプトにするかは実装時に判断してよい）。あわせて ops/inventory.json に autopilot-image エントリを追加するか、digest pin の性質上 inventory.json のフォーマット（current/upstream 比較）に馴染まないなら理由を notes に書いて見送る。意図的に Dockerfile だけ変えて digest を更新しない diff を作り、CI が検出することを確認する",
       "needs_human_reason": "検証スクリプト ops/check_autopilot_image_pin.py は実装・動作確認済み（PR #356）。残りは .github/workflows/ci.yml の manifest-diff job に1ステップ追加するだけだが、この起動の AUTOPILOT_GITHUB_TOKEN に workflow scope が無く .github/workflows/** への push が GitHub 側で拒否される（§5.5 に追記）。workflow scope 付きの credential で以下を追記して push してほしい:\n      - name: Check autopilot image digest pin is updated alongside its Dockerfile\n        run: python3 head/ops/check_autopilot_image_pin.py base head\n（manifest-diff job の『Check for unexplained object deletions』ステップの直後）",
+      "human_action": {
+        "summary": ".github/workflows/ci.yml の manifest-diff job に1ステップ追加して push してください（autopilot の GitHub credential に workflow scope が無く自分では push できません）",
+        "why": "検証スクリプト自体は実装・動作確認済みで、配線（ワークフローファイルへの1ステップ追加）だけが残っている。T-0156/T-0157 も同じ原因（workflow scope 不足）で止まっている",
+        "steps": [
+          "manifest-diff job の「Check for unexplained object deletions」ステップの直後に、次のステップを追記してください:",
+          "<pre>      - name: Check autopilot image digest pin is updated alongside its Dockerfile\n        run: python3 head/ops/check_autopilot_image_pin.py base head</pre>",
+          "workflow scope 付きの credential で commit・push してください（既存の autopilot 用 PAT には workflow scope がありません）",
+          "push 後、次回このタスクに触れる計画役が CI 実行結果でスクリプトが実際に走っていることを確認して done にします"
+        ],
+        "links": [
+          {
+            "label": "PR #356（検証スクリプト本体）",
+            "url": "https://github.com/hikuohiku/homelab/pull/356"
+          }
+        ]
+      },
       "blocked_by": null,
       "refs": [
         "apps/autopilot/deployment.yaml",
@@ -2986,6 +3070,17 @@
       "why": "計画役 run #161 相当の調査（subagent 調査で発見・自分で apps/kustomization.yaml / CLAUDE.md / apps/README.md を読んで裏取り済み）。apps/kustomization.yaml の resources は12件（syncthing/application.yaml を含む）だが、CLAUDE.md の『Apps』一覧・Directory Structure ツリーには syncthing が無く、apps/README.md の『ディレクトリ構造』ツリー（ops-dashboard/syncthing 抜け、8件のみ）と『期待される出力』の kubectl get application サンプル（apps/agent-rbac含め11件、ops-dashboard/syncthing 抜けで実際の13件に届かない）も同様にずれている。この種の drift は T-0057(run#24)・T-0089(run#42)・T-0094(run#47)・T-0134(run#125) で計4回、起票→手直しを繰り返しており、今回で5回目の再発。`just <recipe>` の記載漏れには ops/check_doc_commands.py という同型の自動検証が既にあるのに、アプリ一覧のずれだけは毎回人力の起票に頼ったままで、CHARTER §8『同じミスを2回した→CIかチェックリストで機械的に防ぐ』に反する状態が続いている",
       "dod": "(1) まず CLAUDE.md の Apps 一覧・Directory Structure、apps/README.md のディレクトリ構造ツリー・kubectl get application サンプル出力を apps/kustomization.yaml の実態（12エントリ、agent-rbac/ops-dashboard/syncthing含む）に合わせて修正する。(2) ops/check_doc_commands.py と同型の新規スクリプト（例: ops/check_app_list_sync.py）を作り、apps/kustomization.yaml の resources から app ディレクトリ名一覧を機械的に抽出し、CLAUDE.md・apps/README.md がそれと矛盾しない（全件言及がある）ことを検証し .github/workflows/ci.yml の ops job に追加する。ドキュメントの自由記述（説明文・箇条書きの前後）まで固定フォーマットを強制すると壊れやすいので、検証は『kustomization.yaml にあるapp名がドキュメント中に一度も出現しない』ケースの検出に留める。意図的に1アプリを一覧から抜いた diff を作り CI が検出することを確認する",
       "needs_human_reason": "ドキュメント修正（CLAUDE.md の Apps 一覧・Directory Structure、apps/README.md のディレクトリ構造ツリー・kubectl get application サンプル出力）と検証スクリプトops/check_app_list_sync.py は実装・動作確認済み（実際に手元で app 名を1件除いたdiff を作り検出することを確認済み）で PR に含めた。残りは .github/workflows/ci.ymlの ops job に1ステップ追加するだけだが、この起動の AUTOPILOT_GITHUB_TOKEN に workflow scope が無く .github/workflows/** への push が GitHub 側で拒否される（T-0153 と同型、CHARTER §5.5）。workflow scope 付きの credential で ops job の「check docs reference only existing just recipes」ステップの直後に以下を追記してpush してほしい:\n      - name: check app list in docs matches apps/kustomization.yaml\n        run: python3 ops/check_app_list_sync.py",
+      "human_action": {
+        "summary": ".github/workflows/ci.yml の ops job に1ステップ追加して push してください（T-0153 と同じ理由で自分では push できません）",
+        "why": "ドキュメント修正と検証スクリプト（check_app_list_sync.py）は実装・動作確認済みで、配線（ワークフローファイルへの1ステップ追加）だけが残っている。T-0157 が merge されれば glob ループが自動的にこのスクリプトを拾うため、この配線自体が不要になる可能性がある（先に T-0157 の状況を確認してください）",
+        "steps": [
+          "まず T-0157 が既に merge されているか確認してください。merge 済みなら ops job は check_*.py を glob で自動的に拾うため、この項目の追記は不要です",
+          "T-0157 が未merge の場合のみ: ops job の「check docs reference only existing just recipes」ステップの直後に次のステップを追記してください:",
+          "<pre>      - name: check app list in docs matches apps/kustomization.yaml\n        run: python3 ops/check_app_list_sync.py</pre>",
+          "workflow scope 付きの credential で commit・push してください"
+        ],
+        "links": []
+      },
       "blocked_by": null,
       "refs": [
         "CLAUDE.md",
@@ -3020,7 +3115,17 @@
       "created": "2026-08-06",
       "pr": null,
       "notes": "run #164（計画役）: T-0153/T-0156 が『ops/manifest-diff job への新規 check script 配線は毎回 workflow scope 不足で needs-human になる』という同じ構造的原因で2回連続再発したことに気づき起票（R-NNN 無し、レビュー役経由ではなく計画役の backlog 棚卸し中の直接発見）。CHARTER §8 の『同じミスを2回した』ケースに該当 run #165 (実行役): 5スクリプトの個別実行・glob ループ実行（fail-fast を含む）を手元で検証済み。ci.yml への実push を試したところ想定どおり workflow scope 不足で拒否されたため（commit 1f07c26 → revert、この commit は push していない）、diff を needs_human_reason に切り出し needs-human とした。",
-      "needs_human_reason": "対象5スクリプト（check_version_sync.py/check_pvc_usage_script_sync.py/check_doc_commands.py/check_feedback.py/check_app_list_sync.py）は個別実行でもglob ループ経由でも標準出力・exit code とも一致することを手元で確認済み（set -e により最初に失敗したスクリプトで即座にジョブ全体が失敗することも、ダミースクリプトを使って実地で確認した）。base/head 引数を取る check_manifest_deletions.py/check_autopilot_image_pin.py は glob に一致してしまうため、case 文で明示的に除外している。ここまでは PR に含めた（コード変更なし、backlog.json のみ）。残りは .github/workflows/ci.yml の ops job を以下の diff のとおり書き換えて push するだけだが、この起動の AUTOPILOT_GITHUB_TOKEN に workflow scope が無く .github/workflows/** への push が GitHub 側で拒否される（実際に試して `refusing to allow a Personal Access Token to create or update workflow` を確認済み。T-0153/T-0156 と同型、CHARTER §5.5）。workflow scope 付きの credential で 以下の diff をそのまま適用して push してほしい:\n\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -142,14 +142,23 @@ jobs:\n       - uses: actions/checkout@v7\n       - name: validate\n         run: python3 ops/validate.py\n-      - name: check duplicated version pins are in sync\n-        run: python3 ops/check_version_sync.py\n-      - name: check pvc-usage-reporter script is in sync across namespaces\n-        run: python3 ops/check_pvc_usage_script_sync.py\n-      - name: check docs reference only existing just recipes\n-        run: python3 ops/check_doc_commands.py\n-      - name: check human feedback ledger is consistent\n-        run: python3 ops/check_feedback.py\n+      - name: run ops/check_*.py\n+        # base/head 引数を取る manifest-diff job 向けスクリプトは対象外\n+        # （呼び出し規約が違う。ops/CHARTER.md §4 バージョン更新の作法 T-0157）。\n+        # 新しい no-arg 検証スクリプトを ops/check_*.py として足すだけで\n+        # ここに自動的に乗る。\n+        run: |\n+          set -e\n+          for f in ops/check_*.py; do\n+            case \"$f\" in\n+              ops/check_manifest_deletions.py|ops/check_autopilot_image_pin.py)\n+                continue\n+                ;;\n+            esac\n+            echo \"::group::$f\"\n+            python3 \"$f\"\n+            echo \"::endgroup::\"\n+          done\n       - name: dashboard build.py runs without error\n         # index.html は生成物なので git 管理していない（T-0035）。壊れていないことだけここで担保する\n         run: python3 ops/dashboard/build.py\n\nこれが適用されれば、T-0156 の needs_human_reason にある「ops job に check_app_list_sync.py 用の1ステップを追記してほしい」という依頼は不要になる （check_app_list_sync.py は既に ops/ 直下にあり、glob が自動的に拾うため）。この diff の適用後、次に T-0156 に触れる計画役は CI の実行結果で check_app_list_sync.py が実際に走っていることを確認し done にすること。"
+      "needs_human_reason": "対象5スクリプト（check_version_sync.py/check_pvc_usage_script_sync.py/check_doc_commands.py/check_feedback.py/check_app_list_sync.py）は個別実行でもglob ループ経由でも標準出力・exit code とも一致することを手元で確認済み（set -e により最初に失敗したスクリプトで即座にジョブ全体が失敗することも、ダミースクリプトを使って実地で確認した）。base/head 引数を取る check_manifest_deletions.py/check_autopilot_image_pin.py は glob に一致してしまうため、case 文で明示的に除外している。ここまでは PR に含めた（コード変更なし、backlog.json のみ）。残りは .github/workflows/ci.yml の ops job を以下の diff のとおり書き換えて push するだけだが、この起動の AUTOPILOT_GITHUB_TOKEN に workflow scope が無く .github/workflows/** への push が GitHub 側で拒否される（実際に試して `refusing to allow a Personal Access Token to create or update workflow` を確認済み。T-0153/T-0156 と同型、CHARTER §5.5）。workflow scope 付きの credential で 以下の diff をそのまま適用して push してほしい:\n\n--- a/.github/workflows/ci.yml\n+++ b/.github/workflows/ci.yml\n@@ -142,14 +142,23 @@ jobs:\n       - uses: actions/checkout@v7\n       - name: validate\n         run: python3 ops/validate.py\n-      - name: check duplicated version pins are in sync\n-        run: python3 ops/check_version_sync.py\n-      - name: check pvc-usage-reporter script is in sync across namespaces\n-        run: python3 ops/check_pvc_usage_script_sync.py\n-      - name: check docs reference only existing just recipes\n-        run: python3 ops/check_doc_commands.py\n-      - name: check human feedback ledger is consistent\n-        run: python3 ops/check_feedback.py\n+      - name: run ops/check_*.py\n+        # base/head 引数を取る manifest-diff job 向けスクリプトは対象外\n+        # （呼び出し規約が違う。ops/CHARTER.md §4 バージョン更新の作法 T-0157）。\n+        # 新しい no-arg 検証スクリプトを ops/check_*.py として足すだけで\n+        # ここに自動的に乗る。\n+        run: |\n+          set -e\n+          for f in ops/check_*.py; do\n+            case \"$f\" in\n+              ops/check_manifest_deletions.py|ops/check_autopilot_image_pin.py)\n+                continue\n+                ;;\n+            esac\n+            echo \"::group::$f\"\n+            python3 \"$f\"\n+            echo \"::endgroup::\"\n+          done\n       - name: dashboard build.py runs without error\n         # index.html は生成物なので git 管理していない（T-0035）。壊れていないことだけここで担保する\n         run: python3 ops/dashboard/build.py\n\nこれが適用されれば、T-0156 の needs_human_reason にある「ops job に check_app_list_sync.py 用の1ステップを追記してほしい」という依頼は不要になる （check_app_list_sync.py は既に ops/ 直下にあり、glob が自動的に拾うため）。この diff の適用後、次に T-0156 に触れる計画役は CI の実行結果で check_app_list_sync.py が実際に走っていることを確認し done にすること。",
+      "human_action": {
+        "summary": ".github/workflows/ci.yml の ops job を glob ループ化する diff を適用して push してください（T-0153/T-0156 と同じ理由で自分では push できません）",
+        "why": "T-0153/T-0156 が同じ構造的原因（workflow scope 不足）で2回連続 needs-human になった。ops job を glob ループへ汎化すれば、今後 ops/check_*.py を追加するだけで自動的に CI に乗り、この種の配線待ちタスクが構造的に無くなる",
+        "steps": [
+          "why フィールドに書かれた diff（.github/workflows/ci.yml の ops job、4 step を glob ループの1 step に置き換えるもの）をそのまま適用してください",
+          "workflow scope 付きの credential で commit・push してください",
+          "push 後、次回このタスクに触れる計画役が CI 実行結果で対象5スクリプトが実際に走っていることを確認し、T-0156 の配線待ちが不要になったことも合わせて確認します"
+        ],
+        "links": []
+      }
     }
   ]
 }
