@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-06T13:17:00Z",
+  "updated": "2026-08-06T13:27:16Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-06T13:00:00Z"
+    "last_read": "2026-08-06T13:27:16Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc",
@@ -1487,6 +1487,14 @@
       "kind": "in_cluster_loop",
       "by": "autopilot pod (実行役)",
       "summary": "実行役（journal run #163）。T-0156（アプリ一覧drift5回目）: CLAUDE.md/apps/README.md を apps/kustomization.yaml の実態（agent-rbac/ops-dashboard/syncthing含む12件）に合わせて修正し、ops/check_app_list_sync.py を新規実装・動作確認済み。ci.yml への配線は workflow scope 不足で needs-human に切り出した（T-0153と同型）。",
+      "prs": []
+    },
+    {
+      "n": 164,
+      "at": "2026-08-06T13:27:16Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (計画役)",
+      "summary": "計画役（journal run #164）。inbox 空、フィードバック新規無し、健全性は既知の T-0106 由来 Degraded のみで新規異常無し。backlog blocked/needs-human 全14件の前提変化なし。todo は not_before 未到来の T-0117 のみで枯渇していたため調査し、T-0153/T-0156 が同じ構造的原因（ci.yml ops job の check script 個別列挙）で2回連続 needs-human になっていたと発見。汎化タスク T-0157 を起票。",
       "prs": []
     }
   ]

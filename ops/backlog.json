@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 157,
-  "updated": "2026-08-06T13:30:00Z",
+  "next_id": 158,
+  "updated": "2026-08-06T13:35:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2997,6 +2997,29 @@
       "created": "2026-08-06",
       "pr": 363,
       "notes": "run #163 (実行役): CLAUDE.md / apps/README.md のアプリ一覧を apps/kustomization.yaml の実態（12件、agent-rbac/ops-dashboard/syncthing含む）に合わせて修正し、ops/check_app_list_sync.py を新規実装・動作確認済み。.github/workflows/ci.yml への配線は workflow scope 不足で push できず needs-human に切り出した（T-0153 と同型）"
+    },
+    {
+      "id": "T-0157",
+      "domain": "homelab",
+      "title": "ci.yml の ops job を ops/check_*.py の個別 step 列挙から glob ループへ汎化する",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 46,
+      "why": "T-0153（run #159, manifest-diff job 向け check_autopilot_image_pin.py）と T-0156（run #161-163, ops job 向け check_app_list_sync.py）が同じ構造的原因で2回連続 needs-human になった。原因は .github/workflows/ci.yml の ops job（139-155行目）が check_*.py を1本ずつ `run:` step として個別列挙する作りで、新しい no-arg 検証スクリプトを足すたびに .github/workflows/ci.yml への1行追記が要り、それが AUTOPILOT_GITHUB_TOKEN の workflow scope 不足で毎回 needs-human に落ちる（CHARTER §5.5）。ops job の既存4 step（check_version_sync.py/check_pvc_usage_script_sync.py/check_doc_commands.py/check_feedback.py）と T-0156 で配線待ちの check_app_list_sync.py はいずれも sys.argv を使わない no-arg スクリプトと実測済みで、シェルの glob ループに一般化できる（CHARTER §8『同じ判断を毎回手でやっている→CIかチェックリストで機械的に防ぐ』『同じミスを2回した→CIかチェックリストで機械的に防ぐ』）。汎化すれば今後 ops/check_*.py を追加するだけで自動的に CI に乗り、T-0156 のような配線待ちタスクが構造的に無くなる",
+      "dod": "ops job の個別 step（.github/workflows/ci.yml の『check duplicated version pins are in sync』〜『check human feedback ledger is consistent』の4 step、145-152行目）を、`ops/check_*.py` を glob で列挙して1本ずつ実行する単一 step に置き換える案を書く（例: `set -e` の後に `for f in ops/check_*.py; do echo \"::group::$f\"; python3 \"$f\"; echo \"::endgroup::\"; done`、1本が非0で終了したら即座にジョブ全体を失敗させること）。`ops/validate.py` は `validate.py` という別名でこの glob（`check_*.py`）にはそもそも一致しないため、引き続き専用の `validate` step のまま変更不要。書き換え後、対象5スクリプト（check_version_sync.py/check_pvc_usage_script_sync.py/check_doc_commands.py/check_feedback.py/check_app_list_sync.py）を手元で1本ずつ実行し、個別 step の場合と同じ exit code・標準出力になることを確認する。実際の .github/workflows/ci.yml への push は T-0153/T-0156 と同型で workflow scope 不足のため needs-human になる見込み。着手時に実際にそうであれば、needs_human_reason に置き換え後の diff をそのまま書いて切り出す。この変更が merge されたら、T-0156 の needs_human_reason に書かれた個別 step 追加はもう不要になる（check_app_list_sync.py は glob に自動的に含まれるため）。次にこの task に触れる計画役は、merge 済みなら T-0156 が実質解消しているか ci.yml の実行結果で確認し done にする。manifest-diff job（check_manifest_deletions.py/check_autopilot_image_pin.py、base/head 引数ありで呼び出し規約が違う、T-0153 の対象）は対象外（別タスク）",
+      "blocked_by": null,
+      "refs": [
+        ".github/workflows/ci.yml",
+        "ops/check_version_sync.py",
+        "ops/check_pvc_usage_script_sync.py",
+        "ops/check_doc_commands.py",
+        "ops/check_feedback.py",
+        "ops/check_app_list_sync.py"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #164（計画役）: T-0153/T-0156 が『ops/manifest-diff job への新規 check script 配線は毎回 workflow scope 不足で needs-human になる』という同じ構造的原因で2回連続再発したことに気づき起票（R-NNN 無し、レビュー役経由ではなく計画役の backlog 棚卸し中の直接発見）。CHARTER §8 の『同じミスを2回した』ケースに該当"
     }
   ]
 }
