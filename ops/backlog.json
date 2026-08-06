@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 157,
-  "updated": "2026-08-06T13:00:00Z",
+  "updated": "2026-08-06T13:30:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2981,11 +2981,11 @@
       "title": "CLAUDE.md / apps/README.md のアプリ一覧・ディレクトリ構造が apps/kustomization.yaml の実態からずれ続けている（同型drift5回目、機械検証が無い）",
       "kind": "ci",
       "risk": "low",
-      "status": "todo",
+      "status": "needs-human",
       "priority": 46,
       "why": "計画役 run #161 相当の調査（subagent 調査で発見・自分で apps/kustomization.yaml / CLAUDE.md / apps/README.md を読んで裏取り済み）。apps/kustomization.yaml の resources は12件（syncthing/application.yaml を含む）だが、CLAUDE.md の『Apps』一覧・Directory Structure ツリーには syncthing が無く、apps/README.md の『ディレクトリ構造』ツリー（ops-dashboard/syncthing 抜け、8件のみ）と『期待される出力』の kubectl get application サンプル（apps/agent-rbac含め11件、ops-dashboard/syncthing 抜けで実際の13件に届かない）も同様にずれている。この種の drift は T-0057(run#24)・T-0089(run#42)・T-0094(run#47)・T-0134(run#125) で計4回、起票→手直しを繰り返しており、今回で5回目の再発。`just <recipe>` の記載漏れには ops/check_doc_commands.py という同型の自動検証が既にあるのに、アプリ一覧のずれだけは毎回人力の起票に頼ったままで、CHARTER §8『同じミスを2回した→CIかチェックリストで機械的に防ぐ』に反する状態が続いている",
       "dod": "(1) まず CLAUDE.md の Apps 一覧・Directory Structure、apps/README.md のディレクトリ構造ツリー・kubectl get application サンプル出力を apps/kustomization.yaml の実態（12エントリ、agent-rbac/ops-dashboard/syncthing含む）に合わせて修正する。(2) ops/check_doc_commands.py と同型の新規スクリプト（例: ops/check_app_list_sync.py）を作り、apps/kustomization.yaml の resources から app ディレクトリ名一覧を機械的に抽出し、CLAUDE.md・apps/README.md がそれと矛盾しない（全件言及がある）ことを検証し .github/workflows/ci.yml の ops job に追加する。ドキュメントの自由記述（説明文・箇条書きの前後）まで固定フォーマットを強制すると壊れやすいので、検証は『kustomization.yaml にあるapp名がドキュメント中に一度も出現しない』ケースの検出に留める。意図的に1アプリを一覧から抜いた diff を作り CI が検出することを確認する",
-      "needs_human_reason": null,
+      "needs_human_reason": "ドキュメント修正（CLAUDE.md の Apps 一覧・Directory Structure、apps/README.md のディレクトリ構造ツリー・kubectl get application サンプル出力）と検証スクリプトops/check_app_list_sync.py は実装・動作確認済み（実際に手元で app 名を1件除いたdiff を作り検出することを確認済み）で PR に含めた。残りは .github/workflows/ci.ymlの ops job に1ステップ追加するだけだが、この起動の AUTOPILOT_GITHUB_TOKEN に workflow scope が無く .github/workflows/** への push が GitHub 側で拒否される（T-0153 と同型、CHARTER §5.5）。workflow scope 付きの credential で ops job の「check docs reference only existing just recipes」ステップの直後に以下を追記してpush してほしい:\n      - name: check app list in docs matches apps/kustomization.yaml\n        run: python3 ops/check_app_list_sync.py",
       "blocked_by": null,
       "refs": [
         "CLAUDE.md",
@@ -2996,7 +2996,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": ""
+      "notes": "run (実行役): CLAUDE.md / apps/README.md のアプリ一覧を apps/kustomization.yaml の実態（12件、agent-rbac/ops-dashboard/syncthing含む）に合わせて修正し、ops/check_app_list_sync.py を新規実装・動作確認済み。.github/workflows/ci.yml への配線は workflow scope 不足で push できず needs-human に切り出した（T-0153 と同型）"
     }
   ]
 }
