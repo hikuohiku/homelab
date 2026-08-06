@@ -115,6 +115,9 @@ jobs:
           printf '%s' "$PR_BODY" > /tmp/pr_body.txt
           python3 head/ops/check_manifest_deletions.py base head /tmp/pr_body.txt
 
+      - name: Check autopilot image digest pin is updated alongside its Dockerfile
+        run: python3 head/ops/check_autopilot_image_pin.py base head
+
   terraform:
     name: terraform validate
     runs-on: ubuntu-latest
