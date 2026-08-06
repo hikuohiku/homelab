@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 158,
-  "updated": "2026-08-06T13:35:00Z",
+  "next_id": 166,
+  "updated": "2026-08-06T22:25:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -221,7 +221,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #83: T-0078 実装の副産物として分離起票。run #85: T-0078 は run #84 で done・PR #264 merge 済みのため blocked_by を解消。ただし CronJob の schedule（毎日 03:30 UTC と当時記載）が未到来のため実行確認はまだできない。run #97 (T-0125) で訂正: この schedule は実際には JST（node01 の time.timeZone=Asia/Tokyo により k3s の CronJob は JST で評価される）。CronJob は 2026-08-06T00:40:29Z 作成で当日 03:30 JST の回には間に合っておらず、次回の実行予定は 2026-08-07 03:30 JST（= 2026-08-06T18:30Z）。run #94〜#97 が『毎時 UTC 基準でもうすぐ』と判断していたのは誤りで、実際はまだ半日以上先。run #122 (T-0133): not_before フィールドを追加し、この時刻まで actionable から除外されるようにした"
+      "notes": "run #83: T-0078 実装の副産物として分離起票。run #85: T-0078 は run #84 で done・PR #264 merge 済みのため blocked_by を解消。ただし CronJob の schedule（毎日 03:30 UTC と当時記載）が未到来のため実行確認はまだできない。run #97 (T-0125) で訂正: この schedule は実際には JST（node01 の time.timeZone=Asia/Tokyo により k3s の CronJob は JST で評価される）。CronJob は 2026-08-06T00:40:29Z 作成で当日 03:30 JST の回には間に合っておらず、次回の実行予定は 2026-08-07 03:30 JST（= 2026-08-06T18:30Z）。run #94〜#97 が『毎時 UTC 基準でもうすぐ』と判断していたのは誤りで、実際はまだ半日以上先。run #122 (T-0133): not_before フィールドを追加し、この時刻まで actionable から除外されるようにした | run #183〜#184（実行役、ops/inbox.md 経由）: 子 Job（chb-<workspace-id>）は ttlSecondsAfterFinished=3600 で1時間後にGCされ、autopilotにpods/log権限も無いため、GC前に kubectl get jobs で捕まえないと事後確認できないと判明したが、DoD(1)（オーケストレータの成功確認）に限れば `kubectl get cronjob -n coder coder-workspace-home-backup` の `status.lastSuccessfulTime` がGC後も残り続けるため代替できると分かった（2026-08-06実測、lastScheduleTime/lastSuccessfulTime とも 18:30:0*Z で一致）。DoD(2)の復元試験は `apps/coder/restic-restore-verify-job.yaml` を新規作成し使い捨てPVC/Jobで検証する設計とし、restic実行結果はtermination messageに書き込む（T-0071のimmich版 `#230` と同じ工夫）ことでpods/log権限が無くても確認できる。"
     },
     {
       "id": "T-0118",
@@ -525,6 +525,162 @@
         ],
         "links": []
       }
+    },
+    {
+      "id": "T-0158",
+      "domain": "homelab",
+      "title": "loop.sh 起動直後の git fetch 失敗を『止まっている』と区別できるようにする",
+      "kind": "observability",
+      "risk": "low",
+      "status": "todo",
+      "priority": 92,
+      "why": "run #174（実行役、ops/inbox.md 経由の引き継ぎ）の発見。2026-08-06 の GitHub Actions major_outage 中、`iterate()`（apps/autopilot/loop.sh）冒頭の `git fetch --prune --quiet origin || return 1` が約2時間（17:00〜19:00 UTC 頃、iteration 13→70 の57回連続）失敗し続け、ログには `[autopilot] <ts> iteration #N end exit=1 elapsed=5〜6s` としか残らなかった。ops-health-reporter（apps/ops-health-reporter/report.py の `HEARTBEAT_RE`）はこの行から `exit_code`/`elapsed_seconds` だけを抽出して report に載せる設計（生ログは意図的に外に出さない、T-0110）のため、`exit_code!=0` が『claude -p 自体の異常』なのか『repo 同期前段の早期return』なのかをダッシュボード側から区別できず、外形的には『止まっている』のと見分けがつかなかった。実際は git 操作自体は本イテレーションでは正常に動いており、loop.sh の自己回復設計（Pod を落とさず同じ間隔で回り続ける）どおり実害なく復帰した",
+      "dod": "iterate() の各早期return（clone/fetch/checkout/reset/clean のいずれかの失敗、PROMPT_FILE 読み込み失敗）の理由を、`HEARTBEAT_RE` が既にサポートしている exit code 後の任意の括弧書き（`exit=124 (timed out after Ns) elapsed=Ns` と同型、現状は非捕捉群で読み捨てられている）に乗せて `iteration #N end exit=1 (git fetch failed) elapsed=Ns` のように出力する。あわせて report.py の `HEARTBEAT_RE`/`parse_heartbeat()` がこの括弧内テキストを捕捉し `last_end.reason` 相当のフィールドとして report に含めるようにする（生ログを外に出さない既存方針は維持し、載せるのはこの定型の理由文字列のみに限る）。ダッシュボード側の表示変更は必須ではない（report.py が値を持てば十分）。意図的に git fetch を失敗させて（例: 存在しない remote へ一時的に切り替える等、手元検証の範囲で）ログ行とパース結果を確認する",
+      "blocked_by": null,
+      "refs": [
+        "apps/autopilot/loop.sh",
+        "apps/ops-health-reporter/report.py"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #181（計画役）: ops/inbox.md（run #174 実行役の記録、autopilot/run-172-records ブランチ上で発見・処理。GitHub Actions major_outage で PR #376/#377 が blocked のため main にはまだ無い引き継ぎだった）から起票。緊急性なし（自己回復済み、データ破壊・誤動作は無い）"
+    },
+    {
+      "id": "T-0159",
+      "domain": "homelab",
+      "title": "issue #56 へのフィードバック取り込みが autopilot 自身の投稿コメントをループバックしてしまう",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 35,
+      "why": "計画役 run #187（このPR）で発見。CHARTER §6 手順2の issue #56 コメント取り込みは author を見ておらず、`last_read`/`cutoff` より新しいコメントを無条件に `ops/feedback.json` へ `new` で取り込む。ところが autopilot 自身が issue #56 へ書き込む際に使う credential（`AUTOPILOT_GITHUB_TOKEN`）はリポジトリ所有者 `hikuohiku` の個人アカウント上の PAT で、人間本人の GitHub アカウントと同一の author（`hikuohiku`, type: User）として記録される。そのため autopilot が run #166/#167/#171 で自ら投稿した3件のコメント（T-0107 修正経緯の共有、T-0107 反映完了報告、needs-human 6件の一括依頼）が、次の起動の取り込みで『人間からの新規フィードバック』として `ops/feedback.json` に `new` で3件とも再取り込みされ、今回の計画役が全て『自己投稿・対応不要』と判定して `declined` にする手間が生じた（F-20260806T142440Z-c5205985558 / F-20260806T144513Z-c5206285481 / F-20260806T152002Z-c5206837844）。author のログイン名では人間と autopilot を区別できないため、このままでは autopilot が issue #56 に書き込むたびに同じ手間が繰り返される（CHARTER §8『同じ判断を毎回手でやっている → 仕組みに落とす』）",
+      "dod": "autopilot が issue #56 へコメントを POST するときに、本文へ機械可読なマーカー（例: 本文冒頭または末尾に `<!-- autopilot:self-posted -->` のような HTML コメント、GitHub の issue コメント本文でレンダリングされず grep で検出できる）を必ず付与するようにする。付与箇所は CHARTER §5.5 に列挙された `POST /repos/.../issues/56/comments` の呼び出し全て（同じ curl コマンドを毎回手で打つのではなく、`ops/post_issue_comment.py <body-file>` のような小さいラッパースクリプトを新設し、マーカー付与を漏れなく行う設計が望ましい。CHARTER §5.5 の該当コマンド例もこのスクリプト経由に更新する）。あわせて CHARTER §6 手順2の取り込みロジック（または対応する検証スクリプト）が、本文にこのマーカーを含むコメントを `new` として取り込まない（スキップする）ことを明記・実装する。過去に投稿済みの3件（このタスクの `why` に列挙）はマーカーが無いため今後も対象にならない点を CHARTER に一言残す。意図的にマーカー付きコメントを作り、取り込みロジックがスキップすることを確認する",
+      "blocked_by": null,
+      "refs": [
+        "ops/CHARTER.md",
+        "ops/feedback.json",
+        "ops/check_feedback.py"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #187（計画役）: PR #376/#377（GitHub Actions outage で長時間 blocked）を手動 merge で1本化した際、両ブランチが独立に取り込んでいた feedback.json の new 3件を処理する過程で発見・起票。"
+    },
+    {
+      "id": "T-0160",
+      "domain": "homelab",
+      "title": "autopilot-reader ClusterRole に services の get/list を追加する（レビュー役 R-001）",
+      "kind": "fix",
+      "risk": "low",
+      "status": "todo",
+      "priority": 20,
+      "why": "レビュー役 run #172（利用者視点、R-001, PR #377）の発見。`apps/autopilot/prompt-review-user.md` が名指しで指示するダッシュボード確認手順の1行目 `kubectl -n ops-dashboard get svc ops-dashboard -o jsonpath='{.spec.clusterIP}'` が、`autopilot-reader` ClusterRole（`apps/autopilot/rbac.yaml`）に `services` リソースの権限が無いため `Forbidden` で失敗する。レビュー役はクラスタ内 DNS 名や Pod IP への直接 curl で回避したが、プロンプトに書かれた手順そのものが動かないままでは、次にこのプロンプトを読む自分（または別のレビュー役）が毎回同じ Forbidden に当たって同じ回避を再発見する必要がある。CHARTER §5.5 が列挙する『読めるもの』一覧にも `services` は含まれておらず、get/list のみの read-only ロールという既存方針とも矛盾しない追加",
+      "dod": "`apps/autopilot/rbac.yaml` の `autopilot-reader` ClusterRole に `services` の `get`/`list`（他リソースと同様 watch は付けない方針を踏襲するか、既存の他エントリに合わせて判断）を追加する。CI (`kustomize build`) で構文を確認する。あわせて `apps/autopilot/prompt-review-user.md` の該当手順が実際に動くことを次のレビュー回（利用者視点が回ってきたとき）で確認できるよう、DoD に一言残す。CHARTER §5.5 の『読めるもの』一覧にも `services`（get/list）を追記する",
+      "blocked_by": null,
+      "refs": [
+        "apps/autopilot/rbac.yaml",
+        "apps/autopilot/prompt-review-user.md",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #187（計画役）: ops/review-log.md R-001 を起票。R-001 の状態を『起票済 T-0160』に更新した。"
+    },
+    {
+      "id": "T-0161",
+      "domain": "homelab",
+      "title": "apps/autopilot/deployment.yaml の image digest を chromium/フォント追加ビルドに更新する（レビュー役 R-002）",
+      "kind": "fix",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 18,
+      "why": "レビュー役 run #172（利用者視点、R-002, PR #377）の発見。`images/autopilot/Dockerfile` は commit `8eacc31`（2026-08-06T12:43:53Z、PR #357『レビュー役がダッシュボードを実際に見られるようにする』）で chromium/font-noto/font-noto-cjk を追加済みだが、`apps/autopilot/deployment.yaml` の image digest 参照はその commit 以降一度も更新されておらず、稼働中の Pod（`autopilot-854c989ffd-tp2h8`、Alpine 3.24.1）には chromium が存在しない。つまり『レビュー役が実際にダッシュボードを描画して見られるようにする』ための変更自体が、レビュー役が動く Pod にまだ配達されていない。T-0153（digest ズレを CI で機械検出する仕組み、needs-human で配線待ち）は将来の同種ドリフトの再発防止であり、この『今まさにズレている』現在の状態そのものを直すものではない",
+      "dod": "`images/autopilot/Dockerfile` の commit `8eacc31` 以降の内容で `.github/workflows/build-autopilot-image.yml` がビルド・push した `ghcr.io/hikuohiku/homelab-autopilot` の digest を特定する（GitHub Actions のログ、または `.github/workflows/build-autopilot-image.yml` の trigger 条件と該当 commit の CI 実行結果を突き合わせる）。特定した digest で `apps/autopilot/deployment.yaml` の image 行を更新する。merge・ArgoCD 同期後、`kubectl -n autopilot get pod -o jsonpath='{.items[0].spec.containers[0].image}'` 等で実際に新しい digest が反映されたことと、`which chromium`（もしくは同等の確認）で chromium が入っていることを確認する。risk が medium なのは稼働中の autopilot 自身のコンテナイメージを差し替えるため（CHARTER §4 の『自分や人間がこの homelab を観測・操作する経路』に該当、ロールバック手順を PR に明記すること）",
+      "blocked_by": null,
+      "refs": [
+        "apps/autopilot/deployment.yaml",
+        "images/autopilot/Dockerfile",
+        ".github/workflows/build-autopilot-image.yml"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #187（計画役）: ops/review-log.md R-002 を起票。R-002 の状態を『起票済 T-0161』に更新した。T-0153（CI検出の仕組み自体）とは別論点として分離。"
+    },
+    {
+      "id": "T-0162",
+      "domain": "homelab",
+      "title": "ダッシュボードの健全性サマリに coder/immich/vaultwarden Degraded が T-0106 由来の既知事象である旨を注記する（レビュー役 R-003）",
+      "kind": "feature",
+      "risk": "low",
+      "status": "todo",
+      "priority": 55,
+      "why": "レビュー役 run #172（利用者視点、R-003, PR #377）の発見。ダッシュボード先頭の健全性サマリが『落ちている: coder、immich、vaultwarden』とだけ赤字表示し、これが T-0106（Doppler キー未登録による ExternalSecret の SecretSyncedError、Pod 自体は全て Running/Ready で実サービスへの影響なし）由来の無害な既知状態であることの注記が無い。初見の人間は『3 サービスが落ちている』と誤読する。事情を辿るには優先度順19件の待ち行列を14番目（T-0106）までスクロールし、さらに完了扱いの T-0122 まで辿る必要があり、VISION が名指しで求める『(a) いまシステムは健康か』にダッシュボード単体では正しく・素早く答えられない",
+      "dod": "`ops/dashboard/build.py` の健全性サマリ生成部分で、Degraded な Application が T-0106 由来（`SecretSyncedError` かつ対象が `<app>-restic-backup-credentials` のみ）と機械的に判定できる場合に、サマリ内に一言の注記（例: 『既知の原因あり (T-0106)、実サービスへの影響なし』）を添える。機械判定が難しければ、少なくとも静的な注記（『Degraded の詳細は T-0106 を参照』等、対象アプリ名を明示）を追加する。生成した HTML を目視確認し、初見でも『実害なし』と分かる文言になっているか確認する",
+      "blocked_by": null,
+      "refs": [
+        "ops/dashboard/build.py"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #187（計画役）: ops/review-log.md R-003 を起票。R-003 の状態を『起票済 T-0162』に更新した。"
+    },
+    {
+      "id": "T-0163",
+      "domain": "homelab",
+      "title": "既知の外部障害でリトライ不能と判明した後、確認間隔を伸ばす backoff の仕組みを作る",
+      "kind": "feature",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 50,
+      "why": "実行役の気づき（ops/inbox.md、R-NNN無し）。GitHub Actions の大規模障害（incident qcvjkzcs7j74、2026-08-06 15:22 UTC〜、22:00 UTC 時点も investigating 継続）でPR #376がblockedのあいだ、INTERVAL_SECONDS（120秒）ループが毎回incident statusを確認するだけの起動を繰り返し、run #172〜#193（6時間以上・約20回）でほぼ同一内容のjournal/state.jsonエントリを量産した。CHARTER §7「帳簿には上限がある」が指摘する読み込みコスト問題を自ら悪化させている。既知の外部障害でリトライ不能と判明した後は、確認間隔を伸ばす／次に意味のある変化がある可能性が高いタイミングまで待つ、といった仕組みが無い",
+      "dod": "(1) 最小の対処として、CHARTERに「同一の既知ブロッカー（例: 同一incident id、同一reason）を前回確認時と同内容のまま連続して確認しただけの回は、journal/state.jsonへのエントリを簡潔な1〜2行（前回runへの参照＋『変化なし』のみ）に留めてよい」というルールを追加し、run #172〜#193のような冗長な記録の繰り返しを防ぐ。(2) より根本的な対処として、apps/autopilot/loop.shにconsecutive no-op回数を数え、一定回数を超えたらINTERVAL_SECONDSを段階的に伸ばす（上限を設けてunboundedにはしない）backoff機構の追加を検討する。(2)はloop.shというautopilot自身の生存に関わるコア機構の変更のため、1 PR 1コンポーネントで刻み、変更前後でPodが正常に起動・ループし続けることを実機で確認してから展開する",
+      "blocked_by": null,
+      "refs": [
+        "apps/autopilot/loop.sh",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #172-193統合時の計画役（journal run #173相当の統合作業）が起票。inbox（R-NNN無し、実行役の気づき）より"
+    },
+    {
+      "id": "T-0164",
+      "domain": "homelab",
+      "title": "ops/CHARTER.md の肥大化に上限・圧縮の仕組みを作る（backlog/state と同型、R-004）",
+      "kind": "chore",
+      "risk": "low",
+      "status": "todo",
+      "priority": 51,
+      "why": "レビュー役・アーキテクチャレンズ R-004（ops/review-log.md参照）。commit 762807fは「autopilot は毎イテレーション VISION/CHARTER/backlog/state を全部読み直す。9割が二度と行動につながらない過去の記録」という問題意識でbacklog.json/state.jsonにarchive機構とサイズ上限（ops/validate.pyのcheck_ledger_size()）を導入したが、同じ理由が当てはまるはずのCHARTER.md自身は対象外のまま。2026-08-04の10.8KBから2026-08-06時点で86.1KBまで2日で約8倍に増えており、backlog.jsonの上限（120,000 bytes）に迫っている",
+      "dod": "CHARTER.mdを読み、各ルールに付随する『指摘を受けた日時・経緯』の長い引用部分（例: 'issue #56, 2026-08-05 xx:xx:xxの指摘。...'という詳細な事例説明）と、実際に守るべき『ルール本体』を切り分ける。ルール本体はCHARTER.mdに残し、詳細な経緯・事例は新設する ops/CHARTER-history.md （または同種のarchiveファイル）へ移し、CHARTER.md側には1行の要約とそちらへのポインタだけを残す。移した後もCHARTER.mdの各ルールが単体で意味が通ることを確認する（経緯を読まないと理解できないルールにしない）。ops/validate.pyにCHARTER.mdのサイズ上限チェックを追加する（閾値は実装時にbacklog.jsonの120,000 bytesを参考に決める）。ops/ledger.pyと同様、圧縮操作は繰り返し実行できるようにする",
+      "blocked_by": null,
+      "refs": [
+        "ops/CHARTER.md",
+        "ops/validate.py",
+        "ops/ledger.py",
+        "ops/review-log.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "PR #378（レビュー役・アーキテクチャ初回実行）のR-001が、PR #376との統合時にR-004として採番し直された。起票は統合作業を行った計画役による"
+    },
+    {
+      "id": "T-0165",
+      "domain": "homelab",
+      "title": "REVIEW_EVERY の根拠数値が CHARTER.md 2箇所と loop.sh に三重化しているのを一本化する（R-005）",
+      "kind": "chore",
+      "risk": "low",
+      "status": "todo",
+      "priority": 52,
+      "why": "レビュー役・アーキテクチャレンズ R-005（ops/review-log.md参照）。REVIEW_EVERY=12の根拠数値（実測約9分/イテレーション、journal run #126〜#155の30起動で264分、レビューは約1.8時間おき、同じレンズは約3.5時間おき、実作業損失8%）が ops/CHARTER.md:173-176（§3）・ops/CHARTER.md:740（§6冒頭の再掲）・apps/autopilot/loop.sh:35-38（REVIEW_EVERYのコメント）の3箇所にほぼ同じ文面で重複している。1箇所を直しても他が追随しない構造で、とくにloop.sh側はコード上の意味を持たないコメントのため、値がズレてもCIにも起動時ログにも表れず気づけない",
+      "dod": "根拠の測定値（実測約9分/イテレーション等）の記述をCHARTER.md §3の1箇所にのみ残し、CHARTER.md §6冒頭の再掲は削除してCHARTER §3への参照（例: 'REVIEW_EVERYの根拠は§3参照'）に置き換える。apps/autopilot/loop.shのコメントも同様に、数値の再掲ではなくCHARTER §3への参照コメントに置き換える。再測定が必要になったとき1箇所を直せば済む状態にする",
+      "blocked_by": null,
+      "refs": [
+        "ops/CHARTER.md",
+        "apps/autopilot/loop.sh"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "PR #378（レビュー役・アーキテクチャ初回実行）のR-002が、PR #376との統合時にR-005として採番し直された。起票は統合作業を行った計画役による"
     }
   ]
 }

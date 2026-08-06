@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-06T15:30:00Z",
+  "updated": "2026-08-06T23:31:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-06T14:45:44Z"
+    "last_read": "2026-08-06T23:31:00Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc",
@@ -34,14 +34,6 @@
     "since": "2026-08-05"
   },
   "runs": [
-    {
-      "n": 152,
-      "at": "2026-08-06T11:34:00Z",
-      "kind": "in-cluster-loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #152）。T-0149（coder v2.35.3→v2.36.0）に着手したが、v2.36.0 は inventory.json の note が避けよと指示する mainline リリースそのものと判明したため実装せず dropped に。改善提案は inbox.md へ引き継いだ。",
-      "prs": []
-    },
     {
       "n": 153,
       "at": "2026-08-06T11:40:00Z",
@@ -209,6 +201,239 @@
       "by": "autopilot pod (計画役)",
       "summary": "計画役（journal run #171）。前回の中断PR #374（run #170の記録のみ）が manifest deletion guard の一時的インフラ障害（Service Unavailable）でblockedだったため、空コミットでCI再実行しgreen確認後merge（ca4c577）。needs-humanタスクの棚卸しでissue #56への依頼が実際に投稿されていないもの6件（T-0140/T-0141/T-0148/T-0153/T-0156/T-0157）を発見し、まとめてissue #56へ投稿（issuecomment-5206837844）。T-0074のneeds_human_reason/whyがT-0107の旧い記述（PVE管理コンソール手作業）を引きずっていたのを現状に合わせて訂正。健全性・backlogとも新規異常なし、todoはT-0117（not_before未到来）のみ。ダッシュボードをbuild・publish。",
       "prs": []
+    },
+    {
+      "n": 172,
+      "at": "2026-08-06T15:38:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (計画役)",
+      "summary": "計画役（journal run #172）。前回の中断PR #375（run #171の記録のみ）が同型のインフラ障害でblockedだったため空コミットでCI再実行しgreen確認後merge（dd3b397）。issue #56/#35 とも last_read 以降の新規フィードバック無し、健全性・backlog 19件の前提とも変化なし、todo は T-0117（not_before 未到来）のみ。新規起票価値のあるギャップは見つからず、直前の run #171 が調査済みの範囲を再調査するbusyworkは避けた。",
+      "prs": []
+    },
+    {
+      "n": 173,
+      "at": "2026-08-06T16:32:55Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (計画役)",
+      "summary": "計画役（journal run #173）。前回の中断PR #376（run #172の記録のみ）が依然CI失敗中で、githubstatus.comでGitHub Actionsの Partial Outage（2026-08-06 15:22 UTC〜、進行中）を確認した。空コミットで再実行を1回試みたが依然queued/in_progressのまま完了せず、これ以上のリトライは見送り既存PR #376にこのエントリを相乗りさせた（新規PRを作ると journal/state.json の追記位置で#376と競合するため）。issue #56/#35 とも新規フィードバック無し、健全性・backlog 19件の前提とも変化なし、todo は T-0117（not_before 未到来）のみ。",
+      "prs": []
+    },
+    {
+      "n": 174,
+      "at": "2026-08-06T19:14:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #174）。PR #376/#377（前回の中断、記録専用）は GitHub Actions が major_outage（15:22 UTC〜、19:00時点も継続）のため引き続きblocked、追加リトライはせず現状確認のみに留めた。ops-health-report の autopilot.heartbeat で 2026-08-06 17:00 UTC頃から約2時間57イテレーション連続 exit_code:1・elapsed 5〜6秒 を検知（loop.shのgit fetch失敗が原因と推定、Pod自体は再起動なし・自己回復済み）。実害なしと判断しinboxに1行記録。feedbackは新規なし（既にPR#377で3件new取り込み済み）。T-0117はnot_before経過済みだが前回の中断未解消のため今回は着手せず。",
+      "prs": []
+    },
+    {
+      "n": 175,
+      "at": "2026-08-06T19:26:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #175）。PR #376/#377（前回の中断、記録専用）は GitHub Actions が引き続き major_outage（15:22 UTC〜、直近更新18:46 UTC時点も継続）のため blocked のまま。run #172〜174で複数回リトライ済みのため今回は追加リトライをせず状態確認のみ。issue #56 / ops-feedback ブランチとも新規フィードバックなし。健全性・T-0106由来のDegraded・heartbeatのexit_code:1事象（run #174が既に発見・inbox記録済み）とも変化なし。T-0117はnot_before経過済みだが前回の中断未解消のため今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 177,
+      "at": "2026-08-06T19:41:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #177）。PR #376/#377（前回の中断、記録専用）は run #176 の空コミット再実行（19:35Z）から6分経過してもci.yml必須チェックが一度も起動せず、GitHub Actionsは引き続きmajor_outage（15:22 UTC発生、18:46 UTC更新のまま約1時間停滞）。run #175の方針を継続し追加リトライはせず状態確認のみ。autopilot自身のheartbeatはiteration 77でexit_code:0・344秒に回復し、run #174/175が検知した2時間規模のexit_code:1事象は解消済みと確定。feedback/backlogとも新規変化なし、T-0117はnot_before経過済みだが前回の中断未解消のため今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 178,
+      "at": "2026-08-06T19:51:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #178）。PR #376/#377（前回の中断、記録専用）は依然blocked。githubstatus.comの更新文面が「recovers gradually」に変わったのを見て両ブランチに空コミットでリトライしたが、5分後も actions/runs head_sha total_count:0 のまま変化なし。実効的な回復ではないと判断しリトライを打ち切り状態確認のみ記録。feedback/健全性とも新規変化なし、T-0117は前回の中断未解消のため今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 179,
+      "at": "2026-08-06T19:59:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #179）。PR #376/#377は依然blocked。githubstatus.comのActions major_outageは run #178 が見た19:43:21Z の文面から進展なし。run #178の方針（resolved/monitoringへ進むまでリトライを見送る）に従い、空コミットでの再リトライはせず状態確認のみ記録。feedback/健全性とも新規変化なし、T-0117は前回の中断未解消のため今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 180,
+      "at": "2026-08-06T20:04:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #180）。PR #376/#377は依然blocked。githubstatus.comのActions major_outageは run #178/#179 が見た19:43:21Z の文面から変化なし（本回確認20:04:53Z）。resolved/monitoringへ進むまでリトライを見送る方針を継続し、空コミットでの再リトライはせず状態確認のみ記録。feedback（issue #56最新コメントは自分自身の投稿）/健全性とも新規変化なし、T-0117は前回の中断未解消のため今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 181,
+      "at": "2026-08-06T20:29:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (計画役)",
+      "summary": "計画役（journal run #181）。PR #376/#377はGitHub Actions major_outageで依然blocked（文面はrun#178〜180から変化なし）、今回もリトライ見送り。ops/inbox.md（このブランチ、run#174実行役の記録）にあったgit fetch失敗の観測をT-0158として起票しinboxをクリア。PR #377（レビュー役初回実行）のR-001/R-002/R-003は別ブランチのため未処理のまま確認のみ（R-002はautopilot自身のimage digestがchromium追加コミット以降未更新という現在進行形の事実）。feedback/健全性とも新規変化なし、T-0117はnot_before通過済みだが直列化ルールに従い今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 182,
+      "at": "2026-08-06T20:34:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #182、記録追いつき）。githubstatus.com incident更新（20:34:17Z、job成功率65%まで改善の記述）を根拠にresolved/monitoring待ちの方針を一時的に緩め、PR #376/#377へ空コミットでリトライ（6f41818ほか）。journal追記が遅れた分をrun #183が補完。",
+      "prs": []
+    },
+    {
+      "n": 183,
+      "at": "2026-08-06T20:51:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #183）。run #182のリトライ後もactions/runs?head_sha=は両PRともtotal_count:0（webhook未達）で不発。incidentは依然investigatingのため、run #178〜181のresolved/monitoring待ち方針に戻す。T-0117は着手せずkubectlで読み取り専用の事前調査のみ実施：本日のcoder-workspace-home-backupオーケストレータはComplete 1/1だが子Job(chb-*)はttlSecondsAfterFinished=3600で確認前にGC済み・pods/log権限も無く成否確認不能と判明、次回の着手回向けにops/inbox.mdへ1行残した。feedback/健全性とも新規変化なし。",
+      "prs": []
+    },
+    {
+      "n": 184,
+      "at": "2026-08-06T21:00:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #184）。PR #376/#377はGitHub Actions incidentが20:34:17Z版のまま変化なしのため、run #183の方針（resolved/monitoring待ち）を継続しリトライ見送り。T-0117はDoD(1)をkubectlのCronJob status.lastSuccessfulTime（18:30:26Z）で確認できることが判明し、GCされた子Jobを直接見なくても成功確認できると分かったためops/inbox.mdに追記。feedback/健全性とも新規変化なし。",
+      "prs": []
+    },
+    {
+      "n": 185,
+      "at": "2026-08-06T21:09:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #185）。PR #376/#377はGitHub Actions incident（qcvjkzcs7j74）が20:34:17Z版のまま変化なし（本回確認21:09:05Z）のため、run #183/#184の方針（resolved/monitoring待ち）を継続しリトライ見送り。actions/runs?head_sha=も両ブランチとも引き続きtotal_count:0。feedback/健全性とも新規変化なし、T-0117/T-0158とも直列化ルールに従い今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 186,
+      "at": "2026-08-06T21:14:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #186）。PR #376/#377はGitHub Actions incident（qcvjkzcs7j74）が20:34:17Z版のまま変化なし（本回確認21:14:26Z）のため、run #183〜#185の方針（resolved/monitoring待ち）を継続しリトライ見送り。actions/runs?head_sha=も両ブランチとも引き続きtotal_count:0。feedback/健全性とも新規変化なし、T-0117/T-0158とも直列化ルールに従い今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 187,
+      "at": "2026-08-06T16:51:41Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (レビュー役・利用者視点)",
+      "summary": "レビュー役・利用者視点（journal run #172）。初回実行（review-log に既存エントリ無し）。フィードバック新着3件をfeedback.jsonにnewで追記。プロンプト記載のダッシュボード確認手順を実際に辿り、(R-001) kubectl get svc がRBACのservices欠如でForbidden、(R-002) chromium/フォント追加(commit 8eacc31)がdeployment.yamlのimage digest未更新で稼働Podに届いておらず描画して見る手段が無い、(R-003) 健全性サマリ「落ちている: coder/immich/vaultwarden」にT-0106由来の無害な既知状態である注記が無く初見で誤読する、の3件を発見しreview-log.md/inbox.mdに記録。この2件（n:187/188）は PR #377 が別ブランチとして開いたまま長時間 GitHub Actions outage で merge できなかったため、run #187（計画役）が PR #376 と #377 を手動 merge して1本化した際に state.json 側へ追記した（journal 側は本来の時系列位置に既に挿入済み）。",
+      "prs": []
+    },
+    {
+      "n": 188,
+      "at": "2026-08-06T20:18:29Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (レビュー役・利用者視点)",
+      "summary": "レビュー役・利用者視点（journal run #172 続き）。前回の中断（PR #377, open のまま）を新規タスクより先に回収。R-001/R-002 を自分でも独立に再現確認。PR #377 の CI が2回連続 workflow run 0件で止まっていたため空コミットで retrigger したが同様に0件、githubstatus.com で GitHub Actions が major_outage と確認（run #176/#178 の『解消済み』表記は誤りだった）。追加で気づいた「ops/feedback.jsonの内容がダッシュボードに一切表示されない」点はこの回の指摘上限（3件、PR #377で使用済み）を避けるため今回は起票せず申し送りのみ。フィードバック新規なし。",
+      "prs": []
+    },
+    {
+      "n": 189,
+      "at": "2026-08-06T21:31:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (計画役)",
+      "summary": "計画役（journal run #187）。PR #376/#377 は GitHub Actions incident（qcvjkzcs7j74）が引き続き investigating（update は 21:30:42Z 版へ進んだが webhook throttle 継続）のためリトライ見送り。2つの open PR が #172 の分岐以降15回以上の起動にわたって独立に ops/ ファイルを編集し続けコンフリクト確実だったため、autopilot/run-172-review-user を autopilot/run-172-records へ手動 merge で1本化（journal/state.json は at タイムスタンプで正しい時系列に挿入）。レビュー役が取り込んだ feedback 新着3件は autopilot 自身の自己投稿（issue #56 author が hikuohiku PAT と同一のため区別不能）と判明し declined、構造的原因を T-0159 として起票。inbox の R-001/R-002/R-003 を T-0160/T-0161/T-0162 として起票し review-log.md の状態を更新、T-0117 の GC調査メモは同タスクの notes へ折り込みinbox を空にした。backlog 20→24件。健全性・issue #56 とも新規異常なし。",
+      "prs": []
+    },
+    {
+      "n": 190,
+      "at": "2026-08-06T21:38:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #190）。PR #377 は close・ブランチ削除済みを確認、残る中断は PR #376 のみ。GitHub Actions incident（qcvjkzcs7j74）は run #189 が見た 21:30:42Z 版から変化なし、actions/runs?head_sha= も total_count:0 のままのためリトライ見送り。feedback/健全性とも新規変化なし、T-0117/T-0158/T-0159〜T-0162 とも直列化ルールに従い今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 191,
+      "at": "2026-08-06T21:46:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #191）。残る中断は PR #376 のみ。GitHub Actions incident（qcvjkzcs7j74）は21:30 UTC更新版から変化なし（investigating継続）のためリトライ見送り。feedback/健全性とも新規変化なし。run #172以降このPRの状態確認だけで約20回ほぼ同一内容を記録し続けている点に気づき、backoff の仕組みが無いことをops/inbox.mdに追記（計画役へ）。T-0117/T-0158/T-0159〜T-0162 とも直列化ルールに従い今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 192,
+      "at": "2026-08-06T21:56:00Z",
+      "summary": "実行役（journal run #192）。残る中断は PR #376 のみ。GitHub Actions incident（qcvjkzcs7j74）は run #187〜#191 が見た21:30:42Z版から変化なし（investigating継続）のためリトライ見送り。feedback/健全性とも新規変化なし。T-0117/T-0158/T-0159〜T-0162 とも直列化ルールに従い今回も着手せず。"
+    },
+    {
+      "n": 193,
+      "at": "2026-08-06T22:00:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #193）。残る中断は PR #376 のみ。GitHub Actions incident（qcvjkzcs7j74）は run #187〜#192 が見た21:30:42Z版から変化なし（investigating継続）のためリトライ見送り。feedback/健全性とも新規変化なし。T-0117/T-0158/T-0159〜T-0162 とも直列化ルールに従い今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 194,
+      "at": "2026-08-06T22:10:13Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (レビュー役・アーキテクチャ)",
+      "summary": "レビュー役・アーキテクチャレンズ（journal run #173、PR #378 → #376 へ統合）。REVIEW_EVERY到達後の初回レビュー実行のためreview-log.mdは突き合わせ対象0件。フィードバック新規無し。git logとCHARTER.md/loop.sh/validate.py/ledger.pyを読み、R-004（旧R-001、CHARTER.mdが肥大化に上限を持たず2日で10.8KB→86.1KBへ増加、backlog/stateのarchive+上限機構の対象外）とR-005（旧R-002、REVIEW_EVERY=12の根拠数値がCHARTER.md 2箇所とloop.shに三重化）をops/inbox.md・ops/review-log.mdに記録。実装・起票はせず（書く権利の分離）。",
+      "prs": []
+    },
+    {
+      "n": 195,
+      "at": "2026-08-06T22:25:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (計画役)",
+      "summary": "計画役（journal run #194）。PR #376/#378 を統合（run #187 と同型の手動merge、review-log.mdのR-001/R-002衝突をR-004/R-005へ採番し直し）。GitHub Actions incident（qcvjkzcs7j74）は引き続きinvestigating。feedback新規なし、健全性異常なし。inbox 3件（backoff未整備・R-004・R-005）をT-0163〜T-0165として起票、inboxを空にした。backlog 24→27件、todoは9件（T-0117/T-0158〜T-0165）でいずれも本PR未マージのため着手せず。",
+      "prs": []
+    },
+    {
+      "n": 196,
+      "at": "2026-08-06T22:40:51Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #195）。残る中断は PR #376 のみ。直前イテレーションが記録なしで push した空コミット b919e233（incident改善を理由とするリトライ）の結果を確認したが actions/runs は依然 total_count:0、incident も investigating のまま変化なし。追加リトライは見送り。feedback/健全性とも新規変化なし。todo 9件（T-0117/T-0158〜T-0165）は直列化ルールに従い今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 197,
+      "at": "2026-08-06T22:47:23Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #196）。PR #376の中断確認中、run #195が既に見送り済みだった同じincident更新(22:18 UTC, 成功率97%)を理由に重複して空コミットでリトライしてしまった（実害なし、actions/runsは引き続きtotal_count:0）。あわせてgit checkout -b失敗時に後続コマンドがlocal mainに誤って実行されかけた事故を発見しgit reset --hardで復旧（pushはされていなかった）。再発防止をjournalに明記。feedback/健全性とも新規変化なし。todo 9件は直列化ルールに従い今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 198,
+      "at": "2026-08-06T23:03:05Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #197）。PR #376の中断確認。GitHub Actions incident（qcvjkzcs7j74）はrun #196が見たupdated_at 22:18:09Zから変化なし、actions/runsも引き続きtotal_count:0。変化が無いため今回はリトライを送らず記録のみ。feedback新規なし、健全性異常なし。todo 9件（T-0117/T-0158〜T-0165）は直列化ルールに従い今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 199,
+      "at": "2026-08-06T23:15:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #199）。PR #376の中断確認。GitHub Actions incident（qcvjkzcs7j74）はrun #198が見たupdated_at 22:18:09Zから変化なし、actions/runsも引き続きtotal_count:0。変化が無いため今回もリトライを送らず記録のみ。feedback新規なし、健全性異常なし。todo 9件（T-0117/T-0158〜T-0165）は直列化ルールに従い今回も着手せず。",
+      "prs": []
+    },
+    {
+      "n": 200,
+      "at": "2026-08-06T23:22:00Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #200）。PR #376の中断確認。GitHub Actions incident（qcvjkzcs7j74）のupdated_atがrun #199時点の22:18:09Zから23:13:30Z（成功率99%回復、webhookスループット復旧中）へ進んだため、新しいupdateを根拠に空コミットでリトライ(cb158fb)。push直後はactions/runsまだtotal_count:0（数秒しか経っておらずポーリングはしない）。feedback新規なし、健全性異常なし。todo 9件は直列化ルールに従い今回も着手せず。",
+      "prs": [
+        376
+      ]
+    },
+    {
+      "n": 201,
+      "at": "2026-08-06T23:31:00Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #201）。PR #376の中断確認。incidentのupdated_atはrun #200と同じ23:13:30Zで変化なしだが、actions/runs?head_shaがtotal_count:0→1に変化。CI run 31131207623の完走(success)を確認、必須チェック6件全green、mergeable_state: cleanへ回復。この後PR #376をmergeする。feedback新規なし、健全性異常なし。",
+      "prs": [
+        376
+      ]
     }
   ]
 }
