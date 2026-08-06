@@ -15,8 +15,14 @@ FROM node:22-alpine
 # bash        : ループスクリプト
 # restic      : バックアップの検証（クラスタ内からしかできない）
 # tzdata      : ログの時刻を読める形にする
+# chromium    : レビュー役（利用者視点）がダッシュボードを実際に描画して見るため。
+#               「人間として使って詰まる」ことを求めているのに見る手段が無いと、
+#               マークアップを読んで想像するしかなくなり、レンズの意味が消える
+# font-noto-cjk / font-noto : 日本語が描画されないと画面を見た意味が無い
+#               （フォント不在だと文字が一切出ないまま描画は成功する。実測済み）
 RUN apk add --no-cache \
       git openssh-client ca-certificates python3 py3-yaml curl bash restic tzdata \
+      chromium font-noto font-noto-cjk \
  && npm install -g @anthropic-ai/claude-code \
  && npm cache clean --force
 
