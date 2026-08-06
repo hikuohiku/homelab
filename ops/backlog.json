@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 118,
+  "next_id": 119,
   "updated": "2026-08-06T00:40:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
@@ -2207,14 +2207,30 @@
       "priority": 41,
       "why": "T-0078（run #83, PR #264）はデプロイ後の初回実行が実際に成功するか未確認のまま cooldown で開いている。immich/vaultwarden/coder-postgres は T-0071 で復元試験まで完了しているが、workspace home はまだ同種の検証をしていない。T-0072（PBS 退役判断）はこの確認が完了することを PBS 退役（T-0116）の前提条件にしている",
       "dod": "T-0078 (PR #264) が merge された後、(1) kubectl / ops-health-report で coder-workspace-home-backup CronJob の子 Job (chb-<workspace-id>) が成功していることを確認する、(2) T-0071 と同型の復元試験（使い捨て PVC への restic restore、CHOWN/FOWNER/DAC_OVERRIDE capability が要る可能性が高い点は docs/backup.md の教訓を踏まえる）を実施し docs/backup.md に記録する、(3) 可能であればオーケストレータ Pod の実メモリ/CPU 使用量を kubectl top で確認し、resources の値が妥当か見直す",
-      "blocked_by": "T-0078（PR #264 の merge 待ち）",
+      "blocked_by": null,
       "refs": [
         "apps/coder/workspace-home-backup-cronjob.yaml",
         "docs/backup.md"
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #83: T-0078 実装の副産物として分離起票"
+      "notes": "run #83: T-0078 実装の副産物として分離起票。run #85: T-0078 は run #84 で done・PR #264 merge 済みのため blocked_by を解消。ただし CronJob の schedule（毎日 03:30 UTC）が未到来のため実行確認はまだできない"
+    },
+    {
+      "id": "T-0118",
+      "domain": "homelab",
+      "title": "CI の helm バイナリ (azure/setup-helm の version input) を v3 系から v4 系への移行を検討する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 55,
+      "why": "run #85 の inventory 定期チェック（T-0117 が CronJob の schedule 未到来で着手不能だったため実施）で、CI が使う helm バイナリ（`gha-setup-helm-version`, 現行 v3.21.3, ops/inventory.json）の upstream (helm/helm) に v4 系（最新 v4.2.3）が存在し、v3 系の release notes に EOL 接近の告知があると判明した。v3.21.3 自体は v3 系列の最新なので inventory の『current が遅れている』判定（同一系列内の追従）には該当せず緊急性は無いが、系列そのものの移行は別論点として検討が要る",
+      "dod": "helm v4 の breaking changes（release notes / migration guide）を原文で確認し、このリポジトリの CI（`kustomize build --enable-helm` を使う manifests job・manifest-diff job）が使う helm の呼び出し方（`--enable-helm` フラグの挙動、chart repo 設定等）に影響が無いか洗い出す。影響が無ければ `.github/workflows/ci.yml` の helm version input と `ops/inventory.json` の `gha-setup-helm-version` を v4 系に上げる PR を出す。影響があれば内容を記録し、blocked にする理由を明記する",
+      "blocked_by": null,
+      "refs": [".github/workflows/ci.yml", "ops/inventory.json"],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #85: 定期の inventory 調査（対象8件、他7件は current が最新のまま）で発見。緊急性は無い（v3.21.3 で CI は動いている）が EOL 接近の一次情報あり"
     }
   ]
 }
