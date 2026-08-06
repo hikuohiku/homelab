@@ -2557,7 +2557,7 @@
       "title": "main に統合済みで残っている孤児ブランチ 2 件（origin/claude/create-immich-manifest-FpCGe, origin/feat/coder-dev-server）の掃除",
       "kind": "chore",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 60,
       "why": "計画役 run #129 で `git branch -r` を確認したところ、`autopilot/*` 以外に2件の見覚えのないリモートブランチが残っていた。`origin/claude/create-immich-manifest-FpCGe`（最終コミット 2025-12-19、immich の初期 kustomize/helmChart 構成）と `origin/feat/coder-dev-server`（最終コミット 2026-05-22、coder の初期構成 + Plans.md/terraform 差分）で、いずれも autopilot 発足（2026-08-04）より前の手作業期の draft ブランチ。両ブランチの `kustomization.yaml`/ファイル構成は現行 `apps/immich/`・`apps/coder/`（helmCharts 名・バージョンは古いが同じ resources 構成）とほぼ一致しており、その後の拡張（restic-backup, pvc-usage-cronjob 等）を含む現行 main に内容が包含されている。CHARTER §4/§5.5 の『内容が main と重複していることを確認できたものから順に削除してよい』の考え方（元々は autopilot 自身の孤児ブランチ向けだが、検証手順自体はこの2件にも同型で適用できる）に沿って掃除する",
       "dod": "各ブランチについて `git diff origin/main...<branch>` を取り、追加・変更されているファイルが全て現行 main の同名ファイルに機能的に包含されている（同じリソースが定義済み、または明確に旧版で置き換わっている）ことを確認する。差分が現行 main に無い独自の変更（例: `feat/coder-dev-server` の `terraform/proxmox/vm-nixos.tf` 差分, `Plans.md` 差分）を含む場合は、その内容が既に別の形で反映済みかを individually 確認してから判断する。包含が確認できたら `DELETE /repos/hikuohiku/homelab/git/refs/heads/<branch>`（§5.5 で実測済み、204 が返る）でブランチを削除し、journal に削除したブランチ名と確認した根拠を記録する。念のため削除前に `git rev-parse origin/<branch>` を journal に残し、誤削除時に復元の足がかりを残す",
@@ -2567,8 +2567,8 @@
         "apps/coder/"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #129（計画役）: `git branch -r` の再確認から新規発見。autopilot 自身のブランチではないため即削除はせず、実行役が差分の包含を確認したうえで削除する起票に留めた"
+      "pr": 322,
+      "notes": "run #129（計画役）: `git branch -r` の再確認から新規発見。autopilot 自身のブランチではないため即削除はせず、実行役が差分の包含を確認したうえで削除する起票に留めた。run #131（実行役）: 削除前に `git rev-parse` で両ブランチの HEAD を記録（immich: da131f7c6050af594f11f49945ad1a2f15e35610, coder: 06a9d5b3d7cbd0d86a2899ef13239d8f8d123399）。`git diff origin/main <branch>` を直接比較し、immich 側は main が helm chart 0.13.1（branch は 0.10.3）・restic-backup/pvc-usage-cronjob 追加済みで branch の内容を包含、coder 側は main が deployment/service/rbac/restic-backup/workspace-home-backup-cronjob/templates を備えた大幅拡張版で branch（scaffold のみ）を包含していることを確認。`terraform/proxmox/vm-nixos.tf` の branch 差分（disk size 50→main 256、旧リソース名 `proxmox_download_file`、`local.node01_ip` 未導入）は全て main 側がより新しい状態への改善であり branch は単に古いだけと判断。`Plans.md` の branch 差分（Coder デプロイの計画セクション）は実装（`apps/coder/` の充実度）が計画を上回っており計画メモが陳腐化していただけと判断。両ブランチとも `DELETE /repos/hikuohiku/homelab/git/refs/heads/<branch>` で 204 を確認し削除済み"
     }
   ]
 }
