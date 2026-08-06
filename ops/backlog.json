@@ -2915,22 +2915,23 @@
       "title": "autopilot 自身のコンテナイメージ (apps/autopilot/deployment.yaml) が ops/inventory.json の監視対象外で、Dockerfile 変更と digest pin のずれを誰も検出できない",
       "kind": "ci",
       "risk": "low",
-      "status": "todo",
+      "status": "needs-human",
       "priority": 15,
       "why": "apps/autopilot/deployment.yaml は images/autopilot/Dockerfile を .github/workflows/build-autopilot-image.yml でビルドした ghcr.io/hikuohiku/homelab-autopilot の digest を手動 pin している（コメントに『Dockerfile の内容を変えたら、ビルドが終わった後この digest も手で更新する』と明記）。ops-health-reporter-image/ops-dashboard-image/pvc-usage-reporter-image は ops/inventory.json に登録され check_version_sync.py 相当の監視対象だが、autopilot 自身のこのイメージだけ inventory.json にエントリが無く、CI にも images/autopilot/** の変更と deployment.yaml の image 行変更を突き合わせる仕組みが無い。Dockerfile を変えた PR で digest 更新を忘れると、ワークフローは新しいイメージを push するのに Deployment は古いイメージを参照し続け、クラスタは古い autopilot のまま気づかれずに動く。全システムの正しさの根拠となる自分自身のイメージがこの唯一の抜けになっている（計画役 run #157 相当、subagent 調査で発見）",
       "dod": "images/autopilot/** を変更した PR で apps/autopilot/deployment.yaml の image 行（digest）も同じ PR で変更されていることを CI で検証する仕組みを追加する（ops/check_manifest_deletions.py や check_version_sync.py に相乗りさせるか新規スクリプトにするかは実装時に判断してよい）。あわせて ops/inventory.json に autopilot-image エントリを追加するか、digest pin の性質上 inventory.json のフォーマット（current/upstream 比較）に馴染まないなら理由を notes に書いて見送る。意図的に Dockerfile だけ変えて digest を更新しない diff を作り、CI が検出することを確認する",
-      "needs_human_reason": null,
+      "needs_human_reason": "検証スクリプト ops/check_autopilot_image_pin.py は実装・動作確認済み（PR #356）。残りは .github/workflows/ci.yml の manifest-diff job に1ステップ追加するだけだが、この起動の AUTOPILOT_GITHUB_TOKEN に workflow scope が無く .github/workflows/** への push が GitHub 側で拒否される（§5.5 に追記）。workflow scope 付きの credential で以下を追記して push してほしい:\n      - name: Check autopilot image digest pin is updated alongside its Dockerfile\n        run: python3 head/ops/check_autopilot_image_pin.py base head\n（manifest-diff job の『Check for unexplained object deletions』ステップの直後）",
       "blocked_by": null,
       "refs": [
         "apps/autopilot/deployment.yaml",
         "images/autopilot/Dockerfile",
         ".github/workflows/build-autopilot-image.yml",
         "ops/inventory.json",
-        "ops/check_version_sync.py"
+        "ops/check_version_sync.py",
+        "ops/check_autopilot_image_pin.py"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": null
+      "pr": 356,
+      "notes": "run #159 (実行役): スクリプト本体は実装・動作確認済みで PR #356 として提出。ops/inventory.json への autopilot-image エントリ追加は見送り — inventory.json は current/upstream の比較モデル（外部リリースの追跡）が前提だが、このイメージは同じリポジトリの Dockerfile から都度ビルドされる自己完結物で比較すべき『upstream』が存在しないため、モデルに馴染まない。CI 配線は workflow scope 不足で push できず needs-human に切り出した"
     },
     {
       "id": "T-0154",
