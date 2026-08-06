@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 124,
-  "updated": "2026-08-06T01:50:00Z",
+  "next_id": 125,
+  "updated": "2026-08-06T02:47:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2331,6 +2331,24 @@
       "created": "2026-08-06",
       "pr": 276,
       "notes": "run #92: 着手・完遂。python3 ops/validate.py で 0 error, 0 warning を確認済み"
+    },
+    {
+      "id": "T-0124",
+      "domain": "homelab",
+      "title": "apps/autopilot/deployment.yaml の image ダイジェストコメントが「プレースホルダ」のまま実態と乖離していた",
+      "kind": "chore",
+      "risk": "low",
+      "status": "done",
+      "priority": 60,
+      "why": "backlog の todo（T-0117）が CronJob schedule 未到来で着手不能だったため、CHARTER §3 に従い自分で調査。deployment.yaml のコメントが『タグはイメージのビルド経路が固まった時点で差し替えるプレースホルダ』のままだったが、run #57（2026-08-05 18:14）以降このダイジェストのまま autopilot 自身が継続的に正常稼働しており（現在 iteration #39、restartCount 0）、ビルド経路は既に固まっている。プレースホルダという表現は次の自分が『差し替えが必要』と誤読する原因になりうる",
+      "dod": "コメントを実態（build-autopilot-image.yml が images/autopilot/ の変更を main 取り込み時に push し、このダイジェストは対応する Dockerfile を指す。変更時はビルド完了を待ってダイジェストを更新する）に書き換える",
+      "blocked_by": null,
+      "refs": [
+        "apps/autopilot/deployment.yaml"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #95: 着手・完遂。コメントのみの変更で機能に影響なし"
     }
   ]
 }
