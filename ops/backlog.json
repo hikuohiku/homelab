@@ -2952,7 +2952,7 @@
         "ops/CHARTER.md"
       ],
       "created": "2026-08-06",
-      "pr": "PENDING_PR_NUMBER",
+      "pr": 359,
       "notes": "run #160: ops/validate.py に check_review_log() を追加。review-log.md の R-NNN（状態: 起票済 T-XXXX）と backlog task の why に含まれる R-NNN 参照の食い違いを検出する。review-log.md/backlog.json にダミーの食い違いエントリを一時的に追加して両方向（review-log→backlog 不在、backlog→review-log 不在、why に R-NNN 不足）の検出を手元で確認したうえで元に戻した。レビュー役の運用実績がまだ無いため warning 扱い（error 昇格は数サイクル運用後に検討、DoD どおり）。"
     }
   ]
