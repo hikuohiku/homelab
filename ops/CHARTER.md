@@ -530,8 +530,11 @@ upstream リポジトリのファイル（例: `deploy/crds/bundle.yaml` のよ�
 2026-08-05 17:46:27「クラスタ内にサービスを立てていい」）を受け、autopilot は `apps/autopilot/`
 （Deployment + `loop.sh` の常駐ループ、`claude -p --permission-mode bypassPermissions` を
 `INTERVAL_SECONDS` ごとに回す）に移った。**この節を読んでいる自分は、そのクラスタ内 Pod の中で
-動いている。** クラウド routine（`ops/state.json` の `routines`）は「保険」として残る想定だが、
-まだ頻度は下げられていない（着手すればできる。VISION 段階3の一部）。
+動いている。** クラウド routine（`ops/state.json` の `routines`）は 2026-08-05 に `enabled: false`
+にして無効化済み（クラスタが壊れたときのバックストップとして残置、issue #56, 2026-08-05T18:32:03Z）。
+実際の稼働間隔は `ops/state.json` の `in_cluster_loop`（`apps/autopilot/deployment.yaml` の
+`INTERVAL_SECONDS` 由来、現行 120 秒）であり、ダッシュボードの cadence 表示（`ops/dashboard/build.py`
+の `resolve_cadence()`）もこちらを優先する（T-0131, run #110）。
 
 旧サンドボックスとの違いで、他の節の前提を崩すもの:
 
