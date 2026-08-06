@@ -76,6 +76,7 @@ spec:
           initContainers:
             - name: sqlite-snapshot
               image: python:3.14-alpine
+              terminationMessagePolicy: FallbackToLogsOnError
               command: ["python", "/scripts/sqlite_backup.py"]
               env:
                 - name: SRC_DB
@@ -115,6 +116,7 @@ spec:
           containers:
             - name: restic-backup
               image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
               command:
                 - sh
                 - -c
@@ -202,6 +204,7 @@ spec:
           containers:
             - name: restic-forget
               image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
               command:
                 - sh
                 - -c

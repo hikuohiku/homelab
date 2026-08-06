@@ -33,6 +33,7 @@ spec:
       initContainers:
         - name: fetch-init
           image: alpine:3.22.5
+          terminationMessagePolicy: FallbackToLogsOnError
           command:
             - sh
             - -c
@@ -54,6 +55,7 @@ spec:
         # 認証不要で raw.githubusercontent.com から読める）を定期取得して共有 volume に置く。
         - name: fetcher
           image: alpine:3.22.5
+          terminationMessagePolicy: FallbackToLogsOnError
           command:
             - sh
             - -c
@@ -97,6 +99,7 @@ spec:
         # ops/feedback.json へ取り込んで状態を進める
         - name: httpd
           image: python:3.14-alpine
+          terminationMessagePolicy: FallbackToLogsOnError
           command: ["python3", "/config/server.py"]
           env:
             - name: WWW_ROOT

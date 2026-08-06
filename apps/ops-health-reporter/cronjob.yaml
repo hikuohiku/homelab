@@ -27,6 +27,7 @@ spec:
           containers:
             - name: report
               image: python:3.14-alpine
+              terminationMessagePolicy: FallbackToLogsOnError
               command: ["python", "/scripts/report.py"]
               env:
                 - name: GITHUB_TOKEN
