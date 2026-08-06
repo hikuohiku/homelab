@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 155,
-  "updated": "2026-08-06T11:49:11Z",
+  "next_id": 157,
+  "updated": "2026-08-06T13:00:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2954,6 +2954,49 @@
       "created": "2026-08-06",
       "pr": 359,
       "notes": "run #160: ops/validate.py に check_review_log() を追加。review-log.md の R-NNN（状態: 起票済 T-XXXX）と backlog task の why に含まれる R-NNN 参照の食い違いを検出する。review-log.md/backlog.json にダミーの食い違いエントリを一時的に追加して両方向（review-log→backlog 不在、backlog→review-log 不在、why に R-NNN 不足）の検出を手元で確認したうえで元に戻した。レビュー役の運用実績がまだ無いため warning 扱い（error 昇格は数サイクル運用後に検討、DoD どおり）。"
+    },
+    {
+      "id": "T-0155",
+      "domain": "homelab",
+      "title": "ops/CHARTER.md §6 が「ops/check_feedback.py はまだ CI に入っていない」と書いているが、同じコミットで既に CI に組み込み済み",
+      "kind": "docs",
+      "risk": "low",
+      "status": "todo",
+      "priority": 20,
+      "why": "計画役 run #161 相当の調査（subagent 調査で発見・自分で git blame / .github/workflows/ci.yml を読んで裏取り済み）。ops/CHARTER.md §6 手順5（756〜758行目付近）は『python3 ops/check_feedback.py を実行して0 errorを確認する。これはまだCIに入っていない』と書いているが、`.github/workflows/ci.yml` の `ops` job には既に `check human feedback ledger is consistent` ステップとして `python3 ops/check_feedback.py` が存在する。両方とも同一コミット cce1ca6（『人間の書き置きを issue 経由から台帳に移す』、feedback ledger 新設 PR #360）で追加されており、コミット本文には『ops/check_feedback.py を CI に繋いだ』と明記されているのに CHARTER 本文だけ古い前提のまま取り残された。CHARTER §1 は『実態とドキュメントが乖離していない』ことを健全性の定義に含めており、CHARTER 自身がこれに反する状態を放置しない",
+      "dod": "ops/CHARTER.md §6 手順5 の該当箇所から『これはまだ CI に入っていない（…) 気づいた回に足してよい』という一文を削除し、`.github/workflows/ci.yml` の `ops` job で既に検証されている旨に書き換える",
+      "needs_human_reason": null,
+      "blocked_by": null,
+      "refs": [
+        "ops/CHARTER.md",
+        ".github/workflows/ci.yml"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": ""
+    },
+    {
+      "id": "T-0156",
+      "domain": "homelab",
+      "title": "CLAUDE.md / apps/README.md のアプリ一覧・ディレクトリ構造が apps/kustomization.yaml の実態からずれ続けている（同型drift5回目、機械検証が無い）",
+      "kind": "ci",
+      "risk": "low",
+      "status": "todo",
+      "priority": 46,
+      "why": "計画役 run #161 相当の調査（subagent 調査で発見・自分で apps/kustomization.yaml / CLAUDE.md / apps/README.md を読んで裏取り済み）。apps/kustomization.yaml の resources は12件（syncthing/application.yaml を含む）だが、CLAUDE.md の『Apps』一覧・Directory Structure ツリーには syncthing が無く、apps/README.md の『ディレクトリ構造』ツリー（ops-dashboard/syncthing 抜け、8件のみ）と『期待される出力』の kubectl get application サンプル（apps/agent-rbac含め11件、ops-dashboard/syncthing 抜けで実際の13件に届かない）も同様にずれている。この種の drift は T-0057(run#24)・T-0089(run#42)・T-0094(run#47)・T-0134(run#125) で計4回、起票→手直しを繰り返しており、今回で5回目の再発。`just <recipe>` の記載漏れには ops/check_doc_commands.py という同型の自動検証が既にあるのに、アプリ一覧のずれだけは毎回人力の起票に頼ったままで、CHARTER §8『同じミスを2回した→CIかチェックリストで機械的に防ぐ』に反する状態が続いている",
+      "dod": "(1) まず CLAUDE.md の Apps 一覧・Directory Structure、apps/README.md のディレクトリ構造ツリー・kubectl get application サンプル出力を apps/kustomization.yaml の実態（12エントリ、agent-rbac/ops-dashboard/syncthing含む）に合わせて修正する。(2) ops/check_doc_commands.py と同型の新規スクリプト（例: ops/check_app_list_sync.py）を作り、apps/kustomization.yaml の resources から app ディレクトリ名一覧を機械的に抽出し、CLAUDE.md・apps/README.md がそれと矛盾しない（全件言及がある）ことを検証し .github/workflows/ci.yml の ops job に追加する。ドキュメントの自由記述（説明文・箇条書きの前後）まで固定フォーマットを強制すると壊れやすいので、検証は『kustomization.yaml にあるapp名がドキュメント中に一度も出現しない』ケースの検出に留める。意図的に1アプリを一覧から抜いた diff を作り CI が検出することを確認する",
+      "needs_human_reason": null,
+      "blocked_by": null,
+      "refs": [
+        "CLAUDE.md",
+        "apps/README.md",
+        "apps/kustomization.yaml",
+        "ops/check_doc_commands.py",
+        ".github/workflows/ci.yml"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": ""
     }
   ]
 }
