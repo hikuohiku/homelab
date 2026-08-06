@@ -2613,7 +2613,7 @@
       "title": "syncthing の PVC + Deployment/Service manifest を新規作成する（apps/syncthing/）",
       "kind": "feature",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 68,
       "why": "T-0137（syncthing の k8s 移行可否検討, 2026-08-06 完了・PR #325）で技術的に実現可能と判断した。Plans.md M2 は「検討完了・実装待ち」。CHARTER §3 の起票の粒度（1タスク=1PR=1論点）に従い、まず manifest 作成のみを独立させる。実データ移行（旧 LXC 101 からの config/データ移行）は別タスク T-0140、Tailscale 公開は別タスク T-0139 に分けた",
       "dod": "apps/syncthing/ ディレクトリを新設し、kustomization.yaml・deployment.yaml（syncthing 公式イメージ）・service.yaml（この時点では ClusterIP のみ。外部公開の方式は T-0139 で決める）・pvc.yaml（local-path StorageClass。node01 は単一ノードのためノード固定制約は問題にならない、T-0137 の根拠を参照）を作成する。apps/apps.yaml の App of Apps に登録する。ops/inventory.json にバージョン監視対象として追加する（他アプリと同様、check_version_sync.py の対象にするかも検討）。kustomize build（CI）が green であることを確認する。この時点では空の PVC で新規デバイスとして起動するだけで、旧 LXC 101 の既存データ・ピア関係とは無関係（そちらは T-0140）",
@@ -2624,8 +2624,8 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #136（計画役）: T-0137 完了を受け ops/inbox.md の引き継ぎ（実装タスクへの分割）をここで起票。"
+      "pr": 328,
+      "notes": "run #136（計画役）: T-0137 完了を受け ops/inbox.md の引き継ぎ（実装タスクへの分割）をここで起票。 run #137（実行役）: manifest 実装完了、PR #328。"
     },
     {
       "id": "T-0139",

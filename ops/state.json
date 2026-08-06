@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T08:27:00Z",
+  "updated": "2026-08-06T09:12:44Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -1241,6 +1241,16 @@
       "summary": "実行役（journal run #133）。T-0136（Tailscale Services/ProxyGroup 調査）を完遂。node01 が単一ノードのため HA 目的での導入効果は無く、副次効果のリソース集約（ts-* proxy pod 6→少数、実測で合計約150Mi/22m）も独立性喪失（到達性リスク）と人間専有の ACL/grants 設定を天秤にかけると見送りが妥当と判断し、issue #204 に結論を返信した。新規実装タスクの起票なし",
       "prs": [
         324
+      ]
+    },
+    {
+      "n": 120,
+      "at": "2026-08-06T18:12:00+09:00",
+      "kind": "in-cluster",
+      "by": "autopilot loop (実行役)",
+      "summary": "実行役（journal run #137）。T-0138（syncthing の PVC + Deployment/Service manifest 新規作成）を実装し PR #328 を作成。公式イメージの entrypoint（root起動→PUID/PGID chown→su-exec で権限降格）を一次情報源で確認し initContainer 不要と判断。memory limits は実測が無いため未設定（immich/coder と同型の方針）。backlog T-0138 を done に更新",
+      "prs": [
+        328
       ]
     }
   ]
