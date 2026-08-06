@@ -1503,7 +1503,9 @@
       "kind": "scheduled",
       "by": "in-cluster loop",
       "summary": "実行役（journal run #165）。フィードバック新規無し（ops-feedback ブランチ未作成、issue #56 last_read 以降新規コメント無し）。オープン PR・autopilot ブランチとも無く中断なし。T-0117 は not_before 未到来のため、唯一の todo だった T-0157（ci.yml ops job の glob 化）に着手。5対象スクリプトの個別実行・glob ループ実行（fail-fast含む）を手元検証済みだが、ci.yml への実 push は想定どおり workflow scope 不足で拒否されたため diff を needs_human_reason に切り出し needs-human とした（コード変更なし、backlog.json のみ）。",
-      "prs": []
+      "prs": [
+        366
+      ]
     }
   ]
 }
