@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 129,
-  "updated": "2026-08-06T03:17:00Z",
+  "next_id": 130,
+  "updated": "2026-08-06T03:30:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2429,6 +2429,25 @@
       "created": "2026-08-06",
       "pr": null,
       "notes": "run #98 で起票。T-0127（push 側）が先。"
+    },
+    {
+      "id": "T-0129",
+      "domain": "homelab",
+      "title": "autopilot の loop.sh が自分の更新を拾って exec し直す仕組みを追加（ConfigMap のみで反映）",
+      "kind": "chore",
+      "risk": "high",
+      "status": "in_progress",
+      "priority": 5,
+      "why": "run #99 で発見。loop.sh はコンテナ起動時に一度だけ読み込まれ、ConfigMap（disableNameSuffixHash: true）を書き換えても Deployment の spec は変わらないため Pod は作り直されず、実行中の loop.sh は古いまま変わらない（loop.sh 冒頭のコメントに明記済みの既知の制約）。この run 自身がその実例で、T-0126 相当の役割分担（計画役/実行役プロンプト分割, PR #286, a5e3cc9 で merge 済み）が導入された後もこの Pod は旧 loop.sh のまま単一プロンプト（旧 prompt.md 相当）で動いていた。原因は、PR #286 merge 直後（2026-08-06T03:22:08Z、merge は 03:21:33Z）に origin/autopilot/plan-execute-split ブランチへ直接 1 コミット（2f92db4, author: hikuohiku, Co-Authored-By: Claude Opus 5 経由の構築セッション）が追加され、loop.sh 自身に自己更新検知（起動中の /config/loop.sh の md5 を毎イテレーション先頭で比較し、変化していれば exec で入れ替える）を持たせる修正が作られていたが、対応する PR が一度も開かれず main に取り込まれていなかった。この T-0129 はその孤立コミットを cherry-pick して正式に PR 化するもの",
+      "dod": "apps/autopilot/loop.sh に reexec_if_updated()（/config/loop.sh の md5sum を起動時点と比較し、変化していればイテレーション境界で exec bash \"${SELF}\" して入れ替える）を追加し、apps/autopilot/deployment.yaml の pod template に一度きりの annotation（autopilot/loop-revision: \"2\"）を追加してこの Pod 自身を作り直す。CI green を確認して merge し、ArgoCD sync 後に新しい Pod が起動し旧 Pod が Recreate 戦略で置き換わることを次回起動（新 Pod での iteration）の heartbeat で確認する。以降 loop.sh を書き換えても Pod 再作成なしで次のイテレーション境界から反映されることが期待値",
+      "blocked_by": null,
+      "refs": [
+        "apps/autopilot/loop.sh",
+        "apps/autopilot/deployment.yaml"
+      ],
+      "created": "2026-08-06",
+      "pr": 287,
+      "notes": "run #99: この Pod（autopilot-7786d96c58-nj7sn, 起動 2026-08-05T18:23:23Z）はロールを指定しないプロンプトを受け取っており、CHARTER §3 の計画役/実行役の判別ができない状態で稼働していたことから発覚した。merge 後、この Pod は SIGTERM を受けて終了する見込み（strategy: Recreate, terminationGracePeriodSeconds: 60s）。ops/ 記録の更新は途中で打ち切られる可能性があるため、この run はコード変更のコミットを最優先で push し、journal/state 更新も同じブランチに追加コミットしてから merge する順序で進める。"
     }
   ]
 }

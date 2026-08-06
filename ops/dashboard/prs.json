@@ -1,6 +1,50 @@
 {
-  "open": [],
+  "open": [
+    {
+      "number": 287,
+      "title": "feat(autopilot): loop.sh が自分の更新を拾って exec し直す (T-0129)",
+      "url": "https://github.com/hikuohiku/homelab/pull/287",
+      "isDraft": false,
+      "createdAt": "2026-08-06T03:32:34Z",
+      "statusCheckRollup": [
+        {
+          "conclusion": "SUCCESS"
+        },
+        {
+          "conclusion": "SUCCESS"
+        },
+        {
+          "conclusion": "IN_PROGRESS"
+        },
+        {
+          "conclusion": "IN_PROGRESS"
+        },
+        {
+          "conclusion": "SUCCESS"
+        },
+        {
+          "conclusion": "IN_PROGRESS"
+        }
+      ],
+      "headRefName": "autopilot/T-0129-loop-self-reexec",
+      "autoMergeRequest": null
+    }
+  ],
   "merged": [
+    {
+      "number": 285,
+      "title": "chore(ops): T-0126 の PR 番号 (#284) を記録に反映",
+      "url": "https://github.com/hikuohiku/homelab/pull/285",
+      "mergedAt": "2026-08-06T03:21:38Z",
+      "headRefName": "autopilot/T-0126-record-pr-number"
+    },
+    {
+      "number": 286,
+      "title": "feat(autopilot): 計画役と実行役を分ける",
+      "url": "https://github.com/hikuohiku/homelab/pull/286",
+      "mergedAt": "2026-08-06T03:21:34Z",
+      "headRefName": "autopilot/plan-execute-split"
+    },
     {
       "number": 284,
       "title": "fix(ops): dashboard の PR 一覧取得を gh CLI 依存から GitHub API 直叩きに (T-0126)",
@@ -406,20 +450,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/225",
       "mergedAt": "2026-08-05T18:49:17Z",
       "headRefName": "autopilot/T-0108-argocd-force-replace"
-    },
-    {
-      "number": 224,
-      "title": "ops: run #58 の記録更新（T-0028/T-0071 前提訂正）",
-      "url": "https://github.com/hikuohiku/homelab/pull/224",
-      "mergedAt": "2026-08-05T18:41:20Z",
-      "headRefName": "autopilot/run58-wrapup"
-    },
-    {
-      "number": 223,
-      "title": "fix(vaultwarden): restic backup verify Job のハング切り分け診断を追加 (T-0108)",
-      "url": "https://github.com/hikuohiku/homelab/pull/223",
-      "mergedAt": "2026-08-05T18:36:27Z",
-      "headRefName": "autopilot/T-0108-vaultwarden-restic-diagnostics"
     }
   ]
 }
