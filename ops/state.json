@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T23:31:00Z",
+  "updated": "2026-08-06T23:45:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -433,6 +433,16 @@
       "summary": "実行役（journal run #201）。PR #376の中断確認。incidentのupdated_atはrun #200と同じ23:13:30Zで変化なしだが、actions/runs?head_shaがtotal_count:0→1に変化。CI run 31131207623の完走(success)を確認、必須チェック6件全green、mergeable_state: cleanへ回復。この後PR #376をmergeする。feedback新規なし、健全性異常なし。",
       "prs": [
         376
+      ]
+    },
+    {
+      "n": 202,
+      "at": "2026-08-06T23:45:00Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #202）。PR #376 merge後、直列化ルールに従いbacklog todoのT-0161（autopilot自身のimage digestがchromium/フォント追加ビルドに追随していない、レビュー役R-002）に着手。ghcr.io APIでpush済みdigestを実測しdeployment.yamlを更新、PR #379として提出。DoDの実機確認（Pod内chromium実在）はdockerが無く未実施、次の起動でkubectlにより確認予定。",
+      "prs": [
+        379
       ]
     }
   ]

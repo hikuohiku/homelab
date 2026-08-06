@@ -602,7 +602,7 @@
         ".github/workflows/build-autopilot-image.yml"
       ],
       "created": "2026-08-06",
-      "pr": null,
+      "pr": 379,
       "notes": "run #187（計画役）: ops/review-log.md R-002 を起票。R-002 の状態を『起票済 T-0161』に更新した。T-0153（CI検出の仕組み自体）とは別論点として分離。 run #201（実行役）: PR #376 merge後の直列化ルールに従い着手。commit 8eacc31 (chromium/font追加) が main へ入った push (merge commit 72eaec33ced3847c8b9030354d04261318b675fc、workflow run 31102707031, success) が実際にghcr.ioへ push したイメージのindex digestを ghcr.io/v2/.../manifests/72eaec33... へGET（ghcr.io/tokenで取得した匿名pullトークン使用）して実測: sha256:6d0cf8b13d602f189d75b48ef654cb0cfd0fe999740782928199097b7451bf75（現行pin同様OCI image index）。deployment.yamlのdigestをこれに更新。"
     },
     {
