@@ -172,6 +172,56 @@ def check_state(s) -> None:
         warn("state.json: feedback.issue が未設定（フィードバック窓口が無い）")
 
 
+JOURNAL_HEADING_RE = re.compile(r"^## .* — run #(\d+)", re.MULTILINE)
+JOURNAL_RUN_REF_RE = re.compile(r"journal run\s*#(\d+)")
+
+
+def check_runs_freshness(s) -> None:
+    # T-0145: state.json の runs 配列が journal の run 番号を追わず抜け続けていた
+    # (run #126〜#132 の7件が欠落したまま気づかれなかった)。runs[].n は歴史的経緯で
+    # journal の run 番号と1:1に対応しなくなっている（過去の欠落がそのままズレとして残る
+    # ため）ので、n の連番ではなく summary 中の `journal run #N` という明示的な記述
+    # (CHARTER §7 で追記を義務化) を頼りに、直近の journal run まで追随できているかを見る。
+    runs = s.get("runs")
+    if not isinstance(runs, list) or not runs:
+        return
+
+    journal_dir = OPS / "journal"
+    journal_files = sorted(journal_dir.glob("*.md")) if journal_dir.is_dir() else []
+    if not journal_files:
+        warn("journal/ にファイルが無く、runs 配列の journal 追随を検証できない")
+        return
+
+    latest_journal = journal_files[-1]
+    run_numbers = [int(n) for n in JOURNAL_HEADING_RE.findall(latest_journal.read_text())]
+    if not run_numbers:
+        warn(f"{latest_journal.name}: `## ... — run #N` の見出しが見つからず追随を検証できない")
+        return
+    journal_max = max(run_numbers)
+
+    documented = [
+        int(m.group(1))
+        for r in runs
+        for m in [JOURNAL_RUN_REF_RE.search(r.get("summary", ""))]
+        if m
+    ]
+    if not documented:
+        warn(
+            "state.json: runs[].summary に `journal run #N` の記述が1件も無く、"
+            "journal との追随を機械検証できない (CHARTER §7)"
+        )
+        return
+
+    runs_max = max(documented)
+    gap = journal_max - runs_max
+    if gap > 0:
+        err(
+            f"state.json: runs 配列が journal の run #{journal_max} まで追随していない"
+            f"（runs 側で確認できる最新は run #{runs_max}、{gap} 件分が未反映）。"
+            f"journal に追記するのと同じタイミングで runs 配列にも 1 件追記すること (CHARTER §7)"
+        )
+
+
 def main() -> int:
     backlog = load("backlog.json")
     inventory = load("inventory.json")
@@ -187,6 +237,7 @@ def main() -> int:
         check_inventory(inventory)
     if state:
         check_state(state)
+        check_runs_freshness(state)
 
     check_conflict_markers()
 
