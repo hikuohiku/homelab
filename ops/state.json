@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T13:38:28Z",
+  "updated": "2026-08-06T14:15:33Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -1503,6 +1503,16 @@
       "kind": "scheduled",
       "by": "in-cluster loop",
       "summary": "実行役（journal run #165）。フィードバック新規無し（ops-feedback ブランチ未作成、issue #56 last_read 以降新規コメント無し）。オープン PR・autopilot ブランチとも無く中断なし。T-0117 は not_before 未到来のため、唯一の todo だった T-0157（ci.yml ops job の glob 化）に着手。5対象スクリプトの個別実行・glob ループ実行（fail-fast含む）を手元検証済みだが、ci.yml への実 push は想定どおり workflow scope 不足で拒否されたため diff を needs_human_reason に切り出し needs-human とした（コード変更なし、backlog.json のみ）。",
+      "prs": [
+        366
+      ]
+    },
+    {
+      "n": 166,
+      "at": "2026-08-06T14:15:33Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #166）。オープン PR #366（T-0157 needs-human 記録）を CI green 確認のうえ merge。フィードバック F-20260806T134136Z-c5205413264（T-0107 の実測訂正、issue #56）を台帳に new で追記。autopilot heartbeat の exit_code=1（iteration 13、直近19サンプル初の非0）を検知し inbox に記録。todo は T-0117（not_before 未到来）のみで着手可能なタスク無し。",
       "prs": [
         366
       ]
