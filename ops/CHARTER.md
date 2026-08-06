@@ -648,6 +648,15 @@ upstream リポジトリのファイル（例: `deploy/crds/bundle.yaml` のよ�
     close だけでは残る」対応を、この substrate では今後実際に実行できる。旧サンドボックス時代に
     残った孤児ブランチ（`git branch -r` で確認できるもの）の掃除は、内容が main と重複している
     ことを確認できたものから順に削除してよい
+- **`.github/workflows/**` を変更するコミットは `git push` 自体が拒否される。** `AUTOPILOT_GITHUB_TOKEN`
+  は classic PAT で `workflow` scope を持たず、GitHub 側が
+  `refusing to allow a Personal Access Token to create or update workflow ... without \`workflow\` scope`
+  で push を fail-closed に拒否する（2026-08-06 run #159 実測、T-0153）。旧サンドボックスの
+  §5.2「`.github/workflows/*.yml` は書けるが ruleset は書けない」は GitHub App の `workflows` 権限
+  前提の話で、この substrate の PAT ベースの credential には当てはまらない。CI に新しい検証を
+  足したいのに配線（ワークフロー側の1ステップ追加）だけが必要なときは、検証スクリプト本体は
+  実装・動作確認まで済ませて PR に含め、ワークフローファイルへの追記だけを `needs-human`
+  （`needs_human_reason` に追加すべき YAML の具体的な差分を書く）として切り出す
 - **`kubectl` が実際に動く。** in-cluster ServiceAccount `autopilot` + 専用 ClusterRole
   `autopilot-reader`（`apps/autopilot/rbac.yaml`）で、`get`/`list` のみ・書き込み動詞は無し。
   読めるもの: `pods`/`persistentvolumeclaims`/`nodes`/`namespaces`/`events`、

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T12:34:00Z",
+  "updated": "2026-08-06T12:44:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -1444,6 +1444,14 @@
       "by": "autopilot pod (計画役)",
       "summary": "計画役（journal run #158）。run #157 の重複記録（#350/#351）を発見し #350 merge・#351 close で解消。人間が同時刻に PR #353 でレビュー役の仕組みを追加したと確認。フィードバック・健全性に新規異常無し、inbox 空、backlog blocked/needs-human 全15件は前提変化なし。todo が枯れていたため subagent 調査で T-0153（autopilot 自身のイメージが inventory 監視対象外）・T-0154（review-log.md と backlog の突き合わせに機械検証が無い）の2件を新規起票。",
       "prs": []
+    },
+    {
+      "n": 159,
+      "at": "2026-08-06T12:44:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #159）。T-0153（autopilot 自身のイメージ digest pin 未検証）に着手し ops/check_autopilot_image_pin.py を新設・動作確認。CI (ci.yml) への配線は AUTOPILOT_GITHUB_TOKEN に workflow scope が無く push 拒否されると判明（CHARTER §5.5 に追記）、配線を差し戻しスクリプト単体を PR #356 として提出。T-0153 は配線待ちの needs-human に変更。",
+      "prs": [356]
     }
   ]
 }
