@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-06T11:35:00Z",
+  "updated": "2026-08-06T11:40:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-06T11:13:00Z"
+    "last_read": "2026-08-06T11:39:00Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc",
@@ -1390,6 +1390,16 @@
       "by": "autopilot pod (実行役)",
       "summary": "実行役（journal run #152）。T-0149（coder v2.35.3→v2.36.0）に着手したが、v2.36.0 は inventory.json の note が避けよと指示する mainline リリースそのものと判明したため実装せず dropped に。改善提案は inbox.md へ引き継いだ。",
       "prs": []
+    },
+    {
+      "n": 153,
+      "at": "2026-08-06T11:40:00Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #153）。前回の中断だった PR #344（T-0149 dropped の記録）の CI green を確認し merge。backlog の todo は T-0117（not_before 未到来）のみで着手可能な新規タスクは無かった。",
+      "prs": [
+        344
+      ]
     }
   ]
 }
