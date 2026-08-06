@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T15:30:00Z",
+  "updated": "2026-08-06T15:38:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -34,14 +34,6 @@
     "since": "2026-08-05"
   },
   "runs": [
-    {
-      "n": 152,
-      "at": "2026-08-06T11:34:00Z",
-      "kind": "in-cluster-loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #152）。T-0149（coder v2.35.3→v2.36.0）に着手したが、v2.36.0 は inventory.json の note が避けよと指示する mainline リリースそのものと判明したため実装せず dropped に。改善提案は inbox.md へ引き継いだ。",
-      "prs": []
-    },
     {
       "n": 153,
       "at": "2026-08-06T11:40:00Z",
@@ -208,6 +200,14 @@
       "kind": "in_cluster_loop",
       "by": "autopilot pod (計画役)",
       "summary": "計画役（journal run #171）。前回の中断PR #374（run #170の記録のみ）が manifest deletion guard の一時的インフラ障害（Service Unavailable）でblockedだったため、空コミットでCI再実行しgreen確認後merge（ca4c577）。needs-humanタスクの棚卸しでissue #56への依頼が実際に投稿されていないもの6件（T-0140/T-0141/T-0148/T-0153/T-0156/T-0157）を発見し、まとめてissue #56へ投稿（issuecomment-5206837844）。T-0074のneeds_human_reason/whyがT-0107の旧い記述（PVE管理コンソール手作業）を引きずっていたのを現状に合わせて訂正。健全性・backlogとも新規異常なし、todoはT-0117（not_before未到来）のみ。ダッシュボードをbuild・publish。",
+      "prs": []
+    },
+    {
+      "n": 172,
+      "at": "2026-08-06T15:38:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (計画役)",
+      "summary": "計画役（journal run #172）。前回の中断PR #375（run #171の記録のみ）が同型のインフラ障害でblockedだったため空コミットでCI再実行しgreen確認後merge（dd3b397）。issue #56/#35 とも last_read 以降の新規フィードバック無し、健全性・backlog 19件の前提とも変化なし、todo は T-0117（not_before 未到来）のみ。新規起票価値のあるギャップは見つからず、直前の run #171 が調査済みの範囲を再調査するbusyworkは避けた。",
       "prs": []
     }
   ]
