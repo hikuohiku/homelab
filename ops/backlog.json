@@ -2692,7 +2692,7 @@
       "title": "手動 credential 作成手順（Proxmox/Doppler/Tailscale の UI 操作）の IaC 化可否を調査する（issue #35）",
       "kind": "investigate",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 76,
       "why": "issue #35（2026-05-19、autopilot 発足前）。エージェント用 read-only credential 分離（CLAUDE.md Agent Operations）で必要な手動手順が4つ（Proxmox agent@pve ユーザー/トークン作成 他）あり、再現性のため IaC 化したいという要望。着手されないまま残っている",
       "dod": "issue #35 に列挙された4手順それぞれについて、Terraform 等での自動化が技術的に可能か（例: Proxmox provider の pve_user/pve_acl リソースは、それ自体を作るのに十分な権限を持つ既存 credential が要るという鶏卵問題がありうる）を調査する。自動化可能な部分があれば実装タスクとして分割起票する。ブートストラップ性質上どうしても人間の初回手作業が要る部分は、その理由を issue #35 と CLAUDE.md に明記した上で、再現性を上げる次善策（手順をスクリプト化してコピペミスを防ぐ等）を検討する。全て自動化不能と判断した場合はその根拠を issue #35 に返信し、CHARTER の『人間に渡してよいもの』の実例として記録する",
@@ -2703,7 +2703,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #136（計画役）: run #132 が拾った「#56 以外の open issue」棚卸しの引き継ぎで起票"
+      "notes": "run #136（計画役）: run #132 が拾った「#56 以外の open issue」棚卸しの引き継ぎで起票 run #139（実行役）: bpg/proxmox（user/acl/user_token）、tailscale/tailscale（oauth_client、実ソース tailscale/resource_oauth_client.go まで確認）、DopplerHQ/doppler（secret）の各 provider ドキュメント・実装を確認し、4手順とも技術的には自動化可能と判断。bpg/proxmox の推奨ロール例に Realm.AllocateUser/User.Modify/Permissions.Modify が含まれる点から、既存 terraform Proxmox token がそのまま bootstrap credential として使える可能性が高いことを発見。ただし (1) その既存トークンのロール、(2) 既存 TAILSCALE_CLIENT_ID のスコープの2点は autopilot・構築セッションどちらからも確認不能なため issue #35 に結論とあわせて確認依頼を投稿（issuecomment-5202903809）。自動化不能の結論には至らなかったため CLAUDE.md への反映は見送り。実装タスクへの分割起票は計画役の仕事のため ops/inbox.md に引き継いだ。"
     }
   ]
 }
