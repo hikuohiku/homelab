@@ -659,7 +659,16 @@ def build() -> str:
     )
 
 
-TEMPLATE = """<title>autopilot — homelab 当直記録</title>
+# 完全な HTML 文書として出す。クラスタ内の ops-dashboard は python の http.server で
+# 配信していて Content-Type に charset を付けないため、文書側に <meta charset> が無いと
+# ブラウザが文字コードを推測して日本語が化ける（2026-08-06 に実際に化けた）。
+# サーバ設定に依存させないよう、文書側で完結させる。
+TEMPLATE = """<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>autopilot — homelab 当直記録</title>
 <style>
 :root {{
   --ground:#eef0f4; --surface:#fbfcfe; --surface2:#f3f5f9; --line:#d8dce5;
@@ -894,6 +903,8 @@ footer {{ color:var(--muted); font-size:.75rem; font-family:var(--mono);
   gap:.3rem 1rem; }}
 @media (prefers-reduced-motion:reduce) {{ *{{transition:none!important;animation:none!important}} }}
 </style>
+</head>
+<body>
 
 <div class="wrap">
   <header class="mast">
@@ -1054,6 +1065,8 @@ footer {{ color:var(--muted); font-size:.75rem; font-family:var(--mono);
   setInterval(tick, 1000);
 }})();
 </script>
+</body>
+</html>
 """
 
 
