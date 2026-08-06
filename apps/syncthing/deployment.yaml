@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: syncthing
+  namespace: syncthing
+  labels:
+    app: syncthing
+spec:
+  replicas: 1
+  # 内部 DB (SQLite, v2 系) を単一 PVC 上に持つため、rolling 中の二重起動を避けて Recreate
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: syncthing
+  template:
+    metadata:
+      labels:
+        app: syncthing
+    spec:
+      containers:
+        - name: syncthing
+          # 公式イメージは latest ではなく具体的なバージョンに pin。2026-08-06 時点の最新安定版
+          # （GitHub Releases で breaking change の記載なしを確認済み、DB は SQLite で新規インストールは
+          # マイグレーション対象外）
+          image: syncthing/syncthing:2.1.3
+          # 公式イメージの entrypoint (script/docker-entrypoint.sh) は root で起動し、$HOME
+          # (=/var/syncthing) を PUID:PGID へ chown した上で su-exec により非 root (既定 1000:1000)
+          # へ権限を落として実行する（GitHub syncthing/syncthing 実測、2026-08-06）。vaultwarden と
+          # 異なり別途 initContainer での chown は不要。root 起動が前提のため runAsNonRoot 等の
+          # securityContext は設定しない
+          env:
+            - name: PUID
+              value: "1000"
+            - name: PGID
+              value: "1000"
+          ports:
+            - name: gui
+              containerPort: 8384
+            - name: sync-tcp
+              containerPort: 22000
+              protocol: TCP
+            - name: sync-udp
+              containerPort: 22000
+              protocol: UDP
+            - name: discovery
+              containerPort: 21027
+              protocol: UDP
+          volumeMounts:
+            - name: data
+              mountPath: /var/syncthing
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            # memory の limits は入れない（immich/coder と同型の方針、issue #56 2026-08-05）。
+            # 実データ同期を始める前の新規デプロイで実測が無いため、超過が回復不能な OOMKill に
+            # なる memory limits は設定しない。CPU limits は throttle で回復するため設定する
+            limits:
+              cpu: 1000m
+          # 公式 Dockerfile の HEALTHCHECK と同じエンドポイント。GUI 認証設定に関わらず疎通確認できる
+          livenessProbe:
+            httpGet:
+              path: /rest/noauth/health
+              port: gui
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /rest/noauth/health
+              port: gui
+            initialDelaySeconds: 15
+            periodSeconds: 10
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: syncthing-data
