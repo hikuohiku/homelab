@@ -2896,7 +2896,7 @@
       "title": "inventory 定期チェックで note の除外指定（避けるべきバージョン）を突き合わせる運用を明文化する",
       "kind": "chore",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 45,
       "why": "T-0149（run #152 で dropped）の実例。ops/inventory.json の coder エントリには『stable チャンネルを追う（mainline の vX.XX.0 系は避ける）』という note が既に書かれていたが、run #150 の inventory 自動チェックは『upstream に新しいタグがあるか』だけを見て note の除外指定を突き合わせておらず、避けるべきと明記されていた v2.36.0 への更新タスクを一度起票してしまった（実害は出る前に run #152 で気づき dropped にできたが、1 タスク分の起票・調査・dropped 判断が無駄になった）。CHARTER §8「同じミスを2回した→機械的に防ぐ」がまだ1回目のため、次に同型のミスをする前に運用へ落とす。",
       "dod": "CHARTER §3 のバージョン更新の作法（または該当する調査手順）に、『inventory.json の対象エントリに新しいタグが無いか調べるときは、同じエントリの note に除外・回避指定が無いかを必ず読み合わせる』旨を明文化する。可能であれば ops/ 配下のスクリプト（inventory 定期チェックの手順を担う部分があれば）にも同種のチェックを機械的に組み込めないか検討し、スクリプト化が難しい場合は CHARTER の手順記述のみで良い。",
@@ -2906,8 +2906,8 @@
         "ops/inventory.json"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #153（計画役）: ops/inbox.md の引き継ぎ（run #152 実行役の気づき、T-0149 dropped の教訓）を起票。"
+      "pr": 348,
+      "notes": "run #153（計画役）: ops/inbox.md の引き継ぎ（run #152 実行役の気づき、T-0149 dropped の教訓）を起票。 実行役（run #156）: CHARTER §4 バージョン更新の作法に、inventory.json の note の除外指定を新タグ発見時に必ず読み合わせる旨を明文化して完遂。専用の自動チェックスクリプトは対象外（『新しいタグの有無』の判定自体が upstream 調査に依存し機械的な突き合わせの対象データが無いため、CHARTER の手順記述のみで DoD を満たす）。"
     }
   ]
 }
