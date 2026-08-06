@@ -70,6 +70,7 @@ NAME                 SYNC STATUS   HEALTH STATUS
 apps                 Synced        Healthy
 agent-rbac           Synced        Healthy
 argocd               Synced        Healthy
+autopilot            Synced        Healthy
 coder                Synced        Healthy
 dex                  Synced        Healthy
 external-secrets     Synced        Healthy
@@ -125,7 +126,8 @@ apps/
 ├── immich/
 ├── vaultwarden/
 ├── coder/
-└── ops-health-reporter/
+├── ops-health-reporter/
+└── autopilot/
 ```
 
 各アプリは以下の構造:
