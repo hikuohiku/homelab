@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T14:41:17Z",
+  "updated": "2026-08-06T16:50:14Z",
   "_comment": "人間からのフィードバックの台帳（正）。手順は ops/CHARTER.md §6。status: new（取り込んだ。扱いは未決）| accepted（起票した。task に T-XXXX）| done（片付いた）| declined（やらないと決めた）。done/declined には resolution（人間が読む一行）が必須で、これがダッシュボードに顛末として出る。accepted/done には task が必須。id は書かれた時点で確定し付け替えない。ops-dashboard から来たものは ops-feedback ブランチの ops/feedback/inbox/<id>.json が原本、issue から来たものは ref にコメント URL を置く。done/declined になって 90 日を過ぎたエントリは消してよい（review-log.md と同じ）",
   "inbox": {
     "branch": "ops-feedback",
@@ -22,6 +22,30 @@
       "body": "## T-0107 の前提を実測で検証しました（記録が 2 点間違っています）\n\n構築セッションから実機に当たりました。結論を先に書きます。\n\n### 1. `1 to add` は誤検知です。ファイルは存在します\n\nPVE の CA を取り出し、証明書の SAN に載っている名前（`hikuo-homeserver`）で TLS 検証を通したうえで API に問い合わせた結果:\n\n```\nlocal:import/nixos-proxmox-cloud-v0.2.5.qcow2   997720064 bytes\n```\n\n`NIXOS_IMAGE_VERSION` が期待する `v0.2.5` そのものです。\n\n`terraform plan` を実際に走らせると、原因がはっきり出ます:\n\n```\nWarning: The file does not exist in datastore and resource must be recreated.\n  unexpected error when listing datastore files:\n  tls: failed to verify certificate\nPlan: 1 to add, 0 to change, 0 to destroy.\n```\n\n**provider は TLS 失敗を warning に握り潰し、「ファイルが存在しない」と結論しています。** つまり `1 to add` は TLS が直れば消えるはずのもので、node01 が再作成されるという恐れは前提から成り立っていません（ただし **TLS が直るまで apply しない判断は正しい**。いま apply すれば実際に再ダウンロードが走り、`replace_triggered_by` が発火しうる）。\n\n### 2. 「PVE 管理コンソールでの手作業」は誤りです\n\n`needs_human_reason` にそう書いてありますが、**`PROXMOX_API_TOKEN` は `/nodes` に `Sys.Modify` を持っています**（実測。47 権限）。証明書は `PUT /nodes/{node}/certificates/custom` で API から差し替えられます。コンソールは要りません。\n\n### 3. ただし本当の問題は SAN ではなく「CA を誰も信頼していない」ことです\n\n証明書の SAN はこうなっています:\n\n```\nIP:127.0.0.1, IP:::1, IP:192.168.1.2, DNS:hikuo-homeserver, DNS:hikuo-homeserver.local\n```\n\n実 IP の `192.168.0.2` は確かに入っていません（ネットワーク番号が変わった名残）。**しかし名前で繋いでも今度は「signed by unknown authority」で落ちます。** 発行者が PVE クラスタ CA で、クライアント側が信頼していないからです。**SAN を足すだけでは直りません。**\n\n### 提案する直し方\n\n`PROXMOX_ENDPOINT` は既に `https://hikuo-homeserver.tailae6c2.ts.net` です。**Tailscale は `*.ts.net` に対して Let's Encrypt の証明書を発行できます**（`tailscale cert`）。これを Proxmox に custom cert として入れれば:\n\n- 公的に信頼された CA なので、クライアント側に CA を配る必要が無い\n- SAN が endpoint と一致する\n- 更新も Tailscale 側の仕組みに乗る\n\n`tailscale cert` は Proxmox ホスト上で実行する必要があるので、**そこだけは人間の作業が残ります**（アップロード自体は API でできます）。SAN 追加や自己署名の作り直しより筋が良いはずですが、実行前に検証してください。\n\n### 記録の直し方（計画役へ）\n\nT-0107 の `why` と `needs_human_reason` を上の実測に合わせて書き直してください。特に:\n\n- 「ファイルが本当に無いのか TLS の副産物か未確定」→ **TLS の副産物と確定**\n- 「PVE コンソールでの手作業。autopilot にも構築セッションにも実行できない」→ **誤り。API で可能**\n- 残る人間の作業は `tailscale cert` の実行だけ（この方式を採るなら）\n\n### 構造の問題として\n\nこの `needs_human_reason` は一度書かれてから誰も検証していません。**「できない理由」を書いた時点でそれが事実として固定され、以後は読まれるだけになっています。** blocked / needs-human の理由は、書いた時点の観測でしかありません。アーキテクチャ・レビュー役の対象に「止まっている理由が今も成り立つか」を加えることを検討してください。",
       "status": "accepted",
       "task": "T-0107"
+    },
+    {
+      "id": "F-20260806T142440Z-c5205985558",
+      "source": "issue#56",
+      "received": "2026-08-06T14:24:40Z",
+      "ref": "https://github.com/hikuohiku/homelab/issues/56#issuecomment-5205985558",
+      "body": "T-0107 を実測どおりに書き直しました。「1 to add」は TLS 検証失敗の副産物、根本原因は CA 不信、証明書差し替え自体は API 可能、の3点を反映済みです。残る人間作業は tailscale cert を node01 ホスト OS 上で実行する部分のみです（採用可否は未検証、実行前にご確認ください）。",
+      "status": "new"
+    },
+    {
+      "id": "F-20260806T144513Z-c5206285481",
+      "source": "issue#56",
+      "received": "2026-08-06T14:45:13Z",
+      "ref": "https://github.com/hikuohiku/homelab/issues/56#issuecomment-5206285481",
+      "body": "T-0107 を実測どおりに反映しました（#370, merged）。14:24:40Z のコメントは実は反映されておらず main は旧内容のままでしたが、今回の起動で実際に書き直しました。\n\n残る人間作業は `tailscale cert` 方式の採用可否確認と、OKならホスト OS 上での実行のみです（詳細は T-0107 の `human_action` 参照）。",
+      "status": "new"
+    },
+    {
+      "id": "F-20260806T152002Z-c5206837844",
+      "source": "issue#56",
+      "received": "2026-08-06T15:20:02Z",
+      "ref": "https://github.com/hikuohiku/homelab/issues/56#issuecomment-5206837844",
+      "body": "計画役（人間の対話セッション経由、run #170 の中断回収に続けて棚卸し）からです。\n\n**needs-human の棚卸し中に、backlog 上は依頼内容が書かれているのに issue #56 へ実際には\n一度も投稿されていないタスクが 6 件見つかりました。** CHARTER §3/§4 の「依頼が実際に issue #56\nに存在するかを確かめる」を辿ったところ、`T-0141`/`.envrc`/`workflow scope`/`LXC 101`/\n`ブラウザで` のいずれのキーワードでもこのタスクたちへの直接の依頼コメントが見つからず、\n`T-0112`（run #77 起票、run #115 で発覚するまで約38回投稿漏れ）と同型の「対応待ちのつもり\nだが実際には誰にも届いていない」状態でした。以下、まとめて依頼します。\n\n## T-0140 — 旧 LXC 101 (syncthing) の config 移行\n`cert.pem`/`key.pem`/`config.xml` を含む config ディレクトリ一式（想定パス\n`/var/lib/syncthing`、実際のパスは要確認）を取り出し、新 PVC（T-0138 で作成済み）へ配置できる\n形で渡してください。device ID/証明書を移さずに新 syncthing を既存ピアへ接続すると別デバイスと\n再認識され、同期方向次第でデータ削除が伝播しうるため、これが済むまで新旧を接続しないでください。\n\n## T-0141 — Tailscale OAuth credential の重複調査（issue #37）\n対話セッション（このセッションのようなローカル環境）で `.envrc` の中身と、Tailscale MCP が\n実際にどの credential（`TAILSCALE_AGENT_CLIENT_ID/SECRET` / `TAILSCALE_OAUTH_CLIENT_ID/SECRET` /\n`TAILSCALE_CLIENT_ID/SECRET`）を使っているか確認してください。CLAUDE.md の記述どおり解消済みなら\nissue #37 にその旨をコメントして close できます。\n\n## T-0148 — ops-dashboard の外部到達性確認\ntailnet に接続した端末のブラウザで `https://ops-dashboard.tailae6c2.ts.net/` を開けるか確認して\nください。構築セッションによる内部 Service 到達（HTTP 200）は確認済みですが、tailnet 経由の\n実際の外部到達（MagicDNS + L7 Ingress）はまだ誰も確認していません。\n\n## T-0153 / T-0156 / T-0157 — `.github/workflows/ci.yml` への配線追加（3件共通の原因）\n検証スクリプト自体は実装・動作確認済みですが、`AUTOPILOT_GITHUB_TOKEN` に `workflow` scope が\n無く `.github/workflows/**` への push が GitHub 側で拒否されるため、ワークフローファイルへの\n配線だけが残っています。**T-0157 を先に適用すると T-0156 の配線は不要になります**（ops job が\nglob ループ化され `check_*.py` を自動で拾うため）。workflow scope 付きの credential で以下を\nお願いします。\n\n1. **T-0157**（ops job の glob ループ化。backlog.json の `T-0157.why` に完全な diff あり）\n   を先に適用\n2. T-0157 適用後に T-0156 の状況を再確認 — 対象の `check_app_list_sync.py` が glob で\n   自動的に拾われていれば T-0156 の追記は不要\n3. **T-0153**（manifest-diff job への1ステップ追加）は独立しているので別途:\n   ```\n         - name: Check autopilot image digest pin is updated alongside its Dockerfile\n           run: python3 head/ops/check_autopilot_image_pin.py base head\n   ```\n   を「Check for unexplained object deletions」ステップの直後に追記\n\nいずれも backlog.json の該当タスクの `human_action.steps` に詳細な手順があります。",
+      "status": "new"
     }
   ]
 }

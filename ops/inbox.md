@@ -11,3 +11,7 @@
 [`ops/CHARTER.md`](CHARTER.md) の §3「書く権利」。
 
 ---
+
+- [R-001] レビュー役プロンプトが指示する `kubectl -n ops-dashboard get svc` が RBAC の `services` 欠如で Forbidden になる
+- [R-002] `apps/autopilot/deployment.yaml` の image digest が commit 8eacc31（chromium/フォント追加）以降更新されておらず、稼働中 Pod に chromium が無い
+- [R-003] ダッシュボードの健全性サマリ「落ちている: coder、immich、vaultwarden」が T-0106 由来の無害な既知状態であることの注記が無く、初見では実障害と誤読する
