@@ -2446,7 +2446,7 @@
         "apps/autopilot/deployment.yaml"
       ],
       "created": "2026-08-06",
-      "pr": null,
+      "pr": 287,
       "notes": "run #99: この Pod（autopilot-7786d96c58-nj7sn, 起動 2026-08-05T18:23:23Z）はロールを指定しないプロンプトを受け取っており、CHARTER §3 の計画役/実行役の判別ができない状態で稼働していたことから発覚した。merge 後、この Pod は SIGTERM を受けて終了する見込み（strategy: Recreate, terminationGracePeriodSeconds: 60s）。ops/ 記録の更新は途中で打ち切られる可能性があるため、この run はコード変更のコミットを最優先で push し、journal/state 更新も同じブランチに追加コミットしてから merge する順序で進める。"
     }
   ]

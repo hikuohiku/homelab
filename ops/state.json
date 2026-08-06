@@ -6,7 +6,7 @@
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-06T03:07:26Z"
+    "last_read": "2026-08-06T03:19:42Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -1046,6 +1046,16 @@
       "summary": "前回の中断: オープン PR・autopilot ブランチとも無し。issue #56 の未読フィードバック1件（2026-08-06T03:07:26Z）を反映。get_comments 相当のページネーションの罠（per_page=100 で1ページ目が100件ちょうど返り、2ページ目に3件の未読が隠れていた）を実際に踏んで発見・回避した。内容は2点: (1) ops/dashboard/build.py の fetch_prs() が gh CLI 依存で常に失敗しキャッシュにフォールバックしていた点を、AUTOPILOT_GITHUB_TOKEN による GitHub REST API 直叩き（urllib、標準ライブラリのみ）に置き換え（T-0126, 完遂）。実行して open 0件・merged 60件（PR #283 が最新として反映）を確認した。(2) dashboard の Artifact 公開がクラスタ内常駐では機能しない（Artifact ツールが無い）ため 9 時間半止まっていたという指摘を受け、自前ホスト（HTML を専用ブランチへ push する仕組み T-0127 + tailscale-operator 経由で配信する Deployment T-0128）に分割して起票（直列化ルールに従い、この起動では設計のみで着手せず次回以降に回す）",
       "prs": [
         284
+      ]
+    },
+    {
+      "n": 99,
+      "at": "2026-08-06T12:31:00+09:00",
+      "kind": "scheduled",
+      "by": "cluster-resident (autopilot Pod)",
+      "summary": "この Pod は計画役/実行役分割（PR #286）後もロールを指定しない旧プロンプトのまま起動していた（Pod 起動 2026-08-05T18:23:23Z が PR #286 merge 2026-08-06T03:21:33Z より前だったため）。issue #56 に未読フィードバックなし。原因調査の過程で origin/autopilot/plan-execute-split ブランチに、まさにこの問題（loop.sh は ConfigMap 更新だけでは再読込されない）を解決する未マージコミットが孤立しているのを発見し、cherry-pick して PR 化した（T-0129, #287）。merge 後は ArgoCD の Recreate 戦略でこの Pod 自身が置き換わる見込み",
+      "prs": [
+        287
       ]
     }
   ]
