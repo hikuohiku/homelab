@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T23:45:00Z",
+  "updated": "2026-08-06T23:50:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -34,254 +34,6 @@
     "since": "2026-08-05"
   },
   "runs": [
-    {
-      "n": 153,
-      "at": "2026-08-06T11:40:00Z",
-      "kind": "in-cluster-loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #153）。前回の中断だった PR #344（T-0149 dropped の記録）の CI green を確認し merge。backlog の todo は T-0117（not_before 未到来）のみで着手可能な新規タスクは無かった。",
-      "prs": [
-        344
-      ]
-    },
-    {
-      "n": 154,
-      "at": "2026-08-06T11:49:00Z",
-      "kind": "in-cluster-loop",
-      "by": "autopilot pod (計画役)",
-      "summary": "計画役（journal run #154）。ops/inbox.md の2件をT-0151・T-0152として起票しinboxを空にした。フィードバック・健全性レポートに新規異常なし。backlog blocked/needs-human 全件の理由を確認したが古い前提は無かった。",
-      "prs": []
-    },
-    {
-      "n": 155,
-      "at": "2026-08-06T11:58:00Z",
-      "kind": "in-cluster-loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #155）。T-0151（ops-dashboard/coder workspace-home-backup の python を 3.14-alpine に揃え、inventory.json に2件新規登録）を完遂（#347）。オープン PR・autopilot ブランチとも中断無し、issue #56 に新規フィードバック無し。",
-      "prs": [
-        347
-      ]
-    },
-    {
-      "n": 156,
-      "at": "2026-08-06T12:04:00Z",
-      "kind": "in_cluster_loop",
-      "by": "in-cluster autopilot (executor)",
-      "summary": "実行役（journal run #156）",
-      "prs": [
-        348
-      ]
-    },
-    {
-      "n": 157,
-      "at": "2026-08-06T12:11:00Z",
-      "kind": "in_cluster_loop",
-      "by": "in-cluster autopilot (executor)",
-      "summary": "実行役（journal run #157）。前回の中断PR #348（T-0152）を merge。issue #56 に新規フィードバック無し。健全性確認で新規異常無し（coder/immich/vaultwardenのDegradedは既知のT-0106由来）。backlog todoはT-0117のみでnot_before未到来のため新規タスク着手無し。",
-      "prs": []
-    },
-    {
-      "n": 158,
-      "at": "2026-08-06T12:34:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (計画役)",
-      "summary": "計画役（journal run #158）。run #157 の重複記録（#350/#351）を発見し #350 merge・#351 close で解消。人間が同時刻に PR #353 でレビュー役の仕組みを追加したと確認。フィードバック・健全性に新規異常無し、inbox 空、backlog blocked/needs-human 全15件は前提変化なし。todo が枯れていたため subagent 調査で T-0153（autopilot 自身のイメージが inventory 監視対象外）・T-0154（review-log.md と backlog の突き合わせに機械検証が無い）の2件を新規起票。",
-      "prs": []
-    },
-    {
-      "n": 159,
-      "at": "2026-08-06T12:44:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #159）。T-0153（autopilot 自身のイメージ digest pin 未検証）に着手し ops/check_autopilot_image_pin.py を新設・動作確認。CI (ci.yml) への配線は AUTOPILOT_GITHUB_TOKEN に workflow scope が無く push 拒否されると判明（CHARTER §5.5 に追記）、配線を差し戻しスクリプト単体を PR #356 として提出。T-0153 は配線待ちの needs-human に変更。",
-      "prs": [
-        356
-      ]
-    },
-    {
-      "n": 160,
-      "at": "2026-08-06T12:50:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #160）。T-0154（review-log.md と backlog の突き合わせに機械検証が無い）に着手し ops/validate.py に check_review_log() を追加。R-NNN の起票済参照と task why の食い違いを warning で検出する。ダミーエントリで両方向の検出を確認したうえで元に戻した。",
-      "prs": []
-    },
-    {
-      "n": 161,
-      "at": "2026-08-06T13:00:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (計画役)",
-      "summary": "計画役（journal run #161）。inbox 空、フィードバック新規無し、健全性は既知の T-0106 由来 Degraded のみで新規異常無し。backlog blocked/needs-human 全14件の前提変化なし。todo が枯れていたため調査し、T-0155（CHARTER §6 の自己矛盾: check_feedback.py は既にCI配線済みなのに『まだ』と記述）・T-0156（アプリ一覧drift5回目、CI検証を新設するDoD）を起票。",
-      "prs": []
-    },
-    {
-      "n": 162,
-      "at": "2026-08-06T13:11:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #162）。T-0155（CHARTER §6 の自己矛盾: check_feedback.py は既にCI配線済みなのに「まだ」と記述していた）を修正。",
-      "prs": [
-        362
-      ]
-    },
-    {
-      "n": 163,
-      "at": "2026-08-06T13:17:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #163）。T-0156（アプリ一覧drift5回目）: CLAUDE.md/apps/README.md を apps/kustomization.yaml の実態（agent-rbac/ops-dashboard/syncthing含む12件）に合わせて修正し、ops/check_app_list_sync.py を新規実装・動作確認済み。ci.yml への配線は workflow scope 不足で needs-human に切り出した（T-0153と同型）。",
-      "prs": []
-    },
-    {
-      "n": 164,
-      "at": "2026-08-06T13:27:16Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (計画役)",
-      "summary": "計画役（journal run #164）。inbox 空、フィードバック新規無し、健全性は既知の T-0106 由来 Degraded のみで新規異常無し。backlog blocked/needs-human 全14件の前提変化なし。todo は not_before 未到来の T-0117 のみで枯渇していたため調査し、T-0153/T-0156 が同じ構造的原因（ci.yml ops job の check script 個別列挙）で2回連続 needs-human になっていたと発見。汎化タスク T-0157 を起票。",
-      "prs": []
-    },
-    {
-      "n": 165,
-      "at": "2026-08-06T13:38:28Z",
-      "kind": "scheduled",
-      "by": "in-cluster loop",
-      "summary": "実行役（journal run #165）。フィードバック新規無し（ops-feedback ブランチ未作成、issue #56 last_read 以降新規コメント無し）。オープン PR・autopilot ブランチとも無く中断なし。T-0117 は not_before 未到来のため、唯一の todo だった T-0157（ci.yml ops job の glob 化）に着手。5対象スクリプトの個別実行・glob ループ実行（fail-fast含む）を手元検証済みだが、ci.yml への実 push は想定どおり workflow scope 不足で拒否されたため diff を needs_human_reason に切り出し needs-human とした（コード変更なし、backlog.json のみ）。",
-      "prs": [
-        366
-      ]
-    },
-    {
-      "n": 166,
-      "at": "2026-08-06T14:15:33Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #166）。オープン PR #366（T-0157 needs-human 記録）を CI green 確認のうえ merge。フィードバック F-20260806T134136Z-c5205413264（T-0107 の実測訂正、issue #56）を台帳に new で追記。autopilot heartbeat の exit_code=1（iteration 13、直近19サンプル初の非0）を検知し inbox に記録。todo は T-0117（not_before 未到来）のみで着手可能なタスク無し。",
-      "prs": [
-        366
-      ]
-    },
-    {
-      "n": 167,
-      "at": "2026-08-06T14:41:17Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (計画役)",
-      "summary": "計画役（journal run #167）。フィードバック F-20260806T134136Z-c5205413264（T-0107 実測訂正）を accepted にし、T-0107 の why/dod/needs_human_reason/human_action を実測どおりに書き直した（真因は CA 不信任、証明書差し替えは API 可能、残る人間作業は tailscale cert 実行のみ）。issue #56 に14:24:40Z 付けで「反映済み」という別コメントがあったが main には未反映だったと判明、実際に反映したのはこの回。needs-human 7件（T-0106/T-0140/T-0141/T-0144/T-0148/T-0153/T-0156/T-0157）に欠けていた human_action を追記。ops/inventory.json の policy:auto 全対象を upstream と突き合わせ actionable な差分無しと確認。inbox の heartbeat 単発異常は CHARTER §2 の標準手順でカバーされるため起票せず削除。",
-      "prs": []
-    },
-    {
-      "n": 168,
-      "at": "2026-08-06T14:51:21Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (計画役)",
-      "summary": "計画役（journal run #168）。フィードバック・inbox とも新規無し。run #167 が引き継いだ autopilot 自身の Progressing/readyReplicas:0 を kubectl で直接確認し、14:30:17Z 時点で Synced/Healthy・1/1 に復帰済みと確定（PR #368 ロールアウトの一時的な状態だった、インシデントではない）。coder/immich/vaultwarden の Degraded は T-0106 由来の SecretSyncedError のみで変化なし、pod restarts の19常連・immich backup_listing・node_metrics も異常無し。backlog blocked/needs-human 14件の前提に変化なし、todo は T-0117（not_before 未到来）のみ。新規起票価値のあるギャップは見つからず、busywork のための起票はしなかった。",
-      "prs": []
-    },
-    {
-      "n": 169,
-      "at": "2026-08-06T14:59:18Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (計画役)",
-      "summary": "計画役（journal run #169）。フィードバック・inbox とも新規無し（issue #56 last_read 以降新規コメント無し、ops-feedback ブランチ未作成）。autopilot 自身の Healthy/1/1 復帰継続を kubectl で再確認、他アプリ健全性も変化なし。backlog blocked/needs-human 14件は run #167/#168 で直近棚卸し済みのため前提のみ再確認、変化なし。todo は T-0117（not_before 未到来、残り約3.5時間）のみ。直近2回で inventory/ドキュメントdrift/backlog stale-premise の調査を終えたばかりで短時間の再調査は見込み薄と判断し、新規起票はしなかった。",
-      "prs": []
-    },
-    {
-      "n": 170,
-      "at": "2026-08-06T15:07:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (計画役)",
-      "summary": "計画役（journal run #170）。フィードバック・inbox とも新規無し（issue #56 last_read 以降新規コメント無し、ops-feedback ブランチ未作成）。前回の中断（PR #373, run #169 の記録のみ）を拾い、必須チェック5件 green を確認して merge（197ab32）。autopilot 自身の Healthy/1/1・heartbeat exit_code:0 を確認、他アプリ健全性も変化なし（T-0106由来Degradedのみ）。backlog blocked/needs-human 19件中 todo は T-0117（not_before未到来、残り約3.5時間）のみ。帳簿サイズは backlog 78KiB/state 15.6KiB（いずれも上限内）。4回連続で新規起票価値のあるギャップが見つからず、直近3回の調査済み範囲の再調査は見込み薄と判断し busywork の起票はしなかった。",
-      "prs": [
-        373
-      ]
-    },
-    {
-      "n": 171,
-      "at": "2026-08-06T15:30:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (計画役)",
-      "summary": "計画役（journal run #171）。前回の中断PR #374（run #170の記録のみ）が manifest deletion guard の一時的インフラ障害（Service Unavailable）でblockedだったため、空コミットでCI再実行しgreen確認後merge（ca4c577）。needs-humanタスクの棚卸しでissue #56への依頼が実際に投稿されていないもの6件（T-0140/T-0141/T-0148/T-0153/T-0156/T-0157）を発見し、まとめてissue #56へ投稿（issuecomment-5206837844）。T-0074のneeds_human_reason/whyがT-0107の旧い記述（PVE管理コンソール手作業）を引きずっていたのを現状に合わせて訂正。健全性・backlogとも新規異常なし、todoはT-0117（not_before未到来）のみ。ダッシュボードをbuild・publish。",
-      "prs": []
-    },
-    {
-      "n": 172,
-      "at": "2026-08-06T15:38:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (計画役)",
-      "summary": "計画役（journal run #172）。前回の中断PR #375（run #171の記録のみ）が同型のインフラ障害でblockedだったため空コミットでCI再実行しgreen確認後merge（dd3b397）。issue #56/#35 とも last_read 以降の新規フィードバック無し、健全性・backlog 19件の前提とも変化なし、todo は T-0117（not_before 未到来）のみ。新規起票価値のあるギャップは見つからず、直前の run #171 が調査済みの範囲を再調査するbusyworkは避けた。",
-      "prs": []
-    },
-    {
-      "n": 173,
-      "at": "2026-08-06T16:32:55Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (計画役)",
-      "summary": "計画役（journal run #173）。前回の中断PR #376（run #172の記録のみ）が依然CI失敗中で、githubstatus.comでGitHub Actionsの Partial Outage（2026-08-06 15:22 UTC〜、進行中）を確認した。空コミットで再実行を1回試みたが依然queued/in_progressのまま完了せず、これ以上のリトライは見送り既存PR #376にこのエントリを相乗りさせた（新規PRを作ると journal/state.json の追記位置で#376と競合するため）。issue #56/#35 とも新規フィードバック無し、健全性・backlog 19件の前提とも変化なし、todo は T-0117（not_before 未到来）のみ。",
-      "prs": []
-    },
-    {
-      "n": 174,
-      "at": "2026-08-06T19:14:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #174）。PR #376/#377（前回の中断、記録専用）は GitHub Actions が major_outage（15:22 UTC〜、19:00時点も継続）のため引き続きblocked、追加リトライはせず現状確認のみに留めた。ops-health-report の autopilot.heartbeat で 2026-08-06 17:00 UTC頃から約2時間57イテレーション連続 exit_code:1・elapsed 5〜6秒 を検知（loop.shのgit fetch失敗が原因と推定、Pod自体は再起動なし・自己回復済み）。実害なしと判断しinboxに1行記録。feedbackは新規なし（既にPR#377で3件new取り込み済み）。T-0117はnot_before経過済みだが前回の中断未解消のため今回は着手せず。",
-      "prs": []
-    },
-    {
-      "n": 175,
-      "at": "2026-08-06T19:26:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #175）。PR #376/#377（前回の中断、記録専用）は GitHub Actions が引き続き major_outage（15:22 UTC〜、直近更新18:46 UTC時点も継続）のため blocked のまま。run #172〜174で複数回リトライ済みのため今回は追加リトライをせず状態確認のみ。issue #56 / ops-feedback ブランチとも新規フィードバックなし。健全性・T-0106由来のDegraded・heartbeatのexit_code:1事象（run #174が既に発見・inbox記録済み）とも変化なし。T-0117はnot_before経過済みだが前回の中断未解消のため今回も着手せず。",
-      "prs": []
-    },
-    {
-      "n": 177,
-      "at": "2026-08-06T19:41:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #177）。PR #376/#377（前回の中断、記録専用）は run #176 の空コミット再実行（19:35Z）から6分経過してもci.yml必須チェックが一度も起動せず、GitHub Actionsは引き続きmajor_outage（15:22 UTC発生、18:46 UTC更新のまま約1時間停滞）。run #175の方針を継続し追加リトライはせず状態確認のみ。autopilot自身のheartbeatはiteration 77でexit_code:0・344秒に回復し、run #174/175が検知した2時間規模のexit_code:1事象は解消済みと確定。feedback/backlogとも新規変化なし、T-0117はnot_before経過済みだが前回の中断未解消のため今回も着手せず。",
-      "prs": []
-    },
-    {
-      "n": 178,
-      "at": "2026-08-06T19:51:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #178）。PR #376/#377（前回の中断、記録専用）は依然blocked。githubstatus.comの更新文面が「recovers gradually」に変わったのを見て両ブランチに空コミットでリトライしたが、5分後も actions/runs head_sha total_count:0 のまま変化なし。実効的な回復ではないと判断しリトライを打ち切り状態確認のみ記録。feedback/健全性とも新規変化なし、T-0117は前回の中断未解消のため今回も着手せず。",
-      "prs": []
-    },
-    {
-      "n": 179,
-      "at": "2026-08-06T19:59:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #179）。PR #376/#377は依然blocked。githubstatus.comのActions major_outageは run #178 が見た19:43:21Z の文面から進展なし。run #178の方針（resolved/monitoringへ進むまでリトライを見送る）に従い、空コミットでの再リトライはせず状態確認のみ記録。feedback/健全性とも新規変化なし、T-0117は前回の中断未解消のため今回も着手せず。",
-      "prs": []
-    },
-    {
-      "n": 180,
-      "at": "2026-08-06T20:04:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #180）。PR #376/#377は依然blocked。githubstatus.comのActions major_outageは run #178/#179 が見た19:43:21Z の文面から変化なし（本回確認20:04:53Z）。resolved/monitoringへ進むまでリトライを見送る方針を継続し、空コミットでの再リトライはせず状態確認のみ記録。feedback（issue #56最新コメントは自分自身の投稿）/健全性とも新規変化なし、T-0117は前回の中断未解消のため今回も着手せず。",
-      "prs": []
-    },
-    {
-      "n": 181,
-      "at": "2026-08-06T20:29:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (計画役)",
-      "summary": "計画役（journal run #181）。PR #376/#377はGitHub Actions major_outageで依然blocked（文面はrun#178〜180から変化なし）、今回もリトライ見送り。ops/inbox.md（このブランチ、run#174実行役の記録）にあったgit fetch失敗の観測をT-0158として起票しinboxをクリア。PR #377（レビュー役初回実行）のR-001/R-002/R-003は別ブランチのため未処理のまま確認のみ（R-002はautopilot自身のimage digestがchromium追加コミット以降未更新という現在進行形の事実）。feedback/健全性とも新規変化なし、T-0117はnot_before通過済みだが直列化ルールに従い今回も着手せず。",
-      "prs": []
-    },
-    {
-      "n": 182,
-      "at": "2026-08-06T20:34:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #182、記録追いつき）。githubstatus.com incident更新（20:34:17Z、job成功率65%まで改善の記述）を根拠にresolved/monitoring待ちの方針を一時的に緩め、PR #376/#377へ空コミットでリトライ（6f41818ほか）。journal追記が遅れた分をrun #183が補完。",
-      "prs": []
-    },
     {
       "n": 183,
       "at": "2026-08-06T20:51:00Z",
@@ -443,6 +195,16 @@
       "summary": "実行役（journal run #202）。PR #376 merge後、直列化ルールに従いbacklog todoのT-0161（autopilot自身のimage digestがchromium/フォント追加ビルドに追随していない、レビュー役R-002）に着手。ghcr.io APIでpush済みdigestを実測しdeployment.yamlを更新、PR #379として提出。DoDの実機確認（Pod内chromium実在）はdockerが無く未実施、次の起動でkubectlにより確認予定。",
       "prs": [
         379
+      ]
+    },
+    {
+      "n": 203,
+      "at": "2026-08-06T23:50:00Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #203）。T-0161 (PR #379) のDoD後始末: kubectlでPodのimage digestが実際にsha256:6d0cf8b1...へ反映され1/1 Runningであることを確認。続けてbacklog todoのT-0160（autopilot-reader ClusterRoleにservicesのget/listが無くprompt-review-user.mdの手順がForbiddenになる、レビュー役R-001）に着手し追加、CHARTER §5.5一覧も更新してPR #380として提出。T-0160をdoneにしreview-log R-001を完了に、ops/ledger.pyでbacklog/state合計31件をarchiveへ移した。",
+      "prs": [
+        380
       ]
     }
   ]

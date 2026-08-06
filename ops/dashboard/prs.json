@@ -1,21 +1,50 @@
 {
   "open": [
     {
-      "number": 376,
-      "title": "ops(run #172): 前回中断PR #375のCI一時障害を回収・新規異常なし",
-      "url": "https://github.com/hikuohiku/homelab/pull/376",
+      "number": 380,
+      "title": "fix(autopilot): autopilot-reader ClusterRole に services の get/list を追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/380",
       "isDraft": false,
-      "createdAt": "2026-08-06T15:36:09Z",
+      "createdAt": "2026-08-06T23:49:33Z",
       "statusCheckRollup": [
+        {
+          "conclusion": "SUCCESS"
+        },
+        {
+          "conclusion": "SUCCESS"
+        },
+        {
+          "conclusion": "SUCCESS"
+        },
+        {
+          "conclusion": "SUCCESS"
+        },
+        {
+          "conclusion": "SUCCESS"
+        },
         {
           "conclusion": "SUCCESS"
         }
       ],
-      "headRefName": "autopilot/run-172-records",
+      "headRefName": "autopilot/T-0160-services-rbac",
       "autoMergeRequest": null
     }
   ],
   "merged": [
+    {
+      "number": 379,
+      "title": "fix(autopilot): T-0161 image digest を chromium/フォント追加ビルドへ更新",
+      "url": "https://github.com/hikuohiku/homelab/pull/379",
+      "mergedAt": "2026-08-06T23:43:12Z",
+      "headRefName": "autopilot/T-0161-image-digest"
+    },
+    {
+      "number": 376,
+      "title": "ops(run #172): 前回中断PR #375のCI一時障害を回収・新規異常なし",
+      "url": "https://github.com/hikuohiku/homelab/pull/376",
+      "mergedAt": "2026-08-06T23:35:09Z",
+      "headRefName": "autopilot/run-172-records"
+    },
     {
       "number": 375,
       "title": "ops(run #171): 前回中断の回収・needs-human未依頼6件をissue #56へ依頼・T-0074記述訂正",
@@ -421,20 +450,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/317",
       "mergedAt": "2026-08-06T07:35:59Z",
       "headRefName": "autopilot/T-0134-claude-md-ops-dashboard"
-    },
-    {
-      "number": 316,
-      "title": "docs(ops): run #124/#125 記録更新、T-0134 起票（ops-dashboard の CLAUDE.md 未記載）",
-      "url": "https://github.com/hikuohiku/homelab/pull/316",
-      "mergedAt": "2026-08-06T07:30:28Z",
-      "headRefName": "autopilot/run125-record-T-0134"
-    },
-    {
-      "number": 315,
-      "title": "docs(ops): run #124 記録更新（PR #314 拾い、着手可能タスクなし）",
-      "url": "https://github.com/hikuohiku/homelab/pull/315",
-      "mergedAt": "2026-08-06T07:17:14Z",
-      "headRefName": "autopilot/run124-record-only"
     }
   ]
 }
