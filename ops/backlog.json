@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 136,
-  "updated": "2026-08-06T08:00:00Z",
+  "next_id": 138,
+  "updated": "2026-08-06T08:19:48Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2569,6 +2569,43 @@
       "created": "2026-08-06",
       "pr": 322,
       "notes": "run #129（計画役）: `git branch -r` の再確認から新規発見。autopilot 自身のブランチではないため即削除はせず、実行役が差分の包含を確認したうえで削除する起票に留めた。run #131（実行役）: 削除前に `git rev-parse` で両ブランチの HEAD を記録（immich: da131f7c6050af594f11f49945ad1a2f15e35610, coder: 06a9d5b3d7cbd0d86a2899ef13239d8f8d123399）。`git diff origin/main <branch>` を直接比較し、immich 側は main が helm chart 0.13.1（branch は 0.10.3）・restic-backup/pvc-usage-cronjob 追加済みで branch の内容を包含、coder 側は main が deployment/service/rbac/restic-backup/workspace-home-backup-cronjob/templates を備えた大幅拡張版で branch（scaffold のみ）を包含していることを確認。`terraform/proxmox/vm-nixos.tf` の branch 差分（disk size 50→main 256、旧リソース名 `proxmox_download_file`、`local.node01_ip` 未導入）は全て main 側がより新しい状態への改善であり branch は単に古いだけと判断。`Plans.md` の branch 差分（Coder デプロイの計画セクション）は実装（`apps/coder/` の充実度）が計画を上回っており計画メモが陳腐化していただけと判断。両ブランチとも `DELETE /repos/hikuohiku/homelab/git/refs/heads/<branch>` で 204 を確認し削除済み"
+    },
+    {
+      "id": "T-0136",
+      "domain": "homelab",
+      "title": "Tailscale の Services 機能を調査し、homelab で使える箇所があるか判断する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 65,
+      "why": "issue #204（2026-08-05 15:51:31、人間）「最近出た機能で使ったらよさそうな気がする」。#56 経由のフィードバックではないが、人間からの直接のやってほしいこと。backlog・journal のどこにも未反映だった",
+      "dod": "Tailscale の Services（VIP Service）機能のドキュメントを一次情報源で読み、このリポジトリの構成（tailscale-operator によるアプリ毎の ingress 公開、`apps/tailscale-operator/`）に対して何が改善できるか（例: 複数レプリカ/フェイルオーバー、DNS 名の簡素化等）を具体的に洗い出す。使える箇所があれば新しい実装タスクを起票する。無ければ『調査したが現状の構成で追加のメリットが薄い』と結論を issue #204 に返信し、この調査タスクを done にする",
+      "blocked_by": null,
+      "refs": [
+        "apps/tailscale-operator/"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #132（計画役）: issue #204 が起票から約1日、backlog・journal のどこにも変換されていなかったため起票。#56 以外の open issue も『まだ観測していないもの』の一つとして毎回確認する価値がある"
+    },
+    {
+      "id": "T-0137",
+      "domain": "homelab",
+      "title": "syncthing の K8s 移行可否（P2P 特性）を検討する",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 66,
+      "why": "issue #31（2025-12-15、人間）「syncthing の追加」、issue #38「LXC → K8s サービス移行」の対象の1つ。Plans.md の M2 はディスク容量不足の理由が2026-08-04の node01拡張で解消済み（T-0006）だが、『P2P 特性のため移行可否検討が未了』のまま保留になっており、この検討自体がまだ着手されていない",
+      "dod": "syncthing を k3s 上で運用する場合の P2P 特性の課題（Pod 再起動での device ID/鍵の永続化、discovery/relay の到達性、Tailscale 経由での他ノードとの同期経路）を具体的に洗い出し、実現可能なら manifest 実装タスクとして分割起票する。実現困難・保留が妥当と判断した場合はその技術的根拠を Plans.md の M2 に反映し、issue #31/#38 にコメントで結論を共有する",
+      "blocked_by": null,
+      "refs": [
+        "Plans.md",
+        "apps/"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #132（計画役）: Plans.md M2 の『移行可否検討が未了』が T-0006（run #7, docs のみ）以降も検討タスクとして起票されていなかったため、ここで実行可能な investigate タスクに変換した"
     }
   ]
 }
