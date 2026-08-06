@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: syncthing-data
+  namespace: syncthing
+  annotations:
+    # データ消失防止: ArgoCD prune / app 削除時も PVC を残す
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      # local-path は実ディスクを予約しない（docs/node01-storage.md）ので大きめに確保する。
+      # この時点では空 PVC（新規デバイスとして起動するだけ）。旧 LXC 101 からの実データ移行は
+      # T-0140 で行う
+      storage: 20Gi

@@ -407,6 +407,17 @@
       "policy": "auto",
       "note": "T-0078 で新設。他3ファイルと同じタグ (0.19.1) を使う設計。ファイル内では coder-workspace-home-backup-retention CronJob の image 行の1箇所のみが check_version_sync.py の regex に検出される（オーケストレータ script 内の RESTIC_IMAGE 定数はリポジトリ名とタグを分けて保持し、regex の誤検出を避けている。詳細はファイル内コメント参照）。タグを上げるときは retention CronJob の image 行と RESTIC_IMAGE_TAG 定数の両方を揃えること。check_version_sync.py の GROUPS に4ファイル目として登録済み（vaultwarden-restic-image の note 参照）",
       "observability_impact": "coder workspace home (coder-<workspace-id>-home PVC) の restic バックアップ・retention CronJob が使用。壊れるとバックアップが取れなくなるが coder workspace 本体の可用性には影響しない"
+    },
+    {
+      "id": "syncthing",
+      "kind": "image",
+      "name": "syncthing/syncthing",
+      "current": "2.1.3",
+      "file": "apps/syncthing/deployment.yaml",
+      "match": "syncthing/syncthing:",
+      "upstream": "github:syncthing/syncthing",
+      "policy": "auto",
+      "note": "T-0138 で新設。タグに v プレフィックスは無い（Docker Hub 実測、2026-08-06）。2.x 系は v1 系から DB を LevelDB→SQLite に変更しているが新規インストールはマイグレーション対象外（GitHub Releases v2.0.0 実測）"
     }
   ]
 }
