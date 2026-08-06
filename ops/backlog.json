@@ -2665,7 +2665,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #136（計画役）: T-0137 完了を受け ops/inbox.md の引き継ぎ（実装タスクへの分割）をここで起票。データ移行部分は human 専有（物理的にLXC上のファイルへアクセスする経路が無い）と判断し needs-human で起票。manifest 側（T-0138/T-0139）は着手可能な todo として分離した（CHARTER §3「blocked/needs-human はタスク全体ではなくどの部分かで見る」）"
+      "notes": "run #136（計画役）: T-0137 完了を受け ops/inbox.md の引き継ぎ（実装タスクへの分割）をここで起票。データ移行部分は human 専有（物理的にLXC上のファイルへアクセスする経路が無い）と判断し needs-human で起票。manifest 側（T-0138/T-0139）は着手可能な todo として分離した（CHARTER §3「blocked/needs-human はタスク全体ではなくどの部分かで見る」）。run #143（実行役）: issue #56（2026-08-06T10:03:40Z, hikuohiku）で、現在稼働中の syncthing は新規デバイス ID（旧 LXC 101 とは別デバイス）であり、cert.pem/key.pem 移行なしに既存ピアと接続すると同期方向次第で削除が伝播しうるため、needs-human のまま止めておく現状の判断が正しいと確認された。ステータス変更なし"
     },
     {
       "id": "T-0141",
@@ -2711,7 +2711,7 @@
       "title": "syncthing (T-0139) の tailnet 実到達性を構築セッションに確認してもらう",
       "kind": "investigate",
       "risk": "low",
-      "status": "needs-human",
+      "status": "done",
       "priority": 77,
       "why": "T-0139（PR #329）で syncthing の sync ポート（L3, Service tailscale.com/hostname: syncthing-sync）と GUI（L7 Ingress, syncthing）を tailnet に公開したが、この autopilot 実行環境（in-cluster、kubectl read-only + tailscale devices:core:read のみ）からは実際の到達性を検証できない。tailscale MCP は疎通確認ができず、kubectl でも Service/Ingress の存在は見えても実際に tailnet 上でデバイスとして解決できるかは見えない",
       "dod": "構築セッション（Coder ワークスペース、tailnet 到達可能）または人間に (1) tailscale status で syncthing / syncthing-sync デバイスが見えるか、(2) GUI（https://syncthing.<tailnet>.ts.net/）にブラウザ/curl から到達できるかを確認してもらう。到達できていれば T-0139 の残った不確実性を解消して journal に記録、できていなければ原因調査タスクを新規起票する",
@@ -2723,7 +2723,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #141（計画役）: ops/inbox.md の引き継ぎ（run #138 実行役が残したもの）を起票。issue #56 に確認依頼を投稿済み（https://github.com/hikuohiku/homelab/issues/56#issuecomment-5203057784）"
+      "notes": "run #141（計画役）: ops/inbox.md の引き継ぎ（run #138 実行役が残したもの）を起票。issue #56 に確認依頼を投稿済み（https://github.com/hikuohiku/homelab/issues/56#issuecomment-5203057784）。run #143（実行役）: issue #56 のコメント（2026-08-06T10:03:40Z, hikuohiku、構築セッションによる実測）で反映完了。sync ポート（TCP 22000 → 100.112.112.111）は実際に接続でき、L3 公開は機能していると確認。GUI（L7 Ingress）はこの構築セッションが tailnet ピアではないため判定不能（実装の問題ではなく、非ピアからの接続は tailscale proxy がタイムアウトする構造的な制約。coder.tailae6c2.ts.net も同様のはず）。人間の提案どおり、GUI の最終確認は人間がブラウザで開けば済むだけで他をブロックしないため done でクローズする"
     },
     {
       "id": "T-0144",
@@ -2751,7 +2751,7 @@
       "title": "ops/state.json の runs 配列が journal の run 番号に追随せず抜け続けている（CI での機械検出を追加）",
       "kind": "chore",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 60,
       "why": "ops/dashboard/build.py はダッシュボードの活動タイムライン・gantt・n_runs 統計を ops/state.json の runs 配列から生成するが、この配列は journal の run 番号に対して2回連続で大きく欠落していた（run #125→#133 の間の7回分、run #138〜#140 の3回分）。CHARTER §7 は journal への毎回追記を明記するが、state.json runs への追記は暗黙の前提のまま明文化されておらず、機械的な検出も無いため、抜けても誰も気づかない。VISION の『人間への報告はダッシュボードに集約する』『同じ事実が2箇所に書かれていない』に反する状態が放置され続けていた（run #141 計画役が run #138〜#140 の3件のみ手で埋め合わせたが、run #126〜#132 の7件は未回収のまま）",
       "dod": "ops/validate.py に、直近の journal（ops/journal/YYYY-MM.md）から見出し `## ... — run #N` の最大 N を抽出し、ops/state.json の runs 配列がその run 番号まで（欠落なく）追随しているかを検証するチェックを追加する。厳密な1:1対応が前提と分かれば欠落を error、前提が崩れていれば（例: 同一 cron からの並行起動で run 番号が重複するケースがある、run #33 参照）warning に留める。あわせて CHARTER §7 に『journal と同じタイミングで state.json の runs 配列にも追記する』ことを明記する。run #126〜#132 の7件の内容復元は本タスクの範囲外とし、優先度が上がれば別タスクに分ける",
@@ -2764,8 +2764,8 @@
         "ops/CHARTER.md"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #141（計画役）: state.json 棚卸し中に発見。runs 配列の最終更新コミットが T-0138（run #137 相当、8bb31ed）で止まっており、その後の run #138〜#140（PR #329/#331/#332）が追記していなかった。この3件は本 run で手動バックフィル済み（n=121〜123）。さらに遡ると n=118（journal run #125）→ n=119（journal run #133）の間も7回分（run #126〜#132）が欠落しており、これは今回バックフィルしていない（内容の正確な復元には該当run群の journal 全文精読が要るため、再発防止の仕組み化を先に済める判断）"
+      "pr": 335,
+      "notes": "run #141（計画役）: state.json 棚卸し中に発見。runs 配列の最終更新コミットが T-0138（run #137 相当、8bb31ed）で止まっており、その後の run #138〜#140（PR #329/#331/#332）が追記していなかった。この3件は本 run で手動バックフィル済み（n=121〜123）。さらに遡ると n=118（journal run #125）→ n=119（journal run #133）の間も7回分（run #126〜#132）が欠落しており、これは今回バックフィルしていない（内容の正確な復元には該当run群の journal 全文精読が要るため、再発防止の仕組み化を先に済める判断）。run #143（実行役）: ops/validate.py に journal run #N への追随チェックを追加し、CHARTER §7 に追記義務を明記して完遂（PR #335）。runs[].n は journal の run 番号と1:1で対応しないと判明したため、n の連番ではなく summary 中の `journal run #N` 記述を突き合わせる設計にした（DoD が想定していた『欠落を error』は、この明示的な記述が両方に揃っている場合に限り適用し、記述が無い場合は warning に留める）"
     }
   ]
 }
