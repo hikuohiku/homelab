@@ -2875,7 +2875,7 @@
       "title": "ops-dashboard と coder workspace-home-backup の python:3.12-alpine を inventory に追加し 3.14-alpine へ揃える",
       "kind": "chore",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 42,
       "why": "T-0150（run #151, PR #343）は ops/inventory.json に既に登録済みの2エントリ（ops-health-reporter-image, pvc-usage-reporter-image）だけを 3.14-alpine に揃えた。実行役がその過程で apps/ops-dashboard/deployment.yaml と apps/coder/workspace-home-backup-cronjob.yaml にも python:3.12-alpine が残っているが、どちらの inventory エントリの対象（file/mirrors）にも含まれていないため素通りされていると気づき、ops/inbox.md へ引き継いだ（run #151）。inventory に無いバージョンは自動チェックの対象外のまま塩漬けになりうる（CHARTER §1「依存が塩漬けにならない」）。",
       "dod": "(1) apps/ops-dashboard/deployment.yaml と apps/coder/workspace-home-backup-cronjob.yaml の python:3.12-alpine を 3.14-alpine に更新する（T-0150 で標準ライブラリの破壊的変更は無いと確認済みだが、この2ファイルが使うモジュール（http.server, json/urllib/subprocess 等）についても改めて確認する）。(2) ops/inventory.json にこの2ファイルを追跡対象として登録する。既存の pvc-usage-reporter-image と同一の python:*-alpine 更新ポリシーだが用途（http.server 配信 / workspace home backup orchestrator）が異なるため、既存エントリの mirrors に混ぜるか新規エントリにするかは実装時に判断してよい。(3) ops/check_version_sync.py の GROUPS がこの2ファイルを新たに束ねる場合はそちらも更新し、CI (kustomize build 等) が green であることを確認する。",
@@ -2887,8 +2887,8 @@
         "ops/check_version_sync.py"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #153（計画役）: ops/inbox.md の引き継ぎ（run #151 実行役の気づき）を起票。"
+      "pr": 347,
+      "notes": "run #153（計画役）: ops/inbox.md の引き継ぎ（run #151 実行役の気づき）を起票。run #155（実行役）: apps/ops-dashboard/deployment.yaml・apps/coder/workspace-home-backup-cronjob.yaml の python を 3.14-alpine に更新し、ops/inventory.json に単独エントリ（ops-dashboard-image, coder-workspace-home-backup-image）として新規登録した（#347）。いずれも mirrors を持たない単独ファイルのため check_version_sync.py の GROUPS への追加は不要と判断した。"
     },
     {
       "id": "T-0152",
