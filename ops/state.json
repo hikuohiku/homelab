@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T03:20:00Z",
+  "updated": "2026-08-06T03:40:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -1044,7 +1044,9 @@
       "kind": "scheduled",
       "by": "cluster-resident (autopilot Pod)",
       "summary": "前回の中断: オープン PR・autopilot ブランチとも無し。issue #56 の未読フィードバック1件（2026-08-06T03:07:26Z）を反映。get_comments 相当のページネーションの罠（per_page=100 で1ページ目が100件ちょうど返り、2ページ目に3件の未読が隠れていた）を実際に踏んで発見・回避した。内容は2点: (1) ops/dashboard/build.py の fetch_prs() が gh CLI 依存で常に失敗しキャッシュにフォールバックしていた点を、AUTOPILOT_GITHUB_TOKEN による GitHub REST API 直叩き（urllib、標準ライブラリのみ）に置き換え（T-0126, 完遂）。実行して open 0件・merged 60件（PR #283 が最新として反映）を確認した。(2) dashboard の Artifact 公開がクラスタ内常駐では機能しない（Artifact ツールが無い）ため 9 時間半止まっていたという指摘を受け、自前ホスト（HTML を専用ブランチへ push する仕組み T-0127 + tailscale-operator 経由で配信する Deployment T-0128）に分割して起票（直列化ルールに従い、この起動では設計のみで着手せず次回以降に回す）",
-      "prs": []
+      "prs": [
+        284
+      ]
     }
   ]
 }
