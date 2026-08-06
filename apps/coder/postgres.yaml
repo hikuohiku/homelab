@@ -35,6 +35,7 @@ spec:
       initContainers:
         - name: init-permissions
           image: busybox:1.38.0
+          terminationMessagePolicy: FallbackToLogsOnError
           command: ["sh", "-c", "chown -R 999:999 /var/lib/postgresql/data"]
           securityContext:
             runAsUser: 0
@@ -44,6 +45,7 @@ spec:
       containers:
         - name: postgres
           image: postgres:17.10
+          terminationMessagePolicy: FallbackToLogsOnError
           # 公式 postgres イメージは UID/GID 999 で postgres ユーザーを作成する
           # (docker-library/postgres Dockerfile: groupadd -r postgres --gid=999,
           # useradd -r -g postgres --uid=999)。init-permissions の chown 999:999 と揃える。

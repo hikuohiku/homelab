@@ -65,9 +65,51 @@ def collect_applications():
     return out
 
 
+# 異常時に残す証拠の大きさ。terminationMessage は kubelet 側で 4096 バイトに
+# 切られるが、履歴（history/*.jsonl）は 1 行 1 レポートで無限に伸びるので
+# こちら側でも切る。FATAL の 1 行が読めれば足りるので 1200 文字にした。
+TERMINATION_MESSAGE_LIMIT = 1200
+# 1 レポートに載せる証拠の上限。全 Pod が同時に壊れてもファイルが破裂しない。
+MAX_EVIDENCE_PER_REPORT = 8
+
+
+def _terminated_evidence(cs):
+    """直前に終了したコンテナの証拠を取り出す。
+
+    「落ちた」ことだけを記録して「なぜ落ちたか」を捨てていたため、後から調べた
+    ときには必ず手遅れになっていた（T-0112: immich-postgres の CrashLoopBackOff の
+    FATAL が、events もログも保持期間切れで誰にも分からなくなった）。
+
+    lastState.terminated は `pods` の read 権限だけで読める。ログ本文を取るには
+    pods/log が要るが、それは autopilot namespace に閉じる判断を既にしている
+    （T-0110、rbac.yaml のコメント参照）。その判断を覆さずに原因を残すため、
+    ワークロード側を terminationMessagePolicy: FallbackToLogsOnError にして
+    kubelet に異常終了時のログ末尾を message へ入れさせている。
+    """
+    term = (cs.get("lastState") or {}).get("terminated")
+    if not term:
+        return None
+    message = (term.get("message") or "").strip()
+    truncated = len(message) > TERMINATION_MESSAGE_LIMIT
+    return {
+        "container": cs.get("name"),
+        # restart_count 込みで「どの落下か」が一意になる。同じ値なら同じ事象なので
+        # 読む側で重複を捨てられる（レポートは 30 分毎に出るため）
+        "signature": "{}:{}".format(cs.get("name"), cs.get("restartCount", 0)),
+        "exit_code": term.get("exitCode"),
+        "reason": term.get("reason"),
+        "finished_at": term.get("finishedAt"),
+        "message": message[:TERMINATION_MESSAGE_LIMIT] if message else None,
+        "message_truncated": truncated,
+        # message が空なら、そのワークロードが FallbackToLogsOnError になっていない
+        "message_available": bool(message),
+    }
+
+
 def collect_pod_issues():
     data = k8s_get("/api/v1/pods")
     issues = []
+    evidence_budget = MAX_EVIDENCE_PER_REPORT
     for item in data.get("items", []):
         meta = item.get("metadata", {})
         status = item.get("status", {})
@@ -80,15 +122,20 @@ def collect_pod_issues():
             if "waiting" in cs.get("state", {})
         ]
         if phase not in ("Running", "Succeeded") or restarts > 3 or waiting_reasons:
-            issues.append(
-                {
-                    "name": meta.get("name"),
-                    "namespace": meta.get("namespace"),
-                    "phase": phase,
-                    "restarts": restarts,
-                    "waiting_reasons": waiting_reasons,
-                }
-            )
+            issue = {
+                "name": meta.get("name"),
+                "namespace": meta.get("namespace"),
+                "phase": phase,
+                "restarts": restarts,
+                "waiting_reasons": waiting_reasons,
+            }
+            evidence = [e for e in (_terminated_evidence(cs) for cs in cs_list) if e]
+            if evidence and evidence_budget > 0:
+                issue["terminated"] = evidence[:evidence_budget]
+                evidence_budget -= len(issue["terminated"])
+            elif evidence:
+                issue["terminated_omitted"] = len(evidence)
+            issues.append(issue)
     return issues
 
 

@@ -29,6 +29,7 @@ spec:
           initContainers:
             - name: pg-dump
               image: postgres:17.10
+              terminationMessagePolicy: FallbackToLogsOnError
               command:
                 - sh
                 - -c
@@ -64,6 +65,7 @@ spec:
           containers:
             - name: restic-backup
               image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
               command:
                 - sh
                 - -c
@@ -136,6 +138,7 @@ spec:
           containers:
             - name: restic-forget
               image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
               command:
                 - sh
                 - -c

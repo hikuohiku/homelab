@@ -38,6 +38,7 @@ spec:
       initContainers:
         - name: init-permissions
           image: busybox:1.38.0
+          terminationMessagePolicy: FallbackToLogsOnError
           command: ["sh", "-c", "chown -R 26:999 /var/lib/postgresql/data"]
           securityContext:
             runAsUser: 0
@@ -47,6 +48,7 @@ spec:
       containers:
         - name: postgres
           image: ghcr.io/tensorchord/cloudnative-vectorchord:16.9-0.4.3
+          terminationMessagePolicy: FallbackToLogsOnError
           # このイメージは CloudNativePG operand イメージ (postgres-containers)
           # を継承しており、ベースの Debian postgres ユーザー (UID/GID 999) に
           # usermod -u 26 postgres で UID のみ 26 に変更している (GID は 999 のまま)。

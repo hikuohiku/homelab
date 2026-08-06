@@ -26,6 +26,7 @@ spec:
         # local-path の PVC は root:root で作成されるため、非 root 実行に備えて所有権を調整
         - name: init-permissions
           image: busybox:1.38.0
+          terminationMessagePolicy: FallbackToLogsOnError
           command: ["sh", "-c", "chown -R 1000:1000 /data"]
           securityContext:
             runAsUser: 0
@@ -38,6 +39,7 @@ spec:
           # 1.37.0 が Bitwarden クライアント 2026.7.0+ の対応に必須。
           # 1.37.1 は alpine イメージのビルド不具合 (OpenSSL) 修正を含むため alpine では 1.37.1 を採る。
           image: vaultwarden/server:1.37.1-alpine
+          terminationMessagePolicy: FallbackToLogsOnError
           securityContext:
             runAsNonRoot: true
             runAsUser: 1000

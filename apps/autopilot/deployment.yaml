@@ -48,6 +48,7 @@ spec:
           # 終わったのを待ってこの行のダイジェストも合わせて更新する
           # （ghcr の package が private の場合は imagePullSecrets が別途要る）
           image: ghcr.io/hikuohiku/homelab-autopilot@sha256:1ef41f711651af72fea996ba95c0e0a6e9171f4e6f5579325f54fed1605938a8
+          terminationMessagePolicy: FallbackToLogsOnError
           command: ["bash", "/config/loop.sh"]
           securityContext:
             allowPrivilegeEscalation: false

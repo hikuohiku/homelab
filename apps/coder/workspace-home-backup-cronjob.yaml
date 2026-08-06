@@ -300,6 +300,7 @@ spec:
           containers:
             - name: spawn-backup-jobs
               image: python:3.14-alpine
+              terminationMessagePolicy: FallbackToLogsOnError
               command: ["python", "/scripts/spawn_backup_jobs.py"]
               env:
                 - name: PYTHONDONTWRITEBYTECODE
@@ -352,6 +353,7 @@ spec:
           containers:
             - name: restic-forget
               image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
               command:
                 - sh
                 - -c

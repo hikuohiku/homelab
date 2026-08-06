@@ -197,6 +197,7 @@ spec:
           containers:
             - name: pvc-usage
               image: python:3.14-alpine
+              terminationMessagePolicy: FallbackToLogsOnError
               command: ["python", "/scripts/pvc_usage.py"]
               env:
                 - name: PVC_MOUNTS

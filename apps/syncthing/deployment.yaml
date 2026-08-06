@@ -24,6 +24,7 @@ spec:
           # （GitHub Releases で breaking change の記載なしを確認済み、DB は SQLite で新規インストールは
           # マイグレーション対象外）
           image: syncthing/syncthing:2.1.3
+          terminationMessagePolicy: FallbackToLogsOnError
           # 公式イメージの entrypoint (script/docker-entrypoint.sh) は root で起動し、$HOME
           # (=/var/syncthing) を PUID:PGID へ chown した上で su-exec により非 root (既定 1000:1000)
           # へ権限を落として実行する（GitHub syncthing/syncthing 実測、2026-08-06）。vaultwarden と
