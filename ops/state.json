@@ -890,6 +890,16 @@
       "by": "in-cluster autopilot",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。ops-health-report で新規異常なし、immich backup_listing も直近24時間以内で正常。backlog の blocked/needs-human をタスク単位ではなく部分単位で洗い直し、T-0072（PBS退役判断）・T-0078（coder workspace home backup）の blocked_by がそれぞれ run #68・#53 時点で解消済みなのに放置されていたと発見。T-0072 に着手し『今は PBS を維持、T-0078 完了後に退役』と判断（docs/backup.md に記録）、T-0078 を todo に戻し、退役実行タスク T-0116（blocked_by: T-0078）を分離起票",
       "prs": []
+    },
+    {
+      "n": 83,
+      "at": "2026-08-06T00:29:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断: PR #263（T-0072, run #82 が open のまま終了）を CI green・mergeable_state clean を確認して merge。issue #56 に未読フィードバックなし。backlog の唯一の todo だった T-0078（coder workspace home PVC の backup）に着手し、オーケストレータ Pod が workspace ごとの PVC を動的に列挙して使い捨ての restic backup Job を Kubernetes API 経由で生成する方式で実装した（credential は coder-postgres 用を流用、新規登録不要）。新しい write RBAC・実測なしの resources/securityContext を持ち込むため CHARTER §4 の cooldown 対象と判断し、PR #264 は CI green 確認まで進めたが merge せず open のまま終える。T-0078 は in_progress、初回実行確認・復元試験は T-0117 として分離起票",
+      "prs": [
+        264
+      ]
     }
   ]
 }
