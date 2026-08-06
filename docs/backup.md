@@ -192,7 +192,7 @@ Git → ArgoCD 経由で apply し、`kubectl get pod`（`autopilot-reader` で�
 前回の残留状態（chown 済みディレクトリ等）が新たな権限エラーの原因になりうるため、
 restore 前のクリーンアップを常に入れる。
 
-検証専用の `immich-restore-verify` PVC/Job は確認が取れ次第、削除する PR を別途出す
+検証専用の `immich-restore-verify` PVC/Job は確認が取れたため削除した
 （このファイルの冒頭コメントに書いた運用どおり）。
 
 ### vaultwarden（完了、2026-08-06）

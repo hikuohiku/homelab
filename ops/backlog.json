@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 115,
-  "updated": "2026-08-05T22:19:04Z",
+  "next_id": 116,
+  "updated": "2026-08-06T00:05:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2157,6 +2157,23 @@
       ],
       "created": "2026-08-06",
       "pr": 261,
+      "notes": ""
+    },
+    {
+      "id": "T-0115",
+      "domain": "homelab",
+      "title": "docs/backup.md の immich restore-verify Job 削除記述が「削除する予定」のまま残っていた",
+      "kind": "docs",
+      "risk": "low",
+      "status": "done",
+      "priority": 90,
+      "why": "run #81 の調査タスク（backlog todo が空だったため CHARTER §3 に従いドキュメントの実態乖離を確認）で発見。T-0071 の immich 復元試験を記録した commit 229735e で `immich-restore-verify` PVC/Job 自体は既に同じ commit 内で削除済みだったが、docs/backup.md の文章は「確認が取れ次第、削除する PR を別途出す」という未来形のまま取り残されていた。vaultwarden/coder-postgres の節は正しく「削除した」と過去形で書かれており、immich の節だけ表現がずれていた",
+      "dod": "docs/backup.md の immich 節を vaultwarden/coder-postgres と同じ過去形（削除した）に揃える",
+      "refs": [
+        "docs/backup.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
       "notes": ""
     }
   ]
