@@ -65,7 +65,9 @@ Box との比較検討は不要。宣言値（PVC の `requested`）と実測値
 
 `apps/vaultwarden/restic-backup-cronjob.yaml` に2つの CronJob を実装した。
 
-- **`vaultwarden-restic-backup`**（毎日 03:40 UTC）: `/data` を直接 restic に渡すと
+- **`vaultwarden-restic-backup`**（毎日 03:40 JST。node01 の `time.timeZone = "Asia/Tokyo"` により
+  k3s の CronJob スケジュールはホストのローカル時刻＝JST で評価される。UTC 換算では前日 18:40）:
+  `/data` を直接 restic に渡すと
   `db.sqlite3-wal`/`-shm` と本体の不整合を持ち込む（vaultwarden 公式 wiki の注意）ため、
   initContainer で SQLite の Online Backup API（Python 標準ライブラリの
   `sqlite3.Connection.backup()`。CLI の `.backup`/vaultwarden 内蔵の `VACUUM INTO` と同じ
@@ -79,7 +81,7 @@ Box との比較検討は不要。宣言値（PVC の `requested`）と実測値
   毎回依存してしまうため置き換えた。vaultwarden 内蔵の `/vaultwarden backup` コマンドは
   ソース確認の結果 `db.sqlite3` と同じディレクトリにしか出力できず読み取り専用マウントと
   両立しないため不採用）
-- **`vaultwarden-restic-retention`**（毎週日曜 04:00 UTC）: `restic forget --keep-daily 7
+- **`vaultwarden-restic-retention`**（毎週日曜 04:00 JST、UTC 換算では前日 19:00）: `restic forget --keep-daily 7
   --keep-weekly 4 --keep-monthly 6 --prune`
 - 保存先は Backblaze B2（`b2:<bucket>:vaultwarden`）。immich（T-0068）・coder-postgres
   （T-0070）も同じ bucket・同じ credential でパス末尾だけ変える設計にした
@@ -91,7 +93,11 @@ Box との比較検討は不要。宣言値（PVC の `requested`）と実測値
 `apps/immich/restic-backup-cronjob.yaml` に2つの CronJob を実装した。
 
 - immich server v2.7.5 には "Database Backup" 機能がデフォルトで有効（`server/src/config.ts`
-  の `backup.database`: `enabled: true`、毎日 02:00 UTC 実行、`keepLastAmount: 14`）で、
+  の `backup.database`: `enabled: true`、毎日 02:00 **UTC** 実行、`keepLastAmount: 14`）で、
+  これは k8s の CronJob ではなく immich-server コンテナ内で動くアプリケーション自身のタイマーの
+  ため、node01 の JST 設定の影響を受けない（`backup_listing` のファイル名・`mtime` が実際に
+  UTC 02:00 で揃っていることを 2026-08-06 実測で確認済み、T-0125）。この節の他の CronJob（下記）とは
+  時刻の基準が異なる点に注意
   pg_dump 相当のフルダンプ（pgvector/embeddings テーブル含め除外なし）を `.tmp` へ書いてから
   rename する形で `UPLOAD_LOCATION/backups/*.sql.gz` に確定させる（サブエージェントが v2.7.5
   タグの実ソース `database-backup.service.ts` を直接確認して裏取り済み）。`UPLOAD_LOCATION`
@@ -99,9 +105,10 @@ Box との比較検討は不要。宣言値（PVC の `requested`）と実測値
   のため、**`immich-library` PVC を restic で1本取るだけでライブラリ本体と DB ダンプ
   （immich-postgres-data 相当のデータを含む）が同時に取れる。** coder-postgres（T-0070）の
   ような専用 `pg_dump` initContainer は不要だった
-- **`immich-restic-backup`**（毎日 02:45 UTC、immich 自身のダンプ完了を待つため45分後に開始）:
+- **`immich-restic-backup`**（毎日 02:45 JST、immich 自身のダンプ完了を待つため45分後に開始。
+  UTC 換算では前日 17:45）:
   `immich-library` PVC をそのまま restic backup する
-- **`immich-restic-retention`**（毎週日曜 03:45 UTC）: `restic forget --keep-daily 7
+- **`immich-restic-retention`**（毎週日曜 03:45 JST、UTC 換算では前日 18:45）: `restic forget --keep-daily 7
   --keep-weekly 4 --keep-monthly 6 --prune`
 - 保存先は vaultwarden/coder-postgres と同じ Backblaze B2 バケット、パス末尾のみ `immich`
   （`b2:<bucket>:immich`）
@@ -127,7 +134,7 @@ Box との比較検討は不要。宣言値（PVC の `requested`）と実測値
 同じ設計思想（稼働中の DB を直接 restic に渡さず、一貫性のあるダンプを先に作る）を
 PostgreSQL 向けに適用したもの。
 
-- **`coder-restic-backup`**（毎日 03:10 UTC）: PostgreSQL は稼働中の PGDATA を restic で
+- **`coder-restic-backup`**（毎日 03:10 JST、UTC 換算では前日 18:10）: PostgreSQL は稼働中の PGDATA を restic で
   直接舐めてはいけない（サーバを止めない限り一貫したスナップショットにならないと
   PostgreSQL 公式ドキュメントが明記）ため、initContainer で `pg_dump -Fc`（カスタム形式、
   `pg_restore` で復元）を使いネットワーク経由で論理ダンプを取り、emptyDir 経由で本体の
@@ -137,7 +144,7 @@ PostgreSQL 向けに適用したもの。
   `ops/inventory.json` の `coder-postgres` エントリの `mirrors` としてバージョン同期を
   `check_version_sync.py` の CI で追う）。PVC には触れず DB へのネットワーク接続のみのため、
   vaultwarden の sqlite-snapshot initContainerと違い `DAC_READ_SEARCH` は不要
-- **`coder-restic-retention`**（毎週日曜 04:10 UTC）: `restic forget --keep-daily 7
+- **`coder-restic-retention`**（毎週日曜 04:10 JST、UTC 換算では前日 19:10）: `restic forget --keep-daily 7
   --keep-weekly 4 --keep-monthly 6 --prune`
 - 保存先は vaultwarden と同じ Backblaze B2 バケット、パス末尾のみ `coder-postgres`
   （`b2:<bucket>:coder-postgres`）
@@ -153,7 +160,8 @@ PostgreSQL 向けに適用したもの。
 vaultwarden/coder-postgres）と異なり、対象 PVC (`coder-<workspace-id>-home`) は workspace の
 作成・削除のたびに動的に増減するため、静的なマニフェストには書けない。
 
-- **オーケストレータ方式**: `coder-workspace-home-backup` CronJob（毎日 03:30 UTC）が
+- **オーケストレータ方式**: `coder-workspace-home-backup` CronJob（毎日 03:30 JST、UTC 換算では
+  前日 18:30）が
   python:3.12-alpine の Pod 1個を起動し、`app.kubernetes.io/name=coder-pvc` ラベル
   （`apps/coder/templates/personal/main.tf` が付与）で対象 PVC を毎回列挙、PVC ごとに
   使い捨ての Job（restic/restic イメージ、対象 PVC のみ readOnly マウント）を Kubernetes API
@@ -164,7 +172,8 @@ vaultwarden/coder-postgres）と異なり、対象 PVC (`coder-<workspace-id>-ho
   Secret（同じ Backblaze B2 バケット・同じ暗号化パスワード）をそのまま流用し、リポジトリパス
   末尾のみ `coder-workspace-homes` に変える設計
 - **1リポジトリを workspace 間で共有**: 各 Job は `restic backup --host <workspace-id>` で
-  ホストタグを付ける。**`coder-workspace-home-backup-retention`**（毎週日曜 04:30 UTC）は
+  ホストタグを付ける。**`coder-workspace-home-backup-retention`**（毎週日曜 04:30 JST、UTC 換算では
+  前日 19:30）は
   `restic forget --group-by host --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune`
   でホスト単位に世代管理する。workspace が削除されてもそのホストの世代は自然に切り捨てられる
   （明示的な削除はしない）

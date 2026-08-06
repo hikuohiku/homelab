@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 125,
-  "updated": "2026-08-06T02:47:00Z",
+  "next_id": 126,
+  "updated": "2026-08-06T03:15:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2214,7 +2214,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #83: T-0078 実装の副産物として分離起票。run #85: T-0078 は run #84 で done・PR #264 merge 済みのため blocked_by を解消。ただし CronJob の schedule（毎日 03:30 UTC）が未到来のため実行確認はまだできない"
+      "notes": "run #83: T-0078 実装の副産物として分離起票。run #85: T-0078 は run #84 で done・PR #264 merge 済みのため blocked_by を解消。ただし CronJob の schedule（毎日 03:30 UTC と当時記載）が未到来のため実行確認はまだできない。run #97 (T-0125) で訂正: この schedule は実際には JST（node01 の time.timeZone=Asia/Tokyo により k3s の CronJob は JST で評価される）。CronJob は 2026-08-06T00:40:29Z 作成で当日 03:30 JST の回には間に合っておらず、次回の実行予定は 2026-08-07 03:30 JST（= 2026-08-06T18:30Z）。run #94〜#97 が『毎時 UTC 基準でもうすぐ』と判断していたのは誤りで、実際はまだ半日以上先"
     },
     {
       "id": "T-0118",
@@ -2349,6 +2349,26 @@
       "created": "2026-08-06",
       "pr": 280,
       "notes": "run #95: 着手・完遂。コメントのみの変更で機能に影響なし"
+    },
+    {
+      "id": "T-0125",
+      "domain": "homelab",
+      "title": "CHARTER/docs/backup.md の CronJob schedule が「UTC」と誤記されていた（実際は JST）",
+      "kind": "chore",
+      "risk": "low",
+      "status": "done",
+      "priority": 12,
+      "why": "backlog の todo（T-0117）が CronJob schedule 未到来で着手不能だったため CHARTER §3 に従い調査。kubectl で pvc-usage-reporter (immich/vaultwarden/coder) と各 restic-backup/retention CronJob の実際の lastScheduleTime を、CHARTER/docs/backup.md が『UTC』と書く時刻と突き合わせたところ、4系統・8時刻すべてが UTC ではなく JST（UTC+9）で評価された結果と一致した。原因は node01 の `time.timeZone = \"Asia/Tokyo\"`（nix/images/proxmox-cloud/configuration.nix）で、この CronJob いずれも `spec.timeZone` を明示していないため k3s の kube-controller-manager がホストのローカル時刻（JST）で schedule 文字列を評価する。CHARTER §2 の pvc-usage-reporter 404 判定基準と docs/backup.md のバックアップ時刻表がいずれも UTC 前提で書かれており、T-0117 のように『あと何分で実行されるか』を UTC で見積もると最大 9 時間ずれる。immich サーバー内蔵の backup.database（アプリ内タイマー、コンテナ内で完結）は対象外で、backup_listing のファイル名/mtime が UTC 02:00 で揃っていることを実測し区別した",
+      "dod": "CHARTER §2 の pvc-usage-reporter schedule 記述と docs/backup.md の8箇所の CronJob 時刻表記を JST に訂正し、UTC 換算値も併記する。T-0117 の notes に、次回実行予定が実際には 2026-08-07 03:30 JST（=2026-08-06T18:30Z）である旨を追記する",
+      "blocked_by": null,
+      "refs": [
+        "ops/CHARTER.md",
+        "docs/backup.md",
+        "ops/backlog.json"
+      ],
+      "created": "2026-08-06",
+      "pr": 283,
+      "notes": "run #97: kubectl での実測（pvc-usage-reporter 3件・immich/vaultwarden/coder-restic-backup/retention・coder-workspace-home-backup の lastScheduleTime）に基づき着手・完遂。コード変更は無くドキュメント訂正のみ、機能影響なし"
     }
   ]
 }
