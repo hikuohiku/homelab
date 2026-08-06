@@ -2773,7 +2773,7 @@
       "title": "GitHub Actions の release-image.yml で cachix pull が実際にキャッシュヒットしているか検証する（issue #26）",
       "kind": "investigate",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 80,
       "why": "issue #26（2025-12-14、autopilot 発足前の未トリアージ issue）。当時の報告は『just prepare でローカルの cachix push は成功する（Nothing to push）のに、GitHub Actions 環境ではキャッシュがヒットせず derivation が再ビルドされる』というもの。.github/workflows/release-image.yml の cachix/cachix-action ステップには『authToken/signingKey が無いため pull（substituter）専用。push は一切行わない（ops/CHARTER.md §5.4）』というコメントが既にあり、これは T-0050 (run #19) が push 面（authToken 無しでは push しない）を実ソースで確認済みの事実。ただし pull 面（実際に hikuohiku cachix cache から substitute できているか）は未検証のまま残っている。hikuohiku.cachix.org/nix-cache-info は 200 で応答するが、これは cache のメタデータ公開エンドポイントであり、個別 store path の narinfo が認証無しで取得できる（= public cache として運用されている）保証にはならない。private cache のままなら pull も常に失敗し、release-image.yml の手動実行のたびに cachix 経由の高速化が一切効かず全 derivation をゼロからビルドしている可能性がある",
       "dod": "(1) hikuohiku cachix cache が public（未認証で narinfo を返す）か private かを確認する（cachix ダッシュボードの設定を見られるのは人間のみの可能性が高いが、実際に既知の store path の narinfo を認証無しで curl/WebFetch して 200/404 を見れば外部からでも判別できる）。(2) 直近の release-image.yml 実行ログ（GitHub Actions の workflow run、REST API で取得可能）で `nix build` ステップの出力に `copying path` (=cache miss, ビルドした) と `fetching` (=cache hit, substitute した) のどちらが支配的かを確認する。(3) cache miss が支配的だと分かったら、原因（private cache への読み取り認証が無い、architecture/system の不一致、derivation hash が local と Actions runner で異なる 等）を切り分け、対処（read-only な authToken を追加する、または『pull も意図的に効いていない』を許容している旨をドキュメント化する）を決める。(4) 対応が終わったら issue #26 に結果を報告する",
@@ -2786,7 +2786,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #144（計画役）: backlog の todo が T-0117（not_before 未到来）のみで実行役の着手可能タスクが枯渇していたため、CHARTER §3 に従い未トリアージの open issue を洗い出して起票。issue #26 は autopilot 発足前（2025-12-14）から誰にも拾われていなかった。T-0050/T-0047 が cachix-action の push 挙動は確認済みだが pull 側の実効性は未検証という隙間を埋める"
+      "notes": "run #144（計画役）: backlog の todo が T-0117（not_before 未到来）のみで実行役の着手可能タスクが枯渇していたため、CHARTER §3 に従い未トリアージの open issue を洗い出して起票。issue #26 は autopilot 発足前（2025-12-14）から誰にも拾われていなかった。T-0050/T-0047 が cachix-action の push 挙動は確認済みだが pull 側の実効性は未検証という隙間を埋める。run #146（実行役）: DoD (1) は確認完了（cachix 公式メタデータ API で `hikuohiku` cache が `isPublic: true` と実測、`cachix-action@v17` は `skipAddingSubstituter` 既定 false のため authToken 無しでもデフォルトで substituter を追加すると実ソースで確認、設定面では pull が機能する構成）。DoD (2)(3) は達成できなかった: release-image.yml の過去実行 12 件は全て 2025-12-16 以前で、GitHub Actions ジョブログは保持期限切れのため 410 Gone で取得不能、実際の hit/miss は確認不能だった。新規実行のトリガー（workflow_dispatch）は実際に GitHub Release を作成する副作用があるため autopilot からは行わなかった。issue #26 に結果を報告済み（DoD (4) 達成）。未確認事項は ops/inbox.md に引き継ぎ、次に人間が手動実行する機会があればログ保持期限内に確認する調査タスクの起票を計画役の判断に委ねる"
     }
   ]
 }
