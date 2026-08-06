@@ -6,7 +6,7 @@
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-06T00:56:52Z"
+    "last_read": "2026-08-06T01:26:31Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc"
@@ -938,6 +938,16 @@
       "prs": [
         268,
         269
+      ]
+    },
+    {
+      "n": 88,
+      "at": "2026-08-06T10:26:00+09:00",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。T-0117 は CronJob schedule（03:30 UTC）未到来のため引き続き着手不能。CHARTER §3 に従い blocked/needs-human タスクの blocked_by 有効性を確認したところ、T-0106（B2 restic credential の append-only 鍵分離）の blocked_by（T-0071 復元試験）が既に done なのに blocked のまま取り残されていたと判明。manifest 側（apps/{vaultwarden,immich,coder}/restic-external-secret.yaml に backup 専用 ExternalSecret <app>-restic-backup-credentials を追加、新しい Doppler キー B2_ACCOUNT_ID_APPEND_ONLY/B2_ACCOUNT_KEY_APPEND_ONLY を参照）を実装し、既存 backup CronJob の参照先はまだ切り替えず現状の日次バックアップへの影響を回避した。T-0106 を credential 発行待ちの needs-human に narrow化し、切り替え作業を T-0120（blocked_by: T-0106）として分離した",
+      "prs": [
+        271
       ]
     }
   ]

@@ -282,11 +282,42 @@ DB 接続不要）の2段で行った。
 |---|---|
 | `RESTIC_PASSWORD` | restic リポジトリの暗号化パスワード（新規に決めて登録） |
 | `RESTIC_B2_BUCKET` | Backblaze B2 のバケット名 |
-| `B2_ACCOUNT_ID` | B2 application key ID（**append-only** キーを推奨。node01 が乗っ取られてもバックアップを消せないように） |
+| `B2_ACCOUNT_ID` | B2 application key ID（**実際には削除権限を持つ鍵**。retention CronJob の `forget --prune` と backup CronJob の両方がこのキーを共用しているため。append-only にはなっていない — 下記 T-0106 参照） |
 | `B2_ACCOUNT_KEY` | 同上 application key |
 
 登録後、`ops-health-report`（`pod_issues`）で `vaultwarden-restic-backup` CronJob の Job が
 Failed になっていないことを確認できれば実際に動作したとみなせる（T-0097）。
+
+## backup 専用 credential への分離 (T-0106, 2026-08-06)
+
+issue #56（2026-08-05 16:02:29）の指摘: 実際に `restic forget --prune` が B2 上のオブジェクトを
+削除できることを確認した際、上記 `B2_ACCOUNT_ID`/`B2_ACCOUNT_KEY` が backup と retention の両方の
+CronJob に共用されており、削除権限を持つ鍵であることが判明した（「append-only キーを推奨」という
+当初の登録依頼どおりには登録されていなかった、または退避目的で意図的に共用された）。node01 が
+侵害された場合、この単一の鍵でバックアップそのものを消せてしまう。「バックアップがある」ことと
+「バックアップが守られている」ことは別、という指摘どおり。
+
+**対処（manifest 側、この起動で完了）**: `apps/{vaultwarden,immich,coder}/restic-external-secret.yaml`
+に backup 専用の ExternalSecret（`<app>-restic-backup-credentials`）を追加した。新しい Doppler キー
+`B2_ACCOUNT_ID_APPEND_ONLY`/`B2_ACCOUNT_KEY_APPEND_ONLY` を参照する。retention CronJob
+（削除が必須）は引き続き既存の `<app>-restic-credentials` を使う。
+
+**現状は追加のみで、既存の backup CronJob の参照先はまだ切り替えていない。** 新しい Doppler キーが
+まだ存在しないため、新しい ExternalSecret は登録が済むまで `SecretSyncedError` のまま Ready に
+ならない想定だが、どの CronJob もまだこの新しい Secret を参照していないため、現行の日次バックアップ
+には影響しない。
+
+**人間への依頼（T-0106, needs-human）**: Backblaze の管理コンソールで、既存バケット向けの
+新しい Application Key を発行する。Capabilities は `listBuckets`/`listFiles`/`readFiles`/
+`writeFiles` のみ（`deleteFiles` を含めない = 真の append-only）にする。発行した keyID/
+applicationKey を Doppler（`homelab/prd`）に `B2_ACCOUNT_ID_APPEND_ONLY` /
+`B2_ACCOUNT_KEY_APPEND_ONLY` として登録する。
+
+**登録後の切り替え（T-0120, blocked）**: `kubectl get externalsecret <app>-restic-backup-credentials
+-n <app>` で Ready を確認した上で、4つの backup CronJob（`vaultwarden-restic-backup` /
+`immich-restic-backup` / `coder-restic-backup` / `coder-workspace-home-backup` の動的 Job
+テンプレート）の `B2_ACCOUNT_ID`/`B2_ACCOUNT_KEY` の `secretKeyRef.name` を新しい
+`<app>-restic-backup-credentials` に切り替える。retention CronJob 側は変更しない。
 
 ## わかっていること（repo から）
 
