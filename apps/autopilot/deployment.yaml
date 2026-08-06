@@ -19,6 +19,12 @@ spec:
     metadata:
       labels:
         app: autopilot
+      annotations:
+        # ConfigMap の中身が変わっても Deployment の spec は変わらないため、Pod は
+        # 作り直されない。loop.sh は自分の更新を検知して exec し直すようになったので、
+        # 以降この値を触る必要はない。この 1 回だけ、その仕組みを載せた loop.sh を
+        # 動かすために Pod を作り直す。
+        autopilot/loop-revision: "2"
     spec:
       serviceAccountName: autopilot
       # 走行中のイテレーションが SIGTERM を受けてから降りるまでの猶予。
