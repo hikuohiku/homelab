@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T00:11:00Z",
+  "updated": "2026-08-06T00:40:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -900,6 +900,14 @@
       "prs": [
         264
       ]
+    },
+    {
+      "n": 84,
+      "at": "2026-08-06T00:40:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断: PR #264（T-0078, cooldown で open のまま終了）・#265（run #83 の記録）を発見。issue #56 に新しい異議が無いことを確認し両方を merge（#264: d40c7f7, #265: 12e3d7f）。ArgoCD が新 revision に自動 sync し、coder-workspace-home-backup/-retention CronJob の実在を kubectl で確認（schedule 未到来のため初回実行はこれから）。T-0078 を done にした",
+      "prs": []
     }
   ]
 }
