@@ -196,7 +196,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: pvc-usage
-              image: python:3.12-alpine
+              image: python:3.14-alpine
               command: ["python", "/scripts/pvc_usage.py"]
               env:
                 - name: PVC_MOUNTS

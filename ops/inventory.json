@@ -299,7 +299,7 @@
       "id": "ops-health-reporter-image",
       "kind": "image",
       "name": "python (ops-health-reporter CronJob)",
-      "current": "3.12-alpine",
+      "current": "3.14-alpine",
       "file": "apps/ops-health-reporter/cronjob.yaml",
       "match": "image: python:",
       "upstream": "dockerhub:library/python",
@@ -311,7 +311,7 @@
       "id": "pvc-usage-reporter-image",
       "kind": "image",
       "name": "python (pvc-usage-reporter CronJob)",
-      "current": "3.12-alpine",
+      "current": "3.14-alpine",
       "file": "apps/immich/pvc-usage-cronjob.yaml",
       "match": "image: python:",
       "mirrors": [
