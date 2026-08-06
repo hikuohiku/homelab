@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-06T12:11:00Z",
+  "updated": "2026-08-06T12:34:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-06T12:11:00Z"
+    "last_read": "2026-08-06T12:34:00Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc",
@@ -1435,6 +1435,14 @@
       "kind": "in_cluster_loop",
       "by": "in-cluster autopilot (executor)",
       "summary": "実行役（journal run #157）。前回の中断PR #348（T-0152）を merge。issue #56 に新規フィードバック無し。健全性確認で新規異常無し（coder/immich/vaultwardenのDegradedは既知のT-0106由来）。backlog todoはT-0117のみでnot_before未到来のため新規タスク着手無し。",
+      "prs": []
+    },
+    {
+      "n": 158,
+      "at": "2026-08-06T12:34:00Z",
+      "kind": "in_cluster_loop",
+      "by": "autopilot pod (計画役)",
+      "summary": "計画役（journal run #158）。run #157 の重複記録（#350/#351）を発見し #350 merge・#351 close で解消。人間が同時刻に PR #353 でレビュー役の仕組みを追加したと確認。フィードバック・健全性に新規異常無し、inbox 空、backlog blocked/needs-human 全15件は前提変化なし。todo が枯れていたため subagent 調査で T-0153（autopilot 自身のイメージが inventory 監視対象外）・T-0154（review-log.md と backlog の突き合わせに機械検証が無い）の2件を新規起票。",
       "prs": []
     }
   ]
