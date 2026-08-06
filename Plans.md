@@ -54,9 +54,27 @@ Proxmox LXC で手動運用中のサービスを k8s (ArgoCD) へ移行する。
 |------|------|-----|---------|--------|
 | M0 | docker VM(106) 削除（未使用） | qemu/106 削除 / Tailscale `hikuo-homedocker` 削除 | - | 完了（qemu/106 削除済み・検証済み。Tailscale デバイス削除はユーザー手動） |
 | M1 | vaultwarden を k8s 移行（手書き manifest） | apps/vaultwarden/ 作成・登録 / Doppler `VAULTWARDEN_ADMIN_TOKEN` 登録 / 旧 LXC tailscale 退避 / /data 移行 / 検証 | - | 完了 [PR #47]（ciphers 781 件移行・ログイン確認済み・旧 LXC 100 破棄済み） |
-| M2 | syncthing を k8s 移行 | 後回し（P2P 特性のため移行可否検討が未了。ディスク容量は 2026-08-04 の node01 拡張（256 GiB, 空き 223 GiB）で解消済み） | - | 保留 |
+| M2 | syncthing を k8s 移行 | 移行可否検討完了（T-0137, 2026-08-06）。技術的には実現可能と判断。実装タスクへの分割は未着手 | - | 検討完了・実装待ち |
 
 > 補足: k8s への書き込み操作（移行時の scale/cp/exec 等）は kubectl CLI で行う方針（CLAUDE.md 反映済み）。
 > 当初は `.claude/settings.json` の `permissions.ask` で毎回人間の承認を求めていたが、autopilot の
 > ヘッドレス実行では誰も承認できず起動が丸ごと無駄になるため、`ask` ルールは全廃した（`ops/CHARTER.md`
 > §5.1）。現在の歯止めは「変更は Git → CI → ArgoCD を通す」という経路そのもの。
+
+> M2 の技術的根拠（T-0137, 2026-08-06 調査）: P2P 特性で懸念していた 2 点はいずれも解消できる。
+> (1) device ID/証明書（`cert.pem`/`key.pem`）は syncthing の config ディレクトリに保存され、
+> これが失われると別デバイスとして再認識される（Syncthing 公式ドキュメント）。永続化には PVC が要るが、
+> node01 は単一ノード構成（`kubectl get nodes` 実測）のため `local-path`（node ローカル）PVC の
+> ノード固定制約は実質問題にならない。(2) sync プロトコル（TCP 22000, QUIC 対応）は HTTP ではないため、
+> immich/vaultwarden/coder 等が使っている Tailscale operator の L7 Ingress（`ingressClassName: tailscale`）
+> では転送できない。Tailscale Kubernetes operator は Service に `tailscale.com/expose: "true"`
+> （または `type: LoadBalancer` + `loadBalancerClass: tailscale`）を付ける L3 ingress を提供しており、
+> これは iptables/nftables の DNAT で Service の全ポート・全プロトコル（TCP/UDP）を転送する
+> （Tailscale 公式ドキュメント kubernetes-operator/cluster-egress 系）。この repo では今のところどのアプリも
+> L7 Ingress のみで、L3 Service 公開は前例が無い。global discovery/relay はいずれも outbound 接続のみで
+> 動作するため、この cluster の既存 egress で足りる。local discovery（UDP 21027, マルチキャスト）は
+> Pod のネットワーク namespace 内では機能しないが、既存の LXC 版もピア側は Tailscale 経由で到達している
+> 前提のため実質的な後退ではない（ここは実機の現行構成確認までは至っていない）。実装で詰めるべき残課題:
+> PVC サイジング、GUI(8384) を公開するか（公開するなら既存の L7 Ingress パターンを流用可）、
+> LXC 101 の `/var/lib/syncthing`（想定パス、要確認）から新 PVC への config/データ移行手順
+> （cert.pem/key.pem を含めて移すことで既存ピアとの再認証を避ける）。issue #31/#38 に結論を返信済み。

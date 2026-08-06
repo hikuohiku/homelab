@@ -7,3 +7,9 @@
 [`ops/CHARTER.md`](CHARTER.md) の §3「書く権利」。
 
 ---
+
+- T-0137（syncthing の k8s 移行可否検討）の結論: 技術的に実現可能と判断（詳細は Plans.md M2
+  補足、issue #31/#38 への返信）。実装は「1 タスク = 1 PR = 1 論点」に沿って複数タスクへ分割が
+  必要（例: PVC + Deployment/Service manifest 作成、Tailscale L3 ingress 公開設定、旧 LXC 101
+  からの config/データ移行）。移行対象の LXC 101 の実際の config パス（`/var/lib/syncthing` 想定、
+  未確認）と GUI(8384) を公開するかどうかは実装タスク起票時に決める必要あり。

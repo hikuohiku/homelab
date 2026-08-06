@@ -2594,7 +2594,7 @@
       "title": "syncthing の K8s 移行可否（P2P 特性）を検討する",
       "kind": "investigate",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 66,
       "why": "issue #31（2025-12-15、人間）「syncthing の追加」、issue #38「LXC → K8s サービス移行」の対象の1つ。Plans.md の M2 はディスク容量不足の理由が2026-08-04の node01拡張で解消済み（T-0006）だが、『P2P 特性のため移行可否検討が未了』のまま保留になっており、この検討自体がまだ着手されていない",
       "dod": "syncthing を k3s 上で運用する場合の P2P 特性の課題（Pod 再起動での device ID/鍵の永続化、discovery/relay の到達性、Tailscale 経由での他ノードとの同期経路）を具体的に洗い出し、実現可能なら manifest 実装タスクとして分割起票する。実現困難・保留が妥当と判断した場合はその技術的根拠を Plans.md の M2 に反映し、issue #31/#38 にコメントで結論を共有する",
@@ -2605,7 +2605,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #132（計画役）: Plans.md M2 の『移行可否検討が未了』が T-0006（run #7, docs のみ）以降も検討タスクとして起票されていなかったため、ここで実行可能な investigate タスクに変換した"
+      "notes": "run #132（計画役）: Plans.md M2 の『移行可否検討が未了』が T-0006（run #7, docs のみ）以降も検討タスクとして起票されていなかったため、ここで実行可能な investigate タスクに変換した run #134（実行役）: 移行可否を調査し実現可能と判断。技術的根拠を Plans.md M2 に追記し、issue #31/#38 に結論を返信。実装タスクへの分割起票は計画役の仕事のため ops/inbox.md に引き継ぎ。"
     }
   ]
 }
