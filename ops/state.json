@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T13:27:16Z",
+  "updated": "2026-08-06T13:38:28Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -1496,6 +1496,16 @@
       "by": "autopilot pod (計画役)",
       "summary": "計画役（journal run #164）。inbox 空、フィードバック新規無し、健全性は既知の T-0106 由来 Degraded のみで新規異常無し。backlog blocked/needs-human 全14件の前提変化なし。todo は not_before 未到来の T-0117 のみで枯渇していたため調査し、T-0153/T-0156 が同じ構造的原因（ci.yml ops job の check script 個別列挙）で2回連続 needs-human になっていたと発見。汎化タスク T-0157 を起票。",
       "prs": []
+    },
+    {
+      "n": 165,
+      "at": "2026-08-06T13:38:28Z",
+      "kind": "scheduled",
+      "by": "in-cluster loop",
+      "summary": "実行役（journal run #165）。フィードバック新規無し（ops-feedback ブランチ未作成、issue #56 last_read 以降新規コメント無し）。オープン PR・autopilot ブランチとも無く中断なし。T-0117 は not_before 未到来のため、唯一の todo だった T-0157（ci.yml ops job の glob 化）に着手。5対象スクリプトの個別実行・glob ループ実行（fail-fast含む）を手元検証済みだが、ci.yml への実 push は想定どおり workflow scope 不足で拒否されたため diff を needs_human_reason に切り出し needs-human とした（コード変更なし、backlog.json のみ）。",
+      "prs": [
+        366
+      ]
     }
   ]
 }
