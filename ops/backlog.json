@@ -2456,7 +2456,7 @@
       "title": "T-0128 の dashboard 配信 URL (ops-dashboard) の実際の MagicDNS ホスト名を確認し ops/state.json に反映する",
       "kind": "investigate",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 45,
       "why": "T-0128（run #100-104, #290/#293/#295）で apps/ops-dashboard/ を実装し kubectl で 2/2 Running を実機確認したが、DoD が求める『ops/state.json の dashboard.artifact_url もしくは新しいフィールドを URL に更新』だけ未達のまま run #104 が ops/inbox.md に引き継ぎを残した（計画役の run #109 がこれを拾った）。autopilot-reader ClusterRole に networking.k8s.io/ingresses の read 権限が無く `kubectl get ingress -n ops-dashboard` が Forbidden、この Pod には tailscale credential も無いため、実際の MagicDNS ホスト名を実測できない。apps/{immich,vaultwarden,dex,argocd,coder}/ingress.yaml の tls.hosts 短縮名パターンから類推すると https://ops-dashboard.tailae6c2.ts.net/ の可能性が高いが未検証",
       "dod": "構築セッション（Coder ワークスペース、tailscale 到達可能）に issue #56 経由で ops-dashboard の実際の URL（推定: https://ops-dashboard.tailae6c2.ts.net/）への到達性を確かめてもらう。確かめられたら ops/state.json の dashboard フィールド（artifact_url をこの URL に置き換えるか、新フィールドを追加して両方残すかは実装時に判断）に反映し、CHARTER §7.1 の記述もあわせて更新する",
@@ -2467,8 +2467,8 @@
         "ops/CHARTER.md"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #109 (計画役): ops/inbox.md の引き継ぎ（run #104 が残した）を起票。恒久対応として autopilot-reader ClusterRole に ingresses read を足す案もあるが、単発の確認で足りるため、まずは構築セッションへの確認依頼で解決を図る。権限追加が必要になったら別タスクにする | run #148（計画役）: 構築セッションが issue #56（2026-08-06T10:03:40Z）で https://ops-dashboard.tailae6c2.ts.net/ の L7 Ingress 到達（HTTP 200）を実測・報告済み。 DoD の確認待ち部分が解消したため needs-human → todo に変更。 次の実行役は ops/state.json の dashboard フィールドにこの URL を反映し、 CHARTER §7.1 の記述もあわせて更新すること"
+      "pr": 341,
+      "notes": "run #109 (計画役): ops/inbox.md の引き継ぎ（run #104 が残した）を起票。恒久対応として autopilot-reader ClusterRole に ingresses read を足す案もあるが、単発の確認で足りるため、まずは構築セッションへの確認依頼で解決を図る。権限追加が必要になったら別タスクにする | run #148（計画役）: 構築セッションが issue #56（2026-08-06T10:03:40Z）で https://ops-dashboard.tailae6c2.ts.net/ の L7 Ingress 到達（HTTP 200）を実測・報告済み。 DoD の確認待ち部分が解消したため needs-human → todo に変更。 次の実行役は ops/state.json の dashboard フィールドにこの URL を反映し、 CHARTER §7.1 の記述もあわせて更新すること | run #149（実行役）: ops/state.json に dashboard.ops_dashboard_url を追加、CHARTER §7.1 を更新し done に。ただし issue #56 の同コメントは同じ制約下で syncthing の GUI L7 Ingress を『tailnet ピアでないため判定不能』と明記しており、ops-dashboard の確認も内部 Service 止まりで外部到達は未実測の疑いがあるため、その旨を state.json に注記し ops/inbox.md へ引き継いだ"
     },
     {
       "id": "T-0131",
