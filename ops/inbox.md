@@ -27,3 +27,11 @@
   restic の実行結果（成功/失敗の詳細）を読むには同様に termination message へ結果を
   書き込む設計にしておくと、pods/log 権限が無くても autopilot 自身で確認できる
   （T-0071 の immich 版が `#230` で同じ工夫を先例として持っている）。
+- [T-0117 追記, run #184] 上記の「GC 前に子 Job を捕まえる必要がある」は DoD (1)
+  （オーケストレータの成功確認）に限れば不要と判明した。`kubectl get cronjob -n coder
+  coder-workspace-home-backup` の `status.lastSuccessfulTime` は子 Job が GC された後も
+  CronJob オブジェクト自身に残り続ける。本日分は `lastScheduleTime`/`lastSuccessfulTime`
+  とも `2026-08-06T18:30:0*Z` で一致しており、DoD (1) は GC 後のこの回でも確認できた
+  （子 Job 個別の成否や PVC ごとの内訳までは分からないが、少なくとも「全体として1回は
+  成功した」ことは分かる）。次回着手する回は、1 時間以内に間に合わなければこのフィールド
+  で代替してよい。DoD (2) の復元試験（別途 manifest 要）は引き続き未着手。
