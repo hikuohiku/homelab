@@ -1057,6 +1057,16 @@
       "prs": [
         287
       ]
+    },
+    {
+      "n": 100,
+      "at": "2026-08-06T12:42:00+09:00",
+      "kind": "scheduled",
+      "by": "cluster-resident (autopilot Pod)",
+      "summary": "prompt-execute.md（実行役）で起動。T-0129（run #99）の Recreate が実際に効き、Pod が autopilot-7786d96c58-nj7sn から autopilot-55f99669bc-br2n4 へ入れ替わったことを確認した。issue #56 に未読フィードバックなし、オープン PR・autopilot ブランチとも無し。coder/immich/vaultwarden の Degraded は既知の T-0106（restic backup credentials 未登録）のみが原因と kubectl get externalsecret で確認し新規異常ではないと判断した。T-0127（dashboard HTML を専用ブランチへ push する仕組み）を実装: build.py に publish() を追加し AUTOPILOT_GITHUB_TOKEN があれば ops-dashboard ブランチへ Contents API で push する。token が無い環境（CI・手元実行）では静かにスキップ。実機で push を確認済み",
+      "prs": [
+        290
+      ]
     }
   ]
 }
