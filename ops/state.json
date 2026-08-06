@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-05T23:54:00Z",
+  "updated": "2026-08-06T00:11:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -871,6 +871,24 @@
       "kind": "scheduled",
       "by": "in-cluster autopilot",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。ops-health-report の断面は revert 反映前の古いものだったが、直接 kubectl/ArgoCD で immich-postgres Running・immich Application Synced/Healthy を再確認し新規異常なしと判断。backlog の todo が0件だったため上流バージョン調査を実施（全て最新）、その過程で ops/check_version_sync.py と ops/inventory.json の actions/checkout mirrors から build-autopilot-image.yml が漏れていると発見。T-0114 として起票・即完遂。run #79 の runs エントリの at が JST 値を UTC として誤記録していたのも合わせて修正",
+      "prs": []
+    },
+    {
+      "n": 81,
+      "at": "2026-08-06T00:05:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。ops-health-report で Application 全件 Synced/Healthy・新規異常なしと確認。backlog の todo が0件だったため docs/ の実態乖離を確認し、docs/backup.md の immich restore-verify Job 削除記述が未来形のまま残っていたと発見。T-0115 として起票・即完遂",
+      "prs": [
+        262
+      ]
+    },
+    {
+      "n": 82,
+      "at": "2026-08-06T00:11:00Z",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。ops-health-report で新規異常なし、immich backup_listing も直近24時間以内で正常。backlog の blocked/needs-human をタスク単位ではなく部分単位で洗い直し、T-0072（PBS退役判断）・T-0078（coder workspace home backup）の blocked_by がそれぞれ run #68・#53 時点で解消済みなのに放置されていたと発見。T-0072 に着手し『今は PBS を維持、T-0078 完了後に退役』と判断（docs/backup.md に記録）、T-0078 を todo に戻し、退役実行タスク T-0116（blocked_by: T-0078）を分離起票",
       "prs": []
     }
   ]

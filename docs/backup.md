@@ -287,6 +287,39 @@ Failed になっていないことを確認できれば実際に動作したと�
 
 PBS の現況確認自体が要るなら T-0072（PBS 退役判断）の中で必要な分だけ見る。
 
+## PBS 退役判断 (T-0072, 2026-08-06)
+
+T-0071（復元試験）が immich・vaultwarden・coder-postgres の3コンポーネント全てで完了し、
+いずれも数秒〜十数秒で復元できることを実測した（上記各節参照）。この結果と T-0065（IaC
+完全性の棚卸し）を突き合わせて判断する。
+
+**結論: 今はまだ PBS を退役しない。T-0078（coder workspace home PVC の backup）が
+実装されるまで維持する。**
+
+理由:
+
+- T-0065 が確定した実データを持つ対象は5つ（`immich-library` / `immich-postgres-data`
+  [immich 内蔵ダンプで代替] / `vaultwarden-data` / `coder-postgres-data` /
+  `coder-<workspace-id>-home`）。このうち restic ベースの backup CronJob が実装・復元試験
+  まで完了しているのは前者4つのみで、最後の1つ（コーダー workspace ごとの home PVC）は
+  T-0078 がまだ `blocked` のまま未実装
+- PBS が実際に node01 を対象にしたバックアップジョブを持っているか、workspace home の
+  データを（意図せずであれ）保護しているかは「わからないこと」節のとおり未確認のまま。
+  restic 側の代替が全データ対象に揃っていない状態で PBS を止めると、workspace home だけ
+  バックアップが無い期間が生まれるリスクがある（確認していないものを「無い」とみなして
+  安全側の判断をしない、CHARTER §4「high を戻せる形に落とす」と同じ理由）
+- node01 VM 自体（VM イメージ全体）は Terraform（`terraform/proxmox`）+ NixOS image が
+  完全に宣言的なため、VM 単位の復元は IaC の再適用で代替できる。PBS の VM 単位バックアップは
+  この観点では既に冗長。残る唯一の価値は「T-0078 が塞ぐまでの workspace home の暫定的な
+  保険」だけである
+
+**T-0078 が完了し、workspace home も restic で復元試験まで確認できたら、5対象すべてが
+アプリレベルの restic backup（復元 8〜16 秒、B2 の無料枠内）でカバーされる。その時点で
+PBS の VM 単位バックアップは完全に冗長になり、退役してよい。** この退役の実行手順は
+T-0116 として別途起票した（`blocked_by: T-0078`）。PBS VM 自体の停止・削除は Proxmox
+管理コンソールでの操作が要り、autopilot の Proxmox credential は PVEAuditor（読み取り専用）
+のため実行できない。人間の物理操作が要る点は T-0116 側で明記する。
+
 ## これに依存しているタスク
 
 - T-0029（immich postgres/vchord のメジャー更新、データを失いうる変更）・T-0023（coder
