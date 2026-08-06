@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 133,
-  "updated": "2026-08-06T06:10:58Z",
+  "next_id": 134,
+  "updated": "2026-08-06T06:49:21Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2511,6 +2511,26 @@
       "created": "2026-08-06",
       "pr": 302,
       "notes": "run #109 (計画役): CHARTER §3 の調査観点探しの一環で発見。判断の中身（段階2は完了と言えるか）はこちらの仕事であり人間に投げない（CHARTER §4 の『判断はこちらの仕事』）。実行役が着手する際は本文の三者を機械的に揃えるだけでなく、実際に何が達成されたか/されていないかを一度書き出してから判定すること。run #111 (実行役): 段階2を『完了』とは判定しなかった。in-cluster 常駐（§5.5）開始から2026-08-06時点でまだ1〜2日しか経っておらず、『成果が出続けることを実証する』の実績期間が無い。VISION.md の段階表を『完了/進行中/未着手』の3値に揃え、段階1=完了・段階2=進行中とし、段階2の完了基準（4週間程度の継続稼働・CHARTER §9 相当の事態が起きていないこと・人間の関与が2種類に収まり続けていること）を明文化した。ops/state.json の vision_stage を 1→2、vision_stage_label を『器を安定させる』に更新。CHARTER.md 冒頭に『進行中。完了基準は VISION.md 参照』を追記して3ファイルを一致させた"
+    },
+    {
+      "id": "T-0133",
+      "domain": "homelab",
+      "title": "backlog タスクに時刻ゲート（not_before）を持たせ、loop.sh の actionable 判定が『時刻待ちの todo』を実行役に空振りさせないようにする",
+      "kind": "feature",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 35,
+      "why": "T-0117 は CronJob の初回実行時刻（2026-08-06T18:30Z）まで着手できない todo だが、`apps/autopilot/loop.sh` の actionable 判定（status が todo/in_progress の件数のみを見る python スニペット）はこの時刻ゲートを知らない。backlog の todo が T-0117 だけの間、実行役に倒れた起動は毎回 issue #56 の全件スキャン・health report 取得・journal 記録だけを行って終わる（run #116〜#120 で実測、INTERVAL_SECONDS=120 なので 18:30Z まで実測時点で残り約12時間・350回超が同型になる見込み）。T-0117 のような『時刻が来るまで着手できない todo』はこれまで notes の自由記述でしか表現されておらず機械可読ではなかったため、loop.sh 側で区別できなかった",
+      "dod": "backlog タスクスキーマに任意フィールド `not_before`（ISO8601 文字列、着手可能になる時刻）を追加し、`ops/validate.py` に形式検証（パース可能な ISO8601 であること）を足す。`loop.sh` の actionable 判定を、`not_before` が現在時刻より未来のタスクを除外するように直す（`not_before` の値が壊れている・パースできない場合は安全側＝そのタスクを actionable 扱いのまま、つまり現状と同じ挙動にフォールバックし、role 判定用スニペット全体が例外で落ちて `[ \"\" -eq 0 ]` のような不定形の比較にならないようにする）。既存の T-0117 に `not_before: \"2026-08-06T18:30:00Z\"` を付与し、backlog の todo がこのタスクのみの間は actionable=0 になり計画役に倒れることを次回起動のログ（`role=plan actionable=0`）で確認する。loop.sh の変更は Pod 起動時に一度だけ読み込まれ、変更を反映するには Pod の再作成が要る（ファイル冒頭のコメント参照）ため、PR 本文にその旨と反映タイミングを明記する。自分自身の運用ループ（CHARTER §4 の『自分や人間がこの homelab を観測・操作する経路』に該当）を変更するため、actionable の計算ロジックの単体的な妥当性（真偽の境界条件: not_before なし/過去/未来/壊れた文字列の4パターン）を PR 本文に書き出してから着手する",
+      "blocked_by": null,
+      "refs": [
+        "apps/autopilot/loop.sh",
+        "ops/validate.py",
+        "ops/backlog.json"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #120（計画役）: T-0117 が時刻待ちの todo であるにも関わらず loop.sh の actionable 判定がそれを考慮せず、実行役の起動を12時間規模で空振りさせている実態を journal（run #116〜#119）から発見して起票。VISION §『判断に迷ったときの原則』の『器を太らせる前に、器を使い切る』との整合は検討済み——既存の next_review フィールドは recurring タスクの再オープン判定にのみ使われており（T-0012）、todo タスクの着手可否そのものを表す用途では使われていないため、新規フィールドが必要と判断した"
     }
   ]
 }
