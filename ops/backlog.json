@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "next_id": 116,
+  "next_id": 117,
   "updated": "2026-08-06T00:05:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
@@ -1337,17 +1337,18 @@
       "title": "PBS の退役を判断する",
       "kind": "investigate",
       "risk": "medium",
-      "status": "blocked",
+      "status": "done",
       "priority": 42,
       "why": "issue #56 (2026-08-05 04:40:59) の人間の新方針。構築セッションの調査は『PBS を残す 2 層構成』を推奨していたが、人間の方針は『PBS は必要以上に重い、軽くしたい』。人間の方針を優先する。T-0071 の復元試験が通れば restic 単層で要件は満たす（遅いだけ）。順序を守ること: 復元試験が通ってから判断する",
       "dod": "T-0071 の復元試験結果（成功可否・所要時間）を踏まえ、PBS の VM バックアップジョブ（terraform/proxmox/pbs.tf.ignore の手動管理分）を維持するか退役するかを判断し、記録する。退役する場合は手順を別途 PR にする",
-      "blocked_by": "T-0071（restic 復元試験が通ってから判断する）",
+      "blocked_by": null,
       "refs": [
         "docs/backup.md",
         "terraform/proxmox/pbs.tf.ignore"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": 263,
+      "notes": "run #82: blocked_by（T-0071）が run #68 時点で既に done になっていたにも関わらず run #69〜#81 の間 blocked のまま放置されていたのに気づき着手。T-0065（IaC完全性の棚卸し）の実データ対象5つのうち、restic backup が復元試験まで完了しているのは4つ（immich/vaultwarden/coder-postgres 系）のみで、残る `coder-<workspace-id>-home`（T-0078）が未実装だったため、判断は『今は維持、T-0078 完了後に退役』とした（docs/backup.md『PBS 退役判断』節に記録）。退役の実行タスクは T-0116（blocked_by: T-0078）として分離起票。同じ run で T-0078 も blocked_by（T-0067）が既に done だったため todo に戻した"
     },
     {
       "id": "T-0073",
@@ -1436,17 +1437,18 @@
       "title": "Coder workspace ごとの home PVC (`coder-<workspace-id>-home`) 用の backup CronJob を追加する",
       "kind": "feature",
       "risk": "medium",
-      "status": "blocked",
+      "status": "todo",
       "priority": 40,
       "why": "T-0065（run #30）の調査で発見。`apps/coder/templates/personal/main.tf` が Coder の Terraform プロビジョナー経由で workspace 作成のたびに `coder-<workspace-id>-home` という PVC を動的作成しており（`/home/coder` にマウント、dotfiles・`ghq` clone・code-server 設定等のユーザーデータが載る）、これは `apps/coder/*.yaml` の静的マニフェストには現れないため T-0070（coder-postgres の backup）ではカバーされない。node01 揮発時に失われる実データの5つ目の対象",
       "dod": "workspace ごとに動的作成される `coder-<workspace-id>-home` PVC を列挙し（PVC 名は `coder-<workspace-id>-home` の命名規則で特定可能）、pg_dump 同様の考え方でファイルシステムスナップショット（tar もしくは直接 restic でファイルシステムを対象にする、DB とは異なりファイルなのでオンライン中でも整合性の問題は薄い）を restic で T-0067 の保存先へ push する CronJob を追加する。workspace は増減するため、対象 PVC の列挙は動的（`kubectl get pvc -l` 相当のラベルセレクタ、または命名パターンでのマッチ）にする",
-      "blocked_by": "T-0067（restic 保存先・credential）",
+      "blocked_by": null,
       "refs": [
         "apps/coder/templates/personal/main.tf",
         "docs/backup.md"
       ],
       "created": "2026-08-05",
-      "pr": null
+      "pr": null,
+      "notes": "run #82: blocked_by（T-0067）が run #53 時点で既に done になっていたにも関わらず放置されていたのに気づき todo に戻した（T-0072 の判断作業の副産物）"
     },
     {
       "id": "T-0079",
@@ -2175,6 +2177,25 @@
       "created": "2026-08-06",
       "pr": 262,
       "notes": ""
+    },
+    {
+      "id": "T-0116",
+      "domain": "homelab",
+      "title": "PBS VM (qemu/112) を退役する",
+      "kind": "chore",
+      "risk": "medium",
+      "status": "blocked",
+      "priority": 43,
+      "why": "T-0072（run #82）の判断: T-0065 が挙げた実データ5対象のうち、restic backup + 復元試験まで完了しているのは immich/vaultwarden/coder-postgres 系の4対象のみで、`coder-<workspace-id>-home`（T-0078）が未実装の間は PBS の VM 単位バックアップが唯一の（未確認だが）保険になっている。T-0078 が完了し、workspace home も復元試験まで確認できたら、node01 の全実データがアプリレベルの restic backup でカバーされ、PBS の VM 単位バックアップは完全に冗長になる（node01 VM 自体は Terraform+NixOS で宣言的に再現可能なため）",
+      "dod": "T-0078 が done になった後、(1) workspace home の restic backup が実際に成功し復元試験も通ることを確認する、(2) PBS 上に他に依存しているジョブ・データが無いか最終確認する、(3) `terraform/proxmox/pbs.tf.ignore` にこの記録を残しつつ PBS VM (qemu/112) の停止・削除手順を明記する。実際の VM 停止・削除は Proxmox 管理コンソールでの操作が要り、autopilot の Proxmox credential（PVEAuditor、読み取り専用）では実行できないため、この最終手順は needs-human として人間に引き継ぐ",
+      "blocked_by": "T-0078（coder workspace home PVC の backup 実装・復元試験）",
+      "refs": [
+        "docs/backup.md",
+        "terraform/proxmox/pbs.tf.ignore"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #82: T-0072（PBS 退役判断）から実行タスクとして分離起票"
     }
   ]
 }
