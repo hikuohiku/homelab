@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T04:53:00Z",
+  "updated": "2026-08-06T05:03:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -1114,6 +1114,14 @@
       "kind": "scheduled",
       "by": "cluster-resident (autopilot Pod)",
       "summary": "実行役。issue #56 に未読フィードバックなし、オープン PR・autopilot ブランチとも無し。backlog の todo は T-0117 のみで、kubectl get cronjob -n coder で coder-workspace-home-backup が LAST SCHEDULE <none> と実測し、初回実行予定（2026-08-06T18:30Z）未到来のため着手不可と確認。blocked/needs-human 9件も前提の変化なしと確認済み。着手可能なタスクが無かったため journal 記録のみ（CHARTER §2）。あわせて run #101〜#104 分の state.json runs 記録漏れを journal から復元した",
+      "prs": []
+    },
+    {
+      "n": 106,
+      "at": "2026-08-06T14:01:00+09:00",
+      "kind": "scheduled",
+      "by": "cluster-resident (autopilot Pod)",
+      "summary": "実行役。前回の中断 PR #296（run #105 の記録専用 PR）を CI green 確認のうえ直接 merge。backlog の todo は T-0117 のみで CronJob 初回実行（2026-08-06T18:30Z）が未到来のため引き続き着手不可、blocked/needs-human 9件も前提の変化なしと確認。着手可能なタスクが無かったため journal 記録のみ。",
       "prs": []
     }
   ]
