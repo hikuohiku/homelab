@@ -1,0 +1,394 @@
+# Coder workspace ごとに動的作成される `coder-<workspace-id>-home` PVC
+# (`apps/coder/templates/personal/main.tf` の kubernetes_persistent_volume_claim_v1.home 参照。
+# /home/coder にマウント、dotfiles・ghq clone・code-server 設定等) を restic で
+# Backblaze B2 へバックアップする (T-0078)。docs/backup.md 参照。
+#
+# workspace は増減するため対象 PVC を静的にマニフェストへ書けない。この CronJob は
+# オーケストレータ役の Pod 1 個（python:3.12-alpine、標準ライブラリのみ）が
+# `app.kubernetes.io/name=coder-pvc` ラベルで対象 PVC を毎回列挙し、PVC ごとに
+# 使い捨ての Job（restic/restic イメージ、対象 PVC のみを readOnly マウント）を
+# Kubernetes API 経由で生成する。生成された Job は ttlSecondsAfterFinished で自動 GC
+# されるため、このオーケストレータ自身は Job の削除権限を持たない（作成のみ）。
+#
+# credential は既存の coder-postgres 用 (T-0070, `coder-restic-credentials`) をそのまま流用する。
+# 同じ Backblaze B2 バケット・同じ暗号化パスワードで、リポジトリパス末尾のみ
+# "coder-workspace-homes" に変える設計（vaultwarden/immich/coder-postgres と同型）。
+# 新規の Doppler 登録は不要
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: workspace-home-backup
+  namespace: coder
+---
+# 付与範囲は coder namespace 内、かつ read は PVC の一覧のみ・write は Job の作成のみに絞る。
+# Job が起動する Pod（restic-backup コンテナ）自体はこの ServiceAccount を使わず default を使う
+# （Kubernetes API への到達権限は不要なため、automountServiceAccountToken: false と合わせて
+# トークンそのものを持たせない）
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: workspace-home-backup
+  namespace: coder
+rules:
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: workspace-home-backup
+  namespace: coder
+subjects:
+  - kind: ServiceAccount
+    name: workspace-home-backup
+    namespace: coder
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: workspace-home-backup
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workspace-home-backup-script
+  namespace: coder
+data:
+  spawn_backup_jobs.py: |
+    """coder-<workspace-id>-home PVC ごとに使い捨ての restic backup Job を作る。
+
+    対象 PVC は app.kubernetes.io/name=coder-pvc ラベルで列挙する（ラベルの由来:
+    apps/coder/templates/personal/main.tf の kubernetes_persistent_volume_claim_v1.home）。
+    生成した Job は ttlSecondsAfterFinished で自動 GC されるため、このオーケストレータは
+    Job の削除権限を持たない（作成のみ）。
+    """
+
+    import json
+    import os
+    import ssl
+    import time
+    import urllib.error
+    import urllib.parse
+    import urllib.request
+
+    SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+    K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
+    K8S_PORT = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+    K8S_BASE = "https://{}:{}".format(K8S_HOST, K8S_PORT)
+
+    with open(os.path.join(SA_DIR, "namespace")) as f:
+        NAMESPACE = f.read().strip()
+    with open(os.path.join(SA_DIR, "token")) as f:
+        SA_TOKEN = f.read().strip()
+    SSL_CTX = ssl.create_default_context(cafile=os.path.join(SA_DIR, "ca.crt"))
+
+    # 下の coder-workspace-home-backup-retention CronJob と同じ restic イメージタグに揃える。
+    # ops/check_version_sync.py の GROUP "restic/restic backup CronJob image tag" が検証している
+    # 値は下の retention CronJob 側の image 行（この定数はそこから見た二重管理側なので、
+    # タグを上げるときは両方を揃えて直す）。regex ベースの検証（`image: ` + タグ の連続文字列を
+    # 探す）を誤爆させないよう、リポジトリ名とタグをここでは分けて持つ
+    RESTIC_IMAGE_REPO = "restic/restic"
+    RESTIC_IMAGE_TAG = "0.19.1"
+    RESTIC_IMAGE = RESTIC_IMAGE_REPO + ":" + RESTIC_IMAGE_TAG
+
+    # vaultwarden/immich/coder-postgres の restic backup コンテナと同じ最小権限。
+    # readOnly マウントを DAC_READ_SEARCH のみで読む。書き込み権限は持たせない
+    RESTIC_SECURITY_CONTEXT = {
+        "runAsUser": 0,
+        "allowPrivilegeEscalation": False,
+        "capabilities": {"drop": ["ALL"], "add": ["DAC_READ_SEARCH"]},
+    }
+
+    # T-0108 の教訓（DeadlineExceeded で残った stale lock が以降の実行を恒久的に失敗させた）を
+    # 踏まえ、backup 実行前に restic unlock を先頭に入れる
+    RESTIC_BACKUP_SCRIPT = (
+        "set -eu\n"
+        "restic snapshots >/dev/null 2>&1 || restic init\n"
+        "restic unlock\n"
+        'restic backup /staging --host "$WORKSPACE_ID" '
+        '--tag workspace-id="$WORKSPACE_ID" --tag workspace-name="$WORKSPACE_NAME"\n'
+    )
+
+
+    def k8s_request(method, path, body=None):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(
+            K8S_BASE + path,
+            data=data,
+            method=method,
+            headers={
+                "Authorization": "Bearer " + SA_TOKEN,
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, context=SSL_CTX, timeout=15) as resp:
+                raw = resp.read()
+                return resp.status, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            return e.code, (json.loads(raw) if raw else None)
+
+
+    def list_workspace_home_pvcs():
+        selector = urllib.parse.quote("app.kubernetes.io/name=coder-pvc", safe="=")
+        path = "/api/v1/namespaces/{}/persistentvolumeclaims?labelSelector={}".format(
+            NAMESPACE, selector
+        )
+        status, resp = k8s_request("GET", path)
+        if status != 200:
+            raise RuntimeError("PVC 一覧の取得に失敗: {} {}".format(status, resp))
+        out = []
+        for item in resp.get("items", []):
+            labels = item["metadata"].get("labels", {})
+            workspace_id = labels.get("com.coder.workspace.id")
+            if not workspace_id:
+                # ラベル欠落は想定外だが、他 workspace の backup を止めないためスキップのみ
+                print("workspace id ラベルが無い PVC をスキップ: {}".format(item["metadata"]["name"]))
+                continue
+            out.append({
+                "pvc_name": item["metadata"]["name"],
+                "workspace_id": workspace_id,
+                "workspace_name": labels.get("com.coder.workspace.name", "unknown"),
+            })
+        return out
+
+
+    def build_job(pvc_name, workspace_id, workspace_name):
+        job_name = "chb-{}".format(workspace_id)
+        return {
+            "apiVersion": "batch/v1",
+            "kind": "Job",
+            "metadata": {
+                "name": job_name,
+                "namespace": NAMESPACE,
+                "labels": {
+                    "app.kubernetes.io/name": "coder-workspace-home-backup",
+                    "com.coder.workspace.id": workspace_id,
+                },
+            },
+            "spec": {
+                "backoffLimit": 1,
+                "activeDeadlineSeconds": 3600,
+                "ttlSecondsAfterFinished": 3600,
+                "template": {
+                    "metadata": {
+                        "labels": {"app.kubernetes.io/name": "coder-workspace-home-backup"}
+                    },
+                    "spec": {
+                        "automountServiceAccountToken": False,
+                        "restartPolicy": "Never",
+                        "containers": [{
+                            "name": "restic-backup",
+                            "image": RESTIC_IMAGE,
+                            "command": ["sh", "-c", RESTIC_BACKUP_SCRIPT],
+                            "env": [
+                                {"name": "WORKSPACE_ID", "value": workspace_id},
+                                {"name": "WORKSPACE_NAME", "value": workspace_name},
+                                {
+                                    "name": "RESTIC_B2_BUCKET",
+                                    "valueFrom": {"secretKeyRef": {
+                                        "name": "coder-restic-credentials",
+                                        "key": "RESTIC_B2_BUCKET",
+                                    }},
+                                },
+                                # bucket 名の後ろの "coder-workspace-homes" がリポジトリパスの
+                                # 区切り。coder-postgres (T-0070) と同じ credential・別パスで共有
+                                {
+                                    "name": "RESTIC_REPOSITORY",
+                                    "value": "b2:$(RESTIC_B2_BUCKET):coder-workspace-homes",
+                                },
+                                {
+                                    "name": "RESTIC_PASSWORD",
+                                    "valueFrom": {"secretKeyRef": {
+                                        "name": "coder-restic-credentials",
+                                        "key": "RESTIC_PASSWORD",
+                                    }},
+                                },
+                                {
+                                    "name": "B2_ACCOUNT_ID",
+                                    "valueFrom": {"secretKeyRef": {
+                                        "name": "coder-restic-credentials",
+                                        "key": "B2_ACCOUNT_ID",
+                                    }},
+                                },
+                                {
+                                    "name": "B2_ACCOUNT_KEY",
+                                    "valueFrom": {"secretKeyRef": {
+                                        "name": "coder-restic-credentials",
+                                        "key": "B2_ACCOUNT_KEY",
+                                    }},
+                                },
+                            ],
+                            "securityContext": RESTIC_SECURITY_CONTEXT,
+                            # coder-postgres の restic-backup コンテナ (apps/coder/restic-backup-cronjob.yaml)
+                            # と同じ値をそのまま流用（同種のワークロード、既にレビュー済みの値）
+                            "resources": {
+                                "requests": {"cpu": "50m", "memory": "128Mi"},
+                                "limits": {"cpu": "500m"},
+                            },
+                            "volumeMounts": [{
+                                "name": "home", "mountPath": "/staging", "readOnly": True
+                            }],
+                        }],
+                        "volumes": [{
+                            "name": "home",
+                            "persistentVolumeClaim": {"claimName": pvc_name, "readOnly": True},
+                        }],
+                    },
+                },
+            },
+        }
+
+
+    def create_job(job):
+        path = "/apis/batch/v1/namespaces/{}/jobs".format(NAMESPACE)
+        status, resp = k8s_request("POST", path, job)
+        name = job["metadata"]["name"]
+        if status == 201:
+            print("Job 作成: {}".format(name))
+        elif status == 409:
+            # 前回分がまだ ttlSecondsAfterFinished (1h) で GC されていないだけ。
+            # 翌日の実行を待てば自然に解消するためエラーにしない
+            print("Job {} は既に存在（前回分が GC 待ち）、スキップ".format(name))
+        else:
+            raise RuntimeError("Job {} の作成に失敗: {} {}".format(name, status, resp))
+
+
+    def main():
+        pvcs = list_workspace_home_pvcs()
+        if not pvcs:
+            print("対象の workspace home PVC が無い（workspace 0件）。何もしない")
+            return
+        for i, pvc in enumerate(pvcs):
+            if i > 0:
+                # 同一 restic リポジトリへの同時書き込みによるロック競合を避けるための間隔。
+                # 個人利用規模（workspace 数が少ない）を前提にした簡易な直列化
+                time.sleep(20)
+            job = build_job(pvc["pvc_name"], pvc["workspace_id"], pvc["workspace_name"])
+            create_job(job)
+        print("{} 件の workspace home PVC に backup Job を作成した".format(len(pvcs)))
+
+
+    if __name__ == "__main__":
+        main()
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: coder-workspace-home-backup
+  namespace: coder
+spec:
+  # coder-restic-backup (03:10 UTC) の後、余裕を持って開始
+  schedule: "30 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      # workspace 数に応じて子 Job の作成に time.sleep(20) 間隔がかかる。このオーケストレータ
+      # 自身は Job の作成のみで完了を待たないため通常は数秒〜数分で終わる想定（未実測）
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          serviceAccountName: workspace-home-backup
+          restartPolicy: Never
+          containers:
+            - name: spawn-backup-jobs
+              image: python:3.12-alpine
+              command: ["python", "/scripts/spawn_backup_jobs.py"]
+              env:
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              # K8s API 呼び出しのみで PVC の実データには触れないため root 昇格は不要
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              # 実測なしの緩い安全弁（pvc-usage-reporter と同クラス、CHARTER §4 「縛る変更には
+              # 実測か裏付けが要る」対象）。デプロイ後に kubectl top / ops-health-report の
+              # pod_metrics で実測し、必要なら調整する（T-0078 のフォローアップとして起票）
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 300m
+                  memory: 128Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: workspace-home-backup-script
+---
+# 週次で古い世代を刈る。workspace ごとに restic --host <workspace-id> でタグ付けしているため、
+# --group-by host でホスト単位に世代管理する。workspace が削除されても、そのホストの
+# スナップショットは keep-* の世代分だけ残り続けたのち自然に切り捨てられる（明示的な削除はしない）
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: coder-workspace-home-backup-retention
+  namespace: coder
+spec:
+  schedule: "30 4 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          containers:
+            - name: restic-forget
+              image: restic/restic:0.19.1
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  restic snapshots >/dev/null 2>&1 || { echo "repository not initialized yet, skipping"; exit 0; }
+                  restic forget --group-by host --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+              env:
+                - name: RESTIC_B2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: coder-restic-credentials
+                      key: RESTIC_B2_BUCKET
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):coder-workspace-homes"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: coder-restic-credentials
+                      key: RESTIC_PASSWORD
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: coder-restic-credentials
+                      key: B2_ACCOUNT_ID
+                - name: B2_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: coder-restic-credentials
+                      key: B2_ACCOUNT_KEY
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m

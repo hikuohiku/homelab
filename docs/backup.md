@@ -41,7 +41,7 @@ issue #56 (2026-08-05 04:40:59) で人間から新方針: **PBS は重すぎる�
 | `immich-postgres-data` | immich アセットメタデータ・CLIP埋め込み | T-0068 の immich 内蔵日次DBダンプ（`immich-library` 内）で代替。生 PVC 自体のバックアップは対象外 |
 | `vaultwarden-data` | パスワードマネージャ本体（SQLite） | T-0069 |
 | `coder-postgres-data` | Coder 制御プレーン（ユーザー・workspace・監査ログ） | T-0070（実装済み・credential 登録待ち） |
-| `coder-<workspace-id>-home`（動的作成、`apps/coder/templates/personal/main.tf`） | workspace ごとの `/home/coder`（dotfiles・ghq clone 等） | **未起票**。T-0070 の対象外（別 PVC 群）のため、別途タスク化が必要 |
+| `coder-<workspace-id>-home`（動的作成、`apps/coder/templates/personal/main.tf`） | workspace ごとの `/home/coder`（dotfiles・ghq clone 等） | T-0078（実装済み・cooldown中、credential 登録不要） |
 
 ## 実サイズの実測 (T-0066, run #50)
 
@@ -146,6 +146,38 @@ PostgreSQL 向けに適用したもの。
 - **復元時の注意**: `pg_restore` で復元する前に coder-postgres の既存データをクリアするか
   新規 DB に復元してから切り替えること。`coder server` は起動時に DB migration を自動適用する
   ため、リストア後に起動する `coder` のバージョンと migration の整合を確認する
+
+## coder workspace home の restic バックアップ (T-0078, 実装済み・cooldown中)
+
+`apps/coder/workspace-home-backup-cronjob.yaml` に実装した。他3コンポーネント（immich/
+vaultwarden/coder-postgres）と異なり、対象 PVC (`coder-<workspace-id>-home`) は workspace の
+作成・削除のたびに動的に増減するため、静的なマニフェストには書けない。
+
+- **オーケストレータ方式**: `coder-workspace-home-backup` CronJob（毎日 03:30 UTC）が
+  python:3.12-alpine の Pod 1個を起動し、`app.kubernetes.io/name=coder-pvc` ラベル
+  （`apps/coder/templates/personal/main.tf` が付与）で対象 PVC を毎回列挙、PVC ごとに
+  使い捨ての Job（restic/restic イメージ、対象 PVC のみ readOnly マウント）を Kubernetes API
+  経由で生成する。生成した Job は `ttlSecondsAfterFinished: 3600` で自動 GC されるため、
+  オーケストレータ自身は Job の削除権限を持たない（`create` のみ）。専用 ServiceAccount
+  `workspace-home-backup`（coder namespace 限定の Role: PVC の get/list、Job の create のみ）
+- **credential は新規登録不要**: coder-postgres 用（T-0070）の `coder-restic-credentials`
+  Secret（同じ Backblaze B2 バケット・同じ暗号化パスワード）をそのまま流用し、リポジトリパス
+  末尾のみ `coder-workspace-homes` に変える設計
+- **1リポジトリを workspace 間で共有**: 各 Job は `restic backup --host <workspace-id>` で
+  ホストタグを付ける。**`coder-workspace-home-backup-retention`**（毎週日曜 04:30 UTC）は
+  `restic forget --group-by host --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune`
+  でホスト単位に世代管理する。workspace が削除されてもそのホストの世代は自然に切り捨てられる
+  （明示的な削除はしない）
+- **複数 workspace 同時実行時のロック競合対策**: オーケストレータは PVC ごとに Job を作る際
+  20秒間隔を空ける簡易な直列化のみで、完了を待って次へ進む仕組みではない。個人利用規模
+  （workspace 数が少ない）を前提にした割り切り
+- **cooldown 対象**: 新しい write 権限を持つ ServiceAccount（Job の create）・新しい
+  resources/securityContext（実測の裏付けなし、既存の restic backup CronJob 群からの類推値）を
+  持ち込むため、CHARTER §4「縛る変更には実測か裏付けが要る」の対象とし、この PR を作成した
+  起動では merge していない
+- **未実施（フォローアップ）**: T-0071（immich/vaultwarden/coder-postgres で完了済み）と同様の
+  復元試験はまだ行っていない。デプロイ後の初回実行確認・復元試験・オーケストレータの実メモリ
+  使用量確認は別タスクとして backlog に追跡する
 
 ## 復元試験（T-0071）
 
