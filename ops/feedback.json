@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T12:11:00Z",
+  "updated": "2026-08-06T14:20:00Z",
   "_comment": "人間からのフィードバックの台帳（正）。手順は ops/CHARTER.md §6。status: new（取り込んだ。扱いは未決）| accepted（起票した。task に T-XXXX）| done（片付いた）| declined（やらないと決めた）。done/declined には resolution（人間が読む一行）が必須で、これがダッシュボードに顛末として出る。accepted/done には task が必須。id は書かれた時点で確定し付け替えない。ops-dashboard から来たものは ops-feedback ブランチの ops/feedback/inbox/<id>.json が原本、issue から来たものは ref にコメント URL を置く。done/declined になって 90 日を過ぎたエントリは消してよい（review-log.md と同じ）",
   "inbox": {
     "branch": "ops-feedback",
@@ -13,5 +13,14 @@
     "cutoff": "2026-08-06T12:11:00Z",
     "_comment": "外から書ける経路として残す issue。cutoff は台帳に移行した時点（それ以前のコメントは ops/CHARTER.md 本文に反映済みで、原本は issue に残っている）。cutoff より新しいコメントで、その comment id が items の ref に無いものを取り込む。この値は動かさない"
   },
-  "items": []
+  "items": [
+    {
+      "id": "F-20260806T134136Z-c5205413264",
+      "source": "issue#56",
+      "received": "2026-08-06T13:41:36Z",
+      "ref": "https://github.com/hikuohiku/homelab/issues/56#issuecomment-5205413264",
+      "body": "## T-0107 の前提を実測で検証しました（記録が 2 点間違っています）\n\n構築セッションから実機に当たりました。結論を先に書きます。\n\n### 1. `1 to add` は誤検知です。ファイルは存在します\n\nPVE の CA を取り出し、証明書の SAN に載っている名前（`hikuo-homeserver`）で TLS 検証を通したうえで API に問い合わせた結果:\n\n```\nlocal:import/nixos-proxmox-cloud-v0.2.5.qcow2   997720064 bytes\n```\n\n`NIXOS_IMAGE_VERSION` が期待する `v0.2.5` そのものです。\n\n`terraform plan` を実際に走らせると、原因がはっきり出ます:\n\n```\nWarning: The file does not exist in datastore and resource must be recreated.\n  unexpected error when listing datastore files:\n  tls: failed to verify certificate\nPlan: 1 to add, 0 to change, 0 to destroy.\n```\n\n**provider は TLS 失敗を warning に握り潰し、「ファイルが存在しない」と結論しています。** つまり `1 to add` は TLS が直れば消えるはずのもので、node01 が再作成されるという恐れは前提から成り立っていません（ただし **TLS が直るまで apply しない判断は正しい**。いま apply すれば実際に再ダウンロードが走り、`replace_triggered_by` が発火しうる）。\n\n### 2. 「PVE 管理コンソールでの手作業」は誤りです\n\n`needs_human_reason` にそう書いてありますが、**`PROXMOX_API_TOKEN` は `/nodes` に `Sys.Modify` を持っています**（実測。47 権限）。証明書は `PUT /nodes/{node}/certificates/custom` で API から差し替えられます。コンソールは要りません。\n\n### 3. ただし本当の問題は SAN ではなく「CA を誰も信頼していない」ことです\n\n証明書の SAN はこうなっています:\n\n```\nIP:127.0.0.1, IP:::1, IP:192.168.1.2, DNS:hikuo-homeserver, DNS:hikuo-homeserver.local\n```\n\n実 IP の `192.168.0.2` は確かに入っていません（ネットワーク番号が変わった名残）。**しかし名前で繋いでも今度は「signed by unknown authority」で落ちます。** 発行者が PVE クラスタ CA で、クライアント側が信頼していないからです。**SAN を足すだけでは直りません。**\n\n### 提案する直し方\n\n`PROXMOX_ENDPOINT` は既に `https://hikuo-homeserver.tailae6c2.ts.net` です。**Tailscale は `*.ts.net` に対して Let's Encrypt の証明書を発行できます**（`tailscale cert`）。これを Proxmox に custom cert として入れれば:\n\n- 公的に信頼された CA なので、クライアント側に CA を配る必要が無い\n- SAN が endpoint と一致する\n- 更新も Tailscale 側の仕組みに乗る\n\n`tailscale cert` は Proxmox ホスト上で実行する必要があるので、**そこだけは人間の作業が残ります**（アップロード自体は API でできます）。SAN 追加や自己署名の作り直しより筋が良いはずですが、実行前に検証してください。\n\n### 記録の直し方（計画役へ）\n\nT-0107 の `why` と `needs_human_reason` を上の実測に合わせて書き直してください。特に:\n\n- 「ファイルが本当に無いのか TLS の副産物か未確定」→ **TLS の副産物と確定**\n- 「PVE コンソールでの手作業。autopilot にも構築セッションにも実行できない」→ **誤り。API で可能**\n- 残る人間の作業は `tailscale cert` の実行だけ（この方式を採るなら）\n\n### 構造の問題として\n\nこの `needs_human_reason` は一度書かれてから誰も検証していません。**「できない理由」を書いた時点でそれが事実として固定され、以後は読まれるだけになっています。** blocked / needs-human の理由は、書いた時点の観測でしかありません。アーキテクチャ・レビュー役の対象に「止まっている理由が今も成り立つか」を加えることを検討してください。",
+      "status": "new"
+    }
+  ]
 }
