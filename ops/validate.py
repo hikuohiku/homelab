@@ -163,6 +163,60 @@ def check_conflict_markers() -> None:
                 err(f"{path.relative_to(ROOT)}:{lineno}: git の conflict marker が残っている ({line!r})")
 
 
+REVIEW_LOG_ENTRY_RE = re.compile(r"^## (R-\d+) — .*$", re.MULTILINE)
+REVIEW_LOG_STATUS_RE = re.compile(r"^- 状態:\s*(.+)$", re.MULTILINE)
+REVIEW_LOG_FILED_RE = re.compile(r"起票済\s*(T-\d{4})")
+TASK_R_REF_RE = re.compile(r"R-\d+")
+
+
+def parse_review_log(text: str) -> dict[str, str]:
+    entries: dict[str, str] = {}
+    matches = list(REVIEW_LOG_ENTRY_RE.finditer(text))
+    for i, m in enumerate(matches):
+        rid = m.group(1)
+        end = matches[i + 1].start() if i + 1 < len(matches) else len(text)
+        block = text[m.end():end]
+        status_m = REVIEW_LOG_STATUS_RE.search(block)
+        entries[rid] = status_m.group(1).strip() if status_m else ""
+    return entries
+
+
+def check_review_log(backlog) -> None:
+    # T-0154: review-log.md の R-NNN (状態: 起票済 T-XXXX) と backlog task の why に
+    # 含まれる R-NNN 参照が食い違っていないかを検査する。レビュー役はまだ一度も実行されて
+    # おらず運用実績が無いため、初回は warning に留める（error 昇格は数サイクル運用後に検討）。
+    path = OPS / "review-log.md"
+    if not path.exists():
+        return
+    entries = parse_review_log(path.read_text())
+    if not entries:
+        return
+
+    tasks = backlog.get("tasks", []) if backlog else []
+    tasks_by_id = {t.get("id"): t for t in tasks}
+
+    why_refs: dict[str, list[str]] = {}
+    for t in tasks:
+        for rid in TASK_R_REF_RE.findall(t.get("why", "") or ""):
+            why_refs.setdefault(rid, []).append(t.get("id", "?"))
+
+    for rid, status in entries.items():
+        m = REVIEW_LOG_FILED_RE.search(status)
+        if not m:
+            continue
+        tid = m.group(1)
+        task = tasks_by_id.get(tid)
+        if task is None:
+            warn(f"review-log.md: {rid} は「起票済 {tid}」だが backlog.json に {tid} が存在しない")
+            continue
+        if rid not in (task.get("why", "") or ""):
+            warn(f"review-log.md: {rid} は「起票済 {tid}」だが {tid} の why に {rid} が含まれていない")
+
+    for rid, tids in why_refs.items():
+        if rid not in entries:
+            warn(f"backlog.json: {', '.join(tids)} の why が {rid} を参照しているが review-log.md に {rid} のエントリが無い")
+
+
 def check_state(s) -> None:
     for k in ("updated", "runs", "feedback"):
         if k not in s:
@@ -233,6 +287,7 @@ def main() -> int:
 
     if backlog:
         check_backlog(backlog)
+        check_review_log(backlog)
     if inventory:
         check_inventory(inventory)
     if state:

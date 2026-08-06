@@ -2939,7 +2939,7 @@
       "title": "ops/review-log.md の R-NNN と backlog タスクの起票状態の突き合わせが手作業（LLM 判断）任せで、機械検証が無い",
       "kind": "ci",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 55,
       "why": "PR #353（人間、run #157 直後に merge）で追加されたレビュー役の仕組み（ops/CHARTER.md §3、ops/review-log.md）は、レビュー役が書く R-NNN エントリの `状態`（未処理/起票済 T-XXXX/完了/却下）と、計画役が起票する task の `why` に含める R-NNN 参照が食い違わないことを、CHARTER の手順記述と計画役の注意力だけに頼っている。T-0145（journal run 番号と state.json runs 配列の追随）と構造的に同型の『2箇所が一致しているはずだが機械検証が無い』パターンで、review-log.md/inbox.md/ops/validate.py いずれにも R-NNN や review-log.md への参照は無い（計画役 run #157 相当、subagent 調査で確認）。レビュー役はまだ一度も実行されていない（REVIEW_EVERY=12、直近の run は #157）ため今は実害が無いが、初回実行後に放置すると T-0145 と同じ経路で気づかれないまま乖離する",
       "dod": "ops/validate.py に ops/review-log.md をパースし、(a) `状態: 起票済 T-XXXX` のエントリについて対応する task が backlog.json に存在し、task の `why` にその R-NNN が含まれているか、(b) backlog.json の task の `why` に R-NNN 参照があるのに review-log.md 側にその id のエントリが無い、の食い違いを検出するチェックを追加する。レビュー役がまだ一度も実行されておらず review-log.md に実データが無いため、意図的に食い違うダミーエントリを一時的に追加して検出できることを確認したうえで元に戻す。初回は warning 扱いとし（新しい運用のため誤検出の余地を残す）、数サイクル運用して安定したら error 昇格を検討する旨を notes に残す",
@@ -2952,8 +2952,8 @@
         "ops/CHARTER.md"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": null
+      "pr": 359,
+      "notes": "run #160: ops/validate.py に check_review_log() を追加。review-log.md の R-NNN（状態: 起票済 T-XXXX）と backlog task の why に含まれる R-NNN 参照の食い違いを検出する。review-log.md/backlog.json にダミーの食い違いエントリを一時的に追加して両方向（review-log→backlog 不在、backlog→review-log 不在、why に R-NNN 不足）の検出を手元で確認したうえで元に戻した。レビュー役の運用実績がまだ無いため warning 扱い（error 昇格は数サイクル運用後に検討、DoD どおり）。"
     }
   ]
 }
