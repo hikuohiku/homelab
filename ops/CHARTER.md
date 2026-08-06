@@ -794,6 +794,28 @@ PR に付いたレビューコメントも同じ扱い。**指摘を受けたら
 
 ## 7. 記録
 
+### 帳簿には上限がある
+
+**`ops/backlog.json` には動いているタスクだけを置く。** `done` / `dropped` は
+`ops/archive/backlog-done.json` へ移す。`ops/state.json` の `runs` は直近 20 件だけ残し、
+残りは `ops/archive/runs.json` へ移す。移す操作は `python3 ops/ledger.py`（何度実行してもよい）。
+
+**タスクを done にした回は、同じ PR で `ops/ledger.py` を実行すること。**
+
+理由: autopilot は 1 イテレーションごとに VISION / CHARTER / backlog / state を全部読み直す。
+2026-08-06 にその合計は **587 KiB** あり、**うち約 9 割が done/dropped のタスクと過去の起動記録**
+だった。二度と行動につながらない履歴を毎回読み直す分だけ、世界を観測する余地が削られる。
+圧縮後は 79 KiB になった。
+
+**一度掃除するだけでは必ず再び太る**ので、上限そのものを `ops/validate.py` の検査に入れてある
+（backlog 120 KiB / state 40 KiB）。超えたら CI が落ちる。**上限に当たったら、内容を削るのではなく
+archive へ移すこと。** archive は消さない — 過去の判断の理由は残す価値がある。読む頻度が違うだけ。
+
+参照の整合（`blocked_by` / review-log の `R-NNN` / 台帳の task 参照）は archive も含めて検査する
+（`ops/ledger.py` の `load_backlog(include_archive=True)`）。**済んだタスクを指す参照は生き続ける。**
+
+### journal
+
 `ops/journal/YYYY-MM.md` に**毎回**追記する。新しいものが下。
 
 ```markdown
