@@ -1,0 +1,17 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ops-dashboard
+  namespace: ops-dashboard
+  annotations:
+    tailscale.com/experimental-forward-cluster-traffic-via-ingress: "true"
+spec:
+  ingressClassName: tailscale
+  defaultBackend:
+    service:
+      name: ops-dashboard
+      port:
+        number: 80
+  tls:
+    - hosts:
+        - ops-dashboard
