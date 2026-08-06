@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 151,
-  "updated": "2026-08-06T11:30:00Z",
+  "next_id": 153,
+  "updated": "2026-08-06T11:49:11Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2868,6 +2868,46 @@
       "created": "2026-08-06",
       "pr": 343,
       "notes": "run #150（計画役）: 2つの inventory エントリ（ops-health-reporter-image は単独ファイル、pvc-usage-reporter-image は mirrors 4ファイル）にまたがるが、全て同一の python:3.12-alpine タグを指しており実質同じ変更のため 1 タスクにまとめた。check_version_sync.py の該当 GROUP（T-0082/T-0081）が既にこれらの一致を CI で検証しているので、ズレたまま merge されることはない。 run #151（実行役）: 実装・PR #343。3.13/3.14 の changelog を対象スクリプトが使う標準ライブラリ単位で確認し破壊的変更なしと判断（sqlite3.version/version_info, urllib.request.URLopener/FancyURLopener, urllib.parse.Quoter の削除はいずれも未使用）。apps/ops-dashboard/deployment.yaml と apps/coder/workspace-home-backup-cronjob.yaml にも python:3.12-alpine が残っているが、この inventory エントリの対象外のため触れず、ops/inbox.md に引き継いだ。"
+    },
+    {
+      "id": "T-0151",
+      "domain": "homelab",
+      "title": "ops-dashboard と coder workspace-home-backup の python:3.12-alpine を inventory に追加し 3.14-alpine へ揃える",
+      "kind": "chore",
+      "risk": "low",
+      "status": "todo",
+      "priority": 42,
+      "why": "T-0150（run #151, PR #343）は ops/inventory.json に既に登録済みの2エントリ（ops-health-reporter-image, pvc-usage-reporter-image）だけを 3.14-alpine に揃えた。実行役がその過程で apps/ops-dashboard/deployment.yaml と apps/coder/workspace-home-backup-cronjob.yaml にも python:3.12-alpine が残っているが、どちらの inventory エントリの対象（file/mirrors）にも含まれていないため素通りされていると気づき、ops/inbox.md へ引き継いだ（run #151）。inventory に無いバージョンは自動チェックの対象外のまま塩漬けになりうる（CHARTER §1「依存が塩漬けにならない」）。",
+      "dod": "(1) apps/ops-dashboard/deployment.yaml と apps/coder/workspace-home-backup-cronjob.yaml の python:3.12-alpine を 3.14-alpine に更新する（T-0150 で標準ライブラリの破壊的変更は無いと確認済みだが、この2ファイルが使うモジュール（http.server, json/urllib/subprocess 等）についても改めて確認する）。(2) ops/inventory.json にこの2ファイルを追跡対象として登録する。既存の pvc-usage-reporter-image と同一の python:*-alpine 更新ポリシーだが用途（http.server 配信 / workspace home backup orchestrator）が異なるため、既存エントリの mirrors に混ぜるか新規エントリにするかは実装時に判断してよい。(3) ops/check_version_sync.py の GROUPS がこの2ファイルを新たに束ねる場合はそちらも更新し、CI (kustomize build 等) が green であることを確認する。",
+      "blocked_by": null,
+      "refs": [
+        "apps/ops-dashboard/deployment.yaml",
+        "apps/coder/workspace-home-backup-cronjob.yaml",
+        "ops/inventory.json",
+        "ops/check_version_sync.py"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #153（計画役）: ops/inbox.md の引き継ぎ（run #151 実行役の気づき）を起票。"
+    },
+    {
+      "id": "T-0152",
+      "domain": "homelab",
+      "title": "inventory 定期チェックで note の除外指定（避けるべきバージョン）を突き合わせる運用を明文化する",
+      "kind": "chore",
+      "risk": "low",
+      "status": "todo",
+      "priority": 45,
+      "why": "T-0149（run #152 で dropped）の実例。ops/inventory.json の coder エントリには『stable チャンネルを追う（mainline の vX.XX.0 系は避ける）』という note が既に書かれていたが、run #150 の inventory 自動チェックは『upstream に新しいタグがあるか』だけを見て note の除外指定を突き合わせておらず、避けるべきと明記されていた v2.36.0 への更新タスクを一度起票してしまった（実害は出る前に run #152 で気づき dropped にできたが、1 タスク分の起票・調査・dropped 判断が無駄になった）。CHARTER §8「同じミスを2回した→機械的に防ぐ」がまだ1回目のため、次に同型のミスをする前に運用へ落とす。",
+      "dod": "CHARTER §3 のバージョン更新の作法（または該当する調査手順）に、『inventory.json の対象エントリに新しいタグが無いか調べるときは、同じエントリの note に除外・回避指定が無いかを必ず読み合わせる』旨を明文化する。可能であれば ops/ 配下のスクリプト（inventory 定期チェックの手順を担う部分があれば）にも同種のチェックを機械的に組み込めないか検討し、スクリプト化が難しい場合は CHARTER の手順記述のみで良い。",
+      "blocked_by": null,
+      "refs": [
+        "ops/CHARTER.md",
+        "ops/inventory.json"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #153（計画役）: ops/inbox.md の引き継ぎ（run #152 実行役の気づき、T-0149 dropped の教訓）を起票。"
     }
   ]
 }
