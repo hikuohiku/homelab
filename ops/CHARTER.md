@@ -83,6 +83,18 @@ T-0068 のバックアップは実質機能していないとみなして調査�
 + namespace ごとに 0/10/20 分）がまだ一度もその時刻を迎えていなければ 404 は正常。`generated_at` を
 これらの実行予定時刻と比較し、直近の予定時刻を過ぎてもなお 404 が続く場合にのみ CronJob の異常を疑う。
 
+**`coder`/`immich`/`vaultwarden` の ArgoCD Application health が `Degraded` でも、T-0106 が
+`needs-human` のままの間は新規異常ではない**（run #91 で発見）。T-0106（run #88, PR #263）が
+追加した `<app>-restic-backup-credentials` ExternalSecret は、参照する Doppler キー
+（`B2_ACCOUNT_ID_APPEND_ONLY`/`B2_ACCOUNT_KEY_APPEND_ONLY`）が未登録のため `SecretSyncedError`
+のまま存在し、この 1 リソースの不健全がそのまま親 Application の集約health を `Degraded` に
+引き上げる。Pod は 3 namespace とも全て `Running`/`Ready` で実際のサービスに影響はない。
+`applications` の `health` だけで異常を判断せず、`kubectl get externalsecret -n <ns>` で
+`SecretSyncedError` が `<app>-restic-backup-credentials` だけであること（他の ExternalSecret や
+Pod に波及していないこと）を確認する。T-0106 の Doppler 登録が完了し ExternalSecret が
+`SecretSynced` になれば、この 3 Application の health は自然に `Healthy` へ戻るはずで、
+戻らなければそちらを調査する。
+
 **時間が尽きたら途中で止めてよい。** ただし止まる前に、その時点までの内容で PR を作るか、
 作りかけのブランチを push しておく。ブランチ名は必ず `autopilot/` で始める。
 **次の起動は「オープン PR と `autopilot/*` ブランチ」から中断を拾う。** これが唯一の引き継ぎ経路なので、
