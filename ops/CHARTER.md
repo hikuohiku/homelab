@@ -665,7 +665,7 @@ upstream リポジトリのファイル（例: `deploy/crds/bundle.yaml` のよ�
   （`needs_human_reason` に追加すべき YAML の具体的な差分を書く）として切り出す
 - **`kubectl` が実際に動く。** in-cluster ServiceAccount `autopilot` + 専用 ClusterRole
   `autopilot-reader`（`apps/autopilot/rbac.yaml`）で、`get`/`list` のみ・書き込み動詞は無し。
-  読めるもの: `pods`/`persistentvolumeclaims`/`nodes`/`namespaces`/`events`、
+  読めるもの: `pods`/`persistentvolumeclaims`/`nodes`/`namespaces`/`events`/`services`、
   `deployments`/`statefulsets`/`daemonsets`、`cronjobs`/`jobs`、`argoproj.io` の `applications`、
   `external-secrets.io` の `externalsecrets`/`clustersecretstores`、`metrics.k8s.io` の
   `pods`/`nodes`。**読めないもの**: `secrets`、**Pod のログ**（`pods/log` サブリソースは

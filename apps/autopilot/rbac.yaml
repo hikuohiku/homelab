@@ -27,7 +27,7 @@ metadata:
   name: autopilot-reader
 rules:
   - apiGroups: [""]
-    resources: ["pods", "persistentvolumeclaims", "nodes", "namespaces", "events"]
+    resources: ["pods", "persistentvolumeclaims", "nodes", "namespaces", "events", "services"]
     verbs: ["get", "list"]
   - apiGroups: ["apps"]
     resources: ["deployments", "statefulsets", "daemonsets"]
