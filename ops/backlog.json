@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 146,
-  "updated": "2026-08-06T09:58:00Z",
+  "next_id": 147,
+  "updated": "2026-08-06T10:24:03Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2766,6 +2766,27 @@
       "created": "2026-08-06",
       "pr": 335,
       "notes": "run #141（計画役）: state.json 棚卸し中に発見。runs 配列の最終更新コミットが T-0138（run #137 相当、8bb31ed）で止まっており、その後の run #138〜#140（PR #329/#331/#332）が追記していなかった。この3件は本 run で手動バックフィル済み（n=121〜123）。さらに遡ると n=118（journal run #125）→ n=119（journal run #133）の間も7回分（run #126〜#132）が欠落しており、これは今回バックフィルしていない（内容の正確な復元には該当run群の journal 全文精読が要るため、再発防止の仕組み化を先に済める判断）。run #143（実行役）: ops/validate.py に journal run #N への追随チェックを追加し、CHARTER §7 に追記義務を明記して完遂（PR #335）。runs[].n は journal の run 番号と1:1で対応しないと判明したため、n の連番ではなく summary 中の `journal run #N` 記述を突き合わせる設計にした（DoD が想定していた『欠落を error』は、この明示的な記述が両方に揃っている場合に限り適用し、記述が無い場合は warning に留める）"
+    },
+    {
+      "id": "T-0146",
+      "domain": "homelab",
+      "title": "GitHub Actions の release-image.yml で cachix pull が実際にキャッシュヒットしているか検証する（issue #26）",
+      "kind": "investigate",
+      "risk": "low",
+      "status": "todo",
+      "priority": 80,
+      "why": "issue #26（2025-12-14、autopilot 発足前の未トリアージ issue）。当時の報告は『just prepare でローカルの cachix push は成功する（Nothing to push）のに、GitHub Actions 環境ではキャッシュがヒットせず derivation が再ビルドされる』というもの。.github/workflows/release-image.yml の cachix/cachix-action ステップには『authToken/signingKey が無いため pull（substituter）専用。push は一切行わない（ops/CHARTER.md §5.4）』というコメントが既にあり、これは T-0050 (run #19) が push 面（authToken 無しでは push しない）を実ソースで確認済みの事実。ただし pull 面（実際に hikuohiku cachix cache から substitute できているか）は未検証のまま残っている。hikuohiku.cachix.org/nix-cache-info は 200 で応答するが、これは cache のメタデータ公開エンドポイントであり、個別 store path の narinfo が認証無しで取得できる（= public cache として運用されている）保証にはならない。private cache のままなら pull も常に失敗し、release-image.yml の手動実行のたびに cachix 経由の高速化が一切効かず全 derivation をゼロからビルドしている可能性がある",
+      "dod": "(1) hikuohiku cachix cache が public（未認証で narinfo を返す）か private かを確認する（cachix ダッシュボードの設定を見られるのは人間のみの可能性が高いが、実際に既知の store path の narinfo を認証無しで curl/WebFetch して 200/404 を見れば外部からでも判別できる）。(2) 直近の release-image.yml 実行ログ（GitHub Actions の workflow run、REST API で取得可能）で `nix build` ステップの出力に `copying path` (=cache miss, ビルドした) と `fetching` (=cache hit, substitute した) のどちらが支配的かを確認する。(3) cache miss が支配的だと分かったら、原因（private cache への読み取り認証が無い、architecture/system の不一致、derivation hash が local と Actions runner で異なる 等）を切り分け、対処（read-only な authToken を追加する、または『pull も意図的に効いていない』を許容している旨をドキュメント化する）を決める。(4) 対応が終わったら issue #26 に結果を報告する",
+      "needs_human_reason": null,
+      "blocked_by": null,
+      "refs": [
+        ".github/workflows/release-image.yml",
+        "justfile",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #144（計画役）: backlog の todo が T-0117（not_before 未到来）のみで実行役の着手可能タスクが枯渇していたため、CHARTER §3 に従い未トリアージの open issue を洗い出して起票。issue #26 は autopilot 発足前（2025-12-14）から誰にも拾われていなかった。T-0050/T-0047 が cachix-action の push 挙動は確認済みだが pull 側の実効性は未検証という隙間を埋める"
     }
   ]
 }
