@@ -1,36 +1,68 @@
 {
   "open": [
     {
-      "number": 356,
-      "title": "ci(autopilot): images/autopilot 変更時の digest 更新漏れ検出スクリプトを追加",
-      "url": "https://github.com/hikuohiku/homelab/pull/356",
+      "number": 358,
+      "title": "fix(ops): 実ブラウザで見つかった描画の破綻を直す",
+      "url": "https://github.com/hikuohiku/homelab/pull/358",
       "isDraft": false,
-      "createdAt": "2026-08-06T12:43:36Z",
+      "createdAt": "2026-08-06T12:51:46Z",
       "statusCheckRollup": [
         {
-          "conclusion": "SUCCESS"
+          "conclusion": "QUEUED"
         },
         {
-          "conclusion": "SUCCESS"
+          "conclusion": "QUEUED"
         },
         {
-          "conclusion": "SUCCESS"
+          "conclusion": "IN_PROGRESS"
         },
         {
-          "conclusion": "SUCCESS"
+          "conclusion": "IN_PROGRESS"
         },
         {
-          "conclusion": "SUCCESS"
+          "conclusion": "IN_PROGRESS"
         },
         {
-          "conclusion": "SUCCESS"
+          "conclusion": "IN_PROGRESS"
         }
       ],
-      "headRefName": "autopilot/T-0153-autopilot-image-pin-check",
-      "autoMergeRequest": null
+      "headRefName": "autopilot/dashboard-render-fixes",
+      "autoMergeRequest": {
+        "enabled_by": {
+          "login": "hikuohiku",
+          "id": 105905033,
+          "node_id": "U_kgDOBk_7iQ",
+          "avatar_url": "https://avatars.githubusercontent.com/u/105905033?v=4",
+          "gravatar_id": "",
+          "url": "https://api.github.com/users/hikuohiku",
+          "html_url": "https://github.com/hikuohiku",
+          "followers_url": "https://api.github.com/users/hikuohiku/followers",
+          "following_url": "https://api.github.com/users/hikuohiku/following{/other_user}",
+          "gists_url": "https://api.github.com/users/hikuohiku/gists{/gist_id}",
+          "starred_url": "https://api.github.com/users/hikuohiku/starred{/owner}{/repo}",
+          "subscriptions_url": "https://api.github.com/users/hikuohiku/subscriptions",
+          "organizations_url": "https://api.github.com/users/hikuohiku/orgs",
+          "repos_url": "https://api.github.com/users/hikuohiku/repos",
+          "events_url": "https://api.github.com/users/hikuohiku/events{/privacy}",
+          "received_events_url": "https://api.github.com/users/hikuohiku/received_events",
+          "type": "User",
+          "user_view_type": "public",
+          "site_admin": false
+        },
+        "merge_method": "merge",
+        "commit_title": null,
+        "commit_message": null
+      }
     }
   ],
   "merged": [
+    {
+      "number": 356,
+      "title": "ci(autopilot): images/autopilot 変更時の digest 更新漏れ検出スクリプトを追加",
+      "url": "https://github.com/hikuohiku/homelab/pull/356",
+      "mergedAt": "2026-08-06T12:46:24Z",
+      "headRefName": "autopilot/T-0153-autopilot-image-pin-check"
+    },
     {
       "number": 357,
       "title": "feat(autopilot): レビュー役がダッシュボードを実際に見られるようにする",
@@ -443,13 +475,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/297",
       "mergedAt": "2026-08-06T05:03:23Z",
       "headRefName": "autopilot/run106-nothing-actionable"
-    },
-    {
-      "number": 296,
-      "title": "docs(ops): run #105 記録更新（着手可能タスクなし・state.json 記録漏れ復元）",
-      "url": "https://github.com/hikuohiku/homelab/pull/296",
-      "mergedAt": "2026-08-06T04:59:59Z",
-      "headRefName": "autopilot/run104-nothing-actionable"
     }
   ]
 }
