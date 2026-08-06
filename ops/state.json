@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T00:56:52Z",
+  "updated": "2026-08-06T01:20:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -928,6 +928,17 @@
       "by": "in-cluster autopilot",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。ops-health-report で全11 Application Synced/Healthy、新規異常なし。T-0117 は CronJob schedule（03:30 UTC）未到来のため引き続き着手不能。T-0118（helm v3→v4系への移行検討）を完遂: kustomize v5.8.1 は helm v4 対応済みだが azure/setup-helm アクション自身が v3 のみ公式サポートと明言しているため blocked にし、一次情報を backlog/inventory に記録",
       "prs": []
+    },
+    {
+      "n": 87,
+      "at": "2026-08-06T10:10:00+09:00",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "前回の中断: PR #268（T-0118 の記録更新、run #86 が open のまま終了）を CI green・mergeable_state clean を確認して merge。issue #56 に未読フィードバックなし。ops-health-report で全 Application Synced/Healthy、pod_issues は常連の再起動カウントのみで新規異常なし。T-0117 は CronJob schedule（03:30 UTC）未到来のため引き続き着手不能と判断し、CHARTER §3 に従い調査タスクを自分で起票。subagent が apps/README.md の2箇所（kubectl 期待出力一覧、ディレクトリ構造図）が apps/kustomization.yaml の autopilot Application を欠いたままだったと発見（T-0057/T-0058/T-0102 と同型のドリフトが3回目）。T-0119 として起票・即完遂し merge した",
+      "prs": [
+        268,
+        269
+      ]
     }
   ]
 }
