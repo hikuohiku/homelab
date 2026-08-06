@@ -6,7 +6,8 @@ metadata:
   labels:
     app: syncthing
 spec:
-  # ClusterIP のみ。tailnet 経由の公開方式（sync ポート用の L3 ingress、GUI 公開要否）は T-0139 で決める
+  # GUI のみ。ingress.yaml (L7 Ingress) の backend として使う。
+  # sync/discovery ポートは L7 Ingress で転送できないため service-tailnet.yaml (L3) に分離した（T-0139）
   type: ClusterIP
   selector:
     app: syncthing
@@ -14,15 +15,3 @@ spec:
     - name: gui
       port: 8384
       targetPort: gui
-    - name: sync-tcp
-      port: 22000
-      targetPort: sync-tcp
-      protocol: TCP
-    - name: sync-udp
-      port: 22000
-      targetPort: sync-udp
-      protocol: UDP
-    - name: discovery
-      port: 21027
-      targetPort: discovery
-      protocol: UDP

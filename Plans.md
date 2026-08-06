@@ -54,7 +54,7 @@ Proxmox LXC で手動運用中のサービスを k8s (ArgoCD) へ移行する。
 |------|------|-----|---------|--------|
 | M0 | docker VM(106) 削除（未使用） | qemu/106 削除 / Tailscale `hikuo-homedocker` 削除 | - | 完了（qemu/106 削除済み・検証済み。Tailscale デバイス削除はユーザー手動） |
 | M1 | vaultwarden を k8s 移行（手書き manifest） | apps/vaultwarden/ 作成・登録 / Doppler `VAULTWARDEN_ADMIN_TOKEN` 登録 / 旧 LXC tailscale 退避 / /data 移行 / 検証 | - | 完了 [PR #47]（ciphers 781 件移行・ログイン確認済み・旧 LXC 100 破棄済み） |
-| M2 | syncthing を k8s 移行 | 移行可否検討完了（T-0137, 2026-08-06）。技術的には実現可能と判断。実装タスクへの分割は未着手 | - | 検討完了・実装待ち |
+| M2 | syncthing を k8s 移行 | manifest 作成（T-0138, PR #328）・tailnet 公開（T-0139）完了。旧 LXC 101 からの実データ移行（T-0140）待ち | - | 実装進行中 |
 
 > 補足: k8s への書き込み操作（移行時の scale/cp/exec 等）は kubectl CLI で行う方針（CLAUDE.md 反映済み）。
 > 当初は `.claude/settings.json` の `permissions.ask` で毎回人間の承認を求めていたが、autopilot の
@@ -74,7 +74,13 @@ Proxmox LXC で手動運用中のサービスを k8s (ArgoCD) へ移行する。
 > L7 Ingress のみで、L3 Service 公開は前例が無い。global discovery/relay はいずれも outbound 接続のみで
 > 動作するため、この cluster の既存 egress で足りる。local discovery（UDP 21027, マルチキャスト）は
 > Pod のネットワーク namespace 内では機能しないが、既存の LXC 版もピア側は Tailscale 経由で到達している
-> 前提のため実質的な後退ではない（ここは実機の現行構成確認までは至っていない）。実装で詰めるべき残課題:
-> PVC サイジング、GUI(8384) を公開するか（公開するなら既存の L7 Ingress パターンを流用可）、
-> LXC 101 の `/var/lib/syncthing`（想定パス、要確認）から新 PVC への config/データ移行手順
-> （cert.pem/key.pem を含めて移すことで既存ピアとの再認証を避ける）。issue #31/#38 に結論を返信済み。
+> 前提のため実質的な後退ではない（ここは実機の現行構成確認までは至っていない）。issue #31/#38 に結論を返信済み。
+>
+> T-0139（2026-08-06）で実装: sync/discovery ポート（TCP/UDP 22000, UDP 21027）は
+> `apps/syncthing/service-tailnet.yaml`（`type: LoadBalancer` + `loadBalancerClass: tailscale`、
+> `tailscale.com/hostname: syncthing-sync`）で公開。GUI(8384) は他アプリ（immich/vaultwarden）と
+> 同じ L7 Ingress パターン（`apps/syncthing/ingress.yaml`）で `syncthing` として公開する判断とした
+> （人間が sync フォルダ・デバイス承認を GUI から操作する必要があるため）。実機での到達性確認は
+> このクラウド/クラスタ内サンドボックスからは検証できず未確認（`kustomize build` による構文検証のみ）。
+> 残課題: LXC 101 の `/var/lib/syncthing`（想定パス、要確認）から新 PVC への config/データ移行手順
+> （cert.pem/key.pem を含めて移すことで既存ピアとの再認証を避ける、T-0140 で対応）。
