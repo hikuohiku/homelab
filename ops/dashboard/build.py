@@ -299,6 +299,12 @@ def safe_html(s: str) -> str:
     return "".join(out)
 
 
+def clip(s, n: int) -> str:
+    """n 文字で切る。切ったときは必ず … を付ける（無いと壊れて見える）。"""
+    s = str(s or "")
+    return s if len(s) <= n else s[:n].rstrip() + "…"
+
+
 def chip(text: str, tone: str) -> str:
     return f'<span class="chip chip--{tone}">{E(text)}</span>'
 
@@ -372,6 +378,9 @@ def wait_state(t: dict, ids_in_queue: set[str]) -> tuple[str, str, str]:
     reason = str(t.get("blocked_by") or "")
     known = [d for d in dep if d in ids_in_queue]
     if known:
+        # blocked_by が ID の羅列だけのことがある。裸の ID を 1 行置くと壊れて見えるので文にする
+        if re.fullmatch(r"[\sT\d,、・/-]*", reason) or not reason.strip():
+            reason = "、".join(dep) + " が済むまで待ち"
         return "他タスク待ち", "warn", reason
     return "条件待ち", "warn", reason
 
@@ -397,7 +406,7 @@ def render_queue(tasks: list[dict]) -> tuple[str, dict]:
 
         impact = ""
         if down:
-            names = "、".join(E(str(d.get("title", ""))[:26]) for d in down[:3])
+            names = "、".join(E(clip(d.get("title"), 30)) for d in down[:3])
             more = f"　ほか {len(down) - 3} 件" if len(down) > 3 else ""
             impact = (f'<p class="q__impact">これが済むと <b>{len(down)} 件</b>が動く'
                       f'<span class="q__impact__names">{names}{more}</span></p>')
@@ -412,7 +421,7 @@ def render_queue(tasks: list[dict]) -> tuple[str, dict]:
 
         reason_html = ""
         if reason:
-            short = reason if len(reason) <= 150 else reason[:150] + "…"
+            short = clip(reason, 150)
             reason_html = f'<p class="q__why">{link_ids(short)}</p>'
             if len(reason) > 150:
                 reason_html += (f'<details class="q__more"><summary>理由の続き</summary>'
@@ -472,7 +481,7 @@ def render_archive(tasks: list[dict]) -> str:
                     f'<td class="at__id">{E(t["id"])}</td><td>{chip(label, tone)}</td>'
                     f'<td class="at__kind">{E(KIND_LABEL.get(t.get("kind", ""), t.get("kind", "")))}</td>'
                     f'<td class="at__title">{E(str(t.get("title", "")))}'
-                    + (f'<span class="at__note">{E(str(note)[:110])}</span>' if note else "")
+                    + (f'<span class="at__note">{E(clip(note, 110))}</span>' if note else "")
                     + f'</td><td class="at__pr">{pr}</td></tr>')
     return "".join(rows)
 
@@ -549,7 +558,7 @@ def render_pulse(state, health, prs, runs) -> str:
             tone, label = ci_state(p)
             items.append(f'<li class="pr pr--{tone}">{dot(tone)}'
                          f'<a class="pr__t" href="{E(str(p.get("url", "")))}">'
-                         f'{E(str(p.get("title", ""))[:70])}</a>'
+                         f'{E(clip(p.get("title"), 70))}</a>'
                          f'<span class="pr__n">#{E(str(p.get("number")))}</span>'
                          f'{chip(label, tone)}</li>')
         pr_rows = f'<ul class="prs">{"".join(items)}</ul>'
@@ -662,7 +671,7 @@ def render_cluster(h) -> str:
         out.append('<details class="fold"><summary>再起動の多い Pod '
                    f'{len(issues)} 件</summary><ul class="kv">'
                    + "".join(f'<li><span>{E(str(p.get("namespace", "")))}/'
-                             f'{E(str(p.get("name", ""))[:34])}</span>'
+                             f'{E(clip(p.get("name"), 34))}</span>'
                              f'<b>{E(str(p.get("restarts", "?")))} 回</b></li>'
                              for p in issues[:12]) + "</ul></details>")
     return "".join(out)
@@ -718,12 +727,12 @@ def build() -> str:
     for e in journal[:3]:
         items = [E(re.sub(r"^\s*[-*]\s*", "", l)) for l in e["body"].splitlines()
                  if l.strip().startswith(("-", "*"))][:4]
-        runs_html += (f'<li class="jr"><h4>{E(e["head"][:52])}</h4><ul>'
-                      + "".join(f"<li>{i[:130]}</li>" for i in items) + "</ul></li>")
+        runs_html += (f'<li class="jr"><h4>{E(clip(e["head"], 52))}</h4><ul>'
+                      + "".join(f"<li>{clip(i, 130)}</li>" for i in items) + "</ul></li>")
 
     auto_merged = [p for p in merged if str(p.get("headRefName", "")).startswith("autopilot/")]
     done_html = "".join(
-        f'<li class="dn"><a href="{E(str(p.get("url", "")))}">{E(str(p.get("title", ""))[:62])}</a>'
+        f'<li class="dn"><a href="{E(str(p.get("url", "")))}">{E(clip(p.get("title"), 62))}</a>'
         f'<span>#{p["number"]} · {E(rel_time(p.get("mergedAt")))}</span></li>'
         for p in (auto_merged or merged)[:10])
 
@@ -766,10 +775,13 @@ TEMPLATE = """<!doctype html>
   --crit:#96303a; --crit-soft:#f7e0e1;
   --sig:#1d5876; --sig-soft:#dde9f0;
   --idle:#69727f; --idle-soft:#e5e8ee;
+  /* system-ui を先頭に置かない。環境によっては serif 系（DejaVu Math TeX Gyre 等）に
+     解決され、本文の欧文だけセリフになる（2026-08-06 に headless chromium で実際に出た）。
+     日本語が主なので、和文サンセリフを明示して並べ、総称は sans-serif で締める。 */
   --mono: ui-monospace, SFMono-Regular, "SF Mono", "JetBrains Mono", Menlo, Consolas,
-          "Noto Sans Mono", monospace;
-  --sans: system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP",
-          "Yu Gothic UI", sans-serif;
+          "Noto Sans Mono", "DejaVu Sans Mono", monospace;
+  --sans: -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Noto Sans CJK JP",
+          "Yu Gothic UI", Meiryo, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --r:3px;
 }}
 @media (prefers-color-scheme: dark) {{
@@ -833,7 +845,9 @@ code {{ font-family:var(--mono); font-size:.78em; background:var(--idle-soft);
 .banner--warn {{ background:var(--warn-soft); color:var(--warn);
   border:1px solid var(--warn); }}
 .banner--ok {{ background:var(--ok-soft); color:var(--ok);
-  border:1px solid var(--ok); display:flex; align-items:center; gap:.45rem; }}
+  border:1px solid var(--ok); display:flex; flex-wrap:wrap; align-items:baseline;
+  gap:.2rem .7rem; }}
+.banner--ok #sentid {{ font-family:var(--mono); font-size:.73rem; opacity:.85; }}
 .banner[hidden] {{ display:none; }}
 
 /* --- 脈拍 --- */
@@ -865,16 +879,20 @@ code {{ font-family:var(--mono); font-size:.78em; background:var(--idle-soft);
 
 /* --- 版面 --- */
 /* 狭い画面では書き置きを先頭に出す。順番待ちの下に置くと十数行ぶん
-   スクロールしないと辿り着けず、「セッションを開かずに残せる」意味が薄れる。 */
+   スクロールしないと辿り着けず、「セッションを開かずに残せる」意味が薄れる。
+   .side を display:contents で透過させ、note だけを order で引き上げる。
+   広い画面では素直な 2 カラム。行をまたぐ配置（grid-row: 1 / span 2）は使わない:
+   背の高い順番待ちの高さが 1 行目にも配分され、右側に数百 px の空白が空く
+   （2026-08-06 に 1280px で実際に 440px 空いた）。 */
 .grid {{ display:flex; flex-direction:column; gap:1.35rem; min-width:0; }}
-.grid > .note {{ order:-1; }}
+.side {{ display:contents; }}
+.grid .note {{ order:-1; }}
 .rail {{ display:flex; flex-direction:column; gap:1.35rem; min-width:0; }}
 @media (min-width:940px) {{
   .grid {{ display:grid; grid-template-columns:minmax(0,1.8fr) minmax(0,1fr);
-    column-gap:2rem; row-gap:0; align-content:start; }}
-  .grid > .q-sec {{ grid-column:1; grid-row:1 / span 2; }}
-  .grid > .note {{ grid-column:2; grid-row:1; order:0; align-self:start; }}
-  .grid > .rail {{ grid-column:2; grid-row:2; margin-top:1.35rem; align-self:start; }}
+    gap:2rem; align-items:start; }}
+  .side {{ display:flex; flex-direction:column; gap:1.35rem; min-width:0; }}
+  .grid .note {{ order:0; }}
 }}
 .sec {{ display:flex; flex-direction:column; gap:.55rem; min-width:0; }}
 .sec__h {{ display:flex; align-items:baseline; gap:.6rem; }}
@@ -942,6 +960,14 @@ code {{ font-family:var(--mono); font-size:.78em; background:var(--idle-soft);
 .q__links {{ margin-top:.4rem; font-size:.79rem; display:flex; flex-wrap:wrap;
   gap:.2rem .8rem; }}
 .q__nosteps {{ font-size:.79rem; color:var(--warn); }}
+/* 幅が狭いと「あなた」札の横に残る幅で見出しが折れて、細い柱になる。
+   札を上の行に逃がして見出しに全幅を渡す。 */
+@media (max-width:560px) {{
+  .q__row {{ grid-template-columns:1.9rem minmax(0,1fr); gap:.6rem; }}
+  .q__rank {{ font-size:1.14rem; }}
+  .q__head {{ flex-direction:column; align-items:flex-start; gap:.22rem; }}
+  .q__title {{ min-width:0; }}
+}}
 
 /* --- 書き置き --- */
 .note {{ display:flex; flex-direction:column; gap:.5rem;
@@ -1050,7 +1076,7 @@ footer {{ color:var(--ink3); font-size:.73rem; font-family:var(--mono);
     <span class="mast__meta"><span>巡回 {cadence}</span><span>生成 {generated}</span></span>
   </header>
 
-  <p class="banner banner--ok" id="sent" hidden>書き置きを預かりました。次の巡回で読まれます。</p>
+  <p class="banner banner--ok" id="sent" hidden>書き置きを預かりました。次の巡回で読まれます。<span id="sentid"></span></p>
 
   {stale}
   {pulse}
@@ -1062,34 +1088,36 @@ footer {{ color:var(--ink3); font-size:.73rem; font-family:var(--mono);
       <ol class="q">{queue}</ol>
     </section>
 
-    <form class="note" method="post" action="/feedback">
+    <div class="side">
+      <form class="note" method="post" action="/feedback">
         <h2 class="note__h">書き置き</h2>
         <p class="note__p">殴り書きで構いません。指示も苦情も、ここに残せばセッションを開かずに届きます。</p>
         <textarea name="body" required rows="5" maxlength="20000"
           aria-label="autopilot への書き置き"
           placeholder="例: ダッシュボードのここが見づらい / immich の写真が開けない / 今週は触らないで"></textarea>
-      <div class="note__foot">
-        <button type="submit">送る</button>
-        <span class="note__alt">届かないときは
-          <a href="{fb_url}">issue #{fb_issue}</a>（最後に読んだ: {fb_read}）</span>
+        <div class="note__foot">
+          <button type="submit">送る</button>
+          <span class="note__alt">届かないときは
+            <a href="{fb_url}">issue #{fb_issue}</a>（最後に読んだ: {fb_read}）</span>
+        </div>
+      </form>
+
+      <div class="rail">
+        <section class="sec">
+          <div class="sec__h"><h2>homelab の計器</h2></div>
+          {cluster}
+        </section>
+
+        <section class="sec">
+          <div class="sec__h"><h2>反映された変更</h2></div>
+          <ul>{done}</ul>
+        </section>
+
+        <section class="sec">
+          <div class="sec__h"><h2>直近の当直</h2></div>
+          <ul>{runs}</ul>
+        </section>
       </div>
-    </form>
-
-    <div class="rail">
-      <section class="sec">
-        <div class="sec__h"><h2>homelab の計器</h2></div>
-        {cluster}
-      </section>
-
-      <section class="sec">
-        <div class="sec__h"><h2>反映された変更</h2></div>
-        <ul>{done}</ul>
-      </section>
-
-      <section class="sec">
-        <div class="sec__h"><h2>直近の当直</h2></div>
-        <ul>{runs}</ul>
-      </section>
     </div>
   </div>
 
@@ -1145,12 +1173,16 @@ footer {{ color:var(--ink3); font-size:.73rem; font-family:var(--mono);
   apply('all');
 }})();
 
-/* 送信後にバックエンドが 303 で /?feedback=ok に戻す。受け取った印を出し、
-   再読み込みで残らないよう URL からは落とす。JS 無効なら出ないだけ（送信は成立する） */
+/* 送信後にバックエンドが 303 で /?feedback=ok&id=... に戻す。受け取った印と控えの id を
+   出し、再読み込みで残らないよう URL からは落とす。JS 無効なら出ないだけ（送信は成立する。
+   書けなかったときはバックエンドがエラーページを返すので、この印は出ない） */
 (function () {{
   if (window.location.search.indexOf('feedback=ok') === -1) return;
   var el = document.getElementById('sent');
   if (el) el.hidden = false;
+  var m = window.location.search.match(/[?&]id=([^&]+)/);
+  var idEl = document.getElementById('sentid');
+  if (m && idEl) idEl.textContent = '控え: ' + decodeURIComponent(m[1]);
   if (window.history && window.history.replaceState) {{
     window.history.replaceState(null, '', window.location.pathname);
   }}
