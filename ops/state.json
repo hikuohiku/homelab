@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-06T10:47:08Z",
+  "updated": "2026-08-06T11:35:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-06T10:32:14Z"
+    "last_read": "2026-08-06T11:13:00Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc",
@@ -1364,6 +1364,14 @@
       "prs": [
         341
       ]
+    },
+    {
+      "n": 150,
+      "at": "2026-08-06T11:25:00Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (計画役)",
+      "summary": "計画役（journal run #150）。ops/inbox.md の引き継ぎ1件をT-0148として起票。backlog blocked/needs-humanを棚卸しし、T-0140のblocked_byの古い前提を是正。inventory.jsonのpolicy:auto全対象の上流最新版を調査しT-0149(coder v2.36.0)・T-0150(python 3.14-alpine)を起票。",
+      "prs": []
     }
   ]
 }

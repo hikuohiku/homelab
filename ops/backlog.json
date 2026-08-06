@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 148,
-  "updated": "2026-08-06T10:55:00Z",
+  "next_id": 151,
+  "updated": "2026-08-06T11:30:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2234,7 +2234,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #85: 定期の inventory 調査（対象8件、他7件は current が最新のまま）で発見。緊急性は無い（v3.21.3 で CI は動いている）が EOL 接近の一次情報あり。run #86: 調査完遂。技術的な互換性のハードルは無い——kustomize v5.8.1（本リポジトリが既に使用中）は helm v4 対応の既知バグ修正（kubernetes-sigs/kustomize#6013, PR #6016）を取り込み済みで、本リポジトリが使う helmCharts の基本フィールド（repo/name/version/releaseName/namespace/valuesFile）は helm v4 の breaking changes に抵触しない（一次情報: https://helm.sh/blog/helm-4-released/ 、 https://helm.sh/docs/changelog/ ）。唯一の障害は CI が使う `azure/setup-helm` アクション自身が README で『v2+ of this action only support Helm3』と明言しており、v4 系のバージョン指定を公式サポートしていないこと（動く可能性はあるが未検証・未保証）。auto-merge のゲートである CI に根拠の薄い変更を入れないため blocked とした。再開条件: azure/setup-helm が v4 対応を明言するリリースを出す、または検証用ブランチで実機テストして動作を確認できたとき"
+      "notes": "run #85: 定期の inventory 調査（対象8件、他7件は current が最新のまま）で発見。緊急性は無い（v3.21.3 で CI は動いている）が EOL 接近の一次情報あり。run #86: 調査完遂。技術的な互換性のハードルは無い——kustomize v5.8.1（本リポジトリが既に使用中）は helm v4 対応の既知バグ修正（kubernetes-sigs/kustomize#6013, PR #6016）を取り込み済みで、本リポジトリが使う helmCharts の基本フィールド（repo/name/version/releaseName/namespace/valuesFile）は helm v4 の breaking changes に抵触しない（一次情報: https://helm.sh/blog/helm-4-released/ 、 https://helm.sh/docs/changelog/ ）。唯一の障害は CI が使う `azure/setup-helm` アクション自身が README で『v2+ of this action only support Helm3』と明言しており、v4 系のバージョン指定を公式サポートしていないこと（動く可能性はあるが未検証・未保証）。auto-merge のゲートである CI に根拠の薄い変更を入れないため blocked とした。再開条件: azure/setup-helm が v4 対応を明言するリリースを出す、または検証用ブランチで実機テストして動作を確認できたとき | run #150（計画役）: 上流に helm v4.2.3 GA が実在することを inventory 定期調査で確認したが、azure/setup-helm@v5 の README（raw.githubusercontent.com で実読）は依然「v2+ of this action only support Helm3」のまま。blocked_by の条件は変わっておらず、ステータス変更なし。"
     },
     {
       "id": "T-0119",
@@ -2657,14 +2657,14 @@
       "why": "T-0137 の検討で、device ID/証明書（cert.pem/key.pem、syncthing の config ディレクトリに保存）を移さないと既存ピアから別デバイスとして再認識されると判明した。CHARTER §4「データを失いうる変更」に該当するため、戻せることを確かめてから着手する必要がある。LXC 101 のファイルシステムへの直接アクセス（pct exec や Proxmox コンソール等）は、autopilot（Proxmox は PVEAuditor=監査専用、kubectl は k8s 内 read-only）にも構築セッション（kubectl read-only のみ、Proxmox/LXC への到達経路なし）にも無い",
       "dod": "(1) LXC 101 の実際の config パス（`/var/lib/syncthing` 想定、要確認）の中身一式（cert.pem/key.pem/config.xml/index データ）を人間が取得し、構築セッションまたは autopilot が使える経路（例: 一時的な到達手段、Doppler 等）で引き渡す。(2) T-0138 で作成した PVC へそのデータを配置する（kubectl cp 等の書き込み操作は構築セッションか人間が実施。autopilot 自身の ClusterRole は書き込み動詞を持たない、CHARTER §5.5）。(3) 新しい syncthing Pod が既存ピアと再認証なしに同期を再開できることを確認する。(4) 確認できたら旧 LXC 101 を停止し、一定期間の観察後に破棄する（M1 vaultwarden 移行と同じ順序、Plans.md 参照）",
       "needs_human_reason": "LXC 101 (`/var/lib/syncthing` 想定パス、要確認) の config ディレクトリ一式（cert.pem/key.pem 含む）を取得し、新 PVC へ配置できる形で提供してほしい。自動化された経路（autopilot・構築セッションいずれの credential）でもこのファイルシステムには到達できない",
-      "blocked_by": "T-0138/T-0139 が完了し、移行先の PVC/Service が用意されていること",
+      "blocked_by": null,
       "refs": [
         "Plans.md",
         "apps/syncthing/"
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #136（計画役）: T-0137 完了を受け ops/inbox.md の引き継ぎ（実装タスクへの分割）をここで起票。データ移行部分は human 専有（物理的にLXC上のファイルへアクセスする経路が無い）と判断し needs-human で起票。manifest 側（T-0138/T-0139）は着手可能な todo として分離した（CHARTER §3「blocked/needs-human はタスク全体ではなくどの部分かで見る」）。run #143（実行役）: issue #56（2026-08-06T10:03:40Z, hikuohiku）で、現在稼働中の syncthing は新規デバイス ID（旧 LXC 101 とは別デバイス）であり、cert.pem/key.pem 移行なしに既存ピアと接続すると同期方向次第で削除が伝播しうるため、needs-human のまま止めておく現状の判断が正しいと確認された。ステータス変更なし"
+      "notes": "run #136（計画役）: T-0137 完了を受け ops/inbox.md の引き継ぎ（実装タスクへの分割）をここで起票。データ移行部分は human 専有（物理的にLXC上のファイルへアクセスする経路が無い）と判断し needs-human で起票。manifest 側（T-0138/T-0139）は着手可能な todo として分離した（CHARTER §3「blocked/needs-human はタスク全体ではなくどの部分かで見る」）。run #143（実行役）: issue #56（2026-08-06T10:03:40Z, hikuohiku）で、現在稼働中の syncthing は新規デバイス ID（旧 LXC 101 とは別デバイス）であり、cert.pem/key.pem 移行なしに既存ピアと接続すると同期方向次第で削除が伝播しうるため、needs-human のまま止めておく現状の判断が正しいと確認された。ステータス変更なし | run #149（計画役）: blocked_by の前提（T-0138/T-0139 未完了）が古いままだったのを是正。両タスクとも done・merge 済みで移行先 PVC/Service は既に用意されている。実際に残っている唯一の障壁は needs_human_reason（LXC 101 のファイルシステムへの到達経路が無い）であり、これは変わっていない。ステータスは needs-human のまま。"
     },
     {
       "id": "T-0141",
@@ -2805,6 +2805,69 @@
       "created": "2026-08-06",
       "pr": null,
       "notes": "run #148（計画役）: ops/inbox.md の引き継ぎ（run #146 実行役が残したもの）を起票。急ぎではない（次回実行の予定自体が無い）ため blocked とし、needs-human の依頼は出さない"
+    },
+    {
+      "id": "T-0148",
+      "domain": "homelab",
+      "title": "ops-dashboard 配信 URL の外部到達性を tailnet ピアの人間が実際にブラウザで確認する",
+      "kind": "verify",
+      "risk": "low",
+      "status": "needs-human",
+      "priority": 60,
+      "why": "T-0130 で ops-dashboard.tailae6c2.ts.net への配信が稼働している旨を state.json に反映したが、報告は構築セッション（tailnet 非ピア）による内部 Service 到達（HTTP 200）の確認どまりで、tailnet 経由の実際の外部到達（MagicDNS 名前解決 + L7 Ingress 経由）は未実測。同じ制約が syncthing の GUI L7 Ingress でも指摘されており、ops-dashboard にも及ぶ可能性がある（ops/inbox.md 経由、実行役の気づき）。",
+      "dod": "tailnet に参加している人間が、実際に自分の端末のブラウザで https://ops-dashboard.tailae6c2.ts.net/ を開き、ダッシュボードが表示されることを確認して issue #56 に結果を書く。表示できなければ、その旨と症状（DNS 解決失敗 / 接続拒否 / 証明書エラー等）を書いてもらう。",
+      "blocked_by": null,
+      "refs": [
+        "apps/ops-dashboard/",
+        "ops/state.json"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "needs_human_reason": "ops-dashboard.tailae6c2.ts.net への実際の外部到達確認は tailnet に参加しているブラウザからのアクセスが要る。autopilot（in-cluster、tailnet 到達性なし）にも構築セッション（tailnet 非ピア、既に内部確認済み）にも実行できない。",
+      "notes": "run #149（計画役）: ops/inbox.md の引き継ぎ（実行役の気づき）を起票。T-0130 の内部確認と今回求める外部到達確認は別物であるため、T-0130 を re-open せず新規タスクとして分離した。"
+    },
+    {
+      "id": "T-0149",
+      "domain": "homelab",
+      "title": "ghcr.io/coder/coder を v2.35.3 → v2.36.0 に上げる",
+      "kind": "update",
+      "risk": "medium",
+      "status": "todo",
+      "priority": 40,
+      "why": "計画役の run #150 の inventory 定期調査（policy: auto 全対象の上流最新版チェック）で発見。ghcr.io の実タグ・GitHub Releases API で v2.36.0 (2026-08-04 公開) が存在し、v2.35.3 より新しいことを確認済み。",
+      "dod": "CHARTER §4「バージョン更新の作法」に従い v2.35.3 → v2.36.0 のリリースノートを原文で確認し、破壊的変更が無いことを確かめたうえで apps/coder/ の image タグと ops/inventory.json を更新する。",
+      "blocked_by": null,
+      "refs": [
+        "apps/coder/",
+        "ops/inventory.json"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #150（計画役）: GitHub の `/repos/coder/coder/releases/latest` は make_latest フラグの都合で v2.35.3 を指したままだが、v2.36.0 のリリース自体は実在し ghcr.io に イメージも存在する（agent 調査で確認）。実装時は `/releases/latest` を鵜呑みにせず、tag 指定（`/repos/coder/coder/releases/tags/v2.36.0`）でリリースノートを取得すること。"
+    },
+    {
+      "id": "T-0150",
+      "domain": "homelab",
+      "title": "ops/ 監視系 CronJob の python ベースイメージを 3.12-alpine → 3.14-alpine に上げる",
+      "kind": "update",
+      "risk": "low",
+      "status": "todo",
+      "priority": 40,
+      "why": "計画役の run #150 の inventory 定期調査で、python:3.12-alpine より新しい 3.14-alpine（3.13-alpine も存在）が出ていると判明。対象は ops/inventory.json の ops-health-reporter-image と pvc-usage-reporter-image の2エントリで、後者は mirrors 4ファイルを含む。どちらも標準ライブラリのみで動く読み取り専用スクリプトで homelab 本体の到達性には影響しない（各エントリの observability_impact 参照）。",
+      "dod": "対象5ファイル（apps/ops-health-reporter/cronjob.yaml、apps/immich/pvc-usage-cronjob.yaml、apps/coder/pvc-usage-cronjob.yaml、apps/vaultwarden/pvc-usage-cronjob.yaml、apps/vaultwarden/restic-backup-cronjob.yaml）の python:3.12-alpine を 3.14-alpine に揃えて更新し、ops/inventory.json の該当2エントリも更新する。3.13 を飛ばして 3.14 に上げる場合は CPython 3.13→3.14 の changelog（3.12→3.13 分も含め）に、これらのスクリプトが使う標準ライブラリ（json/urllib/subprocess/pathlib 等）の破壊的変更が無いか目を通す。",
+      "blocked_by": null,
+      "refs": [
+        "apps/ops-health-reporter/cronjob.yaml",
+        "apps/immich/pvc-usage-cronjob.yaml",
+        "apps/coder/pvc-usage-cronjob.yaml",
+        "apps/vaultwarden/pvc-usage-cronjob.yaml",
+        "apps/vaultwarden/restic-backup-cronjob.yaml",
+        "ops/inventory.json",
+        "ops/check_version_sync.py"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #150（計画役）: 2つの inventory エントリ（ops-health-reporter-image は単独ファイル、pvc-usage-reporter-image は mirrors 4ファイル）にまたがるが、全て同一の python:3.12-alpine タグを指しており実質同じ変更のため 1 タスクにまとめた。check_version_sync.py の該当 GROUP（T-0082/T-0081）が既にこれらの一致を CI で検証しているので、ズレたまま merge されることはない。"
     }
   ]
 }
