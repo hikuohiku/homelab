@@ -2415,7 +2415,7 @@
       "title": "dashboard 配信用の静的ファイルサーバーを apps/ に追加し tailscale-operator で公開する",
       "kind": "feature",
       "risk": "medium",
-      "status": "todo",
+      "status": "in_progress",
       "priority": 21,
       "why": "issue #56 (2026-08-06T03:07:26Z) の指摘。claude.ai の Artifact は対話セッションの存在を前提にした置き場所で、常駐基盤（クラスタ内 autopilot）とは噛み合わない。coder が tailscale-operator 経由でcoder.tailae6c2.ts.net として公開されているのと同じパターンで、dashboard も自前でホストし、対話セッションの有無に依存せず autopilot 自身が更新できるようにする",
       "dod": "T-0127 が push する専用ブランチ（例: ops-dashboard）の index.html を定期的に取得して配信するDeployment（nginx か python -m http.server）+ Service を apps/ 配下に追加し、tailscale-operator 経由で公開する。ops/state.json の dashboard.artifact_url もしくは新しいフィールドをこの URL に更新し、Artifact 版は当面残しつつ正とするのはこちらにする（issue #56 の指摘どおり）",
@@ -2427,8 +2427,8 @@
         "ops/state.json"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #98 で起票。T-0127（push 側）が先。前回の起動（PR #291, merged 2026-08-06T03:56:01Z）で実装・merge されたが、記録更新（backlog/journal）が 同じ起動内で行われないまま終わっていた。run #101 で拾い、実機確認したところ httpd コンテナが CrashLoopBackOff（exitCode 127）になっていることを発見: alpine:3.22.5 の標準 busybox パッケージには httpd applet が含まれず （busybox-extras が必要）、`command: [\"busybox\", \"httpd\", ...]` が起動できない。 CHARTER §9「auto-merge した変更の後に不具合の兆候が出た → 即ロールバック PR を 出す」に従い、PR #291 の内容を revert（PR で対応、backlog task id はこの記録の リビジョンで pr フィールドに反映）。次の実装では httpd コンテナのイメージ/コマンドを busybox 依存を避ける形（例: python:3.13-alpine の `python3 -m http.server`、または busybox-extras を含む別イメージ）に変更すること。DoD の「nginx か python -m http.server」の選択肢のうち python 案の方が動作確認が取れている（Docker Hub で python:3.13-alpine タグの実在を確認済み、stdlib のみで追加パッケージ不要）。"
+      "pr": 293,
+      "notes": "run #98 で起票。T-0127（push 側）が先。前回の起動（PR #291, merged 2026-08-06T03:56:01Z）で実装・merge されたが、記録更新（backlog/journal）が 同じ起動内で行われないまま終わっていた。run #101 で拾い、実機確認したところ httpd コンテナが CrashLoopBackOff（exitCode 127）になっていることを発見: alpine:3.22.5 の標準 busybox パッケージには httpd applet が含まれず （busybox-extras が必要）、`command: [\"busybox\", \"httpd\", ...]` が起動できない。 CHARTER §9「auto-merge した変更の後に不具合の兆候が出た → 即ロールバック PR を 出す」に従い、PR #291 の内容を revert（PR で対応、backlog task id はこの記録の リビジョンで pr フィールドに反映）。次の実装では httpd コンテナのイメージ/コマンドを busybox 依存を避ける形（例: python:3.13-alpine の `python3 -m http.server`、または busybox-extras を含む別イメージ）に変更すること。DoD の「nginx か python -m http.server」の選択肢のうち python 案の方が動作確認が取れている（Docker Hub で python:3.13-alpine タグの実在を確認済み、stdlib のみで追加パッケージ不要）。 run #102: httpd コンテナを python:3.12-alpine の `python3 -m http.server` に置き換えて作り直した（busybox-extras の追加を避け、apps/ops-health-reporter・apps/{coder,vaultwarden,immich}/pvc-usage-cronjob.yaml で既に実績のあるイメージに揃えた）。initContainer/fetcher の alpine:3.22.5 + wget はそのまま流用（wget は busybox 標準 applet で影響を受けていなかったため）。手元に docker が無く実行検証はできなかったが、同じ python:3.12-alpine イメージが pvc-usage-reporter CronJob として既にこのクラスタでrun 済み（正常終了）であることを pull 成功の裏付けとした。CI green を確認後、実機（kubectl get pods -n ops-dashboard）で httpd コンテナが Running になることまで確認する。"
     },
     {
       "id": "T-0129",
