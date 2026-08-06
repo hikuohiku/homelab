@@ -19,7 +19,7 @@ spec:
       annotations:
         # server.py は起動時にしか読まれない。ConfigMap の中身を変えても Deployment の
         # spec は変わらず Pod は作り直されないので、変えたらこの値を上げる
-        ops-dashboard/server-revision: "1"
+        ops-dashboard/server-revision: "2"
     spec:
       securityContext:
         runAsNonRoot: true
@@ -92,8 +92,9 @@ spec:
         #
         # 配信そのものは `python3 -m http.server` と同じ SimpleHTTPRequestHandler のまま。
         # server.py はそれを継承して `POST /feedback` だけを足し、ダッシュボードの
-        # フォームから来た文章を GitHub issue #56（人間からのフィードバック窓口、
-        # CHARTER §6）へコメントとして投稿する。窓口は増やさない
+        # フォームから来た文章を ops-feedback ブランチへ 1 件 1 ファイルで書く
+        # （人間からのフィードバックの一次保管場所、CHARTER §6）。autopilot が
+        # ops/feedback.json へ取り込んで状態を進める
         - name: httpd
           image: python:3.14-alpine
           command: ["python3", "/config/server.py"]
@@ -104,7 +105,14 @@ spec:
               value: "8080"
             - name: FEEDBACK_REPO
               value: hikuohiku/homelab
-            # ops/state.json の feedback.issue と一致させる（窓口を移すときは両方直す）
+            # 書き置きの一次保管場所。main には直 push できない（ruleset）ため、
+            # ops-health-report / ops-dashboard と同じ専用ブランチ方式にする
+            - name: FEEDBACK_BRANCH
+              value: ops-feedback
+            - name: FEEDBACK_DIR
+              value: ops/feedback/inbox
+            # 保存に失敗したときのエラーページが「代わりにここへ手で書け」と案内する先。
+            # 投稿先ではない。ops/state.json の feedback.issue と一致させる
             - name: FEEDBACK_ISSUE
               value: "56"
             - name: GITHUB_TOKEN

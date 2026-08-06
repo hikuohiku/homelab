@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "updated": "2026-08-06T12:11:00Z",
+  "_comment": "人間からのフィードバックの台帳（正）。手順は ops/CHARTER.md §6。status: new（取り込んだ。扱いは未決）| accepted（起票した。task に T-XXXX）| done（片付いた）| declined（やらないと決めた）。done/declined には resolution（人間が読む一行）が必須で、これがダッシュボードに顛末として出る。accepted/done には task が必須。id は書かれた時点で確定し付け替えない。ops-dashboard から来たものは ops-feedback ブランチの ops/feedback/inbox/<id>.json が原本、issue から来たものは ref にコメント URL を置く。done/declined になって 90 日を過ぎたエントリは消してよい（review-log.md と同じ）",
+  "inbox": {
+    "branch": "ops-feedback",
+    "dir": "ops/feedback/inbox",
+    "_comment": "apps/ops-dashboard/server.py が POST /feedback を受けて 1 件 1 ファイルで書く場所。autopilot はここを毎回読み、id が items に無いものを取り込む。取り込み済みのファイルは消さない（消すと『取り込んだ』の唯一の証拠が台帳だけになり、PR が落ちたときに書き置きが消える）"
+  },
+  "issue": {
+    "number": 56,
+    "url": "https://github.com/hikuohiku/homelab/issues/56",
+    "cutoff": "2026-08-06T12:11:00Z",
+    "_comment": "外から書ける経路として残す issue。cutoff は台帳に移行した時点（それ以前のコメントは ops/CHARTER.md 本文に反映済みで、原本は issue に残っている）。cutoff より新しいコメントで、その comment id が items の ref に無いものを取り込む。この値は動かさない"
+  },
+  "items": []
+}
