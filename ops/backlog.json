@@ -2851,7 +2851,7 @@
       "title": "ops/ 監視系 CronJob の python ベースイメージを 3.12-alpine → 3.14-alpine に上げる",
       "kind": "update",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 40,
       "why": "計画役の run #150 の inventory 定期調査で、python:3.12-alpine より新しい 3.14-alpine（3.13-alpine も存在）が出ていると判明。対象は ops/inventory.json の ops-health-reporter-image と pvc-usage-reporter-image の2エントリで、後者は mirrors 4ファイルを含む。どちらも標準ライブラリのみで動く読み取り専用スクリプトで homelab 本体の到達性には影響しない（各エントリの observability_impact 参照）。",
       "dod": "対象5ファイル（apps/ops-health-reporter/cronjob.yaml、apps/immich/pvc-usage-cronjob.yaml、apps/coder/pvc-usage-cronjob.yaml、apps/vaultwarden/pvc-usage-cronjob.yaml、apps/vaultwarden/restic-backup-cronjob.yaml）の python:3.12-alpine を 3.14-alpine に揃えて更新し、ops/inventory.json の該当2エントリも更新する。3.13 を飛ばして 3.14 に上げる場合は CPython 3.13→3.14 の changelog（3.12→3.13 分も含め）に、これらのスクリプトが使う標準ライブラリ（json/urllib/subprocess/pathlib 等）の破壊的変更が無いか目を通す。",
@@ -2866,8 +2866,8 @@
         "ops/check_version_sync.py"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #150（計画役）: 2つの inventory エントリ（ops-health-reporter-image は単独ファイル、pvc-usage-reporter-image は mirrors 4ファイル）にまたがるが、全て同一の python:3.12-alpine タグを指しており実質同じ変更のため 1 タスクにまとめた。check_version_sync.py の該当 GROUP（T-0082/T-0081）が既にこれらの一致を CI で検証しているので、ズレたまま merge されることはない。"
+      "pr": 343,
+      "notes": "run #150（計画役）: 2つの inventory エントリ（ops-health-reporter-image は単独ファイル、pvc-usage-reporter-image は mirrors 4ファイル）にまたがるが、全て同一の python:3.12-alpine タグを指しており実質同じ変更のため 1 タスクにまとめた。check_version_sync.py の該当 GROUP（T-0082/T-0081）が既にこれらの一致を CI で検証しているので、ズレたまま merge されることはない。 run #151（実行役）: 実装・PR #343。3.13/3.14 の changelog を対象スクリプトが使う標準ライブラリ単位で確認し破壊的変更なしと判断（sqlite3.version/version_info, urllib.request.URLopener/FancyURLopener, urllib.parse.Quoter の削除はいずれも未使用）。apps/ops-dashboard/deployment.yaml と apps/coder/workspace-home-backup-cronjob.yaml にも python:3.12-alpine が残っているが、この inventory エントリの対象外のため触れず、ops/inbox.md に引き継いだ。"
     }
   ]
 }

@@ -7,3 +7,8 @@
 [`ops/CHARTER.md`](CHARTER.md) の §3「書く権利」。
 
 ---
+
+- run #151: T-0150（python 3.14-alpine 化）の作業中、`apps/ops-dashboard/deployment.yaml` と
+  `apps/coder/workspace-home-backup-cronjob.yaml` にも `python:3.12-alpine` が残っているのを見つけた。
+  どちらも `ops/inventory.json` に監視対象として登録されていない（`grep -rn "python:3.12-alpine" apps/`
+  で確認）。inventory へのエントリ追加＋更新タスクとして起票するか判断してほしい。
