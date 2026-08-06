@@ -2632,8 +2632,8 @@
       "domain": "homelab",
       "title": "syncthing を Tailscale 経由で公開する（sync ポート/GUI の公開方式を決めて実装）",
       "kind": "feature",
-      "risk": "low",
-      "status": "todo",
+      "risk": "medium",
+      "status": "done",
       "priority": 69,
       "why": "T-0137 の技術的検討で、sync プロトコル（TCP 22000、discovery UDP 21027 等）は既存アプリが使う Tailscale operator の L7 Ingress（ingressClassName: tailscale）では転送できず、L3 ingress（Service に tailscale.com/expose: \"true\" または loadBalancerClass: tailscale）が必要と判明した。この repo では L3 Service 公開の前例が無い。GUI(8384) を公開するかどうかも Plans.md M2 で未決定のまま残っている",
       "dod": "T-0138 で作成した Service（または追加の Service）に L3 ingress を設定し、sync ポートを tailnet 上で到達可能にする。GUI(8384) は人間が使う想定があるかで公開要否を判断し、公開する場合は既存の L7 Ingress パターンを別 Service で流用する（sync 用の L3 と GUI 用の L7 は別 Service に分けるのが自然）。前例が無い変更のため、kustomize build（CI）で構文の妥当性は確認できても実際の到達性は確認できない前提を PR 本文に明記する（実機到達性確認は次タスクの範囲か、構築セッション/人間に委ねる）",
@@ -2644,8 +2644,8 @@
         "apps/tailscale-operator/"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #136（計画役）: T-0137 完了を受け ops/inbox.md の引き継ぎ（実装タスクへの分割）をここで起票。"
+      "pr": 329,
+      "notes": "run #136（計画役）: T-0137 完了を受け ops/inbox.md の引き継ぎ（実装タスクへの分割）をここで起票。run #138（実行役）: service-tailnet.yaml（L3, loadBalancerClass: tailscale）と ingress.yaml（GUI, L7）を実装、PR #329。起票時 risk=low だったが実インフラ（Tailscale）への到達性を新設する変更のため medium に修正（可逆・ロールバック手順は PR 本文に明記）。実機到達性は未確認のため ops/inbox.md に確認依頼を追記。"
     },
     {
       "id": "T-0140",

@@ -1,11 +1,11 @@
 {
   "open": [
     {
-      "number": 328,
-      "title": "feat(syncthing): apps/syncthing/ manifest 新規作成（T-0138）",
-      "url": "https://github.com/hikuohiku/homelab/pull/328",
+      "number": 329,
+      "title": "feat(syncthing): sync/GUI ポートを tailnet に公開する",
+      "url": "https://github.com/hikuohiku/homelab/pull/329",
       "isDraft": false,
-      "createdAt": "2026-08-06T09:11:31Z",
+      "createdAt": "2026-08-06T09:21:41Z",
       "statusCheckRollup": [
         {
           "conclusion": "SUCCESS"
@@ -26,11 +26,18 @@
           "conclusion": "SUCCESS"
         }
       ],
-      "headRefName": "autopilot/T-0138-syncthing-manifests",
+      "headRefName": "autopilot/T-0139-syncthing-tailnet-expose",
       "autoMergeRequest": null
     }
   ],
   "merged": [
+    {
+      "number": 328,
+      "title": "feat(syncthing): apps/syncthing/ manifest 新規作成（T-0138）",
+      "url": "https://github.com/hikuohiku/homelab/pull/328",
+      "mergedAt": "2026-08-06T09:14:25Z",
+      "headRefName": "autopilot/T-0138-syncthing-manifests"
+    },
     {
       "number": 327,
       "title": "docs(ops): run #136 の計画記録（T-0138〜T-0142 起票、PR #326 merge、issue #30 close）",
@@ -443,13 +450,6 @@
       "url": "https://github.com/hikuohiku/homelab/pull/268",
       "mergedAt": "2026-08-06T01:05:55Z",
       "headRefName": "autopilot/T-0118-helm-v4-investigate"
-    },
-    {
-      "number": 267,
-      "title": "chore(ops): run #85 の記録更新（inventory 定点調査・T-0118 起票）",
-      "url": "https://github.com/hikuohiku/homelab/pull/267",
-      "mergedAt": "2026-08-06T00:53:42Z",
-      "headRefName": "autopilot/T-0118-inventory-sweep-records"
     }
   ]
 }

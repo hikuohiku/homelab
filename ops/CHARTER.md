@@ -593,8 +593,13 @@ upstream リポジトリのファイル（例: `deploy/crds/bundle.yaml` のよ�
 - **`restic` CLI はイメージに入っているが、この Pod に B2/restic の credential は無い**
   （`apps/autopilot/external-secret.yaml` は `CLAUDE_CODE_OAUTH_TOKEN`/`AUTOPILOT_GITHUB_TOKEN`
   の 2 つのみ）。バックアップの実 push を自分で検証することはできない。これも構築セッションに頼む
-- 旧 §5.2 のうち引き続き成り立つ（イメージに無い）もの: `terraform` / `kustomize` / `nix` / `just` /
-  `direnv` / `sops` / `docker` / `jq`。`node` は入っている
+- 旧 §5.2 のうち引き続き成り立つ（イメージに無い）もの: `terraform` / `kustomize`（単体バイナリ）/
+  `nix` / `just` / `direnv` / `sops` / `docker` / `jq`。`node` は入っている
+- **ただし `kubectl kustomize <dir>` は使える**（kubectl に組み込みの kustomize 機能。単体
+  `kustomize` バイナリが無いことと矛盾しない、2026-08-06 run #138 で実測）。`helm` チャートを
+  含む場合（`--enable-helm` 相当）はレンダリングできない可能性が高い（未検証）が、helm chart を
+  使わないアプリ（例: `apps/syncthing/`）の manifest は push 前にこれで実際に render 結果を
+  目視確認できる。CI (`kustomize build --enable-helm`) に完全に委ねる前に、まずこれを試す
 - **`/tmp` は Pod の生存期間を通じて持続する。旧・クラウド定期実行サンドボックス（起動毎に使い捨て）
   と違い、この Pod は `INTERVAL_SECONDS` 毎に同じファイルシステムでイテレーションを繰り返す。**
   固定パス（例: `/tmp/pr_body.txt`）に一度書いたファイルは、明示的に消さない限り次のイテレーション
