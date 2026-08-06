@@ -18,15 +18,20 @@ from __future__ import annotations
 
 import html
 import json
+import os
 import pathlib
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from datetime import datetime, timezone
 
 OPS = pathlib.Path(__file__).resolve().parent.parent
 ROOT = OPS.parent
 OUT = OPS / "dashboard" / "index.html"
+REPO = "hikuohiku/homelab"
+API = "https://api.github.com"
 
 E = html.escape
 STALE: dict[str, str] = {}
@@ -83,21 +88,86 @@ def load_health() -> dict | None:
 MERGED_LIMIT = 60
 
 
-def _gh_prs(state: str, fields: str, limit: int) -> list[dict]:
-    out = subprocess.run(
-        ["gh", "pr", "list", "--state", state, "--limit", str(limit), "--json", fields],
-        cwd=ROOT, capture_output=True, text=True, timeout=60, check=True,
-    ).stdout
-    return json.loads(out)
+def _gh_api(path: str) -> list | dict:
+    """GitHub REST API を直叩きする。`gh` CLI はこの実行環境に無い（CHARTER §5.2/§5.5）。"""
+    token = os.environ.get("AUTOPILOT_GITHUB_TOKEN")
+    if not token:
+        raise RuntimeError("AUTOPILOT_GITHUB_TOKEN is not set")
+    req = urllib.request.Request(
+        f"{API}{path}",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "User-Agent": "homelab-autopilot-dashboard",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310
+        return json.loads(resp.read())
+
+
+def _status_rollup(sha: str) -> list[dict]:
+    """CI 状態は check-runs と status の両方を見る（外部 App は片方にしか出ないことがある、CHARTER §5.5）。"""
+    rollup = []
+    try:
+        runs = _gh_api(f"/repos/{REPO}/commits/{sha}/check-runs?per_page=100")
+        for r in runs.get("check_runs", []):
+            rollup.append({"conclusion": (r.get("conclusion") or r.get("status") or "").upper()})
+    except Exception:  # noqa: BLE001
+        pass
+    try:
+        status = _gh_api(f"/repos/{REPO}/commits/{sha}/status")
+        for s in status.get("statuses", []):
+            rollup.append({"conclusion": (s.get("state") or "").upper()})
+    except Exception:  # noqa: BLE001
+        pass
+    return rollup
+
+
+def _open_prs() -> list[dict]:
+    raw = _gh_api(f"/repos/{REPO}/pulls?state=open&per_page=100")
+    return [
+        {
+            "number": p["number"],
+            "title": p["title"],
+            "url": p["html_url"],
+            "isDraft": p.get("draft", False),
+            "createdAt": p.get("created_at"),
+            "statusCheckRollup": _status_rollup(p["head"]["sha"]),
+            "headRefName": p.get("head", {}).get("ref", ""),
+            "autoMergeRequest": p.get("auto_merge"),
+        }
+        for p in raw
+    ]
+
+
+def _merged_prs(limit: int) -> list[dict]:
+    # state=closed には未マージの close も混ざるので merged_at で絞る。sort=created&direction=desc
+    # で新しい方から辿れば、通常運用（作成後すぐマージ）では数ページで limit 件に届く。
+    merged = []
+    for page in range(1, 6):
+        batch = _gh_api(f"/repos/{REPO}/pulls?state=closed&sort=created&direction=desc&per_page=100&page={page}")
+        if not batch:
+            break
+        merged.extend(p for p in batch if p.get("merged_at"))
+        if len(batch) < 100 or len(merged) >= limit:
+            break
+    merged.sort(key=lambda p: p["merged_at"], reverse=True)
+    return [
+        {
+            "number": p["number"],
+            "title": p["title"],
+            "url": p["html_url"],
+            "mergedAt": p["merged_at"],
+            "headRefName": p.get("head", {}).get("ref", ""),
+        }
+        for p in merged[:limit]
+    ]
 
 
 def fetch_prs() -> tuple[list[dict], list[dict]]:
     cache = OPS / "dashboard" / "prs.json"
     try:
-        data = {
-            "open": _gh_prs("open", "number,title,url,isDraft,createdAt,statusCheckRollup,headRefName,autoMergeRequest", 30),
-            "merged": _gh_prs("merged", "number,title,url,mergedAt,headRefName", MERGED_LIMIT),
-        }
+        data = {"open": _open_prs(), "merged": _merged_prs(MERGED_LIMIT)}
         cache.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n")
         return data["open"], data["merged"]
     except Exception as e:  # noqa: BLE001
