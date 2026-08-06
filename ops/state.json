@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T02:42:08Z",
+  "updated": "2026-08-06T02:47:00Z",
   "vision_stage": 1,
   "vision_stage_label": "器を作る",
   "feedback": {
@@ -1006,6 +1006,16 @@
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。ops-health-report で ArgoCD 全11 Application 中 coder/immich/vaultwarden の3件が既知事象（T-0106）どおり Degraded、他は Healthy、autopilot 自身の heartbeat も正常と確認。backlog の唯一の todo（T-0117）は kubectl でCronJob の lastScheduleTime 未到来を直接確認し引き続き着手不能。needs-human 4件は追加でできることが無いと再確認。軽めのドキュメント drift 調査（.gitignore/.claude/settings.json/harness.toml/Plans.md/Maintenance.md）では新規のずれは見つからなかった",
       "prs": [
         279
+      ]
+    },
+    {
+      "n": 95,
+      "at": "2026-08-06T11:47:00+09:00",
+      "kind": "scheduled",
+      "by": "in-cluster autopilot",
+      "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。ops-health-report・autopilot heartbeat とも正常、既知の Degraded 3件のみ。backlog の唯一の todo（T-0117）は CronJob schedule（03:30 UTC）未到来のため引き続き着手不能、needs-human 4件も追加対応不可。CHARTER §3 に従い調査し、apps/autopilot/deployment.yaml の image ダイジェストコメントが「ビルド経路が固まった時点で差し替えるプレースホルダ」のまま実態（run #57 以降このダイジェストで継続稼働中）と乖離していたのを発見し実態に即した内容へ書き換えた（T-0124）",
+      "prs": [
+        280
       ]
     }
   ]

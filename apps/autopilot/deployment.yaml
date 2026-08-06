@@ -36,8 +36,11 @@ spec:
           type: RuntimeDefault
       containers:
         - name: autopilot
-          # タグはイメージのビルド経路が固まった時点で差し替えるプレースホルダ。
-          # ghcr の package が private の場合は imagePullSecrets が別途要る
+          # .github/workflows/build-autopilot-image.yml が images/autopilot/ の変更を
+          # main に取り込むたびに ghcr.io へ push する。このダイジェストは対応する
+          # images/autopilot/Dockerfile の内容を指す。中身を変えたら、ビルドが
+          # 終わったのを待ってこの行のダイジェストも合わせて更新する
+          # （ghcr の package が private の場合は imagePullSecrets が別途要る）
           image: ghcr.io/hikuohiku/homelab-autopilot@sha256:1ef41f711651af72fea996ba95c0e0a6e9171f4e6f5579325f54fed1605938a8
           command: ["bash", "/config/loop.sh"]
           securityContext:
