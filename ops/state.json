@@ -1032,7 +1032,7 @@
       "kind": "scheduled",
       "by": "in-cluster autopilot",
       "summary": "オープン PR・autopilot ブランチとも無く中断なし。issue #56 に未読フィードバックなし。ops-health-report・autopilot heartbeat とも正常、既知の Degraded 3件のみ。backlog の唯一の todo（T-0117）の未着手理由を kubectl で裏取りする過程で、CHARTER §2・docs/backup.md が CronJob の schedule を「UTC」と誤記していたと発見（実際は node01 の time.timeZone=Asia/Tokyo により JST で評価される。9時間ずれ）。immich サーバー内蔵の backup.database は対象外で UTC のままと区別して確認。CHARTER・docs/backup.md（計9箇所）を訂正し、T-0117 の notes に正しい次回実行予定（2026-08-07 03:30 JST）を追記した（T-0125）",
-      "prs": []
+      "prs": [283]
     }
   ]
 }
