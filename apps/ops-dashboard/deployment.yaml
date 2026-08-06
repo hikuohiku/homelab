@@ -1,0 +1,118 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ops-dashboard
+  namespace: ops-dashboard
+  labels:
+    app: ops-dashboard
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: ops-dashboard
+  template:
+    metadata:
+      labels:
+        app: ops-dashboard
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      # T-0127 が ops-dashboard ブランチへ push する index.html を初回 sync 前に
+      # 用意する。無いと httpd コンテナが起動直後に 404 を返し続ける。
+      initContainers:
+        - name: fetch-init
+          image: alpine:3.22.5
+          command:
+            - sh
+            - -c
+            - >-
+              wget -qO /www/index.html "$DASHBOARD_URL" ||
+              echo '<html><body>dashboard not published yet</body></html>' > /www/index.html
+          env:
+            - name: DASHBOARD_URL
+              value: https://raw.githubusercontent.com/hikuohiku/homelab/ops-dashboard/index.html
+          volumeMounts:
+            - name: www
+              mountPath: /www
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        # ops-dashboard ブランチ（build.py の publish() が push する、public repo なので
+        # 認証不要で raw.githubusercontent.com から読める）を定期取得して共有 volume に置く。
+        - name: fetcher
+          image: alpine:3.22.5
+          command:
+            - sh
+            - -c
+            - >-
+              while true; do
+                wget -qO /www/index.html.tmp "$DASHBOARD_URL" &&
+                  mv /www/index.html.tmp /www/index.html;
+                sleep "$FETCH_INTERVAL_SECONDS";
+              done
+          env:
+            - name: DASHBOARD_URL
+              value: https://raw.githubusercontent.com/hikuohiku/homelab/ops-dashboard/index.html
+            - name: FETCH_INTERVAL_SECONDS
+              value: "60"
+          volumeMounts:
+            - name: www
+              mountPath: /www
+          # memory limits は付けない: 実測できる環境が無く、OOMKill は回復しないため
+          # 裏付けの無い値で「縛る」変更をしない方針 (CHARTER §4, T-0055 の教訓)。
+          # CPU limits は超過しても throttle で回復するので付けてよい
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+        - name: httpd
+          image: alpine:3.22.5
+          command: ["busybox", "httpd", "-f", "-v", "-p", "8080", "-h", "/www"]
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          volumeMounts:
+            - name: www
+              mountPath: /www
+              readOnly: true
+          resources:
+            requests:
+              cpu: 5m
+              memory: 16Mi
+            limits:
+              cpu: 50m
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: www
+          emptyDir: {}
