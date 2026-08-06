@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "next_id": 121,
-  "updated": "2026-08-06T01:12:00Z",
+  "next_id": 122,
+  "updated": "2026-08-06T01:45:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -2275,6 +2275,26 @@
       "created": "2026-08-06",
       "pr": null,
       "notes": "run #88: T-0106 の manifest 実装（backup専用ExternalSecret 追加）の副産物として分離起票。credential 未登録の間に backup CronJob 側を切り替えると日次バックアップが失敗し続けるため、意図的に manifest 追加のみに留め、この切り替え作業を別タスクにした"
+    },
+    {
+      "id": "T-0121",
+      "domain": "homelab",
+      "title": "ops-health-reporter の autopilot heartbeat 検出窓を tailLines から sinceSeconds に変更",
+      "kind": "fix",
+      "risk": "low",
+      "status": "done",
+      "priority": 42,
+      "why": "run #89 で ops-health-report の autopilot.heartbeat.last_start/last_end が両方 null になっているのを発見。原因は apps/ops-health-reporter/report.py が pod log を tailLines=200 でしか取っていないこと。render.py は claude -p の stream-json イベントを 1 行ずつ出すため、込み入ったイテレーション 1 回で 200 行を超え、直近の \"iteration #N start\" 行が窓の外に押し出されうる。CHARTER §2 が autopilot 自身のハング検知に使う仕組みが、実際には頻繁に効いていない状態だった",
+      "dod": "apps/ops-health-reporter/report.py の pod log 取得を tailLines=200 から sinceSeconds ベース（ITERATION_TIMEOUT_SECONDS 現行3600s の1周分+余裕を確実にカバーする7200s）に変更する。CI（kustomize build 等）green を確認する。次回の ops-health-reporter CronJob 実行（30分毎）後、latest.json の autopilot.heartbeat が null でなく実際の iteration 番号を返すことを確認する",
+      "blocked_by": null,
+      "refs": [
+        "apps/ops-health-reporter/report.py",
+        "apps/autopilot/render.py",
+        "apps/autopilot/deployment.yaml"
+      ],
+      "created": "2026-08-06",
+      "pr": null,
+      "notes": "run #89 で発見・即完遂。修正後の実効性確認（次回 CronJob 実行後の latest.json）は次の起動で見る"
     }
   ]
 }
