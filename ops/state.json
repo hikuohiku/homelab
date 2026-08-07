@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-07T00:20:00Z",
+  "updated": "2026-08-07T00:22:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -209,7 +209,9 @@
       "kind": "in-cluster-loop",
       "by": "autopilot pod (実行役)",
       "summary": "実行役（journal run #206）。前回中断なし(PR #382 merge済み)、フィードバック新規なし、健全性は既知事象(T-0106)のみで異常なし。in_progressのT-0117を継続: termination messageでrestore_rc=0・file_count=3156を確認しdocs/backup.mdに記録、検証専用PVC/Jobを削除してT-0117をdoneに。依存していたT-0116のblocked_byも解消しtodoに戻した。ops/ledger.pyでbacklog 1件・runs 2件をarchiveへ移した。",
-      "prs": []
+      "prs": [
+        383
+      ]
     }
   ]
 }
