@@ -1,0 +1,18 @@
+# heart-and-projects の「ハーネス保護」(設計決定 #7)。
+# ここに列挙したパスは、main ruleset で "Require review from Code Owners" を有効に
+# すると人間 (@hikuohiku) のレビューが必須になる。エージェントは自分の強制装置
+# (予算・watchdog・レビューゲート・壁の denylist) の変更を提案はできるが、
+# 自分で merge することはできない。
+#
+# バックアップ系 (restic) を含めるのは硬い壁 #2 の一部:
+# retention (削除権限) の扱いをエージェントの auto-merge から外す。
+
+/.github/                @hikuohiku
+/ops/heart/              @hikuohiku
+/ops/runner/             @hikuohiku
+/ops/rules.json          @hikuohiku
+/ops/models.json         @hikuohiku
+/ops/validate.py         @hikuohiku
+/apps/autopilot/         @hikuohiku
+apps/*/restic-*.yaml     @hikuohiku
+apps/*/*backup*.yaml     @hikuohiku
