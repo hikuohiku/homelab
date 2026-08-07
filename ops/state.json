@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-07T00:22:00Z",
+  "updated": "2026-08-07T00:35:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-06T23:31:00Z"
+    "last_read": "2026-08-07T00:35:00Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc",
@@ -212,6 +212,14 @@
       "prs": [
         383
       ]
+    },
+    {
+      "n": 207,
+      "at": "2026-08-07T00:35:00Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #207）。前回中断なし(PR #383 merge済み)、フィードバック新規なし。backlog todoの先頭T-0116（PBS VM退役）に着手。DoD(3)（停止・削除手順）をpbs.tf.ignore/docs/backup.mdに明記。DoD(2)（PBS上の依存ジョブ・データ確認）はautopilotにProxmox credentialが無く確認不能なため issue #56 で構築セッションに確認を依頼し needs-human に変更した。",
+      "prs": []
     }
   ]
 }

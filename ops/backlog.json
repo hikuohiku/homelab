@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 166,
-  "updated": "2026-08-07T00:22:00Z",
+  "updated": "2026-08-07T00:35:00Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -190,18 +190,34 @@
       "title": "PBS VM (qemu/112) を退役する",
       "kind": "chore",
       "risk": "medium",
-      "status": "todo",
+      "status": "needs-human",
       "priority": 43,
       "why": "T-0072（run #82）の判断: T-0065 が挙げた実データ5対象のうち、restic backup + 復元試験まで完了しているのは immich/vaultwarden/coder-postgres 系の4対象のみで、`coder-<workspace-id>-home`（T-0078）が未実装の間は PBS の VM 単位バックアップが唯一の（未確認だが）保険になっている。T-0078 が完了し、workspace home も復元試験まで確認できたら、node01 の全実データがアプリレベルの restic backup でカバーされ、PBS の VM 単位バックアップは完全に冗長になる（node01 VM 自体は Terraform+NixOS で宣言的に再現可能なため）",
       "dod": "T-0078 が done になった後、(1) workspace home の restic backup が実際に成功し復元試験も通ることを確認する、(2) PBS 上に他に依存しているジョブ・データが無いか最終確認する、(3) `terraform/proxmox/pbs.tf.ignore` にこの記録を残しつつ PBS VM (qemu/112) の停止・削除手順を明記する。実際の VM 停止・削除は Proxmox 管理コンソールでの操作が要り、autopilot の Proxmox credential（PVEAuditor、読み取り専用）では実行できないため、この最終手順は needs-human として人間に引き継ぐ",
       "blocked_by": null,
+      "needs_human_reason": "DoD(1)(3) は完了（T-0117 で復元試験成功、pbs.tf.ignore に停止・削除手順を明記済み）。残る DoD(2)（PBS 上に backup ジョブ・データが実在するか）は PBS/Proxmox VE への到達性が要り、この in-cluster autopilot 実行環境には Proxmox credential が無いため確認できない。issue #56 で構築セッションに確認を依頼済み（返信待ち）。確認が取れ次第、実際の VM 停止・削除（`qm shutdown 112` / `qm destroy 112`、物理/管理コンソール操作）を人間にお願いする",
+      "human_action": {
+        "summary": "PBS (qemu/112) 上に backup ジョブ・データが実在するかの確認結果を issue #56 で待っています。確認が取れたら、terraform/proxmox/pbs.tf.ignore の手順どおり PBS VM の停止・削除をお願いします",
+        "why": "PBS の VM 単位バックアップは restic 側の復元試験完了により理屈のうえでは冗長になったが、PBS 自身が実際に何を保護していたかを一度も確認しないまま止めると、確認していない前提で『無かった』とみなす安全でない判断になる（CHARTER §4）",
+        "steps": [
+          "issue #56 の依頼コメント（下記リンク）への構築セッションの回答を待つ、または人間が直接 Proxmox で Datacenter > Backup（`pvesh get /cluster/backup`）を確認する",
+          "PBS を対象にした backup ジョブが無い、または削除可能と判断できたら、terraform/proxmox/pbs.tf.ignore に記載した手順（shutdown → 1〜2週間観察 → destroy）で PBS VM (qemu/112) を停止・削除する",
+          "削除後、pbs.tf.ignore / CLAUDE.md / README.md / Plans.md の pbs 関連記述を past tense に更新する PR を出すよう autopilot に issue #56 で伝えるか、次の起動が自動で拾えるよう state に一言残してください"
+        ],
+        "links": [
+          {
+            "label": "issue #56 の確認依頼コメント",
+            "url": "https://github.com/hikuohiku/homelab/issues/56#issuecomment-5210344855"
+          }
+        ]
+      },
       "refs": [
         "docs/backup.md",
         "terraform/proxmox/pbs.tf.ignore"
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #82: T-0072（PBS 退役判断）から実行タスクとして分離起票 | run #102 (計画役): blocked_by が T-0078 のままだったが、T-0078 は run #84 で done・PR #264 merge 済み（実装は完了済み）。実際に残っているのは復元試験（分離済みの T-0117、CronJob 初回実行が 2026-08-07 03:30 JST まで到来しないため未実施）で、blocked_by を T-0117 に訂正した（CHARTER §2 計画役の作業『blocked/needs-human の理由が古い前提のままになっていないか確かめる』）。 | run #206: T-0117 の DoD(1)(2) が完了（restore_rc=0, docs/backup.md 記録済み）したため blocked_by を解消し todo に戻した。DoD(2)『PBS 上に他に依存しているジョブ・データが無いか最終確認する』・DoD(3)『停止・削除手順を明記する』は未着手のまま残っている。"
+      "notes": "run #82: T-0072（PBS 退役判断）から実行タスクとして分離起票 | run #102 (計画役): blocked_by が T-0078 のままだったが、T-0078 は run #84 で done・PR #264 merge 済み（実装は完了済み）。実際に残っているのは復元試験（分離済みの T-0117、CronJob 初回実行が 2026-08-07 03:30 JST まで到来しないため未実施）で、blocked_by を T-0117 に訂正した（CHARTER §2 計画役の作業『blocked/needs-human の理由が古い前提のままになっていないか確かめる』）。 | run #206: T-0117 の DoD(1)(2) が完了（restore_rc=0, docs/backup.md 記録済み）したため blocked_by を解消し todo に戻した。DoD(2)『PBS 上に他に依存しているジョブ・データが無いか最終確認する』・DoD(3)『停止・削除手順を明記する』は未着手のまま残っている。 | run #207（実行役）: DoD(3) を terraform/proxmox/pbs.tf.ignore に追記（停止・削除手順、docs/backup.md にも追記）。DoD(2) は autopilot 自身に Proxmox credential が無く確認不能なため、issue #56 で構築セッションに確認を依頼し needs-human に変更した（CHARTER §3『needs-human に落とす前に構築セッションで確認できないか考える』）。"
     },
     {
       "id": "T-0118",

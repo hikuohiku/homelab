@@ -412,6 +412,17 @@ T-0116 として別途起票した（`blocked_by: T-0078`）。PBS VM 自体の�
 管理コンソールでの操作が要り、autopilot の Proxmox credential は PVEAuditor（読み取り専用）
 のため実行できない。人間の物理操作が要る点は T-0116 側で明記する。
 
+**2026-08-07 追記（T-0117 完了、T-0116 再開）**: workspace home の初回 backup 成功
+（`lastSuccessfulTime` 一致）と復元試験（`restore_rc=0`, 31秒, 3156ファイル, 925MiB）が
+完了し、5対象すべてが restic backup + 復元試験でカバーされた。PBS の VM 単位バックアップは
+理屈のうえでは冗長になったが、**PBS 自身が実際に何のジョブを持っているか（node01 を含む
+VM 単位バックアップとして機能していたか）は依然未確認のまま**（上記「わからないこと」節、
+方針転換で確認自体を打ち切っていた）。停止・削除の実行手順は
+`terraform/proxmox/pbs.tf.ignore` に記載した。手順の最初のステップ（PBS 上の backup ジョブ
+実在確認）は autopilot・構築セッションいずれも実行環境から PBS/Proxmox に到達できない
+（autopilot にはこの実行環境に Proxmox credential が無い）ため、issue #56 で構築セッションに
+確認を依頼した。
+
 ## これに依存しているタスク
 
 - T-0029（immich postgres/vchord のメジャー更新、データを失いうる変更）・T-0023（coder
