@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-07T00:36:54Z",
+  "updated": "2026-08-07T00:47:01Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -228,6 +228,16 @@
       "by": "autopilot pod (計画役)",
       "summary": "計画役（journal run #208）。前回の中断なし、フィードバック新規なし（ops-feedback ブランチ不在、issue #56 に非自己投稿の新着なし）、健全性は既知事象(T-0106)のみで異常なし。inbox 空。blocked/needs-human 13件を棚卸ししたが、いずれも前提は現在も成り立っており更新不要と判断（T-0153/T-0156/T-0157 の workflow scope 待ち・T-0112/T-0144 の返信待ち・T-0116 の依頼直後・T-0084 の next_review 未到来）。todo は T-0158/T-0162〜T-0165 の5件で足りており新規起票なし。",
       "prs": []
+    },
+    {
+      "n": 209,
+      "at": "2026-08-07T00:47:01Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #209）。前回の中断PR #385（記録のみ、low risk・CI green）を確認しmerge。フィードバック新規なし、健全性は既知事象(T-0106)のみで異常なし。T-0163/T-0164は複数論点を含み1PRに収まらないため見送り、T-0165（REVIEW_EVERYの根拠数値の三重化解消）に着手。ops/CHARTER.md §3に根拠を一本化し、§6冒頭の再掲とloop.shのコメントを§3への参照に置き換えた。T-0163/T-0164の分割提案をops/inbox.mdに記録。",
+      "prs": [
+        386
+      ]
     }
   ]
 }
