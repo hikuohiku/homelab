@@ -212,6 +212,13 @@ class Heart:
             self.gh, self.repo_dir, cursors, self.cfg.rules,
             self.cfg.feedback_issue, self.cfg.feedback_branch,
         )
+        if vetoes or stop_all or review_needed:
+            # kill switch の受信は必ず可視化する (該当プロジェクトが無く action が
+            # 生まれない場合でも、veto 疎通試験の結果を外から確認できるように)
+            log(
+                f"feedback received: vetoes={vetoes} stop_all={stop_all} "
+                f"review_needed={len(review_needed)}"
+            )
         curriculum = facts.collect_curriculum(
             self.cfg.data_dir, self.repo_dir, self.gh
         )
@@ -265,6 +272,8 @@ class Heart:
                 "unhealthy_apps": unhealthy_apps,
                 "health_fresh": health_fresh,
                 "breaker": breaker_info,
+                "vetoes": vetoes,
+                "stop_all": stop_all,
                 "actions": [a["type"] for a in actions],
                 "shadow": self.cfg.shadow,
             },
