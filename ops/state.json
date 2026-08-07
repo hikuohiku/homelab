@@ -208,6 +208,16 @@
       "prs": [
         381
       ]
+    },
+    {
+      "n": 205,
+      "at": "2026-08-07T00:05:00Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #205）。前回中断なし(PR #381 merge済み)、フィードバック新規なし、健全性は既知事象(T-0106)のみで異常なし。backlog todoのT-0117（coder workspace home backupの初回実行確認・復元試験）に着手。DoD(1)はkubectlで確認済み、DoD(2)のためapps/coder/workspace-home-restic-restore-verify-job.yamlを新設しPR #382として提出、DoD(3)は Pod GC済みのため見送り。T-0117はin_progressのまま継続。",
+      "prs": [
+        382
+      ]
     }
   ]
 }
