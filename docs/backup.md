@@ -278,6 +278,26 @@ DB 接続不要）の2段で行った。
 
 検証専用の `coder-postgres-restic-restore-verify` Job は確認が取れたため削除した。
 
+### coder workspace home（完了、2026-08-07、T-0117）
+
+T-0071（immich/vaultwarden/coder-postgres）とは別タスク。T-0078 で実装したオーケストレータ方式の
+workspace home バックアップに対する初回の復元試験。2 workspace のうちデータ量が小さいと見込まれる
+"test"（workspace_id: `7fdb7787-e2b7-4a6d-b54f-1640b5d9b587`）を対象に、CHOWN/FOWNER/DAC_OVERRIDE
++ クリーンアップを初回実装から織り込んだ `apps/coder/workspace-home-restic-restore-verify-job.yaml`
+で検証し、試行錯誤なく初回実行で成功した。
+
+| 項目 | 結果 |
+|---|---|
+| restore 結果 | 成功（`restore_rc=0`） |
+| 復元にかかった時間 | 31 秒（約925 MiB） |
+| 復元されたファイル数 | 3904 files/dirs（restic のサマリ値。ジョブ内の `find -type f` カウントは 3156） |
+
+検証専用の `coder-workspace-home-restore-verify` PVC/Job は確認が取れたため削除した。
+
+DoD(3)（オーケストレータ Pod の実メモリ/CPU 使用量確認）は、Pod が毎回 30 秒未満で完了・GC
+されるため 120 秒間隔のループでは実行中に捕まえられず、DoD の「可能であれば」規定により見送った
+（run #205 の journal に記録済み）。
+
 **T-0071 は immich・vaultwarden・coder-postgres の3コンポーネント全て完了。**
 これに依存していた T-0023（coder メジャー更新）・T-0027（immich メジャー更新）・T-0029
 （immich postgres/vchord メジャー更新）は `blocked_by` が解消したため `todo` に戻した。
