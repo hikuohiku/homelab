@@ -35,38 +35,6 @@
   },
   "runs": [
     {
-      "n": 186,
-      "at": "2026-08-06T21:14:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #186）。PR #376/#377はGitHub Actions incident（qcvjkzcs7j74）が20:34:17Z版のまま変化なし（本回確認21:14:26Z）のため、run #183〜#185の方針（resolved/monitoring待ち）を継続しリトライ見送り。actions/runs?head_sha=も両ブランチとも引き続きtotal_count:0。feedback/健全性とも新規変化なし、T-0117/T-0158とも直列化ルールに従い今回も着手せず。",
-      "prs": []
-    },
-    {
-      "n": 187,
-      "at": "2026-08-06T16:51:41Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (レビュー役・利用者視点)",
-      "summary": "レビュー役・利用者視点（journal run #172）。初回実行（review-log に既存エントリ無し）。フィードバック新着3件をfeedback.jsonにnewで追記。プロンプト記載のダッシュボード確認手順を実際に辿り、(R-001) kubectl get svc がRBACのservices欠如でForbidden、(R-002) chromium/フォント追加(commit 8eacc31)がdeployment.yamlのimage digest未更新で稼働Podに届いておらず描画して見る手段が無い、(R-003) 健全性サマリ「落ちている: coder/immich/vaultwarden」にT-0106由来の無害な既知状態である注記が無く初見で誤読する、の3件を発見しreview-log.md/inbox.mdに記録。この2件（n:187/188）は PR #377 が別ブランチとして開いたまま長時間 GitHub Actions outage で merge できなかったため、run #187（計画役）が PR #376 と #377 を手動 merge して1本化した際に state.json 側へ追記した（journal 側は本来の時系列位置に既に挿入済み）。",
-      "prs": []
-    },
-    {
-      "n": 188,
-      "at": "2026-08-06T20:18:29Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (レビュー役・利用者視点)",
-      "summary": "レビュー役・利用者視点（journal run #172 続き）。前回の中断（PR #377, open のまま）を新規タスクより先に回収。R-001/R-002 を自分でも独立に再現確認。PR #377 の CI が2回連続 workflow run 0件で止まっていたため空コミットで retrigger したが同様に0件、githubstatus.com で GitHub Actions が major_outage と確認（run #176/#178 の『解消済み』表記は誤りだった）。追加で気づいた「ops/feedback.jsonの内容がダッシュボードに一切表示されない」点はこの回の指摘上限（3件、PR #377で使用済み）を避けるため今回は起票せず申し送りのみ。フィードバック新規なし。",
-      "prs": []
-    },
-    {
-      "n": 189,
-      "at": "2026-08-06T21:31:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (計画役)",
-      "summary": "計画役（journal run #187）。PR #376/#377 は GitHub Actions incident（qcvjkzcs7j74）が引き続き investigating（update は 21:30:42Z 版へ進んだが webhook throttle 継続）のためリトライ見送り。2つの open PR が #172 の分岐以降15回以上の起動にわたって独立に ops/ ファイルを編集し続けコンフリクト確実だったため、autopilot/run-172-review-user を autopilot/run-172-records へ手動 merge で1本化（journal/state.json は at タイムスタンプで正しい時系列に挿入）。レビュー役が取り込んだ feedback 新着3件は autopilot 自身の自己投稿（issue #56 author が hikuohiku PAT と同一のため区別不能）と判明し declined、構造的原因を T-0159 として起票。inbox の R-001/R-002/R-003 を T-0160/T-0161/T-0162 として起票し review-log.md の状態を更新、T-0117 の GC調査メモは同タスクの notes へ折り込みinbox を空にした。backlog 20→24件。健全性・issue #56 とも新規異常なし。",
-      "prs": []
-    },
-    {
       "n": 190,
       "at": "2026-08-06T21:38:00Z",
       "kind": "in_cluster_loop",

@@ -598,25 +598,6 @@
       "created": "2026-08-06",
       "pr": null,
       "notes": "PR #378（レビュー役・アーキテクチャ初回実行）のR-001が、PR #376との統合時にR-004として採番し直された。起票は統合作業を行った計画役による"
-    },
-    {
-      "id": "T-0165",
-      "domain": "homelab",
-      "title": "REVIEW_EVERY の根拠数値が CHARTER.md 2箇所と loop.sh に三重化しているのを一本化する（R-005）",
-      "kind": "chore",
-      "risk": "low",
-      "status": "done",
-      "priority": 52,
-      "why": "レビュー役・アーキテクチャレンズ R-005（ops/review-log.md参照）。REVIEW_EVERY=12の根拠数値（実測約9分/イテレーション、journal run #126〜#155の30起動で264分、レビューは約1.8時間おき、同じレンズは約3.5時間おき、実作業損失8%）が ops/CHARTER.md:173-176（§3）・ops/CHARTER.md:740（§6冒頭の再掲）・apps/autopilot/loop.sh:35-38（REVIEW_EVERYのコメント）の3箇所にほぼ同じ文面で重複している。1箇所を直しても他が追随しない構造で、とくにloop.sh側はコード上の意味を持たないコメントのため、値がズレてもCIにも起動時ログにも表れず気づけない",
-      "dod": "根拠の測定値（実測約9分/イテレーション等）の記述をCHARTER.md §3の1箇所にのみ残し、CHARTER.md §6冒頭の再掲は削除してCHARTER §3への参照（例: 'REVIEW_EVERYの根拠は§3参照'）に置き換える。apps/autopilot/loop.shのコメントも同様に、数値の再掲ではなくCHARTER §3への参照コメントに置き換える。再測定が必要になったとき1箇所を直せば済む状態にする",
-      "blocked_by": null,
-      "refs": [
-        "ops/CHARTER.md",
-        "apps/autopilot/loop.sh"
-      ],
-      "created": "2026-08-06",
-      "pr": 386,
-      "notes": "PR #378（レビュー役・アーキテクチャ初回実行）のR-002が、PR #376との統合時にR-005として採番し直された。起票は統合作業を行った計画役による 実行役 run #209: CHARTER.md §3 に一本化し、§6冒頭の再掲と loop.sh のコメントを §3 への参照に置き換えた（#386）。"
     }
   ]
 }
