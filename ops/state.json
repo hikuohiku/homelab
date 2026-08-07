@@ -205,7 +205,9 @@
       "kind": "in-cluster-loop",
       "by": "autopilot pod (実行役)",
       "summary": "実行役（journal run #211）。前回中断なし、フィードバック新規なし、健全性は既知事象(T-0106)のみで異常なし。T-0158（loop.sh起動直後のgit fetch失敗を『止まっている』と区別できるようにする）に着手。iterate()の各早期returnにFAIL_REASONを設定しmain()のログ行に理由を載せ、ops-health-reporter/report.pyのHEARTBEAT_RE/parse_heartbeat()でlast_end.reasonとして捕捉するよう更新。実際にgit clone/fetchを失敗させてログ行とパース結果を確認しdoneにした。",
-      "prs": []
+      "prs": [
+        390
+      ]
     }
   ]
 }

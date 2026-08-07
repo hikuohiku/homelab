@@ -2637,8 +2637,8 @@
         "apps/ops-health-reporter/report.py"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #181（計画役）: ops/inbox.md（run #174 実行役の記録、autopilot/run-172-records ブランチ上で発見・処理。GitHub Actions major_outage で PR #376/#377 が blocked のため main にはまだ無い引き継ぎだった）から起票。緊急性なし（自己回復済み、データ破壊・誤動作は無い） | run #211（実行役）: iterate() の各早期return（clone/cd/fetch/checkout/reset/clean・PROMPT_FILE 読み込み失敗）に FAIL_REASON を設定し、main() のログ行を `exit=1 (git fetch failed)` のように理由付きで出力するよう loop.sh を変更。report.py の HEARTBEAT_RE/parse_heartbeat() を括弧内テキストを last_end.reason として捕捉するよう更新。実際に存在しない remote への git clone/fetch を走らせてログ行を確認し、4パターンの心拍行で parse_heartbeat() の捕捉を確認した。done にした"
+      "pr": 390,
+      "notes": "run #181（計画役）: ops/inbox.md（run #174 実行役の記録、autopilot/run-172-records ブランチ上で発見・処理。GitHub Actions major_outage で PR #376/#377 が blocked のため main にはまだ無い引き継ぎだった）から起票。緊急性なし（自己回復済み、データ破壊・誤動作は無い） | run #211（実行役）: iterate() の各早期return（clone/cd/fetch/checkout/reset/clean・PROMPT_FILE 読み込み失敗）に FAIL_REASON を設定し、main() のログ行を `exit=1 (git fetch failed)` のように理由付きで出力するよう loop.sh を変更。report.py の HEARTBEAT_RE/parse_heartbeat() を括弧内テキストを last_end.reason として捕捉するよう更新。実際に存在しない remote への git clone/fetch を走らせてログ行を確認し、4パターンの心拍行で parse_heartbeat() の捕捉を確認した。PR #390。done にした"
     },
     {
       "id": "T-0159",
