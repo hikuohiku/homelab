@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 166,
-  "updated": "2026-08-07T01:33:40Z",
+  "updated": "2026-08-07T02:09:40Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -540,8 +540,8 @@
         "ops/review-log.md"
       ],
       "created": "2026-08-06",
-      "pr": null,
-      "notes": "PR #378（レビュー役・アーキテクチャ初回実行）のR-001が、PR #376との統合時にR-004として採番し直された。起票は統合作業を行った計画役による。実行役 run #209 が『ルール本体と経緯の全編仕分け（DoD本体）は実行役の1回で仕上げるには大きすぎる』と判断し着手を見送っていたが、DoD のうち validate.py へのサイズ上限チェック追加（check_charter_size(), CHARTER_MAX_BYTES=120,000）だけは独立した小さな論点として切り出せたため実行役 run #215 で実施し in_progress にした（T-0163 run #212 と同型の分割）。残る DoD は『経緯部分を ops/CHARTER-history.md 等へ切り出し、ルール本体だけを CHARTER.md に残す』本体作業（全編にわたる編集量が大きい）。しきい値 120,000 は現状 88,936 bytes に対して余裕が少なく、次に何か追記すると CI が落ちうる想定の設計（backlog.json と同じ絶対値を採用し、圧縮を先送りしにくくする狙い）。"
+      "pr": 396,
+      "notes": "PR #378（レビュー役・アーキテクチャ初回実行）のR-001が、PR #376との統合時にR-004として採番し直された。起票は統合作業を行った計画役による。実行役 run #209 が『ルール本体と経緯の全編仕分け（DoD本体）は実行役の1回で仕上げるには大きすぎる』と判断し着手を見送っていたが、DoD のうち validate.py へのサイズ上限チェック追加（check_charter_size(), CHARTER_MAX_BYTES=120,000）だけは独立した小さな論点として切り出せたため実行役 run #215 で実施し in_progress にした（T-0163 run #212 と同型の分割）。実行役（本PR、#396）: 残る DoD本体（経緯部分の切り出し）のうち、密度が最も高い §2 実行サイクル・§4 PR の作り方（全サブセクション）と、§5.3/§5.4/§6/§7.1 を処理した。新設 `ops/CHARTER-history.md` に25件の経緯エントリを移し、CHARTER.md 側には1行要約 + `（経緯: ops/CHARTER-history.md#見出し）` のポインタを残した。ポインタは GitHub のアンカー生成規則（記号除去・空白をハイフン化）に合わせて機械的に検証済み（全25件一致）。CHARTER.md: 88,936 → 84,425 bytes（-5,511、上限120,000に対する余裕は31,064→35,575に拡大）。**残作業**: §3・§5.1/§5.2 のテーブルセル内の短い経緯注記・§5.5 の `/tmp` 事故（run #132）の詳細説明・§7 journal節のT-0163事例・§1/§8/§9 は未処理。これらは個別の指摘文が短く『経緯を切り出すと本文が成り立たなくなる』ボーダーラインのものが多く（判断根拠は本PRの説明を参照）、次に触れる実行役が個別に要否を判断すること。in_progress のまま維持する。"
     }
   ]
 }
