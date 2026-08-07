@@ -2719,6 +2719,25 @@
       "notes": "run #187（計画役）: ops/review-log.md R-003 を起票。R-003 の状態を『起票済 T-0162』に更新した。 | run #210（実行役）: 健全性レポートが externalsecret 詳細を持たず機械判定できないため、DoD のフォールバック方針どおり静的な注記にした。bad apps が {coder, immich, vaultwarden} の既知集合に収まる場合と一部混在する場合の両方をローカルで検証（後者は既知分のみ注記し他は『要確認』と表示）。done。"
     },
     {
+      "id": "T-0163",
+      "domain": "homelab",
+      "title": "既知の外部障害でリトライ不能と判明した後、確認間隔を伸ばす backoff の仕組みを作る",
+      "kind": "feature",
+      "risk": "medium",
+      "status": "done",
+      "priority": 50,
+      "why": "実行役の気づき（ops/inbox.md、R-NNN無し）。GitHub Actions の大規模障害（incident qcvjkzcs7j74、2026-08-06 15:22 UTC〜、22:00 UTC 時点も investigating 継続）でPR #376がblockedのあいだ、INTERVAL_SECONDS（120秒）ループが毎回incident statusを確認するだけの起動を繰り返し、run #172〜#193（6時間以上・約20回）でほぼ同一内容のjournal/state.jsonエントリを量産した。CHARTER §7「帳簿には上限がある」が指摘する読み込みコスト問題を自ら悪化させている。既知の外部障害でリトライ不能と判明した後は、確認間隔を伸ばす／次に意味のある変化がある可能性が高いタイミングまで待つ、といった仕組みが無い",
+      "dod": "(1) 最小の対処として、CHARTERに「同一の既知ブロッカー（例: 同一incident id、同一reason）を前回確認時と同内容のまま連続して確認しただけの回は、journal/state.jsonへのエントリを簡潔な1〜2行（前回runへの参照＋『変化なし』のみ）に留めてよい」というルールを追加し、run #172〜#193のような冗長な記録の繰り返しを防ぐ。(2) より根本的な対処として、apps/autopilot/loop.shにconsecutive no-op回数を数え、一定回数を超えたらINTERVAL_SECONDSを段階的に伸ばす（上限を設けてunboundedにはしない）backoff機構の追加を検討する。(2)はloop.shというautopilot自身の生存に関わるコア機構の変更のため、1 PR 1コンポーネントで刻み、変更前後でPodが正常に起動・ループし続けることを実機で確認してから展開する",
+      "blocked_by": null,
+      "refs": [
+        "apps/autopilot/loop.sh",
+        "ops/CHARTER.md"
+      ],
+      "created": "2026-08-06",
+      "pr": 392,
+      "notes": "run #172-193統合時の計画役（journal run #173相当の統合作業）が起票。inbox（R-NNN無し、実行役の気づき）より。run #209〜#211（実行役）は(1)(2)が1タスクに同居し1 PR 1論点に沿わないとして着手を見送り、inboxに分割提案を記録した。run #212（実行役）でDoD(1)（CHARTER §7へのルール追加）のみ実施（#391）。DoD(2)（loop.shへのbackoff機構）は残作業のためstatusをin_progressのまま維持し、taskは分割しない — DoD(1)を切り離したことで残るDoD(2)自体が単一論点になり、分割提案の前提が解消したため。run #213（実行役）で DoD(2)（loop.sh の backoff 機構）を実装し PR #392 を作成した。origin/main の commit が NOOP_BACKOFF_THRESHOLD（既定3）回連続で動かなければ次の sleep を 2^n 倍（既定上限1800秒）に伸ばし、main が動いた回は即座に通常間隔へ戻す。autopilot 自身の生存に関わるコア機構の変更のため、CHARTER §4「縛る変更には実測か裏付けが要る」に倣いこの回では merge しない（cooldown。T-0158/#390 と同じ扱い）。次の起動が PR #392 を CI green 確認のうえmerge し、ConfigMap 反映後の in-cluster kubectl で Pod が Running / restarts 増加なしで回り続けていること、ops-health-report の autopilot.heartbeat が exit_code 0 で継続していることを確認してから done にする。run #214（実行役）で PR #392（cooldown解除）と PR #393（記録更新）をこの回でmerge。merge後、in-cluster kubectl で autopilot Pod（autopilot-7d77766457-cfnvg）が Running・restarts 0 のまま継続していることを確認し、ops-health-report（generated_at 2026-08-07T01:30:04Z）の autopilot.heartbeat が iteration 1 で exit_code 0・last_start iteration 2 と、ConfigMap 反映後の reexec_if_updated 経由で iteration カウンタがリセットされて正常に再開したことを確認できたため done にした"
+    },
+    {
       "id": "T-0165",
       "domain": "homelab",
       "title": "REVIEW_EVERY の根拠数値が CHARTER.md 2箇所と loop.sh に三重化しているのを一本化する（R-005）",
