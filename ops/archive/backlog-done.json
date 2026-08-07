@@ -2682,6 +2682,24 @@
       "notes": "run #187（計画役）: ops/review-log.md R-002 を起票。R-002 の状態を『起票済 T-0161』に更新した。T-0153（CI検出の仕組み自体）とは別論点として分離。 run #201（実行役）: PR #376 merge後の直列化ルールに従い着手。commit 8eacc31 (chromium/font追加) が main へ入った push (merge commit 72eaec33ced3847c8b9030354d04261318b675fc、workflow run 31102707031, success) が実際にghcr.ioへ push したイメージのindex digestを ghcr.io/v2/.../manifests/72eaec33... へGET（ghcr.io/tokenで取得した匿名pullトークン使用）して実測: sha256:6d0cf8b13d602f189d75b48ef654cb0cfd0fe999740782928199097b7451bf75（現行pin同様OCI image index）。deployment.yamlのdigestをこれに更新。"
     },
     {
+      "id": "T-0162",
+      "domain": "homelab",
+      "title": "ダッシュボードの健全性サマリに coder/immich/vaultwarden Degraded が T-0106 由来の既知事象である旨を注記する（レビュー役 R-003）",
+      "kind": "feature",
+      "risk": "low",
+      "status": "done",
+      "priority": 55,
+      "why": "レビュー役 run #172（利用者視点、R-003, PR #377）の発見。ダッシュボード先頭の健全性サマリが『落ちている: coder、immich、vaultwarden』とだけ赤字表示し、これが T-0106（Doppler キー未登録による ExternalSecret の SecretSyncedError、Pod 自体は全て Running/Ready で実サービスへの影響なし）由来の無害な既知状態であることの注記が無い。初見の人間は『3 サービスが落ちている』と誤読する。事情を辿るには優先度順19件の待ち行列を14番目（T-0106）までスクロールし、さらに完了扱いの T-0122 まで辿る必要があり、VISION が名指しで求める『(a) いまシステムは健康か』にダッシュボード単体では正しく・素早く答えられない",
+      "dod": "`ops/dashboard/build.py` の健全性サマリ生成部分で、Degraded な Application が T-0106 由来（`SecretSyncedError` かつ対象が `<app>-restic-backup-credentials` のみ）と機械的に判定できる場合に、サマリ内に一言の注記（例: 『既知の原因あり (T-0106)、実サービスへの影響なし』）を添える。機械判定が難しければ、少なくとも静的な注記（『Degraded の詳細は T-0106 を参照』等、対象アプリ名を明示）を追加する。生成した HTML を目視確認し、初見でも『実害なし』と分かる文言になっているか確認する",
+      "blocked_by": null,
+      "refs": [
+        "ops/dashboard/build.py"
+      ],
+      "created": "2026-08-06",
+      "pr": 388,
+      "notes": "run #187（計画役）: ops/review-log.md R-003 を起票。R-003 の状態を『起票済 T-0162』に更新した。 | run #210（実行役）: 健全性レポートが externalsecret 詳細を持たず機械判定できないため、DoD のフォールバック方針どおり静的な注記にした。bad apps が {coder, immich, vaultwarden} の既知集合に収まる場合と一部混在する場合の両方をローカルで検証（後者は既知分のみ注記し他は『要確認』と表示）。done。"
+    },
+    {
       "id": "T-0165",
       "domain": "homelab",
       "title": "REVIEW_EVERY の根拠数値が CHARTER.md 2箇所と loop.sh に三重化しているのを一本化する（R-005）",

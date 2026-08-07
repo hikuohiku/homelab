@@ -542,24 +542,6 @@
       "notes": "run #181（計画役）: ops/inbox.md（run #174 実行役の記録、autopilot/run-172-records ブランチ上で発見・処理。GitHub Actions major_outage で PR #376/#377 が blocked のため main にはまだ無い引き継ぎだった）から起票。緊急性なし（自己回復済み、データ破壊・誤動作は無い）"
     },
     {
-      "id": "T-0162",
-      "domain": "homelab",
-      "title": "ダッシュボードの健全性サマリに coder/immich/vaultwarden Degraded が T-0106 由来の既知事象である旨を注記する（レビュー役 R-003）",
-      "kind": "feature",
-      "risk": "low",
-      "status": "done",
-      "priority": 55,
-      "why": "レビュー役 run #172（利用者視点、R-003, PR #377）の発見。ダッシュボード先頭の健全性サマリが『落ちている: coder、immich、vaultwarden』とだけ赤字表示し、これが T-0106（Doppler キー未登録による ExternalSecret の SecretSyncedError、Pod 自体は全て Running/Ready で実サービスへの影響なし）由来の無害な既知状態であることの注記が無い。初見の人間は『3 サービスが落ちている』と誤読する。事情を辿るには優先度順19件の待ち行列を14番目（T-0106）までスクロールし、さらに完了扱いの T-0122 まで辿る必要があり、VISION が名指しで求める『(a) いまシステムは健康か』にダッシュボード単体では正しく・素早く答えられない",
-      "dod": "`ops/dashboard/build.py` の健全性サマリ生成部分で、Degraded な Application が T-0106 由来（`SecretSyncedError` かつ対象が `<app>-restic-backup-credentials` のみ）と機械的に判定できる場合に、サマリ内に一言の注記（例: 『既知の原因あり (T-0106)、実サービスへの影響なし』）を添える。機械判定が難しければ、少なくとも静的な注記（『Degraded の詳細は T-0106 を参照』等、対象アプリ名を明示）を追加する。生成した HTML を目視確認し、初見でも『実害なし』と分かる文言になっているか確認する",
-      "blocked_by": null,
-      "refs": [
-        "ops/dashboard/build.py"
-      ],
-      "created": "2026-08-06",
-      "pr": 388,
-      "notes": "run #187（計画役）: ops/review-log.md R-003 を起票。R-003 の状態を『起票済 T-0162』に更新した。 | run #210（実行役）: 健全性レポートが externalsecret 詳細を持たず機械判定できないため、DoD のフォールバック方針どおり静的な注記にした。bad apps が {coder, immich, vaultwarden} の既知集合に収まる場合と一部混在する場合の両方をローカルで検証（後者は既知分のみ注記し他は『要確認』と表示）。done。"
-    },
-    {
       "id": "T-0163",
       "domain": "homelab",
       "title": "既知の外部障害でリトライ不能と判明した後、確認間隔を伸ばす backoff の仕組みを作る",
