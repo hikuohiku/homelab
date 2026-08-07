@@ -530,6 +530,16 @@ def render_pulse(state, health, prs, runs) -> str:
         atone = "crit" if bad else "ok"
         atext = f"{len(apps) - len(bad)} / {len(apps)} 正常"
         asub = ("落ちている: " + "、".join(E(str(a.get("name"))) for a in bad[:4])) if bad else fresh
+        # T-0162: coder/immich/vaultwarden の Degraded は Doppler 未登録の
+        # ExternalSecret（T-0106）由来と分かっている既知事象。健全性レポートは
+        # externalsecret の詳細まで持たないので機械判定はできず、静的な注記に留める。
+        bad_names = {str(a.get("name")) for a in bad}
+        known_t0106 = {"coder", "immich", "vaultwarden"}
+        if bad_names and bad_names <= known_t0106:
+            asub += "（既知の原因あり: T-0106、実サービスへの影響なし）"
+        elif bad_names & known_t0106:
+            asub += (f"（うち {'、'.join(sorted(bad_names & known_t0106))} は"
+                      "既知の原因あり: T-0106、実サービスへの影響なし。他は要確認）")
         if bad and ftone != "ok":
             asub += f"（{fresh}）"
     else:
