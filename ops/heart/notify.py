@@ -53,7 +53,12 @@ class Notifier:
         req = urllib.request.Request(
             self.webhook,
             data=json.dumps({"content": text[:1900]}).encode(),
-            headers={"Content-Type": "application/json"},
+            headers={
+                "Content-Type": "application/json",
+                # Python 既定の UA (Python-urllib/3.x) は Discord 側 (Cloudflare) が
+                # 403 で弾く。2026-08-07 の疎通試験で実測 (curl は 204、urllib は 403)
+                "User-Agent": "homelab-heart/1 (+https://github.com/hikuohiku/homelab)",
+            },
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=15):
@@ -153,7 +158,10 @@ def main():
     req = urllib.request.Request(
         url,
         data=json.dumps({"content": f"[test] {text}"}).encode(),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "homelab-heart/1 (+https://github.com/hikuohiku/homelab)",
+        },
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=15) as resp:
