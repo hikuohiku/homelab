@@ -216,6 +216,16 @@
       "by": "autopilot pod (実行役)",
       "summary": "実行役（journal run #212）。前回中断なし、フィードバック新規なし、健全性は既知事象(T-0106)のみで異常なし。todoのT-0163はrun #209〜#211で3回連続見送られており、同じ見送りを繰り返すこと自体がT-0163の問題意識と同型と判断し、DoD(1)（既知ブロッカーの重複確認を簡潔な記録に留めるCHARTERルール追加）のみ切り出して実施。CHARTER §7にルールを追加し、T-0163はDoD(2)（loop.shのbackoff機構）を残してin_progressに変更した。",
       "prs": []
+    },
+    {
+      "n": 213,
+      "at": "2026-08-07T01:33:40Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #213）。前回中断なし、フィードバック新規なし、健全性は既知事象(T-0106)のみで異常なし。T-0163（in_progress）のDoD(2)（loop.shのbackoff機構）に着手。origin/mainがNOOP_BACKOFF_THRESHOLD回連続で動かなければsleepを2^n倍（上限あり）に伸ばし、動けば即復帰するロジックを追加。オフラインでロジック検証・kubectlでbaseline確認済み。autopilot自身のコア機構の変更のためPR #392はcooldown対象としてこの回ではmergeしない。",
+      "prs": [
+        392
+      ]
     }
   ]
 }
