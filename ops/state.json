@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-06T23:50:00Z",
+  "updated": "2026-08-06T23:59:00Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -34,14 +34,6 @@
     "since": "2026-08-05"
   },
   "runs": [
-    {
-      "n": 183,
-      "at": "2026-08-06T20:51:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #183）。run #182のリトライ後もactions/runs?head_sha=は両PRともtotal_count:0（webhook未達）で不発。incidentは依然investigatingのため、run #178〜181のresolved/monitoring待ち方針に戻す。T-0117は着手せずkubectlで読み取り専用の事前調査のみ実施：本日のcoder-workspace-home-backupオーケストレータはComplete 1/1だが子Job(chb-*)はttlSecondsAfterFinished=3600で確認前にGC済み・pods/log権限も無く成否確認不能と判明、次回の着手回向けにops/inbox.mdへ1行残した。feedback/健全性とも新規変化なし。",
-      "prs": []
-    },
     {
       "n": 184,
       "at": "2026-08-06T21:00:00Z",
@@ -205,6 +197,16 @@
       "summary": "実行役（journal run #203）。T-0161 (PR #379) のDoD後始末: kubectlでPodのimage digestが実際にsha256:6d0cf8b1...へ反映され1/1 Runningであることを確認。続けてbacklog todoのT-0160（autopilot-reader ClusterRoleにservicesのget/listが無くprompt-review-user.mdの手順がForbiddenになる、レビュー役R-001）に着手し追加、CHARTER §5.5一覧も更新してPR #380として提出。T-0160をdoneにしreview-log R-001を完了に、ops/ledger.pyでbacklog/state合計31件をarchiveへ移した。",
       "prs": [
         380
+      ]
+    },
+    {
+      "n": 204,
+      "at": "2026-08-06T23:59:00Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #204）。前回中断なし(PR #380 merge済み)、フィードバック新規なし、健全性は既知事象(T-0106)のみで異常なし。backlog todoのT-0159（issue #56への自己投稿コメントがフィードバック取り込みでループバックする）に着手。ops/post_issue_comment.py を新設しマーカー付与を集約、CHARTER §5.5/§6 を更新してPR #381として提出。T-0159をdoneにしops/ledger.pyでbacklog 1件・runs 1件をarchiveへ移した。",
+      "prs": [
+        381
       ]
     }
   ]
