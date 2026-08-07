@@ -113,6 +113,8 @@ spec:
               readOnly: true
             - name: work
               mountPath: /work
+            - name: data
+              mountPath: /data
             - name: tmp
               mountPath: /tmp
       volumes:
@@ -126,5 +128,11 @@ spec:
         # から拾う（CHARTER §2）ので、Pod が作り直されてローカルが消えても困らない
         - name: work
           emptyDir: {}
+        # 思考記録 (stream-json) の保存先。heart-and-projects への移行 (Phase 1) で追加。
+        # 「状態を持たない」原則の対象外 — ここに載るのは引き継ぎに使わない生ログと
+        # プロジェクト Job の中間状態だけで、消えても運用は壊れない (pvc.yaml 参照)
+        - name: data
+          persistentVolumeClaim:
+            claimName: autopilot-data
         - name: tmp
           emptyDir: {}

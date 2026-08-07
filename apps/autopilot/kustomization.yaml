@@ -5,7 +5,9 @@ resources:
   - namespace.yaml
   - rbac.yaml
   - external-secret.yaml
+  - pvc.yaml
   - deployment.yaml
+  - heart-deployment.yaml
 
 configMapGenerator:
   - name: autopilot-config
@@ -17,6 +19,7 @@ configMapGenerator:
       - prompt-review-user.md
       - prompt-review-arch.md
       - render.py
+      - heart-bootstrap.sh
 
 generatorOptions:
   # 名前にハッシュを付けない（ops-health-reporter と同じ）。ハッシュを付けると

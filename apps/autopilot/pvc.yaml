@@ -1,0 +1,27 @@
+# heart-and-projects の共有データ (transcript / プロジェクト作業状態 / result.json)。
+#
+# 旧 loop 時代の「状態を持たないことが引き継ぎの前提」(deployment.yaml の旧註記) を
+# 意図的に変更する: 生の思考記録 (stream-json) は git に持ち出さず (T-0110)、この PVC に
+# 置いて heart がローテーションする (ops/rules.json transcripts)。プロジェクトの引き継ぎは
+# 引き続き origin 側 (project/* ブランチ + PROJECT.md) が正で、この PVC が消えても
+# 失われるのは思考記録と実行中 Job の中間状態だけ。
+#
+# RWO だが node01 は単一ノードなので、heart Deployment と runner/reviewer Job の
+# 同時マウントは同一ノード上で成立する。
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: autopilot-data
+  namespace: autopilot
+  annotations:
+    # ArgoCD の prune / Application 削除でもこの PVC は消さない (他アプリの PVC と同じ)
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      # local-path は容量を予約しない (docs/node01-storage.md)。実使用は
+      # rules.json transcripts.max_total_gb と retention_days で heart が抑える
+      storage: 20Gi

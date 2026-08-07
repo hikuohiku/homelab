@@ -1,0 +1,60 @@
+{
+  "version": 1,
+  "_comment": "heart-and-projects の運用パラメータの単一情報源。heart / runner / validate.py がここだけを読む。閾値の変更は PR 経由 (このファイルは ruleset の人間レビュー必須パスに含まれる)。YAML でなく JSON なのは、CI とサンドボックスを stdlib のみで通す repo 慣習 (check_version_sync.py の経緯) に合わせるため",
+  "veto": {
+    "window_hours": 24,
+    "_comment": "予告から着手までの拒否権窓。アイドル (走行プロジェクト 0) かつ非不可逆なら 0 で即着手。irreversible=true のプロジェクトは常にこの窓を待つ。窓の短縮は、人間が veto を 1 回実際に通した疎通実績 (trust.json の veto_drill_passed) が無い限り行わない",
+    "stop_keywords": ["止めて", "止まって", "やめて", "中止", "stop", "abort", "veto"]
+  },
+  "soak": {
+    "minutes": 30,
+    "_comment": "apps/ に触れる変更は merge 後、ops-health-report の green をこの時間確認して初めて delivered"
+  },
+  "notify": {
+    "daily_budget": 6,
+    "_comment": "Discord への即時送信は 1 日この件数まで。超過分は digest に畳む。即時送信してよい型は予告 (announce)・納品 (deliver)・question・障害 (incident) のみ"
+  },
+  "breaker": {
+    "daily_cost_usd": 100.0,
+    "_comment": "stream-json result の total_cost_usd の当日合計がこの値を超えたら新規 spawn のみ停止して通知する。走行中の Job は殺さない (決定 #9)。値は名目コスト (OAuth 定額でも計上される) で、実請求と一致しない点に注意"
+  },
+  "runner": {
+    "max_concurrent": 1,
+    "session_max_seconds": 7200,
+    "inactivity_nudge_seconds": 1800,
+    "inactivity_kill_seconds": 3600,
+    "_timeout_comment": "session_max は inactivity_kill より十分大きくすること。同値だと無活動 kill が到達不能の死にコードになる (2026-08-07 レビュー指摘)",
+    "default_soft_cap_tokens": 3000000,
+    "max_sessions_per_project": 60,
+    "_comment": "soft_cap はプロジェクト採択時に上書き可。超過で checkpoint 最終ターン→終了 (硬い上限ではない。heart が状況を通知し、継続価値があれば予算を積んで再開する)"
+  },
+  "chore": {
+    "max_concurrent": 1,
+    "soft_cap_tokens": 300000
+  },
+  "review": {
+    "max_cycles": 3,
+    "_comment": "reviewer の差し戻し回数上限。超えたら stalled にして review 型通知で人間に見せる"
+  },
+  "heartbeat": {
+    "stale_seconds": 7200,
+    "_comment": "watchdog (外部) が ops-state の heartbeat をこの時間以上 stale と見たら通知。report.py の sinceSeconds=7200 と同じ値に揃えている"
+  },
+  "transcripts": {
+    "retention_days": 30,
+    "max_total_gb": 10,
+    "_comment": "PVC 上の生 stream-json の保持。heart が毎日ローテーション (古い順に削除)。git には持ち出さない (T-0110 と両立)"
+  },
+  "curriculum": {
+    "exploration_quota": 0.25,
+    "recent_cell_window": 5,
+    "min_interval_hours": 6,
+    "_comment": "直近 window 件と同一セル [domain, kind] の案は判定で減点。exploration_quota は『修繕以外 (調査・実験・新規性駆動) を全プロジェクトの 1/4 以上に保つ』の下限"
+  },
+  "allowed_autopilot_doppler_keys": [
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "AUTOPILOT_GITHUB_TOKEN",
+    "DISCORD_WEBHOOK_URL"
+  ],
+  "_allowed_keys_comment": "apps/autopilot/ の ExternalSecret が参照してよい Doppler キーの allowlist (validate.py が CI で検査)。バックアップの retention 削除鍵・決済系 credential をエージェント環境に入れない壁の機械化。B2 の append-only 鍵すらここに無いのは、autopilot Pod は restic を直接触らない (backup CronJob 側の namespace に閉じる) ため"
+}

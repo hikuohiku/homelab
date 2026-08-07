@@ -1,0 +1,354 @@
+"""プロジェクト状態機械。純関数のみ — I/O を書かない。
+
+heart.py が事実 (facts) を集めてここに渡し、返った actions を実行する。
+判断はすべてここに集約し、単体テストで遷移表を固定する (プラン検証 #1)。
+
+状態: proposed → announced → active → in_review → merging → (soaking) → delivered
+終端: delivered / stalled / vetoed
+rework は独立した状態にせず、in_review で fail → active に戻して
+review_cycles を数える (上限 rules.review.max_cycles で stalled)。
+
+「実行経路で強制」の該当箇所:
+  - merge は verdict=pass かつ CI green のときだけ action になる (LLM は納品判断に関与しない)
+  - veto は他のどの遷移よりも先に評価される
+  - breaker が落ちている間は新しい仕事 (announce / spawn) を一切作らない。
+    走行中は殺さない (決定 #9)
+
+観測の扱い (2026-08-07 レビューで確定した規約):
+  - facts["jobs"] が None のときは「観測に失敗した」であり「Job が無い」ではない。
+    job_missing 系の判定・respawn を一切しない (二重 spawn と誤 stalled の防止)
+  - result.json / review.json は消費した遷移で consume_* action を出し、heart が
+    ファイルを退避する。消費しないと次のビートで同じ事実を再消費して発振する
+"""
+
+from datetime import timedelta
+
+from .statefiles import TERMINAL_STATES, now_iso, parse_iso
+
+# 各待ち状態の見張り時限。恒久的に黙って待つ状態を作らない (レビュー指摘 [4][11])
+REVIEW_TIMEOUT_HOURS = 2
+REVIEW_MAX_RETRIES = 2
+MERGING_TIMEOUT_HOURS = 24
+
+
+def _action(kind, project_id=None, **kw):
+    a = {"type": kind}
+    if project_id is not None:
+        a["project"] = project_id
+    a.update(kw)
+    return a
+
+
+def _veto_deadline(project, facts, rules, now):
+    """予告からの拒否権窓の期限。アイドルかつ非不可逆なら即着手 (窓 0)。
+    不可逆ラベル付きは常に窓を待つ (決定 #3)。"""
+    if not project.get("irreversible") and facts.get("running_runners", 0) == 0:
+        return now_iso(now)
+    hours = rules["veto"]["window_hours"]
+    return now_iso(now + timedelta(hours=hours))
+
+
+def _touches_apps(project):
+    return bool(project.get("touches_apps"))
+
+
+def _stall(p, actions, reason, ntype=None, text=None):
+    p["state"] = "stalled"
+    p["stalled_reason"] = reason
+    if ntype:
+        actions.append(_action("notify", p["id"], ntype=ntype, text=text))
+
+
+def decide(doc, facts, rules, now):
+    """(projects doc, facts) -> (新 doc, actions)。doc は破壊的に更新して返す。"""
+    actions = []
+    vetoes = set(facts.get("vetoes", []))
+    stop_all = facts.get("stop_all", False)
+    breaker = facts.get("breaker_tripped", False)
+    jobs = facts.get("jobs")  # None = 観測失敗 (「無い」と区別する)
+    results = facts.get("results", {})
+    reviews = facts.get("reviews", {})
+    prs = facts.get("open_prs", {})
+    merged_prs = facts.get("merged_prs", {})
+    unhealthy = facts.get("unhealthy_apps")  # None = 観測失敗
+
+    running = sum(
+        1 for p in doc["projects"] if p["state"] in ("active", "in_review", "merging")
+    )
+
+    for p in doc["projects"]:
+        state = p["state"]
+        if state in TERMINAL_STATES:
+            continue
+        pid = p["id"]
+
+        # --- 人間の停止意思は他のどの遷移よりも先 ---
+        if stop_all or pid in vetoes:
+            if p.get("job"):
+                actions.append(_action("kill_job", pid, job=p["job"]))
+            p["state"] = "stalled" if stop_all else "vetoed"
+            if stop_all:
+                p["stalled_reason"] = "human_stop"
+            actions.append(
+                _action(
+                    "notify",
+                    pid,
+                    ntype="notify",
+                    text=f"{pid} を{'停止' if stop_all else 'veto により中止'}しました",
+                )
+            )
+            continue
+
+        if state == "proposed":
+            # breaker 中は新しい仕事を作らない (走行中は別条項で守る)
+            if breaker:
+                continue
+            p["state"] = "announced"
+            p["veto_deadline"] = _veto_deadline(p, facts, rules, now)
+            actions.append(_action("announce", pid))
+
+        elif state == "announced":
+            if parse_iso(p["veto_deadline"]) > now:
+                continue
+            if breaker:
+                continue
+            if running >= rules["runner"]["max_concurrent"]:
+                continue
+            p["state"] = "active"
+            running += 1
+            actions.append(_action("spawn_runner", pid))
+
+        elif state == "active":
+            result = results.get(pid)
+            job = jobs.get(p.get("job", ""), None) if jobs is not None else None
+            if result and result.get("state") == "ready_for_review":
+                if result.get("pr") is not None:
+                    prs_list = p.setdefault("prs", [])
+                    if not prs_list or prs_list[-1] != result["pr"]:
+                        prs_list.append(result["pr"])
+                if not p.get("prs"):
+                    # PR 番号が無いままレビューに進むと merging で必ず詰む。
+                    # runner 側の契約違反としてここで止め、人間に見せる
+                    actions.append(_action("consume_result", pid))
+                    _stall(
+                        p, actions, "no_pr_reported", "incident",
+                        f"{pid}: runner が ready_for_review を報告したが PR 番号が無い",
+                    )
+                    continue
+                if job and job.get("active"):
+                    actions.append(_action("kill_job", pid, job=p["job"]))
+                p["state"] = "in_review"
+                p["review_requested_at"] = now_iso(now)
+                p["review_retries"] = 0
+                actions.append(_action("consume_result", pid))
+                actions.append(_action("spawn_reviewer", pid))
+            elif result and result.get("state") == "budget_exhausted":
+                actions.append(_action("consume_result", pid))
+                _stall(
+                    p, actions, "budget_exhausted", "question",
+                    f"{pid} が予算 (soft cap) を使い切りました。"
+                    "継続する価値があれば予算を積んで再開を指示してください",
+                )
+            elif result and result.get("state") in (
+                "spec_error", "error", "stalled_inactive"
+            ):
+                actions.append(_action("consume_result", pid))
+                _stall(
+                    p, actions, result["state"], "incident",
+                    f"{pid} の runner が {result['state']} で終了: "
+                    f"{str(result.get('error', ''))[:200]}",
+                )
+            elif jobs is None:
+                # 観測失敗。Job の生死が分からないビートでは何もしない
+                continue
+            elif not p.get("job"):
+                # spawn が失敗した (execute が job 名を記録できなかった)。
+                # spawn は 409 冪等なので再発行してよい (レビュー指摘 [4])
+                actions.append(_action("spawn_runner", pid, respawn=True))
+            elif job is None:
+                # 信念と実測の乖離: 走っているはずの Job が居ない
+                p["drift_count"] = p.get("drift_count", 0) + 1
+                actions.append(_action("record_drift", pid, reason="job_missing"))
+                if p["drift_count"] > 2:
+                    _stall(
+                        p, actions, "job_missing", "incident",
+                        f"{pid} の runner Job が繰り返し消失。stalled にしました",
+                    )
+                else:
+                    actions.append(_action("spawn_runner", pid, respawn=True))
+            elif job.get("active"):
+                p["drift_count"] = 0
+            elif job.get("failed"):
+                p["restart_count"] = p.get("restart_count", 0) + 1
+                if p["restart_count"] > 3:
+                    _stall(
+                        p, actions, "runner_crash_loop", "incident",
+                        f"{pid} の runner が {p['restart_count']} 回連続で異常終了",
+                    )
+                else:
+                    actions.append(_action("spawn_runner", pid, respawn=True))
+
+        elif state == "in_review":
+            review = reviews.get(pid)
+            if review:
+                actions.append(_action("consume_review", pid))
+                if review.get("verdict") == "pass":
+                    p["state"] = "merging"
+                    p["merging_since"] = now_iso(now)
+                else:
+                    p["review_cycles"] = p.get("review_cycles", 0) + 1
+                    if p["review_cycles"] >= rules["review"]["max_cycles"]:
+                        _stall(
+                            p, actions, "review_rejected", "review",
+                            f"{pid} がレビューを {p['review_cycles']} 回通らず停滞。"
+                            "指摘一覧を確認してください",
+                        )
+                    else:
+                        p["state"] = "active"
+                        actions.append(
+                            _action(
+                                "spawn_runner", pid,
+                                findings=review.get("findings", []),
+                            )
+                        )
+            else:
+                # reviewer が黙って死んだ/spawn に失敗したケースの見張り
+                requested = p.get("review_requested_at")
+                if requested and (
+                    now - parse_iso(requested)
+                ) > timedelta(hours=REVIEW_TIMEOUT_HOURS):
+                    if p.get("review_retries", 0) < REVIEW_MAX_RETRIES:
+                        p["review_retries"] = p.get("review_retries", 0) + 1
+                        p["review_requested_at"] = now_iso(now)
+                        actions.append(
+                            _action("spawn_reviewer", pid, retry=p["review_retries"])
+                        )
+                    else:
+                        _stall(
+                            p, actions, "review_timeout", "incident",
+                            f"{pid} のレビューが {REVIEW_TIMEOUT_HOURS}h × "
+                            f"{REVIEW_MAX_RETRIES + 1} 回応答しません",
+                        )
+
+        elif state == "merging":
+            pr_num = (p.get("prs") or [None])[-1]
+            if pr_num is None:
+                _stall(
+                    p, actions, "no_pr_to_merge", "incident",
+                    f"{pid} が merging に入ったが PR 番号の記録が無い",
+                )
+                continue
+            if pr_num in merged_prs:
+                if _touches_apps(p):
+                    p["state"] = "soaking"
+                    p["soak"] = {
+                        "until": now_iso(
+                            now + timedelta(minutes=rules["soak"]["minutes"])
+                        ),
+                        # soak の合否は絶対値でなく「merge 時点から悪化したか」。
+                        # 既知の Degraded (T-0106 等) を green と嘘をつかずに扱う
+                        "baseline_unhealthy": sorted(unhealthy or []),
+                    }
+                else:
+                    p["state"] = "delivered"
+                    actions.append(_action("deliver", pid))
+            elif pr_num in prs:
+                if prs[pr_num].get("checks_green"):
+                    actions.append(_action("merge_pr", pid, pr=pr_num))
+                elif (
+                    now - parse_iso(p.get("merging_since", now_iso(now)))
+                ) > timedelta(hours=MERGING_TIMEOUT_HOURS):
+                    _stall(
+                        p, actions, "merge_timeout", "question",
+                        f"{pid} の PR #{pr_num} が {MERGING_TIMEOUT_HOURS}h 経っても "
+                        "merge できません (CI 未 green か保護パス)。判断をください",
+                    )
+                # checks が green でない間は待つ (CI が唯一のゲート)
+            else:
+                # open にも merged にも居ない = merge されずに close された
+                _stall(
+                    p, actions, "pr_closed", "question",
+                    f"{pid} の PR #{pr_num} が merge されずに close されています",
+                )
+
+        elif state == "soaking":
+            if parse_iso(p["soak"]["until"]) > now:
+                continue
+            if unhealthy is None or not facts.get("health_fresh"):
+                # 観測できないまま soak を判定しない。次のビートまで待つ
+                continue
+            baseline = set(p["soak"].get("baseline_unhealthy", []))
+            worse = [a for a in unhealthy if a not in baseline]
+            if not worse:
+                p["state"] = "delivered"
+                actions.append(_action("deliver", pid))
+            else:
+                _stall(
+                    p, actions, "soak_failed", "incident",
+                    f"{pid} の merge 後に {', '.join(worse)} が unhealthy になりました。"
+                    "ロールバックの判断が要ります",
+                )
+
+    # --- curriculum: 立案結果の取り込みと次の立案 ---
+    cur = facts.get("curriculum")  # {"state","pr","adopted_specs","pr_merged","pr_open","checks_green","pr_unknown"}
+    curriculum_pending = False
+    if cur and cur.get("state") == "curriculum_done":
+        curriculum_pending = True
+        if cur.get("pr_unknown"):
+            pass  # PR の状態が観測できないビートでは判断しない
+        elif cur.get("pr_merged"):
+            existing = {p["id"] for p in doc["projects"]}
+            for spec in cur.get("adopted_specs", []):
+                if spec.get("id") in existing:
+                    continue
+                doc["projects"].append(
+                    {
+                        "id": spec["id"],
+                        "title": spec.get("title", ""),
+                        "state": "proposed",
+                        "branch": f"project/{spec['id'].lower()}",
+                        "irreversible": bool(spec.get("irreversible")),
+                        "capabilities": spec.get("capabilities", []),
+                        "touches_apps": bool(spec.get("touches_apps")),
+                        "verify": spec.get("verify", []),
+                        "confidence": spec.get("confidence", "unsure"),
+                        "budget": {
+                            "used_tokens": 0,
+                            "soft_cap": (spec.get("budget") or {}).get(
+                                "soft_cap_tokens",
+                                rules["runner"]["default_soft_cap_tokens"],
+                            ),
+                        },
+                        "created": now_iso(now)[:10],
+                    }
+                )
+            actions.append(_action("consume_curriculum"))
+            curriculum_pending = False
+        elif cur.get("pr_open") and cur.get("checks_green"):
+            actions.append(_action("merge_pr", "system", pr=cur["pr"]))
+        elif cur.get("pr") is None or (
+            not cur.get("pr_open") and not cur.get("pr_merged")
+        ):
+            # PR が無い、または merge されずに close された (人間の拒否)。結果を破棄する
+            actions.append(_action("consume_curriculum"))
+            curriculum_pending = False
+    elif cur and cur.get("state") == "error":
+        actions.append(_action("consume_curriculum"))
+        actions.append(
+            _action(
+                "notify", "system", ntype="incident",
+                text=f"curriculum Job がエラー終了: {str(cur.get('error', ''))[:200]}",
+            )
+        )
+        curriculum_pending = False
+
+    non_terminal = [p for p in doc["projects"] if p["state"] not in TERMINAL_STATES]
+    curriculum_idle = not non_terminal and not curriculum_pending
+    last_curriculum = doc.get("last_curriculum_at")
+    min_gap = timedelta(hours=rules["curriculum"].get("min_interval_hours", 6))
+    gap_ok = last_curriculum is None or (now - parse_iso(last_curriculum)) >= min_gap
+    if curriculum_idle and gap_ok and not breaker and not stop_all:
+        doc["last_curriculum_at"] = now_iso(now)
+        actions.append(_action("spawn_curriculum"))
+
+    return doc, actions
