@@ -187,10 +187,21 @@ EOF
   # headless では既定で権限確認が要る。Pod は read-only RBAC の非 root コンテナで、
   # 確認に応じられる人間もいないので bypass する（CHARTER §5.1 の「止まるくらいなら
   # 最初から確認を出さない」と同じ理由）。
+  #
+  # tee: 生の stream-json を PVC (/data) に残す。これまで render.py が畳んだ残りは
+  # どこにも残らず、「なぜその判断をしたか」を後から検証する材料がゼロだった
+  # (heart-and-projects Phase 1)。git には持ち出さない (T-0110)。保持期間の管理と
+  # 削除は heart 側 (ops/heart/metrics.py rotate_transcripts) がやる。
+  # /data が無い環境 (手元実行等) でも止まらないよう、書けなければ /dev/null に逃がす
+  TRANSCRIPT_DIR="${TRANSCRIPT_DIR:-/data/transcripts/loop}"
+  mkdir -p "${TRANSCRIPT_DIR}" 2>/dev/null || true
+  TRANSCRIPT_FILE="${TRANSCRIPT_DIR}/$(date -u '+%Y-%m-%dT%H%M%S')-i${i}.jsonl"
+  touch "${TRANSCRIPT_FILE}" 2>/dev/null || TRANSCRIPT_FILE=/dev/null
   set -o pipefail
   timeout -k 30 "${ITERATION_TIMEOUT_SECONDS}" \
     claude -p --permission-mode bypassPermissions \
       --output-format stream-json --verbose "${PROMPT}" \
+    | tee -a "${TRANSCRIPT_FILE}" \
     | python3 /config/render.py
   rc=$?
   set +o pipefail

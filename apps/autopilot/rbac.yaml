@@ -59,3 +59,123 @@ subjects:
   - kind: ServiceAccount
     name: autopilot
     namespace: autopilot
+  # heart / runner (reviewer を含む) にも同じクラスタ読み取りを与える。
+  # 読む対象は旧 autopilot と同じで、書き込みは下の専用ロールに分離してある
+  - kind: ServiceAccount
+    name: autopilot-heart
+    namespace: autopilot
+  - kind: ServiceAccount
+    name: autopilot-runner
+    namespace: autopilot
+  - kind: ServiceAccount
+    name: autopilot-writer
+    namespace: autopilot
+---
+# ============================================================================
+# heart-and-projects (ops/heart/) の SA 3 種。
+#
+# 旧 autopilot SA の「書き込み動詞は一切含めない」宣言は、heart-and-projects への
+# 移行 (プラン決定 #5「大幅開放を宣言制注入で実装」) に伴いこのファイル全体としては
+# 撤回した。ただし開放は無差別ではない:
+#   - autopilot (旧 loop 用)   — 従来どおり読み取りのみ。触らない
+#   - autopilot-heart          — heart 専用。autopilot namespace 内の Job 管理と
+#                                pods/log (自己診断) だけを書ける
+#   - autopilot-runner         — プロジェクト Job の既定 SA。クラスタ読み取りのみ。
+#                                worker はトークン automount 無しで API に触れない
+#   - autopilot-writer         — kubectl write。PROJECT.md が capability を宣言し
+#                                予告 (Discord) に明記されたプロジェクトの Job にのみ
+#                                heart が注入する (ops/heart/spawn.py)
+# ============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: autopilot-heart
+  namespace: autopilot
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: autopilot-runner
+  namespace: autopilot
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: autopilot-writer
+  namespace: autopilot
+---
+# heart が自分の namespace で runner/reviewer/curriculum Job を生み、殺し、
+# ログを読む (veto の即 kill と自己診断に必要)。namespace の外には書けない
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: heart-job-manager
+  namespace: autopilot
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: heart-job-manager
+  namespace: autopilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: heart-job-manager
+subjects:
+  - kind: ServiceAccount
+    name: autopilot-heart
+    namespace: autopilot
+---
+# kubectl write (宣言制注入の対象)。secrets と RBAC は含めない:
+#   - secrets: バックアップの retention 鍵・他アプリの credential を読ませない
+#     (硬い壁 #6 の一部。ただし pod を作れる権限は間接的に secret へ到達しうるため、
+#     これは「壁」ではなく減速帯。実効的な担保は監査 (audit.jsonl) と予告制)
+#   - rbac.authorization.k8s.io: 自分の権限を自分で広げる経路を作らない
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: autopilot-writer
+rules:
+  - apiGroups: [""]
+    resources:
+      ["pods", "pods/log", "pods/exec", "services", "endpoints", "configmaps",
+       "persistentvolumeclaims", "events", "namespaces"]
+    verbs: ["*"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["*"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["*"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses", "networkpolicies"]
+    verbs: ["*"]
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "appprojects"]
+    verbs: ["*"]
+  - apiGroups: ["external-secrets.io"]
+    resources: ["externalsecrets"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: autopilot-writer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: autopilot-writer
+subjects:
+  - kind: ServiceAccount
+    name: autopilot-writer
+    namespace: autopilot
