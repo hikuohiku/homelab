@@ -11,6 +11,37 @@
 #       既に稼働中だった pbs を Terraform に巻き込んで誤って再作成/破壊しないよう
 #       pbs.tf → pbs.tf.ignore にリネームして無効化した。
 #       2026-06-21 に「pbs は手動管理（Terraform 管理対象外）」として方針を確定。
+#
+# 退役判断 (T-0072, 2026-08-06): node01 の実データ5対象（immich-library/immich-postgres-data/
+# vaultwarden-data/coder-postgres-data/coder-<workspace-id>-home）全てが restic ベースの backup
+# CronJob で復元試験まで完了した（T-0071/T-0117, docs/backup.md 参照）。node01 VM 自体は
+# Terraform + NixOS image で完全に宣言的なため VM 単位の復元は IaC の再適用で代替でき、PBS の
+# VM 単位バックアップは冗長になった。退役タスクは T-0116（ops/backlog.json）。
+#
+# PBS VM (qemu/112) 停止・削除手順（実行未着手。物理/管理コンソール操作のため人間専有）:
+#
+#   1. Proxmox WebUI または `pvesh` で、pbs (qemu/112) を対象にした backup ジョブ
+#      （Datacenter > Backup、vzdump が PBS storage を指すもの）が実在しないか確認する。
+#      無ければそのまま 2 へ。あれば先にそのジョブを削除する（後述「確認できていないこと」参照）
+#   2. Proxmox WebUI で pbs (qemu/112) をシャットダウン（`qm shutdown 112`）する
+#   3. 一定期間（目安 1〜2 週間）稼働させたまま観察し、参照している設定・ジョブが無いことを
+#      再確認する
+#   4. 問題なければ pbs (qemu/112) を削除する（`qm destroy 112`）。ディスク（local-lvm 上の
+#      64GB）も同時に解放される
+#   5. このファイル（pbs.tf.ignore）と CLAUDE.md / README.md / Plans.md の pbs 関連記述を、
+#      「過去に運用していた」past tense に更新する PR を別途出す（削除はしない。経緯の記録として
+#      残す）
+#
+# autopilot の Proxmox credential（PVEAuditor、読み取り専用）ではこの手順を実行できない
+# （書き込み・削除権限が無い）。この in-cluster 実行環境自体に Proxmox credential が無いため
+# （2026-08-07 実測、環境変数に PROXMOX_* 系が存在しない）、手順1の確認も autopilot 単独では
+# できない。人間または構築セッション（Coder ワークスペース、T-0107 で PROXMOX_API_TOKEN の
+# Sys.Modify 権限を実測済み）が実行する。
+#
+# 確認できていないこと（手順1で埋める）: PBS 自身が保持している backup job 設定・保存済み
+# バックアップの一覧。autopilot はこの in-cluster 実行環境から PBS/Proxmox のどちらにも到達
+# できないため確認できない。issue #56 で構築セッションに確認を依頼した
+# （https://github.com/hikuohiku/homelab/issues/56, T-0116 参照）。
 
 resource "proxmox_virtual_environment_vm" "pbs" {
   name        = "pbs"
