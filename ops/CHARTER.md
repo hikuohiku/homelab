@@ -633,7 +633,14 @@ upstream リポジトリのファイル（例: `deploy/crds/bundle.yaml` のよ�
   - open PR 一覧: `GET /repos/hikuohiku/homelab/pulls?state=open&per_page=100`
   - issue コメント（§6 のページネーションの罠は継続。`per_page=100` を明示する）:
     `GET /repos/hikuohiku/homelab/issues/56/comments?per_page=100`
-  - コメント投稿: `POST /repos/hikuohiku/homelab/issues/56/comments` body `{"body": "..."}`
+  - コメント投稿: 生の `curl` POST ではなく **`python3 ops/post_issue_comment.py <body-file>`
+    を使う**（T-0159, run #188）。本文末尾に `<!-- autopilot:self-posted -->` マーカーを自動で
+    付与し、次の起動の §6 手順2 がこのマーカー付きコメントを自分自身の投稿として取り込みを
+    スキップできるようにする（マーカーが無いと author だけでは人間本人と区別がつかず、
+    自分の投稿を「人間からの新規フィードバック」として再取り込みしてしまっていた）。
+    標準入力からも読める（`echo "本文" | python3 ops/post_issue_comment.py -`）。
+    送信前に本文を確認したいときは `--dry-run` を付けると POST せずマーカー付与後の
+    本文だけを表示する
   - PR 作成: `POST /repos/hikuohiku/homelab/pulls` body `{"title","head","base","body"}`
   - CI 状態: `GET /repos/.../commits/{sha}/check-runs` と `GET /repos/.../commits/{sha}/status`
     の両方を見る（Actions の workflow は check-runs 経由、GitGuardian 等の外部 App は状況によって
@@ -746,7 +753,15 @@ issue に返信する代わりになる。「何をしたか」「なぜやら�
    `ops/feedback.json` の `items[].id` に無いファイルが未取り込み。
    `git show origin/ops-feedback:<path>` で中身を読む
 2. issue #56 のコメントを `per_page=100` を明示して全件取り、`feedback.json` の
-   `issue.cutoff` より新しく、かつ `items[].ref` にその comment id が無いものを取り込む
+   `issue.cutoff` より新しく、かつ `items[].ref` にその comment id が無いものを取り込む。
+   **本文に `<!-- autopilot:self-posted -->` マーカーが含まれるコメントは取り込まない
+   （スキップする）。** これは autopilot 自身が `ops/post_issue_comment.py`（§5.5）
+   経由で投稿したコメントで、GitHub 上は人間本人と同じ author として記録されるため
+   author では区別できない（T-0159）。**このマーカーが導入される前（run #188 より前）に
+   投稿された自己投稿コメントにはマーカーが無く、この判定では見分けられない。** 該当する
+   3 件（T-0107 修正経緯の共有・反映完了報告・needs-human 一括依頼、いずれも 2026-08-06）は
+   `ops/feedback.json` に `declined`（自己投稿・対応不要）として既に記録済みなので、
+   同じ内容を再度取り込む心配はない
 3. 取り込んだものを `items` に `status: "new"` で追記し、その回の PR に載せる。
    **原本（inbox のファイル・issue のコメント）は消さない・書き換えない。**
    取り込み済みかは id で判定する。ポインタ（`ops/state.json` の `feedback.last_read`）は

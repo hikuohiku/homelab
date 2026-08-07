@@ -2602,6 +2602,26 @@
       "notes": "run #162（実行役）: CHARTER.md §6 手順5 の該当箇所を修正し PR で反映。"
     },
     {
+      "id": "T-0159",
+      "domain": "homelab",
+      "title": "issue #56 へのフィードバック取り込みが autopilot 自身の投稿コメントをループバックしてしまう",
+      "kind": "ci",
+      "risk": "low",
+      "status": "done",
+      "priority": 35,
+      "why": "計画役 run #187（このPR）で発見。CHARTER §6 手順2の issue #56 コメント取り込みは author を見ておらず、`last_read`/`cutoff` より新しいコメントを無条件に `ops/feedback.json` へ `new` で取り込む。ところが autopilot 自身が issue #56 へ書き込む際に使う credential（`AUTOPILOT_GITHUB_TOKEN`）はリポジトリ所有者 `hikuohiku` の個人アカウント上の PAT で、人間本人の GitHub アカウントと同一の author（`hikuohiku`, type: User）として記録される。そのため autopilot が run #166/#167/#171 で自ら投稿した3件のコメント（T-0107 修正経緯の共有、T-0107 反映完了報告、needs-human 6件の一括依頼）が、次の起動の取り込みで『人間からの新規フィードバック』として `ops/feedback.json` に `new` で3件とも再取り込みされ、今回の計画役が全て『自己投稿・対応不要』と判定して `declined` にする手間が生じた（F-20260806T142440Z-c5205985558 / F-20260806T144513Z-c5206285481 / F-20260806T152002Z-c5206837844）。author のログイン名では人間と autopilot を区別できないため、このままでは autopilot が issue #56 に書き込むたびに同じ手間が繰り返される（CHARTER §8『同じ判断を毎回手でやっている → 仕組みに落とす』）",
+      "dod": "autopilot が issue #56 へコメントを POST するときに、本文へ機械可読なマーカー（例: 本文冒頭または末尾に `<!-- autopilot:self-posted -->` のような HTML コメント、GitHub の issue コメント本文でレンダリングされず grep で検出できる）を必ず付与するようにする。付与箇所は CHARTER §5.5 に列挙された `POST /repos/.../issues/56/comments` の呼び出し全て（同じ curl コマンドを毎回手で打つのではなく、`ops/post_issue_comment.py <body-file>` のような小さいラッパースクリプトを新設し、マーカー付与を漏れなく行う設計が望ましい。CHARTER §5.5 の該当コマンド例もこのスクリプト経由に更新する）。あわせて CHARTER §6 手順2の取り込みロジック（または対応する検証スクリプト）が、本文にこのマーカーを含むコメントを `new` として取り込まない（スキップする）ことを明記・実装する。過去に投稿済みの3件（このタスクの `why` に列挙）はマーカーが無いため今後も対象にならない点を CHARTER に一言残す。意図的にマーカー付きコメントを作り、取り込みロジックがスキップすることを確認する",
+      "blocked_by": null,
+      "refs": [
+        "ops/CHARTER.md",
+        "ops/feedback.json",
+        "ops/check_feedback.py"
+      ],
+      "created": "2026-08-06",
+      "pr": 381,
+      "notes": "run #187（計画役）: PR #376/#377（GitHub Actions outage で長時間 blocked）を手動 merge で1本化した際、両ブランチが独立に取り込んでいた feedback.json の new 3件を処理する過程で発見・起票。 実行役 run #204: ops/post_issue_comment.py を新設しマーカー付与を集約、CHARTER §5.5（投稿手順）・§6 手順2（取り込み時のスキップ）を更新。過去3件（マーカー無し）は既に feedback.json declined 済みのため対象外である旨を CHARTER に明記。dry-run でマーカー付与・二重付与防止を確認。PR #381。"
+    },
+    {
       "id": "T-0160",
       "domain": "homelab",
       "title": "autopilot-reader ClusterRole に services の get/list を追加する（レビュー役 R-001）",
