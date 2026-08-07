@@ -523,25 +523,6 @@
       }
     },
     {
-      "id": "T-0158",
-      "domain": "homelab",
-      "title": "loop.sh 起動直後の git fetch 失敗を『止まっている』と区別できるようにする",
-      "kind": "observability",
-      "risk": "low",
-      "status": "todo",
-      "priority": 92,
-      "why": "run #174（実行役、ops/inbox.md 経由の引き継ぎ）の発見。2026-08-06 の GitHub Actions major_outage 中、`iterate()`（apps/autopilot/loop.sh）冒頭の `git fetch --prune --quiet origin || return 1` が約2時間（17:00〜19:00 UTC 頃、iteration 13→70 の57回連続）失敗し続け、ログには `[autopilot] <ts> iteration #N end exit=1 elapsed=5〜6s` としか残らなかった。ops-health-reporter（apps/ops-health-reporter/report.py の `HEARTBEAT_RE`）はこの行から `exit_code`/`elapsed_seconds` だけを抽出して report に載せる設計（生ログは意図的に外に出さない、T-0110）のため、`exit_code!=0` が『claude -p 自体の異常』なのか『repo 同期前段の早期return』なのかをダッシュボード側から区別できず、外形的には『止まっている』のと見分けがつかなかった。実際は git 操作自体は本イテレーションでは正常に動いており、loop.sh の自己回復設計（Pod を落とさず同じ間隔で回り続ける）どおり実害なく復帰した",
-      "dod": "iterate() の各早期return（clone/fetch/checkout/reset/clean のいずれかの失敗、PROMPT_FILE 読み込み失敗）の理由を、`HEARTBEAT_RE` が既にサポートしている exit code 後の任意の括弧書き（`exit=124 (timed out after Ns) elapsed=Ns` と同型、現状は非捕捉群で読み捨てられている）に乗せて `iteration #N end exit=1 (git fetch failed) elapsed=Ns` のように出力する。あわせて report.py の `HEARTBEAT_RE`/`parse_heartbeat()` がこの括弧内テキストを捕捉し `last_end.reason` 相当のフィールドとして report に含めるようにする（生ログを外に出さない既存方針は維持し、載せるのはこの定型の理由文字列のみに限る）。ダッシュボード側の表示変更は必須ではない（report.py が値を持てば十分）。意図的に git fetch を失敗させて（例: 存在しない remote へ一時的に切り替える等、手元検証の範囲で）ログ行とパース結果を確認する",
-      "blocked_by": null,
-      "refs": [
-        "apps/autopilot/loop.sh",
-        "apps/ops-health-reporter/report.py"
-      ],
-      "created": "2026-08-06",
-      "pr": null,
-      "notes": "run #181（計画役）: ops/inbox.md（run #174 実行役の記録、autopilot/run-172-records ブランチ上で発見・処理。GitHub Actions major_outage で PR #376/#377 が blocked のため main にはまだ無い引き継ぎだった）から起票。緊急性なし（自己回復済み、データ破壊・誤動作は無い）"
-    },
-    {
       "id": "T-0163",
       "domain": "homelab",
       "title": "既知の外部障害でリトライ不能と判明した後、確認間隔を伸ばす backoff の仕組みを作る",

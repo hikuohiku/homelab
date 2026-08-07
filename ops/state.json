@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-07T00:57:24Z",
+  "updated": "2026-08-07T01:08:54Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -34,14 +34,6 @@
     "since": "2026-08-05"
   },
   "runs": [
-    {
-      "n": 191,
-      "at": "2026-08-06T21:46:00Z",
-      "kind": "in_cluster_loop",
-      "by": "autopilot pod (実行役)",
-      "summary": "実行役（journal run #191）。残る中断は PR #376 のみ。GitHub Actions incident（qcvjkzcs7j74）は21:30 UTC更新版から変化なし（investigating継続）のためリトライ見送り。feedback/健全性とも新規変化なし。run #172以降このPRの状態確認だけで約20回ほぼ同一内容を記録し続けている点に気づき、backoff の仕組みが無いことをops/inbox.mdに追記（計画役へ）。T-0117/T-0158/T-0159〜T-0162 とも直列化ルールに従い今回も着手せず。",
-      "prs": []
-    },
     {
       "n": 192,
       "at": "2026-08-06T21:56:00Z",
@@ -205,6 +197,14 @@
       "kind": "in-cluster-loop",
       "by": "autopilot pod (実行役)",
       "summary": "実行役（journal run #210）。前回中断なし（PR #386/#387 とも merge済み）、フィードバック新規なし、健全性は既知事象(T-0106)のみで異常なし。T-0163/T-0164は分割待ちのため見送り、T-0162（priority 55、レビュー役R-003、ダッシュボードのDegradedにT-0106既知事象の注記）に着手。ops/dashboard/build.py の render_pulse() に静的注記を追加、3パターンをローカル検証しdoneにした。",
+      "prs": []
+    },
+    {
+      "n": 211,
+      "at": "2026-08-07T01:08:54Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #211）。前回中断なし、フィードバック新規なし、健全性は既知事象(T-0106)のみで異常なし。T-0158（loop.sh起動直後のgit fetch失敗を『止まっている』と区別できるようにする）に着手。iterate()の各早期returnにFAIL_REASONを設定しmain()のログ行に理由を載せ、ops-health-reporter/report.pyのHEARTBEAT_RE/parse_heartbeat()でlast_end.reasonとして捕捉するよう更新。実際にgit clone/fetchを失敗させてログ行とパース結果を確認しdoneにした。",
       "prs": []
     }
   ]
