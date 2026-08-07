@@ -326,6 +326,171 @@ def check_charter_size() -> None:
         )
 
 
+MEMORY_FILE_MAX_BYTES = 40_000
+MEMORY_TOTAL_MAX_BYTES = 200_000
+PROJECT_ID_RE = re.compile(r"^P-\d{4}$")
+MODEL_ROLES = {
+    "project",
+    "review",
+    "curriculum_generate",
+    "curriculum_judge",
+    "consolidation",
+    "critic",
+    "chore",
+    "triage",
+}
+
+
+def check_heart_config() -> None:
+    """rules.json / models.json (heart-and-projects の単一情報源) のスキーマ検査。"""
+    rules = load("rules.json")
+    if rules is not None:
+        for section, key in (
+            ("veto", "window_hours"),
+            ("soak", "minutes"),
+            ("notify", "daily_budget"),
+            ("breaker", "daily_cost_usd"),
+            ("runner", "default_soft_cap_tokens"),
+            ("review", "max_cycles"),
+        ):
+            if not isinstance(rules.get(section, {}).get(key), (int, float)):
+                err(f"rules.json: {section}.{key} が数値でない")
+        if not rules.get("veto", {}).get("stop_keywords"):
+            err("rules.json: veto.stop_keywords が空。人間の停止手段が消えている")
+        if not isinstance(rules.get("allowed_autopilot_doppler_keys"), list):
+            err("rules.json: allowed_autopilot_doppler_keys が無い")
+    models = load("models.json")
+    if models is not None:
+        roles = models.get("roles", {})
+        for role in MODEL_ROLES:
+            if not roles.get(role):
+                err(f"models.json: roles.{role} が無い。spawn 時のモデル指定が壊れる")
+
+
+def check_projects_archive() -> None:
+    """ops/projects/archive.jsonl の検査。
+
+    - 各行が JSON で、採択済み (adopted) 行は runner が動ける最低限のフィールドを持つ
+    - 追記のみ: origin/main 時点の内容が先頭一致で残っていること (改変・削除の検知)。
+      origin/main が参照できない環境 (shallow CI checkout) では追記検査をスキップする
+      — heart / 手元では常に効く
+    """
+    path = OPS / "projects" / "archive.jsonl"
+    if not path.exists():
+        err("ops/projects/archive.jsonl が存在しない")
+        return
+    text = path.read_text()
+    seen_adopted: set[str] = set()
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            err(f"archive.jsonl:{n}: JSON として壊れている")
+            continue
+        pid = rec.get("id", "")
+        if not PROJECT_ID_RE.match(pid):
+            err(f"archive.jsonl:{n}: id が P-NNNN 形式でない: {pid!r}")
+        if rec.get("adopted"):
+            if pid in seen_adopted:
+                # 同一 id の再採択は最新行が有効 (runner は最後の行を読む)。重複自体は許す
+                pass
+            seen_adopted.add(pid)
+            if not rec.get("verify"):
+                err(f"archive.jsonl:{n}: 採択案 {pid} に verify が無い。受入検証が消えている")
+            cell = rec.get("cell")
+            if not (isinstance(cell, list) and len(cell) == 2):
+                err(f"archive.jsonl:{n}: 採択案 {pid} の cell が [領域, 種類] でない")
+            if "irreversible" not in rec:
+                err(f"archive.jsonl:{n}: 採択案 {pid} に irreversible が無い")
+    import subprocess
+
+    try:
+        base = subprocess.run(
+            ["git", "show", "origin/main:ops/projects/archive.jsonl"],
+            cwd=ROOT, capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return
+    if base.returncode != 0:
+        return  # origin/main が無い (shallow checkout 等) → スキップ
+    if not text.startswith(base.stdout):
+        err(
+            "archive.jsonl: origin/main の内容と先頭一致しない。"
+            "このファイルは追記のみ (過去の案・採択 spec の書き換え・削除は禁止)"
+        )
+
+
+def check_memory_size() -> None:
+    """ops/memory/ (意味記憶) の肥大化検知。CHARTER と同じ理由 (読むコスト)。"""
+    mem = OPS / "memory"
+    if not mem.is_dir():
+        err("ops/memory/ が存在しない")
+        return
+    total = 0
+    for path in mem.rglob("*.md"):
+        size = path.stat().st_size
+        total += size
+        if size > MEMORY_FILE_MAX_BYTES:
+            err(
+                f"{path.relative_to(ROOT)}: {size:,} bytes は上限 "
+                f"{MEMORY_FILE_MAX_BYTES:,} を超えている。consolidation で圧縮すること"
+            )
+    if total > MEMORY_TOTAL_MAX_BYTES:
+        err(
+            f"ops/memory/ 合計 {total:,} bytes は上限 {MEMORY_TOTAL_MAX_BYTES:,} を"
+            "超えている。価値の失効した記述を削ること"
+        )
+
+
+def check_autopilot_secret_allowlist() -> None:
+    """autopilot namespace に Secret を作る ExternalSecret を allowlist で縛る。
+
+    バックアップの削除系鍵・決済系 credential がエージェント環境に紛れ込む経路を
+    CI で機械的に塞ぐ (硬い壁 2 つの denylist 側、プラン決定 #6)。
+
+    - 検査対象は apps/ 全体 (autopilot ディレクトリ限定だと、他ディレクトリから
+      metadata.namespace: autopilot へ配送する ExternalSecret が素通りする —
+      apps/external-secrets/tailscale-oauth-external-secret.yaml がまさにその前例)
+    - `dataFrom` (キー名を列挙せず全キーを取り込む形) は autopilot 向けでは禁止。
+      allowlist 検査がキー名を見る以上、名前を持たない取り込み方は穴になる
+    - PyYAML に依存しないよう `---` 区切りの素朴な document 分割 + 正規表現で判定する
+      (Doppler キーは大文字スネークケース、target 側の secretKey と区別できる)
+    """
+    rules = load("rules.json")
+    if rules is None:
+        return
+    allowed = set(rules.get("allowed_autopilot_doppler_keys", []))
+    key_re = re.compile(r"^\s*key:\s*\"?([A-Z][A-Z0-9_]+)\"?\s*$", re.MULTILINE)
+    for path in sorted((ROOT / "apps").rglob("*.yaml")):
+        if "/charts/" in str(path):
+            continue
+        text = path.read_text()
+        for idx, doc in enumerate(re.split(r"(?m)^---\s*$", text)):
+            if "kind: ExternalSecret" not in doc:
+                continue
+            in_autopilot_dir = path.parent == ROOT / "apps" / "autopilot"
+            targets_autopilot = bool(
+                re.search(r"(?m)^\s*namespace:\s*autopilot\s*$", doc)
+            )
+            if not (in_autopilot_dir or targets_autopilot):
+                continue
+            rel = path.relative_to(ROOT)
+            if re.search(r"(?m)^\s*dataFrom:", doc):
+                err(
+                    f"{rel} (doc {idx}): autopilot 向け ExternalSecret に dataFrom は"
+                    "使えない。キー名を data で明示して allowlist 検査を通すこと"
+                )
+            for m in key_re.finditer(doc):
+                if m.group(1) not in allowed:
+                    err(
+                        f"{rel} (doc {idx}): Doppler キー {m.group(1)} は "
+                        "rules.json の allowed_autopilot_doppler_keys に無い。"
+                        "エージェント環境に渡してよい鍵か確認して allowlist を更新すること"
+                    )
+
+
 def main() -> int:
     # 参照の整合（blocked_by / review-log / next_id）は archive も含めて見ないと、
     # 済んだタスクを指す参照が「存在しない」と誤判定される。
@@ -335,6 +500,10 @@ def main() -> int:
 
     check_ledger_size()
     check_charter_size()
+    check_heart_config()
+    check_projects_archive()
+    check_memory_size()
+    check_autopilot_secret_allowlist()
 
     for name in ("VISION.md", "CHARTER.md"):
         if not (OPS / name).exists():

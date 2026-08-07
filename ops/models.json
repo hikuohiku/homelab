@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "_comment": "各役のモデル指定の単一情報源。heart が Job spawn 時に環境変数 CLAUDE_MODEL として注入し、runner が claude -p --model に渡す。『無指定でアカウント既定に任せる』をやめる (再設計の決定 #8)。triage は初期実装がキーワードルールなのでモデルを持たない。値の変更は PR 経由",
+  "roles": {
+    "project": "claude-opus-5",
+    "review": "claude-opus-5",
+    "curriculum_generate": "claude-opus-5",
+    "curriculum_judge": "claude-opus-5",
+    "consolidation": "claude-opus-5",
+    "critic": "claude-opus-5",
+    "chore": "claude-sonnet-5",
+    "triage": "keyword"
+  }
+}

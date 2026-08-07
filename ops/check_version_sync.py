@@ -214,6 +214,17 @@ GROUPS = [
         ],
     },
     {
+        "name": "autopilot image digest (heart-and-projects: 旧 loop / heart shadow / spawn 用 env の 3 箇所)",
+        "targets": [
+            ("apps/autopilot/deployment.yaml", lambda: extract_image_tag(
+                "apps/autopilot/deployment.yaml", "ghcr.io/hikuohiku/homelab-autopilot@"
+            )),
+            ("apps/autopilot/heart-deployment.yaml", lambda: extract_image_tag(
+                "apps/autopilot/heart-deployment.yaml", "ghcr.io/hikuohiku/homelab-autopilot@"
+            )),
+        ],
+    },
+    {
         "name": "immich server / machine-learning tag (inventory: immich-server, immich-machine-learning)",
         "targets": [
             ("apps/immich/values.yaml (controllers.main, server)", lambda: extract_tag_in_block(
