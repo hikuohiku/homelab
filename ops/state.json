@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-07T00:35:00Z",
+  "updated": "2026-08-07T00:36:54Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-07T00:35:00Z"
+    "last_read": "2026-08-07T00:36:54Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc",
@@ -219,6 +219,14 @@
       "kind": "in-cluster-loop",
       "by": "autopilot pod (実行役)",
       "summary": "実行役（journal run #207）。前回中断なし(PR #383 merge済み)、フィードバック新規なし。backlog todoの先頭T-0116（PBS VM退役）に着手。DoD(3)（停止・削除手順）をpbs.tf.ignore/docs/backup.mdに明記。DoD(2)（PBS上の依存ジョブ・データ確認）はautopilotにProxmox credentialが無く確認不能なため issue #56 で構築セッションに確認を依頼し needs-human に変更した。",
+      "prs": []
+    },
+    {
+      "n": 208,
+      "at": "2026-08-07T00:36:54Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (計画役)",
+      "summary": "計画役（journal run #208）。前回の中断なし、フィードバック新規なし（ops-feedback ブランチ不在、issue #56 に非自己投稿の新着なし）、健全性は既知事象(T-0106)のみで異常なし。inbox 空。blocked/needs-human 13件を棚卸ししたが、いずれも前提は現在も成り立っており更新不要と判断（T-0153/T-0156/T-0157 の workflow scope 待ち・T-0112/T-0144 の返信待ち・T-0116 の依頼直後・T-0084 の next_review 未到来）。todo は T-0158/T-0162〜T-0165 の5件で足りており新規起票なし。",
       "prs": []
     }
   ]
