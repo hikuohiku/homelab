@@ -44,6 +44,13 @@ INTERVAL_SECONDS="${INTERVAL_SECONDS:-120}"
 # 1 イテレーションの上限。エージェントが 1 周を終えられずに居座ると、
 # 次の周回が永久に来ない（= 止まったのと同じ）。上限で必ず切って次へ行く
 ITERATION_TIMEOUT_SECONDS="${ITERATION_TIMEOUT_SECONDS:-3600}"
+# origin/main の commit が何周連続で動かなかったら backoff を始めるか（T-0163 DoD(2)）。
+# GitHub 側の障害等で PR が一切 land しない間、INTERVAL_SECONDS のまま回り続けると
+# ほぼ同一内容の journal/state.json エントリを量産する（run #172〜#193 の実例）。
+# main が動いた回はいつでも即座に通常間隔へ戻す
+NOOP_BACKOFF_THRESHOLD="${NOOP_BACKOFF_THRESHOLD:-3}"
+# backoff で伸ばす間隔の上限。unbounded にはしない（VISION「ループが止まる選択をしない」）
+NOOP_BACKOFF_MAX_SECONDS="${NOOP_BACKOFF_MAX_SECONDS:-1800}"
 
 # 心拍。イテレーションの開始/終了を stdout に出しておくと、`kubectl logs` だけで
 # 「いま何周目の何をしているか」が外から分かる（旧クラウド cron に無かったもの）
@@ -92,6 +99,10 @@ setup_git() {
 # exit_code のみ）から区別できず、外から『止まっている』のと見分けがつかなかったため
 iterate() {
   FAIL_REASON=""
+  # このイテレーション開始時点の origin/main。main() が前回の値と比べて
+  # consecutive no-op を数える（backoff, T-0163 DoD(2)）。fetch に失敗したら
+  # 空のままにし、main() 側で「変化なし」と同じ扱いにする
+  CURRENT_MAIN_SHA=""
 
   if [ ! -d "${REPO_DIR}/.git" ]; then
     log "cloning ${REPO_URL} into ${REPO_DIR}"
@@ -104,6 +115,7 @@ iterate() {
   # 中断の引き継ぎは origin 側（オープン PR と autopilot/* ブランチ）から拾う設計
   # なので、ローカルに残す意味が無い（CHARTER §2）
   git fetch --prune --quiet origin || { FAIL_REASON="git fetch failed"; return 1; }
+  CURRENT_MAIN_SHA="$(git rev-parse origin/main 2>/dev/null || true)"
   git checkout --quiet -B main origin/main || { FAIL_REASON="git checkout failed"; return 1; }
   git reset --hard --quiet origin/main || { FAIL_REASON="git reset failed"; return 1; }
   git clean -fdq || { FAIL_REASON="git clean failed"; return 1; }
@@ -210,6 +222,8 @@ main() {
   log "started (interval=${INTERVAL_SECONDS}s timeout=${ITERATION_TIMEOUT_SECONDS}s repo=${REPO_URL})"
 
   i=0
+  noop_count=0
+  prev_main_sha=""
   while true; do
     # イテレーションの途中では入れ替えない
     reexec_if_updated
@@ -229,12 +243,37 @@ main() {
       log "iteration #${i} end exit=${rc} elapsed=${elapsed}s"
     fi
 
+    # origin/main が前回のイテレーション開始時から動いていなければ no-op を数える
+    # （fetch 自体が失敗した = CURRENT_MAIN_SHA が空、も「動いていない」と同列に扱う。
+    # 空文字 = prev_main_sha は成り立たないので、空のときも no-op 側に倒す判定を明示する）。
+    # 動いた（新しい SHA を取得できた）ときだけ通常間隔に戻す（T-0163 DoD(2)）
+    if [ -n "${prev_main_sha}" ] && { [ -z "${CURRENT_MAIN_SHA:-}" ] || [ "${CURRENT_MAIN_SHA}" = "${prev_main_sha}" ]; }; then
+      noop_count=$((noop_count + 1))
+    else
+      noop_count=0
+    fi
+    if [ -n "${CURRENT_MAIN_SHA:-}" ]; then
+      prev_main_sha="${CURRENT_MAIN_SHA}"
+    fi
+
+    sleep_seconds="${INTERVAL_SECONDS}"
+    if [ "${noop_count}" -ge "${NOOP_BACKOFF_THRESHOLD}" ]; then
+      extra=$((noop_count - NOOP_BACKOFF_THRESHOLD + 1))
+      # 2^extra は noop_count が伸び続けると桁あふれしうるので、上限に張り付く前で頭打ちにする
+      [ "${extra}" -gt 10 ] && extra=10
+      sleep_seconds=$((INTERVAL_SECONDS * (2 ** extra)))
+      if [ "${sleep_seconds}" -gt "${NOOP_BACKOFF_MAX_SECONDS}" ]; then
+        sleep_seconds="${NOOP_BACKOFF_MAX_SECONDS}"
+      fi
+      log "backoff: origin/main unchanged for ${noop_count} consecutive iterations, next interval=${sleep_seconds}s"
+    fi
+
     # 失敗しても Pod は落とさない。CrashLoopBackOff で再起動間隔が伸びていくより、
     # 同じ間隔で回り続けて次の周回に賭ける方がループが止まらない（VISION）
     # sleep をバックグラウンドにして wait で待つ。前面で sleep すると sh は
     # それが終わるまで trap を実行しないため、待機中の SIGTERM に反応できず
     # terminationGracePeriodSeconds を待たずに SIGKILL される
-    sleep "${INTERVAL_SECONDS}" &
+    sleep "${sleep_seconds}" &
     wait $!
   done
 }
