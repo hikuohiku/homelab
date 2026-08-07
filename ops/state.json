@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-07T01:39:47Z",
+  "updated": "2026-08-07T01:49:59Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-07T01:19:39Z"
+    "last_read": "2026-08-07T01:49:59Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc",
@@ -212,6 +212,14 @@
       "kind": "in-cluster-loop",
       "by": "autopilot pod (実行役)",
       "summary": "実行役（journal run #214）。前回の中断PR #392（cooldown解除）/#393（記録更新）を確認しCI green・issue #56に新規異議なしを確認のうえ merge。ConfigMap反映後のreexec_if_updated経由でloop.shが入れ替わり、Podがrestarts 0で回り続けheartbeatがexit_code 0で継続していることをkubectl/ops-health-reportで確認できたため T-0163 を done にした。ops/ledger.py実行。",
+      "prs": []
+    },
+    {
+      "n": 215,
+      "at": "2026-08-07T01:49:59Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #215）。前回中断なし、フィードバック新規なし、健全性は既知事象(T-0106)のみで異常なし。todoの唯一のタスクT-0164（CHARTER.md圧縮、R-004）はrun #209が全編仕分けの編集量を理由に見送っていたが、DoDのうちops/validate.pyへのサイズ上限チェック追加（check_charter_size(), 閾値120,000 bytes）だけを切り出して実施し、T-0163run #212と同型でin_progressにした。残る本体（経緯部分の切り出し）はinboxで計画役に分割判断を依頼。",
       "prs": []
     }
   ]

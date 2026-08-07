@@ -528,10 +528,10 @@
       "title": "ops/CHARTER.md の肥大化に上限・圧縮の仕組みを作る（backlog/state と同型、R-004）",
       "kind": "chore",
       "risk": "low",
-      "status": "todo",
+      "status": "in_progress",
       "priority": 51,
       "why": "レビュー役・アーキテクチャレンズ R-004（ops/review-log.md参照）。commit 762807fは「autopilot は毎イテレーション VISION/CHARTER/backlog/state を全部読み直す。9割が二度と行動につながらない過去の記録」という問題意識でbacklog.json/state.jsonにarchive機構とサイズ上限（ops/validate.pyのcheck_ledger_size()）を導入したが、同じ理由が当てはまるはずのCHARTER.md自身は対象外のまま。2026-08-04の10.8KBから2026-08-06時点で86.1KBまで2日で約8倍に増えており、backlog.jsonの上限（120,000 bytes）に迫っている",
-      "dod": "CHARTER.mdを読み、各ルールに付随する『指摘を受けた日時・経緯』の長い引用部分（例: 'issue #56, 2026-08-05 xx:xx:xxの指摘。...'という詳細な事例説明）と、実際に守るべき『ルール本体』を切り分ける。ルール本体はCHARTER.mdに残し、詳細な経緯・事例は新設する ops/CHARTER-history.md （または同種のarchiveファイル）へ移し、CHARTER.md側には1行の要約とそちらへのポインタだけを残す。移した後もCHARTER.mdの各ルールが単体で意味が通ることを確認する（経緯を読まないと理解できないルールにしない）。ops/validate.pyにCHARTER.mdのサイズ上限チェックを追加する（閾値は実装時にbacklog.jsonの120,000 bytesを参考に決める）。ops/ledger.pyと同様、圧縮操作は繰り返し実行できるようにする",
+      "dod": "CHARTER.mdを読み、各ルールに付随する『指摘を受けた日時・経緯』の長い引用部分（例: 'issue #56, 2026-08-05 xx:xx:xxの指摘。...'という詳細な事例説明）と、実際に守るべき『ルール本体』を切り分ける。ルール本体はCHARTER.mdに残し、詳細な経緯・事例は新設する ops/CHARTER-history.md （または同種のarchiveファイル）へ移し、CHARTER.md側には1行の要約とそちらへのポインタだけを残す。移した後もCHARTER.mdの各ルールが単体で意味が通ることを確認する（経緯を読まないと理解できないルールにしない）。[done] ops/validate.pyにCHARTER.mdのサイズ上限チェックを追加する（閾値は実装時にbacklog.jsonの120,000 bytesを参考に決める）。ops/ledger.pyと同様、圧縮操作は繰り返し実行できるようにする",
       "blocked_by": null,
       "refs": [
         "ops/CHARTER.md",
@@ -541,7 +541,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "PR #378（レビュー役・アーキテクチャ初回実行）のR-001が、PR #376との統合時にR-004として採番し直された。起票は統合作業を行った計画役による"
+      "notes": "PR #378（レビュー役・アーキテクチャ初回実行）のR-001が、PR #376との統合時にR-004として採番し直された。起票は統合作業を行った計画役による。実行役 run #209 が『ルール本体と経緯の全編仕分け（DoD本体）は実行役の1回で仕上げるには大きすぎる』と判断し着手を見送っていたが、DoD のうち validate.py へのサイズ上限チェック追加（check_charter_size(), CHARTER_MAX_BYTES=120,000）だけは独立した小さな論点として切り出せたため実行役 run #215 で実施し in_progress にした（T-0163 run #212 と同型の分割）。残る DoD は『経緯部分を ops/CHARTER-history.md 等へ切り出し、ルール本体だけを CHARTER.md に残す』本体作業（全編にわたる編集量が大きい）。しきい値 120,000 は現状 88,936 bytes に対して余裕が少なく、次に何か追記すると CI が落ちうる想定の設計（backlog.json と同じ絶対値を採用し、圧縮を先送りしにくくする狙い）。"
     }
   ]
 }
