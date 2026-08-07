@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-08-07T00:47:01Z",
+  "updated": "2026-08-07T00:57:24Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
@@ -206,6 +206,14 @@
       "prs": [
         386
       ]
+    },
+    {
+      "n": 210,
+      "at": "2026-08-07T00:57:24Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #210）。前回中断なし（PR #386/#387 とも merge済み）、フィードバック新規なし、健全性は既知事象(T-0106)のみで異常なし。T-0163/T-0164は分割待ちのため見送り、T-0162（priority 55、レビュー役R-003、ダッシュボードのDegradedにT-0106既知事象の注記）に着手。ops/dashboard/build.py の render_pulse() に静的注記を追加、3パターンをローカル検証しdoneにした。",
+      "prs": []
     }
   ]
 }
