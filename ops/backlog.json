@@ -528,7 +528,7 @@
       "title": "既知の外部障害でリトライ不能と判明した後、確認間隔を伸ばす backoff の仕組みを作る",
       "kind": "feature",
       "risk": "medium",
-      "status": "todo",
+      "status": "in_progress",
       "priority": 50,
       "why": "実行役の気づき（ops/inbox.md、R-NNN無し）。GitHub Actions の大規模障害（incident qcvjkzcs7j74、2026-08-06 15:22 UTC〜、22:00 UTC 時点も investigating 継続）でPR #376がblockedのあいだ、INTERVAL_SECONDS（120秒）ループが毎回incident statusを確認するだけの起動を繰り返し、run #172〜#193（6時間以上・約20回）でほぼ同一内容のjournal/state.jsonエントリを量産した。CHARTER §7「帳簿には上限がある」が指摘する読み込みコスト問題を自ら悪化させている。既知の外部障害でリトライ不能と判明した後は、確認間隔を伸ばす／次に意味のある変化がある可能性が高いタイミングまで待つ、といった仕組みが無い",
       "dod": "(1) 最小の対処として、CHARTERに「同一の既知ブロッカー（例: 同一incident id、同一reason）を前回確認時と同内容のまま連続して確認しただけの回は、journal/state.jsonへのエントリを簡潔な1〜2行（前回runへの参照＋『変化なし』のみ）に留めてよい」というルールを追加し、run #172〜#193のような冗長な記録の繰り返しを防ぐ。(2) より根本的な対処として、apps/autopilot/loop.shにconsecutive no-op回数を数え、一定回数を超えたらINTERVAL_SECONDSを段階的に伸ばす（上限を設けてunboundedにはしない）backoff機構の追加を検討する。(2)はloop.shというautopilot自身の生存に関わるコア機構の変更のため、1 PR 1コンポーネントで刻み、変更前後でPodが正常に起動・ループし続けることを実機で確認してから展開する",
@@ -539,7 +539,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #172-193統合時の計画役（journal run #173相当の統合作業）が起票。inbox（R-NNN無し、実行役の気づき）より"
+      "notes": "run #172-193統合時の計画役（journal run #173相当の統合作業）が起票。inbox（R-NNN無し、実行役の気づき）より。run #209〜#211（実行役）は(1)(2)が1タスクに同居し1 PR 1論点に沿わないとして着手を見送り、inboxに分割提案を記録した。本PR（実行役）でDoD(1)（CHARTER §7へのルール追加）のみ実施。DoD(2)（loop.shへのbackoff機構）は残作業のためstatusをin_progressのまま維持し、taskは分割しない — DoD(1)を切り離したことで残るDoD(2)自体が単一論点になり、分割提案の前提が解消したため"
     },
     {
       "id": "T-0164",

@@ -1,12 +1,12 @@
 {
   "version": 1,
-  "updated": "2026-08-07T01:08:54Z",
+  "updated": "2026-08-07T01:19:39Z",
   "vision_stage": 2,
   "vision_stage_label": "器を安定させる",
   "feedback": {
     "issue": 56,
     "url": "https://github.com/hikuohiku/homelab/issues/56",
-    "last_read": "2026-08-07T00:36:54Z"
+    "last_read": "2026-08-07T01:19:39Z"
   },
   "dashboard": {
     "artifact_url": "https://claude.ai/code/artifact/a86aa1b6-ddfb-4bbf-9085-b70a4e243adc",
@@ -208,6 +208,14 @@
       "prs": [
         390
       ]
+    },
+    {
+      "n": 212,
+      "at": "2026-08-07T01:19:39Z",
+      "kind": "in-cluster-loop",
+      "by": "autopilot pod (実行役)",
+      "summary": "実行役（journal run #212）。前回中断なし、フィードバック新規なし、健全性は既知事象(T-0106)のみで異常なし。todoのT-0163はrun #209〜#211で3回連続見送られており、同じ見送りを繰り返すこと自体がT-0163の問題意識と同型と判断し、DoD(1)（既知ブロッカーの重複確認を簡潔な記録に留めるCHARTERルール追加）のみ切り出して実施。CHARTER §7にルールを追加し、T-0163はDoD(2)（loop.shのbackoff機構）を残してin_progressに変更した。",
+      "prs": []
     }
   ]
 }
