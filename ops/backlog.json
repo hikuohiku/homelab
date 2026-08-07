@@ -1,7 +1,7 @@
 {
   "version": 1,
   "next_id": 166,
-  "updated": "2026-08-07T00:55:00Z",
+  "updated": "2026-08-07T00:57:24Z",
   "_comment": "status: todo | in_progress | blocked | needs-human | done | dropped. risk は ops/CHARTER.md §4 の区分。priority 昇順で着手する。domain は VISION.md のドメイン区分（現状は homelab のみ）。recurring なタスクは実施後 status: done にしつつ last_done/next_review を付け、next_review を過ぎたら手動で status: todo に戻す（自動再オープンの仕組みはまだ無い、T-0012 run #10 参照）。human_action は needs-human タスクに付ける任意フィールド（summary / why / steps[] / links[]）。steps は人間がそのまま実行できる粒度で書き、HTML を含めてよい",
   "tasks": [
     {
@@ -547,7 +547,7 @@
       "title": "ダッシュボードの健全性サマリに coder/immich/vaultwarden Degraded が T-0106 由来の既知事象である旨を注記する（レビュー役 R-003）",
       "kind": "feature",
       "risk": "low",
-      "status": "todo",
+      "status": "done",
       "priority": 55,
       "why": "レビュー役 run #172（利用者視点、R-003, PR #377）の発見。ダッシュボード先頭の健全性サマリが『落ちている: coder、immich、vaultwarden』とだけ赤字表示し、これが T-0106（Doppler キー未登録による ExternalSecret の SecretSyncedError、Pod 自体は全て Running/Ready で実サービスへの影響なし）由来の無害な既知状態であることの注記が無い。初見の人間は『3 サービスが落ちている』と誤読する。事情を辿るには優先度順19件の待ち行列を14番目（T-0106）までスクロールし、さらに完了扱いの T-0122 まで辿る必要があり、VISION が名指しで求める『(a) いまシステムは健康か』にダッシュボード単体では正しく・素早く答えられない",
       "dod": "`ops/dashboard/build.py` の健全性サマリ生成部分で、Degraded な Application が T-0106 由来（`SecretSyncedError` かつ対象が `<app>-restic-backup-credentials` のみ）と機械的に判定できる場合に、サマリ内に一言の注記（例: 『既知の原因あり (T-0106)、実サービスへの影響なし』）を添える。機械判定が難しければ、少なくとも静的な注記（『Degraded の詳細は T-0106 を参照』等、対象アプリ名を明示）を追加する。生成した HTML を目視確認し、初見でも『実害なし』と分かる文言になっているか確認する",
@@ -557,7 +557,7 @@
       ],
       "created": "2026-08-06",
       "pr": null,
-      "notes": "run #187（計画役）: ops/review-log.md R-003 を起票。R-003 の状態を『起票済 T-0162』に更新した。"
+      "notes": "run #187（計画役）: ops/review-log.md R-003 を起票。R-003 の状態を『起票済 T-0162』に更新した。 | run #210（実行役）: 健全性レポートが externalsecret 詳細を持たず機械判定できないため、DoD のフォールバック方針どおり静的な注記にした。bad apps が {coder, immich, vaultwarden} の既知集合に収まる場合と一部混在する場合の両方をローカルで検証（後者は既知分のみ注記し他は『要確認』と表示）。done。"
     },
     {
       "id": "T-0163",
