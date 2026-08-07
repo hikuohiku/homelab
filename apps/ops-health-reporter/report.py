@@ -236,13 +236,14 @@ def collect_nodes():
 
 
 # loop.sh (apps/autopilot/loop.sh) の log() が書く心拍行だけを抜き出す正規表現。
-# ここにマッチした行から取り出した値（timestamp/iteration/exit_code/elapsed_seconds）
+# ここにマッチした行から取り出した値（timestamp/iteration/exit_code/elapsed_seconds/reason）
 # だけを report に載せる。生ログはこの関数の外に一切出さない — claude の出力を
 # git 管理のブランチにそのまま持ち出す経路を作らないため（T-0110）。
-# exit=124 (timeout) の行は "exit=124 (timed out after Ns) elapsed=Ns" と exit code の後に
-# 括弧書きが挟まるので、その部分を任意にして両方の形式を通す
+# exit code の後に "exit=124 (timed out after Ns) elapsed=Ns" のような括弧書きの理由が
+# 挟まることがある（タイムアウト、または repo 同期前段での早期return, T-0158）ので、
+# その部分を任意で捕捉する
 HEARTBEAT_RE = re.compile(
-    r"^\[autopilot\] (\S+) iteration #(\d+) (?:start|end exit=(-?\d+)(?: \([^)]*\))? elapsed=(\d+)s)"
+    r"^\[autopilot\] (\S+) iteration #(\d+) (?:start|end exit=(-?\d+)(?: \(([^)]*)\))? elapsed=(\d+)s)"
 )
 
 
@@ -253,7 +254,7 @@ def parse_heartbeat(raw_log):
         m = HEARTBEAT_RE.match(line.strip())
         if not m:
             continue
-        ts, iteration, exit_code, elapsed = m.groups()
+        ts, iteration, exit_code, reason, elapsed = m.groups()
         if exit_code is None:
             last_start = {"timestamp": ts, "iteration": int(iteration)}
         else:
@@ -263,6 +264,8 @@ def parse_heartbeat(raw_log):
                 "exit_code": int(exit_code),
                 "elapsed_seconds": int(elapsed),
             }
+            if reason:
+                last_end["reason"] = reason
     return {"last_start": last_start, "last_end": last_end}
 
 

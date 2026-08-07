@@ -87,21 +87,26 @@ setup_git() {
 }
 
 # 1 イテレーション: リポジトリを最新化 → claude -p を実行 → 終了コードを返す
+# 早期 return の理由は FAIL_REASON に書いて main() のログ行に載せる（T-0158）。
+# 「claude -p 自体の異常」と「repo 同期前段での早期return」を外形（heartbeat の
+# exit_code のみ）から区別できず、外から『止まっている』のと見分けがつかなかったため
 iterate() {
+  FAIL_REASON=""
+
   if [ ! -d "${REPO_DIR}/.git" ]; then
     log "cloning ${REPO_URL} into ${REPO_DIR}"
-    git clone --quiet "${REPO_URL}" "${REPO_DIR}" || return 1
+    git clone --quiet "${REPO_URL}" "${REPO_DIR}" || { FAIL_REASON="git clone failed"; return 1; }
   fi
 
-  cd "${REPO_DIR}" || return 1
+  cd "${REPO_DIR}" || { FAIL_REASON="cd to repo failed"; return 1; }
 
   # 前回のイテレーションの作業ブランチ・未コミットの残骸は捨てて main の最新から始める。
   # 中断の引き継ぎは origin 側（オープン PR と autopilot/* ブランチ）から拾う設計
   # なので、ローカルに残す意味が無い（CHARTER §2）
-  git fetch --prune --quiet origin || return 1
-  git checkout --quiet -B main origin/main || return 1
-  git reset --hard --quiet origin/main || return 1
-  git clean -fdq || return 1
+  git fetch --prune --quiet origin || { FAIL_REASON="git fetch failed"; return 1; }
+  git checkout --quiet -B main origin/main || { FAIL_REASON="git checkout failed"; return 1; }
+  git reset --hard --quiet origin/main || { FAIL_REASON="git reset failed"; return 1; }
+  git clean -fdq || { FAIL_REASON="git clean failed"; return 1; }
 
   # 役の選択。REVIEW_EVERY 回に 1 回はレビュー役、着手可能なタスクが無いか
   # PLAN_EVERY 回に 1 回は計画役、それ以外は実行役。
@@ -163,7 +168,7 @@ EOF
   fi
   log "role=${role}${lens:+ lens=${lens}} actionable=${actionable}"
 
-  PROMPT="$(cat "${PROMPT_FILE}")" || return 1
+  PROMPT="$(cat "${PROMPT_FILE}")" || { FAIL_REASON="failed to read prompt file"; return 1; }
 
   # timeout の -k は「猶予後に SIGKILL」。GNU coreutils と busybox の双方で使える書式。
   # 上限に達した場合の終了コードは 124
@@ -218,6 +223,8 @@ main() {
     elapsed=$(($(date -u '+%s') - started_at))
     if [ "${rc}" -eq 124 ]; then
       log "iteration #${i} end exit=124 (timed out after ${ITERATION_TIMEOUT_SECONDS}s) elapsed=${elapsed}s"
+    elif [ "${rc}" -ne 0 ] && [ -n "${FAIL_REASON:-}" ]; then
+      log "iteration #${i} end exit=${rc} (${FAIL_REASON}) elapsed=${elapsed}s"
     else
       log "iteration #${i} end exit=${rc} elapsed=${elapsed}s"
     fi
