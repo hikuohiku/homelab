@@ -23,6 +23,11 @@ RISKS = {"low", "medium", "high"}
 DOMAINS = {"homelab"}
 REQUIRED_TASK_KEYS = {"id", "domain", "title", "kind", "risk", "status", "priority", "why", "dod", "created"}
 
+# CHARTER.md の肥大化検知の上限。backlog.json の上限 (ledger.BACKLOG_MAX_BYTES)
+# を参考に決めた（T-0164 DoD(2)）。まだ archive 機構（DoD(1)）が無いので、
+# 圧縮の締め切りというより「気づく」ためのしきい値。
+CHARTER_MAX_BYTES = 120_000
+
 errors: list[str] = []
 warnings: list[str] = []
 
@@ -300,6 +305,27 @@ def check_ledger_size() -> None:
             )
 
 
+def check_charter_size() -> None:
+    """CHARTER.md の肥大化を検知する。
+
+    2026-08-04 の 10.8 KiB から 2026-08-06 時点で 86.1 KiB まで 2 日で約8倍に
+    増えた実績があり（ops/review-log.md R-004）、backlog/state と同じ問題
+    （毎イテレーション読み直すコストが観測の余地を削る）を抱える。ルール本体と
+    経緯を切り分けて archive 先へ移す仕組み（T-0164 DoD(1)）はまだ実施していない
+    ため、超過時にできるのはまだ「気づく」ことだけ。超えたら各ルールの経緯部分
+    （「issue #56, <日時>の指摘。...」のような詳細な事例説明）を切り出して圧縮すること。
+    """
+    path = OPS / "CHARTER.md"
+    if not path.exists():
+        return
+    size = path.stat().st_size
+    if size > CHARTER_MAX_BYTES:
+        err(
+            f"CHARTER.md: {size:,} bytes は上限 {CHARTER_MAX_BYTES:,} を超えている。"
+            "各ルールの経緯部分を切り出して圧縮すること (T-0164)"
+        )
+
+
 def main() -> int:
     # 参照の整合（blocked_by / review-log / next_id）は archive も含めて見ないと、
     # 済んだタスクを指す参照が「存在しない」と誤判定される。
@@ -308,6 +334,7 @@ def main() -> int:
     state = load("state.json")
 
     check_ledger_size()
+    check_charter_size()
 
     for name in ("VISION.md", "CHARTER.md"):
         if not (OPS / name).exists():
