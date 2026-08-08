@@ -1,6 +1,47 @@
 {
   "version": 1,
-  "projects": [],
+  "projects": [
+    {
+      "id": "P-0004",
+      "title": "エージェント自身の脳 (claude-code CLI) と土台イメージのバージョンを固定し、監視対象に入れる",
+      "state": "proposed",
+      "branch": "project/p-0004",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "grep -qE '@anthropic-ai/claude-code@[0-9]+\\.[0-9]+\\.[0-9]+' images/autopilot/Dockerfile",
+        "grep -qE '^FROM node:22-alpine@sha256:[0-9a-f]{64}' images/autopilot/Dockerfile",
+        "python3 -c \"import json,sys; ids=[t['id'] for t in json.load(open('ops/inventory.json'))['targets']]; sys.exit(0 if 'claude-code-cli' in ids else 1)\""
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1500000
+      },
+      "created": "2026-08-08"
+    },
+    {
+      "id": "P-0002",
+      "title": "ops-health-reporter を heart 対応にし、心臓の生存を再び観測可能にする",
+      "state": "proposed",
+      "branch": "project/p-0002",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "python3 ops/check_health_reporter_target.py",
+        "grep -q 'autopilot-heart' apps/ops-health-reporter/report.py",
+        "grep -q 'check_health_reporter_target.py' .github/workflows/ci.yml"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2000000
+      },
+      "created": "2026-08-08"
+    }
+  ],
   "chores": [],
   "last_curriculum_at": "2026-08-08T05:54:43Z"
 }
