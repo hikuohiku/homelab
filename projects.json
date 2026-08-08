@@ -277,7 +277,51 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-08",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-08T13:39:03Z",
+        "verify": [
+          {
+            "cmd": "python3 -c \"import json,sys; rows=[json.loads(l) for l in open('ops/projects/archive.jsonl') if l.strip()]; done={r['id'] for r in rows if 'result' in r}; sys.exit(0 if {'P-0001','P-0004','P-0011','P-0012','P-0013','P-0014'} <= done else 1)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'archive_result' ops/heart/reconcile.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'def check_archive_results' ops/validate.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m unittest ops.heart.tests.test_archive_result",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_archive_result (unittest.loader._FailedTest.test_archive_result)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_archive_result\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 137, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.heart.tests.test_archive_result'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
