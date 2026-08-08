@@ -100,11 +100,32 @@ class TestActivate(unittest.TestCase):
         self.assertEqual(d["projects"][0]["state"], "active")
         self.assertIn("spawn_runner", kinds(actions))
 
-    def test_announced_waits_before_deadline(self):
+    def test_announced_reversible_catches_up_when_idle(self):
+        """走行中に予告されて窓が付いた可逆案は、アイドルになったら繰り上げて即着手
+        (窓の基準は稼働率 — 決定 #3)。"""
         p = project(state="announced", veto_deadline="2026-08-07T13:00:00Z")
+        d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
+        self.assertEqual(d["projects"][0]["state"], "active")
+        self.assertIn("spawn_runner", kinds(actions))
+
+    def test_announced_irreversible_never_catches_up(self):
+        p = project(state="announced", irreversible=True,
+                    veto_deadline="2026-08-07T13:00:00Z")
         d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
         self.assertEqual(d["projects"][0]["state"], "announced")
         self.assertEqual(kinds(actions), [])
+
+    def test_announced_waits_while_busy(self):
+        waiting = project(id="P-0002", state="announced", branch="project/p-0002",
+                          veto_deadline="2026-08-07T13:00:00Z")
+        busy = project(state="active", job="runner-p-0001-a1")
+        d, actions = reconcile.decide(
+            doc(busy, waiting),
+            facts(running_runners=1, jobs={"runner-p-0001-a1": {"active": True}}),
+            RULES, NOW,
+        )
+        self.assertEqual(d["projects"][1]["state"], "announced")
+        self.assertNotIn("spawn_runner", kinds(actions))
 
     def test_concurrency_cap(self):
         ready = project(id="P-0002", state="announced",

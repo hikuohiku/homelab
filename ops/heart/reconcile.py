@@ -146,7 +146,16 @@ def decide(doc, facts, rules, now):
 
         elif state == "announced":
             if parse_iso(p["veto_deadline"]) > now:
-                continue
+                # 窓の繰り上げ: 予告時に「他が走行中」だったために窓が付いた可逆案は、
+                # アイドルになった時点で即着手してよい (窓の基準は安全性でなく稼働率 —
+                # 決定 #3「何もしてない時間が嫌」)。不可逆案は繰り上げない
+                if (
+                    p.get("irreversible")
+                    or facts.get("running_runners", 0) > 0
+                    or running > 0
+                ):
+                    continue
+                p["veto_deadline"] = now_iso(now)
             if breaker:
                 continue
             if running >= rules["runner"]["max_concurrent"]:
