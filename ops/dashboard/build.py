@@ -13,12 +13,17 @@ token が無い環境（CI、手元実行）では push をスキップし、HTM
 設計方針:
   - この画面は 1 日数回、数秒だけ見られる。答えるのは 2 問だけ:
     「いま何が起きているか」「自分は何をすればいいか」
-  - 主役は backlog の順番待ち。priority 昇順にそのまま並べる（backlog.json の
-    着手順そのもの）。集計バーではなく行を出す。次に来るものが読めないと意味がない
-  - 誰待ちか（あなた / autopilot / 条件）を行の形と色で示す。色だけに頼らず必ず語で書く
-  - 済んだこと・全タスク・クラスタの細部は畳む
+  - 主役は heart のプロジェクト台帳（ops-state ブランチの projects.json）。
+    予告中 / 実行中 / レビュー中 / 納品済みを状態順にそのまま並べる。集計バーではなく
+    行を出す。いま何が動いているかが読めないと意味がない
+  - 「自分は何をすればいいか」は ops/projects/seeds.md の『人間の鍵作業』節だけから出す。
+    旧 backlog の needs-human は数えない（凍結済みで、権限開放で大半が解消した。
+    解消済みの依頼を出すのは嘘になる、P-0014）
+  - 誰待ちか（あなた / heart / 条件）を行の形と色で示す。色だけに頼らず必ず語で書く
+  - 済んだこと・クラスタの細部は畳む
   - 書き置きフォームを同一オリジンの POST /feedback に出す。JS 無しで成立させる
-  - 数はすべてこのファイルが backlog.json から数える。文章側で数えない（食い違いの元）
+  - 数はすべてこのファイルが projects.json と seeds.md から数える。文章側で数えない
+    （食い違いの元）
 
 標準ライブラリのみ。入力が同じなら出力も同じ（生成時刻を除く）。
 """
@@ -35,7 +40,6 @@ import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
-import ledger
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
@@ -48,28 +52,6 @@ API = "https://api.github.com"
 
 E = html.escape
 STALE: dict[str, str] = {}
-
-# 順番待ちに出す状態と、その並び順（priority が同値のときの安定化にも使う）
-OPEN_STATUSES = ("in_progress", "needs-human", "todo", "blocked")
-
-STATUS_META = {
-    "todo": ("待ち", "idle"),
-    "in_progress": ("作業中", "sig"),
-    "blocked": ("詰まり", "warn"),
-    "needs-human": ("あなた待ち", "crit"),
-    "done": ("完了", "ok"),
-    "dropped": ("取り下げ", "idle"),
-}
-
-# backlog の kind をそのまま出さず、人間の語彙に寄せる。色は割り当てない
-# （識別色を増やすと、状態を示す赤/黄/緑が埋もれる）。
-KIND_LABEL = {
-    "investigate": "調査", "docs": "文書", "ci": "検証", "feature": "機能",
-    "upgrade": "版上げ", "chore": "雑務", "refactor": "整理", "security": "安全",
-    "meta": "器", "fix": "修正", "update": "版上げ", "infra": "基盤",
-    "migrate": "移行", "verify": "確認",
-}
-RISK_LABEL = {"low": "小", "medium": "中", "high": "大"}
 
 # プロジェクトの状態。語彙は ops/heart/statefiles.py の PROJECT_STATES が単一の情報源で、
 # ここはその 9 個を日本語ラベルと tone に写すだけ。色は「誰待ちか」「正常/注意/異常」に
@@ -132,6 +114,74 @@ def load_projects() -> dict | None:
         except Exception:  # noqa: BLE001
             continue
     return None
+
+
+def load_heartbeat() -> dict | None:
+    """heart の心拍（ops-state ブランチの heartbeat.json）。
+
+    load_projects() と同型。`{"beat": 9, "at": "...", "writer": "heart"}` の 3 キーだけ。
+    ops-state を持たない環境（CI）では None を返し、呼び出し側は「観測なし」に倒す。
+    """
+    for ref in ("origin/ops-state", "ops-state"):
+        try:
+            out = subprocess.run(
+                ["git", "show", f"{ref}:heartbeat.json"],
+                cwd=ROOT, capture_output=True, text=True, timeout=30, check=True,
+            ).stdout
+            return json.loads(out)
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+def heart_beat_seconds() -> int:
+    """heart のビート周期（秒）。単一の情報源は ops/heart/config.py の HEART_BEAT_SECONDS。
+
+    env は「どこで動いているか」だけを持つ規約（heart/config.py の冒頭）なので、
+    ここでは空 env で既定値を読む。ダッシュボードのプロセスの env は heart の env とは
+    別物で、そこから読むと嘘になる。apps/autopilot/deployment.yaml はこの変数を
+    上書きしていない（2026-08-08 実測）。上書きするならここも直すこと。
+    """
+    try:
+        from heart.config import Config
+        return int(Config(ROOT, None, None, {}).beat_seconds)
+    except Exception:  # noqa: BLE001
+        return 120
+
+
+HUMAN_KEYS_HEADING = "人間の鍵作業"
+
+
+def load_human_keys() -> list[dict]:
+    """ops/projects/seeds.md の『人間の鍵作業として残るもの』節から、人間に残る依頼を採る。
+
+    この節だけが「あなたの手が要る」の情報源（P-0014）。旧 backlog の needs-human は
+    数えない — 凍結済みで、権限開放後に解消したものが大半のため。
+
+    パーサは節の中の行頭 `- ` の行だけを採り、次の `## ` 見出しか非リスト行で打ち切る。
+    節の直後に別リストの番号付き項目が紛れ込んでいる（seeds.md 実測）ので、
+    「リストが続く限り」で読むと拾ってしまう。節もファイルも無ければ 0 件に倒す。
+    """
+    p = OPS / "projects" / "seeds.md"
+    if not p.exists():
+        return []
+    items: list[dict] = []
+    inside = False
+    for line in p.read_text().splitlines():
+        if line.startswith("## "):
+            if inside:
+                break
+            inside = HUMAN_KEYS_HEADING in line
+            continue
+        if not inside:
+            continue
+        if line.startswith("- "):
+            body = line[2:].strip()
+            m = re.match(r"^(T-\d{4})\s*[:：]\s*(.*)$", body)
+            items.append({"id": m.group(1) if m else "", "text": m.group(2) if m else body})
+        elif line.strip():
+            break
+    return items
 
 
 def load_project_specs() -> dict[str, dict]:
@@ -348,24 +398,6 @@ def parse_quantity(v) -> float:
     return num * factor
 
 
-_INLINE_OK = re.compile(r"</?(?:a|code|b|strong|em|i|br|span|kbd|small)(?:\s[^<>]*)?/?>",
-                        re.IGNORECASE)
-
-
-def safe_html(s: str) -> str:
-    """human_action.steps は HTML を含んでよい（backlog.json の規約）。ただし
-    `kubectl logs <pod>` のようなプレースホルダも書かれるため、既知のインライン
-    タグ以外は文字として出す。素通しすると文書が壊れる（T-0112 の steps で実際に壊れた）。
-    """
-    out, last = [], 0
-    for m in _INLINE_OK.finditer(str(s)):
-        out.append(E(str(s)[last:m.start()]))
-        out.append(m.group(0))
-        last = m.end()
-    out.append(E(str(s)[last:]))
-    return "".join(out)
-
-
 def clip(s, n: int) -> str:
     """n 文字で切る。切ったときは必ず … を付ける（無いと壊れて見える）。"""
     s = str(s or "")
@@ -389,168 +421,34 @@ def meter(label: str, used: float, cap: float, extra: str, tone: str | None = No
             f'style="width:{min(pct, 100):.1f}%"></span></span></div>')
 
 
-# ---------------------------------------------------------------- backlog
+# ------------------------------------------------------------- 人間の鍵作業
 
 
-def _blocked_ids(t: dict) -> list[str]:
-    return re.findall(r"T-\d{4}", str(t.get("blocked_by", "")))
+def _md_inline(s: str) -> str:
+    """seeds.md の 1 行を HTML に。エスケープしてから **強調** だけ復元する。
+
+    素通しはしない（seeds.md には `.envrc` のようなパスも書かれる）。
+    """
+    out = E(str(s))
+    return re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", out)
 
 
-def _reason_ids(t: dict) -> list[str]:
-    """blocked_by に加えて needs_human_reason 側の T-xxxx も依存として拾う。"""
-    ids = _blocked_ids(t)
-    for extra in re.findall(r"T-\d{4}", str(t.get("needs_human_reason", ""))):
-        if extra not in ids:
-            ids.append(extra)
-    return ids
+def render_human_keys(items: list[dict]) -> str:
+    """あなたの手が要ること。seeds.md の『人間の鍵作業』節がそのまま行になる。
 
-
-def open_tasks(tasks: list[dict]) -> list[dict]:
-    """順番待ち。backlog.json の規約どおり priority 昇順、同値は ID 順。"""
-    live = [t for t in tasks if t.get("status") in OPEN_STATUSES]
-    return sorted(live, key=lambda t: (t.get("priority", 999), t.get("id", "")))
-
-
-def downstream(tasks: list[dict], tid: str) -> list[dict]:
-    """tid が片づくと動き出すもの（推移的）。"""
-    waiting = [t for t in tasks if t.get("status") in ("blocked", "needs-human")]
-    found, frontier = [], [tid]
-    while frontier:
-        cur = frontier.pop()
-        for w in waiting:
-            if w in found or w.get("id") == tid:
-                continue
-            if cur in _reason_ids(w):
-                found.append(w)
-                frontier.append(w["id"])
-    return found
-
-
-def wait_state(t: dict, ids_in_queue: set[str]) -> tuple[str, str, str]:
-    """(owner ラベル, tone, 待ち理由の一文) を返す。誰が動かすべきかを最初に置く。"""
-    status = t.get("status")
-    if status == "needs-human":
-        ha = t.get("human_action") or {}
-        why = ha.get("why") or t.get("needs_human_reason") or t.get("why") or ""
-        return "あなた", "crit", str(why)
-    if status == "in_progress":
-        return "autopilot", "sig", "作業中"
-    if status == "todo":
-        nb = t.get("not_before")
-        if nb is not None and (age_seconds(nb) or 0) < 0:
-            # 返す文は呼び出し側でまとめてエスケープするので、ここでは素のまま
-            return "時刻待ち", "idle", f"{nb} まで着手しない（{until_time(nb)}）"
-        return "autopilot", "sig", "着手できる状態。次の巡回で取る"
-    dep = _blocked_ids(t)
-    reason = str(t.get("blocked_by") or "")
-    known = [d for d in dep if d in ids_in_queue]
-    if known:
-        # blocked_by が ID の羅列だけのことがある。裸の ID を 1 行置くと壊れて見えるので文にする
-        if re.fullmatch(r"[\sT\d,、・/-]*", reason) or not reason.strip():
-            reason = "、".join(dep) + " が済むまで待ち"
-        return "他タスク待ち", "warn", reason
-    return "条件待ち", "warn", reason
-
-
-def render_queue(tasks: list[dict]) -> tuple[str, dict]:
-    live = open_tasks(tasks)
-    ids_in_queue = {t["id"] for t in live}
-    if not live:
-        return ('<li class="q__empty">順番待ちは空です。'
-                'autopilot が拾える仕事はいまありません。</li>', {"total": 0, "you": 0, "unblocks": 0})
-
-    rows, you, unblocks_total = [], 0, 0
-    for i, t in enumerate(live, 1):
-        owner, tone, reason = wait_state(t, ids_in_queue)
-        if t.get("status") == "needs-human":
-            you += 1
-        down = downstream(tasks, t["id"])
-        if t.get("status") == "needs-human":
-            unblocks_total += len(down)
-
-        ha = t.get("human_action") or {}
-        title = ha.get("summary") or t.get("title") or t["id"]
-
-        impact = ""
-        if down:
-            names = "、".join(E(clip(d.get("title"), 30)) for d in down[:3])
-            more = f"　ほか {len(down) - 3} 件" if len(down) > 3 else ""
-            impact = (f'<p class="q__impact">これが済むと <b>{len(down)} 件</b>が動く'
-                      f'<span class="q__impact__names">{names}{more}</span></p>')
-
-        # blocked_by / needs_human_reason 中の T-xxxx は同じ画面内の行へ飛ばす
-        def link_ids(s: str) -> str:
-            out = E(s)
-            for tid in sorted(set(re.findall(r"T-\d{4}", s)), reverse=True):
-                if tid in ids_in_queue:
-                    out = out.replace(tid, f'<a class="q__dep" href="#{tid}">{tid}</a>')
-            return out
-
-        reason_html = ""
-        if reason:
-            short = clip(reason, 150)
-            reason_html = f'<p class="q__why">{link_ids(short)}</p>'
-            if len(reason) > 150:
-                reason_html += (f'<details class="q__more"><summary>理由の続き</summary>'
-                                f'<p>{link_ids(reason)}</p></details>')
-
-        steps = ha.get("steps") or []
-        links = ha.get("links") or []
-        act = ""
-        if t.get("status") == "needs-human":
-            if steps:
-                act = ('<details class="q__act" open><summary>あなたの手順'
-                       f'（{len(steps)} ステップ）</summary><ol>'
-                       + "".join(f"<li>{safe_html(s)}</li>" for s in steps) + "</ol>")
-                if links:
-                    act += ('<p class="q__links">' + " ".join(
-                        f'<a href="{E(str(l.get("url", "")))}">{E(str(l.get("label") or l.get("url", "")))}</a>'
-                        for l in links) + "</p>")
-                act += "</details>"
-            else:
-                act = ('<p class="q__nosteps">手順がまだ書かれていません。'
-                       'autopilot に <code>human_action.steps</code> を書かせてください。</p>')
-
-        meta = [f'<span class="q__id">{E(t["id"])}</span>',
-                f'<span>優先度 {E(str(t.get("priority", "—")))}</span>']
-        if t.get("kind"):
-            meta.append(f'<span>{E(KIND_LABEL.get(t["kind"], t["kind"]))}</span>')
-        if t.get("risk"):
-            meta.append(f'<span>リスク {E(RISK_LABEL.get(t["risk"], t["risk"]))}</span>')
-        if t.get("pr"):
-            meta.append(f'<a href="https://github.com/{REPO}/pull/{E(str(t["pr"]))}">'
-                        f'PR #{E(str(t["pr"]))}</a>')
-
-        rows.append(f"""
-        <li class="q__row q__row--{tone}" id="{E(t['id'])}">
-          <span class="q__rank" aria-hidden="true">{i}</span>
-          <div class="q__main">
-            <div class="q__head"><span class="q__owner q__owner--{tone}">{E(owner)}</span>
-              <h3 class="q__title">{E(str(title))}</h3></div>
-            <p class="q__meta">{"".join(meta)}</p>
-            {reason_html}{impact}{act}
-          </div>
-        </li>""")
-    summary = {"total": len(live), "you": you, "unblocks": unblocks_total}
-    return "".join(rows), summary
-
-
-def render_archive(tasks: list[dict]) -> str:
+    旧 backlog の queue 節（順位・優先度・依存グラフ）はここに引き継がない。
+    ここに並ぶのは「autopilot に手が届かないので人間が動くしかないもの」だけで、
+    優先度の列も待ち行列も持たない（数が一桁なら順位は要らない）。
+    """
+    if not items:
+        return ('<p class="empty">いまあなたにお願いすることはありません。'
+                '動いているものは heart が自分で進めます。</p>')
     rows = []
-    order = {"needs-human": 0, "blocked": 1, "in_progress": 2, "todo": 3, "done": 4, "dropped": 5}
-    for t in sorted(tasks, key=lambda x: (order.get(x.get("status"), 9),
-                                          x.get("priority", 999), x.get("id", ""))):
-        label, tone = STATUS_META.get(t.get("status"), (str(t.get("status")), "idle"))
-        pr = (f'<a href="https://github.com/{REPO}/pull/{t["pr"]}">#{t["pr"]}</a>'
-              if t.get("pr") else "")
-        note = t.get("needs_human_reason") or t.get("blocked_by") or ""
-        rows.append(f'<tr data-status="{E(str(t.get("status")))}">'
-                    f'<td class="at__id">{E(t["id"])}</td><td>{chip(label, tone)}</td>'
-                    f'<td class="at__kind">{E(KIND_LABEL.get(t.get("kind", ""), t.get("kind", "")))}</td>'
-                    f'<td class="at__title">{E(str(t.get("title", "")))}'
-                    + (f'<span class="at__note">{E(clip(note, 110))}</span>' if note else "")
-                    + f'</td><td class="at__pr">{pr}</td></tr>')
-    return "".join(rows)
+    for it in items:
+        head = (f'<span class="hk__id">{E(it["id"])}</span>' if it.get("id") else "")
+        rows.append(f'<li class="hk">{head}'
+                    f'<span class="hk__t">{_md_inline(it["text"])}</span></li>')
+    return f'<ul class="hk-list">{"".join(rows)}</ul>'
 
 
 # ---------------------------------------------------------------- projects
@@ -634,16 +532,23 @@ def render_projects(doc: dict | None, specs: dict[str, dict]) -> str:
 # ---------------------------------------------------------------- pulse
 
 
-def loop_state(state: dict, runs: list[dict]) -> tuple[str, str, str]:
-    last = runs[-1] if runs else {}
-    gap = age_seconds(last.get("at"))
+def heart_state(hb: dict | None, beat_sec: int) -> tuple[str, str, str]:
+    """heart が生きているか。ops-state の heartbeat.json が一次情報（P-0014）。
+
+    以前は state.json の `runs` 最終要素を見ていたが、あれは旧 loop.sh の起動記録で
+    2026-08-07 で凍結しており、常に「止まっているかも」を出していた。heart は
+    beat_seconds ごとに heartbeat.json を書き戻すので、その鮮度で判定する。
+    """
+    if not hb:
+        return "idle", "観測なし", "ops-state の heartbeat.json が読めていません"
+    gap = age_seconds(hb.get("at"))
     if gap is None:
-        return "idle", "起動の記録なし", "—"
-    tone = "crit" if gap > 7200 else "warn" if gap > 4500 else "ok"
-    text = {"ok": "動いています", "warn": "しばらく動きなし", "crit": "止まっているかも"}[tone]
-    # runs 配列は古い分が間引かれるので通算回数は最後の n を使う（len では過少になる）
-    total = last.get("n") if isinstance(last.get("n"), int) else len(runs)
-    return tone, text, f"最終起動 {rel_time(last.get('at'))}・通算 {total} 回"
+        return "warn", "時刻が読めない", f"heartbeat.at = {hb.get('at')}"
+    # 1 拍落ちただけで赤くしない。4 拍で注意、10 拍で異常（既定 120 秒なら 8 分 / 20 分）
+    tone = "crit" if gap > beat_sec * 10 else "warn" if gap > beat_sec * 4 else "ok"
+    text = {"ok": "鼓動しています", "warn": "鼓動が遅れています",
+            "crit": "止まっているかも"}[tone]
+    return tone, text, f"拍 #{hb.get('beat', '?')}・最終 {rel_time(hb.get('at'))}"
 
 
 def health_freshness(h: dict | None) -> tuple[str, str]:
@@ -657,11 +562,11 @@ def health_freshness(h: dict | None) -> tuple[str, str]:
     return tone, f"{rel_time(h.get('generated_at'))}の観測"
 
 
-def render_pulse(state, health, prs, runs) -> str:
+def render_pulse(hb, health, prs, beat_sec) -> str:
     cells = []
 
-    tone, text, sub = loop_state(state, runs)
-    cells.append(f'<div class="pulse__cell"><p class="pulse__k">autopilot ループ</p>'
+    tone, text, sub = heart_state(hb, beat_sec)
+    cells.append(f'<div class="pulse__cell"><p class="pulse__k">heart の鼓動</p>'
                  f'<p class="pulse__v">{dot(tone)}{E(text)}</p>'
                  f'<p class="pulse__s">{E(sub)}</p></div>')
 
@@ -703,8 +608,7 @@ def render_pulse(state, health, prs, runs) -> str:
                  f'<p class="pulse__v">{dot(worst)}{E(ptext)}</p>'
                  f'<p class="pulse__s">CI が通れば自分でマージします</p></div>')
 
-    ap = render_autopilot_self(health)
-    cells.append(ap)
+    cells.append(render_heart_pod(health))
 
     pr_rows = ""
     if prs:
@@ -720,15 +624,19 @@ def render_pulse(state, health, prs, runs) -> str:
     return f'<div class="pulsebox"><div class="pulse">{"".join(cells)}</div>{pr_rows}</div>'
 
 
-def render_autopilot_self(h) -> str:
-    """T-0110: autopilot 自身（namespace autopilot）の readyReplicas と心拍。
+def render_heart_pod(h) -> str:
+    """T-0110 / P-0011: heart の Pod（namespace autopilot）が k8s 側からどう見えているか。
+
+    「生きているか」はもう heart_state（heartbeat.json）が答えるので、ここは
+    heartbeat.json では分からないことだけを言う: Pod が上がっているか、拍が
+    異常終了・ハングしていないか。正常時に反復番号を出すと拍番号の二重表示になるので出さない。
 
     経過時間はレポートの generated_at を基準に測る。now() を基準にすると、
     レポートが古いだけでハング扱いになる（2026-08-06 に実際に誤検知した）。
     """
     ap = (h or {}).get("autopilot") or {}
     if not ap or "error" in ap:
-        return ('<div class="pulse__cell"><p class="pulse__k">autopilot 自身</p>'
+        return ('<div class="pulse__cell"><p class="pulse__k">heart の Pod</p>'
                 '<p class="pulse__v">' + dot("idle") + '観測なし</p>'
                 '<p class="pulse__s">健全性レポートに autopilot キーがありません</p></div>')
     ref = ts(h.get("generated_at")) or datetime.now(timezone.utc)
@@ -736,33 +644,24 @@ def render_autopilot_self(h) -> str:
     hb = ap.get("heartbeat") or {}
     start, end = hb.get("last_start"), hb.get("last_end")
 
-    tone, text, sub = "ok", "常駐しています", ""
-    if (dep.get("readyReplicas") or 0) < 1:
+    ready, want = dep.get("readyReplicas") or 0, dep.get("replicas", "?")
+    tone, text, sub = "ok", "常駐しています", f"readyReplicas {ready} / {want}"
+    if ready < 1:
         tone, text = "crit", "Pod が上がっていない"
-        sub = f"readyReplicas {dep.get('readyReplicas', 0)} / {dep.get('replicas', '?')}"
     elif start and (not end or start.get("iteration", 0) > end.get("iteration", -1)):
         elapsed = age_seconds(start.get("timestamp"), ref)
         if elapsed is not None and elapsed > 3700:
             tone, text = "crit", "ハングの疑い"
             sub = (f"#{start.get('iteration')} が観測時点で {int(elapsed // 60)} 分実行中"
                    "（timeout 3600 秒を超過）")
-        else:
-            text = f"#{start.get('iteration')} を実行中"
-            sub = f"開始 {rel_time(start.get('timestamp'))}"
-    elif end:
-        if end.get("exit_code") not in (0, None):
-            tone, text = "crit", f"#{end.get('iteration')} が異常終了"
-            sub = f"exit={end.get('exit_code')}・{rel_time(end.get('timestamp'))}"
-        else:
-            text = f"#{end.get('iteration')} まで正常"
-            sub = f"{end.get('elapsed_seconds', '?')} 秒で終了・{rel_time(end.get('timestamp'))}"
-    else:
-        tone, text, sub = "warn", "心拍がまだ無い", "loop.sh の心拍ログが読めていません"
+    elif end and end.get("exit_code") not in (0, None):
+        tone, text = "crit", f"#{end.get('iteration')} が異常終了"
+        sub = f"exit={end.get('exit_code')}・{rel_time(end.get('timestamp'))}"
 
     ftone, fresh = health_freshness(h)
     if ftone != "ok":
         sub = f"{sub}（{fresh}）" if sub else fresh
-    return (f'<div class="pulse__cell"><p class="pulse__k">autopilot 自身</p>'
+    return (f'<div class="pulse__cell"><p class="pulse__k">heart の Pod</p>'
             f'<p class="pulse__v">{dot(tone)}{E(text)}</p>'
             f'<p class="pulse__s">{E(sub)}</p></div>')
 
@@ -835,47 +734,35 @@ def render_cluster(h) -> str:
 # ---------------------------------------------------------------- misc
 
 
-def resolve_cadence(state) -> str | None:
-    """人間に見せる実行間隔。無効化されたクラウド routine の頻度をそのまま出さない。"""
-    routines = state.get("routines") or []
-    active = [r for r in routines if r.get("enabled", True)]
-    if active:
-        return active[0].get("cron_human") or active[0].get("cron")
-    loop_cfg = state.get("in_cluster_loop") or {}
-    cadence = loop_cfg.get("interval_human")
-    if not cadence:
-        return None
-    disabled = [r for r in routines if not r.get("enabled", True)]
-    if disabled:
-        backup = disabled[0].get("cron_human") or disabled[0].get("cron")
-        if backup:
-            cadence = f"{cadence} ・ バックストップ: {backup}"
-    return cadence
+def resolve_cadence(beat_sec: int) -> str:
+    """人間に見せる周期。heart のビート周期そのもの（P-0014）。
+
+    以前は state.json の routines / in_cluster_loop を見ていたが、routines は全て
+    enabled: false、in_cluster_loop は退役した loop.sh の値で、どちらも今の実体を
+    指していなかった。
+    """
+    return f"{_span(beat_sec)}ごと"
 
 
 def build() -> str:
     state = load("state.json", {}) or {}
-    # 順番待ちは熱い backlog だけで足りるが、完了件数とアーカイブ表には
-    # archive も要る（ops/ledger.py が done/dropped をそちらへ移すため）
-    backlog = ledger.load_backlog(include_archive=True)
-    tasks = backlog.get("tasks", [])
     prs, merged = fetch_prs()
     health = load_health()
     projects = load_projects()
-    runs = state.get("runs", []) or []
+    heartbeat = load_heartbeat()
+    beat_sec = heart_beat_seconds()
     journal = parse_journal()
 
-    queue_html, qs = render_queue(tasks)
-    n_done = sum(1 for t in tasks if t.get("status") == "done")
+    human_keys = load_human_keys()
     fb = state.get("feedback", {}) or {}
 
-    if qs["you"] == 0:
+    if not human_keys:
         lede = ("いまあなたにお願いすることはありません。"
-                "上から順に autopilot が自分で片づけます。")
+                "動いているものは heart が自分で進めます。")
     else:
-        extra = (f"それが済むと、さらに {qs['unblocks']} 件が動き出します。"
-                 if qs["unblocks"] else "")
-        lede = f"あなたの手が要るのは {qs['you']} 件。{extra}"
+        lede = (f"あなたの手が要るのは {len(human_keys)} 件。"
+                "どれも heart の手が物理的に届かないもので、"
+                "ops/projects/seeds.md の『人間の鍵作業』がそのまま出ています。")
 
     stale_html = (f'<p class="banner banner--warn">GitHub から PR 一覧を取得できませんでした。'
                   f'「出している変更」は{E(rel_time(STALE.get("at")))}のキャッシュです。</p>'
@@ -888,6 +775,9 @@ def build() -> str:
         runs_html += (f'<li class="jr"><h4>{E(clip(e["head"], 52))}</h4><ul>'
                       + "".join(f"<li>{clip(i, 130)}</li>" for i in items) + "</ul></li>")
 
+    # 「直近の納品」は heart-projects 節の delivered 行が既に答えている。ここは PR 単位の
+    # 記録（プロジェクトになっていない heart 自身の変更も入る）として役割を分ける。
+    # 同じ事実を 2 か所に出さない（P-0014）。
     auto_merged = [p for p in merged if str(p.get("headRefName", "")).startswith("autopilot/")]
     done_html = "".join(
         f'<li class="dn"><a href="{E(str(p.get("url", "")))}">{E(clip(p.get("title"), 62))}</a>'
@@ -898,12 +788,11 @@ def build() -> str:
         generated=datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC"),
         stage=E(str(state.get("vision_stage", "?"))),
         stage_label=E(str(state.get("vision_stage_label", ""))),
-        cadence=E(resolve_cadence(state) or "巡回間隔 未設定"),
-        pulse=render_pulse(state, health, prs, runs),
+        cadence=E(resolve_cadence(beat_sec)),
+        pulse=render_pulse(heartbeat, health, prs, beat_sec),
         projects=render_projects(projects, load_project_specs()),
-        queue=queue_html, n_queue=qs["total"], lede=E(lede),
+        human_keys=render_human_keys(human_keys), n_keys=len(human_keys), lede=E(lede),
         cluster=render_cluster(health),
-        archive=render_archive(tasks), n_total=len(tasks), n_done=n_done,
         runs=runs_html, done=done_html,
         fb_url=E(str(fb.get("url") or f"https://github.com/{REPO}/issues")),
         fb_issue=E(str(fb.get("issue") or "?")), fb_read=E(rel_time(fb.get("last_read"))),
@@ -1037,11 +926,11 @@ code {{ font-family:var(--mono); font-size:.78em; background:var(--idle-soft);
 .pr__n {{ font-family:var(--mono); font-size:.73rem; color:var(--ink3); }}
 
 /* --- 版面 --- */
-/* 狭い画面では書き置きを先頭に出す。順番待ちの下に置くと十数行ぶん
+/* 狭い画面では書き置きを先頭に出す。主列の節の下に置くと十数行ぶん
    スクロールしないと辿り着けず、「セッションを開かずに残せる」意味が薄れる。
    .side を display:contents で透過させ、note だけを order で引き上げる。
    広い画面では素直な 2 カラム。行をまたぐ配置（grid-row: 1 / span 2）は使わない:
-   背の高い順番待ちの高さが 1 行目にも配分され、右側に数百 px の空白が空く
+   背の高い主列の高さが 1 行目にも配分され、右側に数百 px の空白が空く
    （2026-08-06 に 1280px で実際に 440px 空いた）。 */
 .grid {{ display:flex; flex-direction:column; gap:1.35rem; min-width:0; }}
 /* 主列は必ずこの箱でまとめる。.grid の直下に節を増やすと、広い画面の
@@ -1077,62 +966,19 @@ code {{ font-family:var(--mono); font-size:.78em; background:var(--idle-soft);
 .chip--crit {{ background:var(--crit-soft); color:var(--crit); }}
 .chip--sig {{ background:var(--sig-soft); color:var(--sig); }}
 
-/* --- 順番待ち（台帳） --- */
-.q {{ display:flex; flex-direction:column; }}
-.q__empty {{ font-size:.85rem; color:var(--ink2); border:1px dashed var(--rule);
-  border-radius:var(--r); padding:.7rem .85rem; }}
-.q__row {{ display:grid; grid-template-columns:2.6rem minmax(0,1fr); gap:.85rem;
-  padding:.8rem .2rem .85rem 0; border-top:1px solid var(--rule2); }}
-.q__row:first-child {{ border-top:1px solid var(--rule); }}
-.q__row:target {{ background:var(--accent-soft); border-radius:var(--r);
-  padding-left:.55rem; padding-right:.55rem; }}
-.q__rank {{ font-family:var(--mono); font-size:1.32rem; font-weight:600;
-  font-variant-numeric:tabular-nums; color:var(--ink3); text-align:right;
-  line-height:1.35; letter-spacing:-.03em; }}
-.q__row--crit .q__rank {{ color:var(--crit); }}
-.q__main {{ display:flex; flex-direction:column; gap:.28rem; min-width:0; }}
-.q__head {{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.45rem; }}
-.q__owner {{ font-family:var(--mono); font-size:.69rem; padding:.08rem .45rem;
-  border-radius:2px; white-space:nowrap; background:var(--idle-soft);
-  color:var(--idle); border:1px solid transparent; }}
-.q__owner--crit {{ background:var(--crit); color:var(--sheet); font-weight:600; }}
-.q__owner--sig {{ background:var(--sig-soft); color:var(--sig);
-  border-color:var(--sig); }}
-.q__owner--warn {{ background:var(--warn-soft); color:var(--warn); }}
-.q__title {{ font-size:.96rem; font-weight:600; line-height:1.5;
-  text-wrap:balance; flex:1; min-width:12rem; }}
-.q__row--crit .q__title {{ font-size:1.02rem; }}
-.q__meta {{ font-family:var(--mono); font-size:.71rem; color:var(--ink3);
-  display:flex; flex-wrap:wrap; gap:.15rem .75rem; }}
-.q__id {{ color:var(--ink2); }}
-.q__why {{ font-size:.815rem; color:var(--ink2); }}
-.q__dep {{ font-family:var(--mono); font-size:.95em; }}
-.q__more summary, .q__act summary {{ cursor:pointer; font-size:.79rem;
-  color:var(--accent); padding:.15rem 0; }}
-.q__more p {{ font-size:.8rem; color:var(--ink2); }}
-.q__impact {{ font-size:.79rem; color:var(--ink2); }}
-.q__impact b {{ color:var(--ink); }}
-.q__impact__names {{ display:block; font-size:.73rem; color:var(--ink3); }}
-.q__act {{ background:var(--sheet); border-left:2px solid var(--crit);
-  border-radius:0 var(--r) var(--r) 0; padding:.4rem .7rem .5rem; margin-top:.2rem; }}
-.q__act summary {{ color:var(--crit); font-weight:600; }}
-.q__act ol {{ list-style:decimal; padding-left:1.25rem; display:flex;
-  flex-direction:column; gap:.32rem; font-size:.83rem; margin-top:.3rem; }}
-.q__act li::marker {{ font-family:var(--mono); font-size:.76rem; color:var(--ink3); }}
-.q__links {{ margin-top:.4rem; font-size:.79rem; display:flex; flex-wrap:wrap;
-  gap:.2rem .8rem; }}
-.q__nosteps {{ font-size:.79rem; color:var(--warn); }}
-/* 幅が狭いと「あなた」札の横に残る幅で見出しが折れて、細い柱になる。
-   札を上の行に逃がして見出しに全幅を渡す。 */
-@media (max-width:560px) {{
-  .q__row {{ grid-template-columns:1.9rem minmax(0,1fr); gap:.6rem; }}
-  .q__rank {{ font-size:1.14rem; }}
-  .q__head {{ flex-direction:column; align-items:flex-start; gap:.22rem; }}
-  .q__title {{ min-width:0; }}
-}}
+/* --- あなたの手が要ること（台帳） --- */
+.hk-list {{ display:flex; flex-direction:column; }}
+.hk {{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.2rem .6rem;
+  padding:.6rem 0 .65rem; border-top:1px solid var(--rule2); font-size:.86rem;
+  line-height:1.6; border-left:2px solid var(--crit); padding-left:.7rem; }}
+.hk:first-child {{ border-top:1px solid var(--rule); }}
+.hk__id {{ font-family:var(--mono); font-size:.72rem; color:var(--crit);
+  white-space:nowrap; }}
+.hk__t {{ flex:1; min-width:12rem; }}
+.hk__t b {{ color:var(--crit); }}
 
 /* --- プロジェクト --- */
-/* 順番待ちと同じ台帳の罫線。順位の数字は付けない（プロジェクトは優先度順ではなく
+/* 台帳の罫線。順位の数字は付けない（プロジェクトは優先度順ではなく
    状態順で、番号を振ると着手順に読めてしまう）。 */
 .pj-list {{ display:flex; flex-direction:column; }}
 .pj {{ display:flex; flex-direction:column; gap:.24rem; min-width:0;
@@ -1213,33 +1059,6 @@ code {{ font-family:var(--mono); font-size:.78em; background:var(--idle-soft);
 .jr li {{ padding-left:.8rem; position:relative; color:var(--ink2); }}
 .jr li::before {{ content:"›"; position:absolute; left:0; color:var(--ink3); }}
 
-/* --- 全タスク --- */
-.archive {{ border-top:1px solid var(--rule); padding-top:.8rem; }}
-.archive > summary {{ cursor:pointer; font-family:var(--mono); font-size:.85rem;
-  font-weight:600; }}
-.filters {{ display:flex; flex-wrap:wrap; gap:.3rem; margin:.7rem 0 .4rem; }}
-.filters button {{ font:inherit; font-family:var(--mono); font-size:.73rem;
-  padding:.15rem .6rem; border-radius:999px; border:1px solid var(--rule);
-  background:var(--sheet2); color:var(--ink2); cursor:pointer; }}
-.filters button[aria-pressed="true"] {{ background:var(--accent);
-  border-color:var(--accent); color:var(--paper); }}
-.acount {{ font-family:var(--mono); font-size:.72rem; color:var(--ink3); }}
-.tablewrap {{ overflow-x:auto; max-height:62vh; overflow-y:auto;
-  border:1px solid var(--rule); border-radius:var(--r); margin-top:.4rem; }}
-.tablewrap table {{ border-collapse:collapse; width:100%; font-size:.79rem;
-  background:var(--sheet); }}
-.tablewrap th, .tablewrap td {{ text-align:left; padding:.34rem .55rem;
-  border-bottom:1px solid var(--rule2); vertical-align:top; }}
-.tablewrap th {{ font-family:var(--mono); font-size:.7rem; color:var(--ink3);
-  background:var(--sheet2); position:sticky; top:0; z-index:1; }}
-.at__id {{ font-family:var(--mono); font-size:.72rem; color:var(--ink3);
-  white-space:nowrap; }}
-.at__kind {{ white-space:nowrap; color:var(--ink3); font-size:.74rem; }}
-.at__title {{ min-width:16rem; }}
-.at__note {{ display:block; font-size:.71rem; color:var(--ink3); margin-top:.1rem; }}
-.at__pr {{ font-family:var(--mono); font-size:.72rem; white-space:nowrap; }}
-.tablewrap tr[hidden] {{ display:none; }}
-
 footer {{ color:var(--ink3); font-size:.73rem; font-family:var(--mono);
   border-top:1px solid var(--rule); padding-top:.7rem;
   display:flex; flex-wrap:wrap; gap:.25rem 1.1rem; }}
@@ -1254,10 +1073,10 @@ footer {{ color:var(--ink3); font-size:.73rem; font-family:var(--mono);
   <header class="mast">
     <span class="mast__h">autopilot — homelab 当直記録</span>
     <span class="mast__stage">段階 {stage}・{stage_label}</span>
-    <span class="mast__meta"><span>巡回 {cadence}</span><span>生成 {generated}</span></span>
+    <span class="mast__meta"><span>心拍 {cadence}</span><span>生成 {generated}</span></span>
   </header>
 
-  <p class="banner banner--ok" id="sent" hidden>書き置きを預かりました。次の巡回で読まれます。<span id="sentid"></span></p>
+  <p class="banner banner--ok" id="sent" hidden>書き置きを預かりました。次の鼓動で読まれます。<span id="sentid"></span></p>
 
   {stale}
   {pulse}
@@ -1265,10 +1084,19 @@ footer {{ color:var(--ink3); font-size:.73rem; font-family:var(--mono);
   <div class="grid">
     <div class="col">
     {projects}
-    <section class="sec q-sec">
-      <div class="sec__h"><h2>順番待ち</h2><span class="sec__n">{n_queue} 件・優先度順</span></div>
+    <section class="sec" id="human-keys">
+      <div class="sec__h"><h2>あなたの手が要ること</h2>
+        <span class="sec__n">{n_keys} 件</span></div>
       <p class="lede">{lede}</p>
-      <ol class="q">{queue}</ol>
+      {human_keys}
+    </section>
+
+    <section class="sec" id="legacy-backlog">
+      <div class="sec__h"><h2>旧 backlog</h2><span class="sec__n">凍結</span></div>
+      <p class="lede">旧体制のタスクキュー（<code>ops/backlog.json</code>）は凍結しました。
+        もう誰も取りません。生きている論点は
+        <a href="https://github.com/{repo}/blob/main/ops/projects/seeds.md">ops/projects/seeds.md</a>
+        に移してあり、そこから curriculum がプロジェクトを立てます。</p>
     </section>
     </div>
 
@@ -1305,26 +1133,6 @@ footer {{ color:var(--ink3); font-size:.73rem; font-family:var(--mono);
     </div>
   </div>
 
-  <details class="archive">
-    <summary>全タスクを開く（{n_total} 件、うち完了 {n_done} 件）</summary>
-    <div class="filters" role="group" aria-label="状態で絞り込む">
-      <button type="button" data-f="all" aria-pressed="true">すべて</button>
-      <button type="button" data-f="needs-human" aria-pressed="false">あなた待ち</button>
-      <button type="button" data-f="blocked" aria-pressed="false">詰まり</button>
-      <button type="button" data-f="todo" aria-pressed="false">待ち</button>
-      <button type="button" data-f="in_progress" aria-pressed="false">作業中</button>
-      <button type="button" data-f="done" aria-pressed="false">完了</button>
-      <button type="button" data-f="dropped" aria-pressed="false">取り下げ</button>
-    </div>
-    <p class="acount" id="acount"></p>
-    <div class="tablewrap">
-      <table>
-        <thead><tr><th>ID</th><th>状態</th><th>種別</th><th>内容</th><th>PR</th></tr></thead>
-        <tbody id="abody">{archive}</tbody>
-      </table>
-    </div>
-  </details>
-
   <footer>
     <span>{repo}</span>
     <a href="https://github.com/{repo}/blob/main/ops/VISION.md">VISION</a>
@@ -1334,29 +1142,7 @@ footer {{ color:var(--ink3); font-size:.73rem; font-family:var(--mono);
 </div>
 
 <script>
-/* 絞り込みだけ。ページの情報は JS 無しで全部読める（書き置きの送信も含む） */
-(function () {{
-  var btns = Array.prototype.slice.call(document.querySelectorAll('.filters button'));
-  var rows = Array.prototype.slice.call(document.querySelectorAll('#abody tr'));
-  var count = document.getElementById('acount');
-  function apply(f) {{
-    var n = 0;
-    rows.forEach(function (r) {{
-      var show = f === 'all' || r.getAttribute('data-status') === f;
-      r.hidden = !show;
-      if (show) n++;
-    }});
-    if (count) count.textContent = n + ' 件を表示';
-  }}
-  btns.forEach(function (b) {{
-    b.addEventListener('click', function () {{
-      btns.forEach(function (o) {{ o.setAttribute('aria-pressed', String(o === b)); }});
-      apply(b.getAttribute('data-f'));
-    }});
-  }});
-  apply('all');
-}})();
-
+/* ページの情報は JS 無しで全部読める（書き置きの送信も含む）。JS は送信後の印だけ */
 /* 送信後にバックエンドが 303 で /?feedback=ok&id=... に戻す。受け取った印と控えの id を
    出し、再読み込みで残らないよう URL からは落とす。JS 無効なら出ないだけ（送信は成立する。
    書けなかったときはバックエンドがエラーページを返すので、この印は出ない） */
