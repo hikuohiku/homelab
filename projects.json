@@ -198,6 +198,50 @@
         "until": "2026-08-08T11:00:37Z",
         "baseline_unhealthy": []
       }
+    },
+    {
+      "id": "P-0015",
+      "title": "壊れた仕様を予告する前に殺す — 採択と予告の間に『新品 clone で verify を実測する』ゲートを置く",
+      "state": "announced",
+      "branch": "project/p-0015",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "test -f ops/heart/adoptgate.py",
+        "grep -q 'adoptgate' ops/heart/reconcile.py",
+        "python3 -m unittest ops.heart.tests.test_adoptgate",
+        "grep -q 'single-branch' ops/memory/substrate.md"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2500000
+      },
+      "created": "2026-08-08",
+      "veto_deadline": "2026-08-08T12:13:50Z"
+    },
+    {
+      "id": "P-0023",
+      "title": "実績台帳が空っぽ — 納品・失敗・実消費を archive.jsonl と projects.json に本当に書く",
+      "state": "announced",
+      "branch": "project/p-0023",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "python3 -c \"import json,sys; rows=[json.loads(l) for l in open('ops/projects/archive.jsonl') if l.strip()]; done={r['id'] for r in rows if 'result' in r}; sys.exit(0 if {'P-0001','P-0004','P-0011','P-0012','P-0013','P-0014'} <= done else 1)\"",
+        "grep -q 'archive_result' ops/heart/reconcile.py",
+        "grep -q 'def check_archive_results' ops/validate.py",
+        "python3 -m unittest ops.heart.tests.test_archive_result"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-08",
+      "veto_deadline": "2026-08-08T12:13:50Z"
     }
   ],
   "chores": [],
