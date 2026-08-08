@@ -20,7 +20,7 @@ heart-and-projects の設計時 (2026-08-07) に洗い出した「器が自分�
 10. 通知 digest / daily briefing の実装 (outbox の digest 分を回収する正規経路)
 11. 生活ドメイン用 lethal trifecta 分離プロファイル (私的データを読む Job に外部送信経路を持たせない) — **段階 3 の前提**
 12. ops-state ブランチの履歴間引き (1 日 ~320 コミット蓄積する)
-13. ops-health-reporter の heartbeat 監視を heart 対応にする (旧 loop の app=autopilot 前提を
+13. ~~ops-health-reporter の heartbeat 監視を heart 対応にする~~ — **P-0011 として実行中** (旧 loop の app=autopilot 前提を
     app=autopilot-heart に。現状 reporter は「pod が見つからない」を報告し続けている)
 
 ## 旧 backlog からの移送 (needs-human / blocked だったもの)
@@ -43,3 +43,7 @@ heart-and-projects の設計時 (2026-08-07) に洗い出した「器が自分�
 - T-0140: 旧 LXC 101 (syncthing) の cert/config の物理的な取り出し
 - T-0141: .envrc の Tailscale credential 重複調査 (対話セッションでの確認が要る)
 - T-0148: ops-dashboard への tailnet 実到達確認 (人間のブラウザ)
+14. **利用者レンズの定期検分 (critic-user) の常設** — 旧体制の「レビュー役・利用者視点」の後継。
+    人間が見る面 (ダッシュボード・Discord 通知・依頼文) を定期的に実際に見て、嘘・古さ・読む負担を
+    指摘する critic の変種。2026-08-08 の「ダッシュボードが旧世界のまま」は人間が見つけた —
+    このレンズが常設されていれば器が先に気づけた種類の問題 (移行時の空席、優先度高)
