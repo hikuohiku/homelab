@@ -357,6 +357,32 @@ class TestMergeAndSoak(unittest.TestCase):
         self.assertEqual(d["projects"][0]["state"], "soaking")
 
 
+class TestArchiveAdoption(unittest.TestCase):
+    SPEC = {"id": "P-0001", "title": "パイロット", "verify": ["false"],
+            "irreversible": False, "capabilities": [], "touches_apps": False,
+            "budget": {"soft_cap_tokens": 500}, "confidence": "confident"}
+
+    def test_adopted_spec_registers_and_announces_same_beat(self):
+        """main の archive で採択済み・projects 未登録の spec は登録され、
+        同じビートで予告まで進む (手動採択のパイロット経路)。"""
+        d, actions = reconcile.decide(doc(), facts(adopted_specs=[self.SPEC]), RULES, NOW)
+        p = d["projects"][0]
+        self.assertEqual(p["id"], "P-0001")
+        self.assertEqual(p["state"], "announced")
+        self.assertEqual(p["budget"]["soft_cap"], 500)
+        self.assertIn("announce", kinds(actions))
+        # 仕事が登録されたビートで curriculum は回さない
+        self.assertNotIn("spawn_curriculum", kinds(actions))
+
+    def test_terminal_project_is_not_resurrected(self):
+        done = project(state="delivered")
+        d, actions = reconcile.decide(
+            doc(done), facts(adopted_specs=[self.SPEC]), RULES, NOW
+        )
+        self.assertEqual(len(d["projects"]), 1)
+        self.assertEqual(d["projects"][0]["state"], "delivered")
+
+
 class TestCurriculum(unittest.TestCase):
     def test_idle_spawns_curriculum(self):
         d, actions = reconcile.decide(doc(), facts(), RULES, NOW)

@@ -168,6 +168,13 @@ class Runner:
         self.data = Path(os.environ.get("HEART_DATA_DIR", "/data"))
         self.project_dir = self.data / "projects" / self.project_id
         self.project_dir.mkdir(parents=True, exist_ok=True)
+        # プロジェクトの永続文脈 (PROJECT.md / PROGRESS.md) はリポジトリ直下でなく
+        # プロジェクト別ディレクトリに置く。直下に置くと PR 経由で main に混入し、
+        # 次のプロジェクトのブランチに前プロジェクトの文脈が残って initializer が
+        # スキップされる (P-0004 の初回実走 #406 で発覚)
+        self.doc_dir = self.repo_dir / "ops" / "projects" / "logs" / self.project_id
+        self.project_md = self.doc_dir / "PROJECT.md"
+        self.progress_md = self.doc_dir / "PROGRESS.md"
         with open(self.repo_dir / "ops" / "rules.json") as f:
             self.rules = json.load(f)
         self.gh = Gh(os.environ.get("AUTOPILOT_GITHUB_TOKEN", ""), self.repo)
@@ -228,6 +235,8 @@ class Runner:
             "PROJECT_ID": self.project_id,
             "PROJECT_BRANCH": self.branch,
             "SPEC_JSON": json.dumps(self.spec, ensure_ascii=False, indent=2),
+            "PROJECT_FILE": str(self.project_md.relative_to(self.repo_dir)),
+            "PROGRESS_FILE": str(self.progress_md.relative_to(self.repo_dir)),
         }
         subst.update(extra or {})
         for k, v in subst.items():
@@ -332,8 +341,8 @@ class Runner:
             return 1
         self.checkout_branch()
 
-        progress = self.repo_dir / "PROJECT-PROGRESS.md"
-        first_time = not (self.repo_dir / "PROJECT.md").exists()
+        progress = self.progress_md
+        first_time = not self.project_md.exists()
         verify = self.run_verify()
         if first_time:
             if any(v["ok"] for v in verify):
