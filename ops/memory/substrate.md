@@ -18,6 +18,22 @@ autopilot namespace の Pod (heart / runner / reviewer / …) が動く環境の
 - PR の `merged` フィールドは信用しない (closed 全件で false を返す実測あり)。
   `merged_at` の非 null で判定する — verified_at: 2026-08-05, CHARTER §7.1
 
+## git (clone / refspec)
+
+> この節は consolidation ではなく P-0015 の worker が追記した (spec の DoD (4) が名指しで
+> 要求している例外。README「書き手は consolidation の PR のみ」の唯一の破れ)。
+
+- **`git clone --depth=1 <url>` は `--single-branch` を含む。** clone 直後の
+  `remote.origin.fetch` が `+refs/heads/<clone したブランチ>:refs/remotes/origin/<同>` の
+  **1 本だけ**になり、以後 `git fetch origin` を何度打ってもこの refspec しか使われない。
+  `origin/main` も `origin/ops-state` も生えず、`git show origin/ops-state:projects.json` が
+  rc=128 で**静かに**落ち続ける (「ファイルが無い」と区別が付かない) — verified_at: 2026-08-08, P-0014 の worker が実際に踏んだ / P-0015 で再実測
+- 復旧は明示 refspec `git fetch origin '+refs/heads/*:refs/remotes/origin/*'`。
+  打った直後に `origin/main` が生えるのを実測した。**shallow のままでも
+  `git show origin/<branch>:<path>` は成功する**ので `--unshallow` は要らない — verified_at: 2026-08-08, P-0015
+- 他ブランチを見る必要がある使い捨て clone では `--depth=1` を使わず、full clone +
+  明示 refspec の fetch にする。実装は `ops/heart/adoptgate.py` の `clone_fresh()` — verified_at: 2026-08-08, P-0015
+
 ## Kubernetes
 
 - 旧 `autopilot-reader` ClusterRole は get/list のみ。secrets と pods/log は読めない。
