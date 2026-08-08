@@ -95,6 +95,40 @@ class TestRunVerifyIn(unittest.TestCase):
         self.assertEqual(v["verdict"], adoptgate.BROKEN_COMMAND)
         self.assertEqual(v["broken"][0]["reason"], "not_found (rc=127)")
 
+    def test_unbuilt_script_is_a_legitimate_fail(self):
+        """罠: `bash <まだ作っていないスクリプト>` も rc=127 を返す。
+
+        rc だけで broken_command に落とすと「これから作る成果物を起動する verify」を
+        持つ spec がゲートで恒久的に殺される (差し戻しは終端 stalled で、同じ id は
+        `_register_spec` が蘇らせない)。archive.jsonl の P-0005 / P-0006 / P-0010 が
+        まさにこの形。stderr は "No such file or directory" で、
+        "command not found" ではない。
+        """
+        results = adoptgate.run_verify_in(
+            self.dir, ["bash ops/drills/not_built_yet_p0015.sh"]
+        )
+        self.assertEqual(results[0]["rc"], 127)
+        self.assertFalse(results[0]["not_found"])
+        self.assertEqual(adoptgate.classify(results)["verdict"], adoptgate.ALL_FAIL)
+
+    def test_unbuilt_relative_script_is_a_legitimate_fail(self):
+        """`./scripts/new.sh` 形式も同じ (rc=127 / No such file or directory)。"""
+        results = adoptgate.run_verify_in(self.dir, ["./scripts/new_p0015.sh"])
+        self.assertEqual(results[0]["rc"], 127)
+        self.assertFalse(results[0]["not_found"])
+        self.assertEqual(adoptgate.classify(results)["verdict"], adoptgate.ALL_FAIL)
+
+    def test_real_spec_shape_passes_the_gate(self):
+        """archive.jsonl の P-0005 の verify 列そのもの。空の clone で all_fail になること
+        (= 予告に進めること)。ゲートは runner より厳しくてはいけない。"""
+        results = adoptgate.run_verify_in(self.dir, [
+            "bash ops/drills/immich_db_restore_drill.sh",
+            "python3 ops/drills/check_drill_freshness.py immich-db-restore "
+            "--max-age-days 30",
+            "grep -q 'immich_db_restore_drill' docs/backup.md",
+        ])
+        self.assertEqual(adoptgate.classify(results)["verdict"], adoptgate.ALL_FAIL)
+
     def test_timeout(self):
         results = adoptgate.run_verify_in(self.dir, ["sleep 5"], timeout=1)
         self.assertTrue(results[0]["timeout"])

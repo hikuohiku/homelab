@@ -157,6 +157,45 @@ class TestAdoptGate(unittest.TestCase):
         )
         self.assertNotIn("announce", kinds(actions))
 
+    def test_unmeasured_gate_counts_its_attempts(self):
+        """恒久的に黙って待つ状態を作らない (冒頭の不変条件)。試行を数えること。"""
+        d, _ = reconcile.decide(doc(project()), facts(), RULES, NOW)
+        self.assertEqual(d["projects"][0]["adopt_gate_attempts"], 1)
+
+    def test_unmeasurable_gate_is_handed_to_a_human(self):
+        """測定が N 回続けて書き戻されなければ stalled + incident。
+
+        これが無いと clone 失敗や /tmp の枯渇で proposed が無期限・無通知の待ちになり、
+        non_terminal が空にならず curriculum_idle も False に固定されて、ビートは
+        回っているのに仕事が一切進まない沈黙状態になる。
+        """
+        p = project(adopt_gate_attempts=reconcile.ADOPT_GATE_MAX_ATTEMPTS)
+        d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
+        p = d["projects"][0]
+        self.assertEqual(p["state"], "stalled")
+        self.assertEqual(p["stalled_reason"], "adopt_gate_unmeasurable")
+        self.assertNotIn("run_adopt_gate", kinds(actions))
+        self.assertNotIn("announce", kinds(actions))
+        # spec の不良ではなく仕組みの故障なので incident
+        notifies = [a for a in actions if a["type"] == "notify"]
+        self.assertEqual(notifies[0]["ntype"], "incident")
+
+    def test_attempts_short_of_the_limit_still_measure(self):
+        p = project(adopt_gate_attempts=reconcile.ADOPT_GATE_MAX_ATTEMPTS - 1)
+        d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
+        self.assertEqual(d["projects"][0]["state"], "proposed")
+        self.assertIn("run_adopt_gate", kinds(actions))
+
+    def test_measured_gate_ignores_the_attempt_counter(self):
+        """測れてしまえば試行回数は関係ない (上限を超えていても判定に進む)。"""
+        p = project(
+            adopt_gate_attempts=reconcile.ADOPT_GATE_MAX_ATTEMPTS + 5,
+            adopt_gate=gate({"cmd": "test -f x", "ok": False, "rc": 1}),
+        )
+        d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
+        self.assertEqual(d["projects"][0]["state"], "announced")
+        self.assertIn("announce", kinds(actions))
+
     def test_bounced_spec_frees_the_curriculum(self):
         """差し戻しは終端 (stalled) なので、同じビートで次の立案に進める。"""
         p = project(adopt_gate=gate({"cmd": "test -d .", "ok": True, "rc": 0}))

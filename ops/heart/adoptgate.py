@@ -18,12 +18,17 @@
 (1 PR 1 論点、CHARTER §4)。runner 側の開始前 all-fail ゲートも**残す** — ここは
 予告の前段であって、runner 側の最後の砦を置き換えるものではない (二重に守る)。
 
-判定の実測的根拠 (2026-08-08, bash 5.3 / git 2.54.0):
+判定の実測的根拠 (2026-08-08, bash 5.3.9 / git 2.54.0):
   - `bash -n -c '<cmd>'` は構文エラーのときだけ rc=2。存在しないコマンドでは rc=0。
     **構文エラーの唯一の判定手段で、実行の前に打つ**
-  - 実行時 rc=127 = コマンドが無い
   - 実行時 rc=2 を構文エラーと見なしてはいけない。`grep -q x /nonexistent` も 2 を
     返す。これは正当な「まだ出来ていない」
+  - **rc=127 は 2 通りあり、rc だけでは区別できない**。stderr で分ける (下記)
+
+このゲートの誤りは対称ではない。取り逃がし (broken を all_fail と判定) は runner 側の
+開始前ゲートが拾い直すが、誤検知 (正当な spec を broken と判定) は stalled = 終端に
+落とし、`_register_spec` が同じ id を蘇らせないので人手なしには回復しない。
+**迷ったら正当な fail に倒す。**
 """
 
 import shutil
@@ -46,6 +51,18 @@ OUTPUT_TAIL = 2000
 ALL_FAIL = "all_fail"
 SOME_PASS = "some_pass"
 BROKEN_COMMAND = "broken_command"
+
+# rc=127 は「コマンドが PATH に無い」と「起動しようとしたファイルが無い」の両方で返る。
+# 実測 (2026-08-08, bash 5.3.9):
+#   bash -c 'no_such_cmd_xyz'          -> 127 / "bash: line 1: no_such_cmd_xyz: command not found"
+#   bash -c 'bash ops/drills/nope.sh'  -> 127 / "bash: ops/drills/nope.sh: No such file or directory"
+#   bash -c './scripts/new.sh'         -> 127 / "bash: line 1: ./scripts/new.sh: No such file or directory"
+# 後者は**成果物がまだ無いだけ**で、spec としては完全に正当な fail。rc だけで broken に
+# 落とすと「これから作るスクリプトを起動する verify」を持つ spec がゲートで恒久的に死ぬ
+# (archive.jsonl の過去 spec 15 件のうち P-0005 / P-0006 / P-0010 の 3 件が該当した)。
+# 判定は stderr のこの marker が出たときだけに絞る。locale で marker が変わって
+# 一致しなくなった場合は「正当な fail」に倒れる = 安全側 (runner 側のゲートが拾う)
+NOT_FOUND_MARKER = "command not found"
 
 
 def _broken_reason(rec):
@@ -145,7 +162,9 @@ def run_one(work_dir, cmd, timeout=VERIFY_TIMEOUT_SECONDS):
         return rec
     rec["rc"] = p.returncode
     rec["ok"] = p.returncode == 0
-    rec["not_found"] = p.returncode == 127
+    # rc==127 だけでは足りない。NOT_FOUND_MARKER を参照。
+    # 「起動するファイルがまだ無い」(No such file or directory) は正当な fail
+    rec["not_found"] = p.returncode == 127 and NOT_FOUND_MARKER in p.stderr
     rec["output"] = (p.stdout + p.stderr)[-OUTPUT_TAIL:]
     return rec
 

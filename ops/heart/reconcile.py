@@ -32,6 +32,7 @@ from .statefiles import TERMINAL_STATES, now_iso, parse_iso
 REVIEW_TIMEOUT_HOURS = 2
 REVIEW_MAX_RETRIES = 2
 MERGING_TIMEOUT_HOURS = 24
+ADOPT_GATE_MAX_ATTEMPTS = 3  # 測定が書き戻されないまま回り続ける proposed を打ち切る
 
 
 def _action(kind, project_id=None, **kw):
@@ -152,7 +153,23 @@ def decide(doc, facts, rules, now):
             gate = p.get("adopt_gate")
             if not gate:
                 # 測るまで進めない。このビートは proposed のまま次を待つ
-                # (ゲートは spec 1 件につき 1 回。毎ビート clone しない)
+                # (ゲートは spec 1 件につき 1 回。毎ビート clone しない)。
+                # ただし**この待ちにも見張り時限を置く** (冒頭の不変条件)。
+                # clone 失敗・/tmp の枯渇・git の timeout が続くと adopt_gate が
+                # 永久に書き戻されず、proposed は非終端なので non_terminal が空に
+                # ならず curriculum_idle も False に固定される = ビートは回っている
+                # のに仕事が一切進まない沈黙状態になる。試行を数えて人間に渡す
+                attempts = p.get("adopt_gate_attempts", 0)
+                if attempts >= ADOPT_GATE_MAX_ATTEMPTS:
+                    # 測れないのは spec の不良ではなく仕組みの故障。incident で渡す
+                    _stall(
+                        p, actions, "adopt_gate_unmeasurable", "incident",
+                        f"{pid} の採択ゲートが {ADOPT_GATE_MAX_ATTEMPTS} 回続けて"
+                        "測定できませんでした (新品 clone か verify 実行が失敗している)。"
+                        "heart の audit.jsonl に例外が残っています",
+                    )
+                    continue
+                p["adopt_gate_attempts"] = attempts + 1
                 actions.append(_action("run_adopt_gate", pid))
                 continue
             verdict = adoptgate.classify(gate.get("verify", []))
