@@ -127,6 +127,9 @@ code { font-family:var(--mono); font-size:.78em; background:var(--idle-soft);
    背の高い順番待ちの高さが 1 行目にも配分され、右側に数百 px の空白が空く
    （2026-08-06 に 1280px で実際に 440px 空いた）。 */
 .grid { display:flex; flex-direction:column; gap:1.35rem; min-width:0; }
+/* 主列は必ずこの箱でまとめる。.grid の直下に節を増やすと、広い画面の
+   2 カラムが 3 セル目に折り返して版面が崩れる。 */
+.col { display:flex; flex-direction:column; gap:1.35rem; min-width:0; }
 .side { display:contents; }
 .grid .note { order:-1; }
 .rail { display:flex; flex-direction:column; gap:1.35rem; min-width:0; }
@@ -209,6 +212,25 @@ code { font-family:var(--mono); font-size:.78em; background:var(--idle-soft);
   .q__rank { font-size:1.14rem; }
   .q__head { flex-direction:column; align-items:flex-start; gap:.22rem; }
   .q__title { min-width:0; }
+}
+
+/* --- プロジェクト --- */
+/* 順番待ちと同じ台帳の罫線。順位の数字は付けない（プロジェクトは優先度順ではなく
+   状態順で、番号を振ると着手順に読めてしまう）。 */
+.pj-list { display:flex; flex-direction:column; }
+.pj { display:flex; flex-direction:column; gap:.24rem; min-width:0;
+  padding:.75rem 0 .8rem; border-top:1px solid var(--rule2); }
+.pj:first-child { border-top:1px solid var(--rule); }
+.pj__head { display:flex; flex-wrap:wrap; align-items:baseline; gap:.45rem; }
+.pj__title { font-size:.92rem; font-weight:600; line-height:1.5;
+  text-wrap:balance; flex:1; min-width:12rem; }
+.pj__meta { font-family:var(--mono); font-size:.71rem; color:var(--ink3);
+  display:flex; flex-wrap:wrap; gap:.15rem .75rem; }
+.pj__id { color:var(--ink2); }
+.pj__why { font-size:.8rem; color:var(--ink2); }
+@media (max-width:560px) {
+  .pj__head { flex-direction:column; align-items:flex-start; gap:.22rem; }
+  .pj__title { min-width:0; }
 }
 
 /* --- 書き置き --- */
@@ -315,15 +337,45 @@ footer { color:var(--ink3); font-size:.73rem; font-family:var(--mono);
   <header class="mast">
     <span class="mast__h">autopilot — homelab 当直記録</span>
     <span class="mast__stage">段階 2・器を安定させる</span>
-    <span class="mast__meta"><span>巡回 2 分間隔 ・ バックストップ: 1 時間ごと（毎時 19 分）</span><span>生成 2026-08-08 08:04 UTC</span></span>
+    <span class="mast__meta"><span>巡回 2 分間隔 ・ バックストップ: 1 時間ごと（毎時 19 分）</span><span>生成 2026-08-08 08:07 UTC</span></span>
   </header>
 
   <p class="banner banner--ok" id="sent" hidden>書き置きを預かりました。次の巡回で読まれます。<span id="sentid"></span></p>
 
   
-  <div class="pulsebox"><div class="pulse"><div class="pulse__cell"><p class="pulse__k">autopilot ループ</p><p class="pulse__v"><span class="dot dot--crit" aria-hidden="true"></span>止まっているかも</p><p class="pulse__s">最終起動 29 時間前・通算 219 回</p></div><div class="pulse__cell"><p class="pulse__k">homelab のアプリ</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>13 / 13 正常</p><p class="pulse__s">4 分前の観測</p></div><div class="pulse__cell"><p class="pulse__k">出している変更</p><p class="pulse__v"><span class="dot dot--idle" aria-hidden="true"></span>なし</p><p class="pulse__s">CI が通れば自分でマージします</p></div><div class="pulse__cell"><p class="pulse__k">autopilot 自身</p><p class="pulse__v"><span class="dot dot--crit" aria-hidden="true"></span>Pod が上がっていない</p><p class="pulse__s">readyReplicas 0 / 0</p></div></div></div>
+  <div class="pulsebox"><div class="pulse"><div class="pulse__cell"><p class="pulse__k">autopilot ループ</p><p class="pulse__v"><span class="dot dot--crit" aria-hidden="true"></span>止まっているかも</p><p class="pulse__s">最終起動 29 時間前・通算 219 回</p></div><div class="pulse__cell"><p class="pulse__k">homelab のアプリ</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>13 / 13 正常</p><p class="pulse__s">7 分前の観測</p></div><div class="pulse__cell"><p class="pulse__k">出している変更</p><p class="pulse__v"><span class="dot dot--idle" aria-hidden="true"></span>なし</p><p class="pulse__s">CI が通れば自分でマージします</p></div><div class="pulse__cell"><p class="pulse__k">autopilot 自身</p><p class="pulse__v"><span class="dot dot--crit" aria-hidden="true"></span>Pod が上がっていない</p><p class="pulse__s">readyReplicas 0 / 0</p></div></div></div>
 
   <div class="grid">
+    <div class="col">
+    <section class="sec" id="heart-projects">
+      <div class="sec__h"><h2>プロジェクト</h2>
+        <span class="sec__n">4 件・進行中 2</span></div>
+      <ul class="pj-list">
+          <li class="pj">
+            <div class="pj__head"><span class="chip chip--warn">予告中</span>
+              <h3 class="pj__title">ops-health-reporter を heart 対応にし、心臓の生存を再び観測可能にする</h3></div>
+            <p class="pj__meta"><span class="pj__id">P-0011</span><span>observability・repair</span><span>拒否権の期限 到来済み</span></p>
+            <p class="pj__why">VISION の第一原理は『ループが止まらないこと』なのに、その心臓 (autopilot-heart) の生死を見る計器が壊れている。ops-health-report の autopilot 節は 2026-08-08T05:30Z 時点で deploym…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 2.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
+          </li>
+          <li class="pj">
+            <div class="pj__head"><span class="chip chip--sig">実行中</span>
+              <h3 class="pj__title">ダッシュボードに heart-and-projects のプロジェクトビューを追加する</h3></div>
+            <p class="pj__meta"><span class="pj__id">P-0001</span><span>observability・feature</span><span>拒否権の期限 到来済み</span></p>
+            <p class="pj__why">人間がプロジェクトの現在地 (予告中/実行中/レビュー中/納品済み・予算消費・拒否権期限) を一目で見る場所が無い。Discord は push 型の断片で、pull 型の全体像はダッシュボードの仕事。旧体制への最大の不満『ダッシュボードが更新されない・フロー…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
+          </li>
+          <li class="pj">
+            <div class="pj__head"><span class="chip chip--ok">納品済み</span>
+              <h3 class="pj__title">エージェント自身の脳 (claude-code CLI) と土台イメージのバージョンを固定し、監視対象に入れる</h3></div>
+            <p class="pj__meta"><span class="pj__id">P-0004</span><span>security・prevent</span><a href="https://github.com/hikuohiku/homelab/pull/406">PR #406</a></p>
+            <p class="pj__why">images/autopilot/Dockerfile は `npm install -g @anthropic-ai/claude-code` を pin 無しで実行し、FROM も node:22-alpine のタグ参照。つまりイメージを再ビルドするたび…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 1.5M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
+          </li>
+          <li class="pj">
+            <div class="pj__head"><span class="chip chip--idle">拒否</span>
+              <h3 class="pj__title">ops-health-reporter を heart 対応にし、心臓の生存を再び観測可能にする</h3></div>
+            <p class="pj__meta"><span class="pj__id">P-0002</span><span>observability・repair</span></p>
+            <p class="pj__why">VISION の第一原理は『ループが止まらないこと』なのに、その心臓 (autopilot-heart) の生死を見る計器が壊れている。ops-health-report の autopilot 節は 2026-08-08T05:30Z 時点で deploym…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 2.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
+          </li></ul>
+    </section>
     <section class="sec q-sec">
       <div class="sec__h"><h2>順番待ち</h2><span class="sec__n">19 件・優先度順</span></div>
       <p class="lede">あなたの手が要るのは 12 件。それが済むと、さらに 6 件が動き出します。</p>
@@ -502,6 +554,7 @@ footer { color:var(--ink3); font-size:.73rem; font-family:var(--mono);
           </div>
         </li></ol>
     </section>
+    </div>
 
     <div class="side">
       <form class="note" method="post" action="/feedback">
