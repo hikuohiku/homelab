@@ -22,7 +22,7 @@ import time
 import traceback
 from datetime import datetime, timezone
 
-from . import config, facts, gitutil, metrics, reconcile, spawn
+from . import adoptgate, config, facts, gitutil, metrics, reconcile, spawn
 from .gh import Gh
 from .notify import Notifier, veto_footer
 from .statefiles import StateFiles, now_iso
@@ -85,6 +85,28 @@ class Heart:
                         log(f"[shadow] announce {pid}")
                     else:
                         notifier.send("announce", announce_text(p), now)
+                elif kind == "run_adopt_gate":
+                    # 採択ゲートの実測 (P-0015)。使い捨ての新品 clone で spec の
+                    # verify を 1 本ずつ実行し、生レコードを書き戻す。判定は
+                    # reconcile.adoptgate.classify() が次のビートで導く。
+                    # **shadow でも実行する**: 副作用は使い捨て clone の中の読み取り
+                    # だけで外に出るものが無く、逆にここを飛ばすと shadow から本番へ
+                    # 切り替えた最初のビートで未検査のまま予告が出てしまう。
+                    # clone に失敗したら例外 → adopt_gate を書かず次のビートでやり直す
+                    # (測れなかったことを all_fail と取り違えない)
+                    verify_results = adoptgate.run_gate(
+                        self.repo_url, p.get("verify", [])
+                    )
+                    p["adopt_gate"] = {
+                        "at": now_iso(now),
+                        "verify": verify_results,
+                        **adoptgate.classify(verify_results),
+                    }
+                    audit["verdict"] = p["adopt_gate"]["verdict"]
+                    log(
+                        f"adopt gate {pid}: {p['adopt_gate']['verdict']} — "
+                        f"{adoptgate.describe(p['adopt_gate'])}"
+                    )
                 elif kind == "spawn_runner":
                     p["spawn_count"] = p.get("spawn_count", 0) + 1
                     if shadow:

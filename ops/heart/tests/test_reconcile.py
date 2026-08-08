@@ -64,9 +64,18 @@ def kinds(actions):
     return [a["type"] for a in actions]
 
 
+def gate(*records):
+    """heart.execute() の run_adopt_gate が書き戻す形 (P-0015)。
+    引数が無ければ all_fail (= 予告してよい健全な spec)。"""
+    verify = list(records) or [{"cmd": "test -f x", "ok": False, "rc": 1}]
+    return {"at": "2026-08-07T11:59:00Z", "verify": verify}
+
+
 class TestAnnounce(unittest.TestCase):
     def test_proposed_becomes_announced_with_zero_window_when_idle(self):
-        d, actions = reconcile.decide(doc(project()), facts(), RULES, NOW)
+        d, actions = reconcile.decide(
+            doc(project(adopt_gate=gate())), facts(), RULES, NOW
+        )
         p = d["projects"][0]
         self.assertEqual(p["state"], "announced")
         self.assertIn("announce", kinds(actions))
@@ -74,23 +83,85 @@ class TestAnnounce(unittest.TestCase):
         self.assertEqual(p["veto_deadline"], "2026-08-07T12:00:00Z")
 
     def test_irreversible_always_waits_window(self):
-        d, _ = reconcile.decide(doc(project(irreversible=True)), facts(), RULES, NOW)
+        d, _ = reconcile.decide(
+            doc(project(irreversible=True, adopt_gate=gate())), facts(), RULES, NOW
+        )
         deadline = reconcile.parse_iso(d["projects"][0]["veto_deadline"])
         self.assertEqual(deadline - NOW, timedelta(hours=RULES["veto"]["window_hours"]))
 
     def test_busy_waits_window_even_if_reversible(self):
         d, _ = reconcile.decide(
-            doc(project()), facts(running_runners=1), RULES, NOW
+            doc(project(adopt_gate=gate())), facts(running_runners=1), RULES, NOW
         )
         deadline = reconcile.parse_iso(d["projects"][0]["veto_deadline"])
         self.assertGreater(deadline, NOW)
 
     def test_breaker_blocks_new_announce(self):
         d, actions = reconcile.decide(
-            doc(project()), facts(breaker_tripped=True), RULES, NOW
+            doc(project(adopt_gate=gate())), facts(breaker_tripped=True), RULES, NOW
         )
         self.assertEqual(d["projects"][0]["state"], "proposed")
         self.assertNotIn("announce", kinds(actions))
+
+
+class TestAdoptGate(unittest.TestCase):
+    """採択と予告の間のゲート (P-0015)。壊れた spec は予告の前に殺す —
+    announce も veto 窓も Job も一切消費しない。"""
+
+    def test_unmeasured_spec_is_not_announced(self):
+        d, actions = reconcile.decide(doc(project()), facts(), RULES, NOW)
+        p = d["projects"][0]
+        self.assertEqual(p["state"], "proposed")
+        self.assertIn("run_adopt_gate", kinds(actions))
+        self.assertNotIn("announce", kinds(actions))
+        self.assertNotIn("veto_deadline", p)
+
+    def test_breaker_blocks_the_gate_too(self):
+        """breaker 中は新しい仕事を作らない。clone も走らせない。"""
+        _, actions = reconcile.decide(
+            doc(project()), facts(breaker_tripped=True), RULES, NOW
+        )
+        self.assertNotIn("run_adopt_gate", kinds(actions))
+
+    def test_gate_is_measured_only_once(self):
+        """測定済みなら再実行しない (毎ビート clone しない)。"""
+        _, actions = reconcile.decide(
+            doc(project(adopt_gate=gate())), facts(), RULES, NOW
+        )
+        self.assertNotIn("run_adopt_gate", kinds(actions))
+
+    def test_some_pass_is_bounced_without_announcing(self):
+        p = project(adopt_gate=gate(
+            {"cmd": "test -f a", "ok": False, "rc": 1},
+            {"cmd": "test -d .", "ok": True, "rc": 0},
+        ))
+        d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
+        p = d["projects"][0]
+        self.assertEqual(p["state"], "stalled")
+        self.assertEqual(p["stalled_reason"], "adopt_gate_some_pass")
+        self.assertNotIn("announce", kinds(actions))
+        self.assertNotIn("veto_deadline", p)
+        # incident ではなく「採択の不良」として question で渡す
+        notifies = [a for a in actions if a["type"] == "notify"]
+        self.assertEqual(notifies[0]["ntype"], "question")
+        self.assertIn("test -d .", notifies[0]["text"])
+
+    def test_broken_command_is_bounced(self):
+        p = project(adopt_gate=gate(
+            {"cmd": "no_such_cmd", "ok": False, "rc": 127, "not_found": True},
+        ))
+        d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
+        self.assertEqual(d["projects"][0]["state"], "stalled")
+        self.assertEqual(
+            d["projects"][0]["stalled_reason"], "adopt_gate_broken_command"
+        )
+        self.assertNotIn("announce", kinds(actions))
+
+    def test_bounced_spec_frees_the_curriculum(self):
+        """差し戻しは終端 (stalled) なので、同じビートで次の立案に進める。"""
+        p = project(adopt_gate=gate({"cmd": "test -d .", "ok": True, "rc": 0}))
+        _, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
+        self.assertIn("spawn_curriculum", kinds(actions))
 
 
 class TestActivate(unittest.TestCase):
@@ -383,17 +454,27 @@ class TestArchiveAdoption(unittest.TestCase):
             "irreversible": False, "capabilities": [], "touches_apps": False,
             "budget": {"soft_cap_tokens": 500}, "confidence": "confident"}
 
-    def test_adopted_spec_registers_and_announces_same_beat(self):
+    def test_adopted_spec_registers_and_gates_before_announcing(self):
         """main の archive で採択済み・projects 未登録の spec は登録され、
-        同じビートで予告まで進む (手動採択のパイロット経路)。"""
+        同じビートで**ゲートの実測まで**進む (手動採択のパイロット経路)。
+        予告はその次のビート — 採択と予告の間に実測を挟むのが P-0015 の要件。"""
         d, actions = reconcile.decide(doc(), facts(adopted_specs=[self.SPEC]), RULES, NOW)
         p = d["projects"][0]
         self.assertEqual(p["id"], "P-0001")
-        self.assertEqual(p["state"], "announced")
+        self.assertEqual(p["state"], "proposed")
         self.assertEqual(p["budget"]["soft_cap"], 500)
-        self.assertIn("announce", kinds(actions))
+        self.assertIn("run_adopt_gate", kinds(actions))
+        self.assertNotIn("announce", kinds(actions))
         # 仕事が登録されたビートで curriculum は回さない
         self.assertNotIn("spawn_curriculum", kinds(actions))
+
+    def test_gated_spec_announces_on_the_next_beat(self):
+        """all_fail が実測されたら、次のビートで従来通り予告に進む。"""
+        d, _ = reconcile.decide(doc(), facts(adopted_specs=[self.SPEC]), RULES, NOW)
+        d["projects"][0]["adopt_gate"] = gate()  # heart.execute() が書き戻す想定
+        d, actions = reconcile.decide(d, facts(adopted_specs=[self.SPEC]), RULES, NOW)
+        self.assertEqual(d["projects"][0]["state"], "announced")
+        self.assertIn("announce", kinds(actions))
 
     def test_terminal_project_is_not_resurrected(self):
         done = project(state="delivered")
