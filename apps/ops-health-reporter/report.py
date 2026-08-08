@@ -12,6 +12,7 @@ import os
 import re
 import ssl
 import urllib.error
+import urllib.parse
 import urllib.request
 
 SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
@@ -235,7 +236,11 @@ def collect_nodes():
     return out
 
 
-# loop.sh (apps/autopilot/loop.sh) の log() が書く心拍行だけを抜き出す正規表現。
+# heart (ops/heart/heart.py) の log() が書く心拍行だけを抜き出す正規表現。
+# 産出側は `[autopilot] <ts> iteration #N start` /
+# `[autopilot] <ts> iteration #N end exit=<rc> elapsed=<n>s` を出す（旧 loop.sh と
+# 同じ書式を heart が引き継いでいる）。この結合は ops/check_health_reporter_target.py が
+# CI で機械検査している（heart 側の書式を変えるとそこで落ちる）。
 # ここにマッチした行から取り出した値（timestamp/iteration/exit_code/elapsed_seconds/reason）
 # だけを report に載せる。生ログはこの関数の外に一切出さない — claude の出力を
 # git 管理のブランチにそのまま持ち出す経路を作らないため（T-0110）。
@@ -270,6 +275,16 @@ def parse_heartbeat(raw_log):
 
 
 AUTOPILOT_NAMESPACE = "autopilot"
+# 観測対象は heart（heart-and-projects の常駐ループ、ops/heart/heart.py）。
+# 旧ループの Deployment `autopilot` / label `app=autopilot` は replicas 0 で退役済みで、
+# そちらを見ていた間は heart が死んでも「pod が見つからない」という同じ文字列が出続けて
+# いた（異常が定常状態に埋もれる、P-0011）。
+# この 2 つの値は apps/autopilot/heart-deployment.yaml が正で、
+# ops/check_health_reporter_target.py が CI で一致を検査している
+# （Deployment をリネームしたら CI が落ちる）。定数のまま持つこと — URL 文字列へ
+# 直書きすると機械抽出できなくなる
+AUTOPILOT_DEPLOYMENT = "autopilot-heart"
+AUTOPILOT_APP_LABEL = "autopilot-heart"
 
 
 def collect_autopilot_health():
@@ -277,7 +292,9 @@ def collect_autopilot_health():
 
     try:
         dep = k8s_get(
-            "/apis/apps/v1/namespaces/{}/deployments/autopilot".format(AUTOPILOT_NAMESPACE)
+            "/apis/apps/v1/namespaces/{}/deployments/{}".format(
+                AUTOPILOT_NAMESPACE, AUTOPILOT_DEPLOYMENT
+            )
         )
         status = dep.get("status", {})
         result["deployment"] = {
@@ -291,8 +308,9 @@ def collect_autopilot_health():
     pod_name = None
     try:
         pods = k8s_get(
-            "/api/v1/namespaces/{}/pods?labelSelector=app%3Dautopilot".format(
-                AUTOPILOT_NAMESPACE
+            "/api/v1/namespaces/{}/pods?labelSelector={}".format(
+                AUTOPILOT_NAMESPACE,
+                urllib.parse.quote("app={}".format(AUTOPILOT_APP_LABEL), safe=""),
             )
         )
         items = pods.get("items", [])
@@ -318,14 +336,13 @@ def collect_autopilot_health():
 
     if pod_name:
         try:
-            # tailLines=200 は不十分だった（2026-08-06 run #89 で last_start/last_end が
-            # 両方 null になる事象を観測）。render.py (apps/autopilot/render.py) は
-            # claude -p の stream-json イベント（tool_use/text/result）を 1 行ずつ出すため、
-            # 込み入ったイテレーション 1 回だけで 200 行を超え、直近の
-            # "iteration #N start" 行が窓の外に押し出されうる。行数ではなく時間で窓を取り、
-            # ITERATION_TIMEOUT_SECONDS（apps/autopilot/deployment.yaml, 現行 3600s）
-            # 1 周分 + 余裕を確実にカバーする。deployment.yaml 側の値を大きく変えたら
-            # ここも合わせて見直すこと
+            # 行数ではなく時間で窓を取る。tailLines=200 は不十分だった（2026-08-06
+            # run #89 で last_start/last_end が両方 null になる事象を観測）——
+            # 旧ループは claude の stream-json を 1 行ずつ吐いたため、1 イテレーションで
+            # 200 行を超え直近の "iteration #N start" が窓の外へ押し出されえた。
+            # heart のビートは HEART_BEAT_SECONDS（ops/heart/config.py 既定 120s、
+            # apps/autopilot/heart-deployment.yaml で上書き可）なので 7200s は
+            # 数十周分にあたる。ビートを大きく変えたらここも見直すこと
             raw = k8s_get_text(
                 "/api/v1/namespaces/{}/pods/{}/log?sinceSeconds=7200".format(
                     AUTOPILOT_NAMESPACE, pod_name
@@ -335,7 +352,9 @@ def collect_autopilot_health():
         except Exception as e:  # noqa: BLE001
             result["heartbeat"] = {"error": "{}: {}".format(type(e).__name__, e)}
     else:
-        result["heartbeat"] = {"error": "app=autopilot の pod が見つからない"}
+        result["heartbeat"] = {
+            "error": "app={} の pod が見つからない".format(AUTOPILOT_APP_LABEL)
+        }
 
     return result
 
@@ -476,7 +495,9 @@ def main():
             "監視用に計算する値であり、ルートファイルシステムの全体サイズとは別物（node01 の root "
             "ファイルシステムは実際には約252GiBあるが、この値は約48.9GiBしか出ない）。ディスク容量の "
             "確認にこの値を使わないこと（T-0079, issue #56 2026-08-05 15:45:04 参照）。"
-            " autopilot キーは autopilot 自身（namespace autopilot）の健全性。"
+            " autopilot キーは autopilot 自身の健全性で、対象は namespace autopilot の "
+            "Deployment autopilot-heart（heart, ops/heart/heart.py）。旧ループの "
+            "Deployment autopilot は退役済み（replicas 0）。"
             "heartbeat.last_end が無い/古い、または exit_code が非 0 なら前回のイテレーションが"
             "異常終了またはハング中の疑い（T-0110）。pods/log は autopilot namespace に閉じた"
             "Role でのみ許可し、心拍行だけを正規表現で抽出している。生ログはここに含まれない。"

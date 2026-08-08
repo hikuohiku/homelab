@@ -48,11 +48,15 @@ autopilot namespace の Pod (heart / runner / reviewer / …) が動く環境の
 
 ## 観測経路 (壊すと自分の異常を誰も検知できなくなる)
 
-- heartbeat 行の書式 `[autopilot] <ts> iteration #N start|end exit=<rc> elapsed=<n>s` は
-  `apps/ops-health-reporter/report.py` の HEARTBEAT_RE と結合している。
-  変えるときは report.py と同時に変える — verified_at: 2026-08-06
-- report.py のログ取得は `sinceSeconds=7200`。イテレーション/ビートの周期を大きく変えるなら
-  ここも見直す — verified_at: 2026-08-06
+- heartbeat 行 `[autopilot] <ts> iteration #N start|end exit=<rc> elapsed=<n>s` の産出元は
+  `ops/heart/heart.py` の `log()` (旧 loop.sh から引き継いだ書式)。
+  `apps/ops-health-reporter/report.py` の HEARTBEAT_RE と結合しており、変えるときは同時に変える。
+  この結合と観測対象 (Deployment `autopilot-heart` / label `app=autopilot-heart`) は
+  `ops/check_health_reporter_target.py` が CI (ops job) で機械検査する — 注意書きではなく
+  片側だけ変えれば落ちる。**replicas >= 1 の Deployment を正とする**規則付き
+  (退役済み `autopilot` を指したままだった drift が P-0011 の発端) — verified_at: 2026-08-08
+- report.py のログ取得は `sinceSeconds=7200`。ビート周期 (`HEART_BEAT_SECONDS`, 既定 120s) を
+  大きく変えるならここも見直す — verified_at: 2026-08-08
 - ops-health-report ブランチの `ops/health/latest.json` は最新 1 点のみ (上書き)。
   傾向は `ops/health/history/YYYY-MM-DD.jsonl` — verified_at: 2026-08-05
 - coder / immich / vaultwarden の ArgoCD `Degraded` は T-0106 (append-only 鍵の Doppler 未登録)
