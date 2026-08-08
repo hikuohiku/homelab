@@ -222,6 +222,7 @@ class Heart:
         curriculum = facts.collect_curriculum(
             self.cfg.data_dir, self.repo_dir, self.gh
         )
+        adopted_specs = list(facts.load_adopted_specs(self.repo_dir).values())
         tripped, breaker_info = metrics.breaker_tripped(
             sf, self.cfg.rules, self.transcripts, now
         )
@@ -243,6 +244,7 @@ class Heart:
             "breaker_tripped": tripped,
             "running_runners": running,
             "curriculum": curriculum,
+            "adopted_specs": adopted_specs,
         }
         doc, actions = reconcile.decide(doc, f, self.cfg.rules, now)
 

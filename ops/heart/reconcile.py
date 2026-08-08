@@ -59,6 +59,31 @@ def _stall(p, actions, reason, ntype=None, text=None):
         actions.append(_action("notify", p["id"], ntype=ntype, text=text))
 
 
+def _register_spec(doc, spec, rules, now):
+    """main の archive.jsonl で採択された spec を proposed として登録する。"""
+    doc["projects"].append(
+        {
+            "id": spec["id"],
+            "title": spec.get("title", ""),
+            "state": "proposed",
+            "branch": f"project/{spec['id'].lower()}",
+            "irreversible": bool(spec.get("irreversible")),
+            "capabilities": spec.get("capabilities", []),
+            "touches_apps": bool(spec.get("touches_apps")),
+            "verify": spec.get("verify", []),
+            "confidence": spec.get("confidence", "unsure"),
+            "budget": {
+                "used_tokens": 0,
+                "soft_cap": (spec.get("budget") or {}).get(
+                    "soft_cap_tokens",
+                    rules["runner"]["default_soft_cap_tokens"],
+                ),
+            },
+            "created": now_iso(now)[:10],
+        }
+    )
+
+
 def decide(doc, facts, rules, now):
     """(projects doc, facts) -> (新 doc, actions)。doc は破壊的に更新して返す。"""
     actions = []
@@ -75,6 +100,18 @@ def decide(doc, facts, rules, now):
     running = sum(
         1 for p in doc["projects"] if p["state"] in ("active", "in_review", "merging")
     )
+
+    # --- 採択の正は main の archive.jsonl。projects に無い採択 spec を登録する ---
+    # curriculum の PR 経由でも人間の手動採択でも、「main に載れば動き出す」で意味論を
+    # 統一する (2026-08-08 パイロット準備で発覚: curriculum result 経由の登録しか無く、
+    # 手動採択が永遠に放置される欠落があった)。終端 (delivered/stalled/vetoed) の
+    # エントリも projects に残るため、済んだ spec がここで蘇ることはない。
+    # projects.json の終端エントリを将来間引くときは、登録済み id の記録を別に持つこと
+    existing_ids = {p["id"] for p in doc["projects"]}
+    for spec in facts.get("adopted_specs") or []:
+        if spec.get("id") and spec["id"] not in existing_ids:
+            _register_spec(doc, spec, rules, now)
+            existing_ids.add(spec["id"])
 
     for p in doc["projects"]:
         state = p["state"]
@@ -297,31 +334,14 @@ def decide(doc, facts, rules, now):
         if cur.get("pr_unknown"):
             pass  # PR の状態が観測できないビートでは判断しない
         elif cur.get("pr_merged"):
+            # 登録自体は上の「archive.jsonl reconcile」が担う (merge されれば main の
+            # archive に載っているので、次のビートまでに必ず登録される)。ここでは
+            # 消費の後始末だけを行う
             existing = {p["id"] for p in doc["projects"]}
             for spec in cur.get("adopted_specs", []):
-                if spec.get("id") in existing:
-                    continue
-                doc["projects"].append(
-                    {
-                        "id": spec["id"],
-                        "title": spec.get("title", ""),
-                        "state": "proposed",
-                        "branch": f"project/{spec['id'].lower()}",
-                        "irreversible": bool(spec.get("irreversible")),
-                        "capabilities": spec.get("capabilities", []),
-                        "touches_apps": bool(spec.get("touches_apps")),
-                        "verify": spec.get("verify", []),
-                        "confidence": spec.get("confidence", "unsure"),
-                        "budget": {
-                            "used_tokens": 0,
-                            "soft_cap": (spec.get("budget") or {}).get(
-                                "soft_cap_tokens",
-                                rules["runner"]["default_soft_cap_tokens"],
-                            ),
-                        },
-                        "created": now_iso(now)[:10],
-                    }
-                )
+                if spec.get("id") and spec["id"] not in existing:
+                    _register_spec(doc, spec, rules, now)
+                    existing.add(spec["id"])
             actions.append(_action("consume_curriculum"))
             curriculum_pending = False
         elif cur.get("pr_open") and cur.get("checks_green"):
