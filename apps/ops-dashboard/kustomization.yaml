@@ -4,6 +4,7 @@ kind: Kustomization
 resources:
   - external-secret.yaml
   - deployment.yaml
+  - build-cronjob.yaml
   - service.yaml
   - ingress.yaml
 
