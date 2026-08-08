@@ -71,6 +71,28 @@ KIND_LABEL = {
 }
 RISK_LABEL = {"low": "小", "medium": "中", "high": "大"}
 
+# プロジェクトの状態。語彙は ops/heart/statefiles.py の PROJECT_STATES が単一の情報源で、
+# ここはその 9 個を日本語ラベルと tone に写すだけ。色は「誰待ちか」「正常/注意/異常」に
+# しか使わない（識別色は増やさない）。announced は拒否権の窓が開いている＝あなた待ちなので
+# warn、stalled は止まっている＝異常で crit、autopilot が回している最中は sig。
+PROJECT_STATE_META = {
+    "proposed": ("立案", "idle"),
+    "announced": ("予告中", "warn"),
+    "active": ("実行中", "sig"),
+    "in_review": ("レビュー中", "sig"),
+    "merging": ("取り込み中", "sig"),
+    "soaking": ("様子見", "ok"),
+    "delivered": ("納品済み", "ok"),
+    "stalled": ("停止", "crit"),
+    "vetoed": ("拒否", "idle"),
+}
+
+# 上から「人間が見るべき順」。止まっているもの、拒否権の窓が開いているものが先。
+PROJECT_ORDER = {
+    "stalled": 0, "announced": 1, "in_review": 2, "merging": 3, "active": 4,
+    "soaking": 5, "proposed": 6, "delivered": 7, "vetoed": 8,
+}
+
 
 def load(name: str, default=None):
     p = OPS / name
@@ -91,6 +113,48 @@ def load_health() -> dict | None:
         except Exception:  # noqa: BLE001
             continue
     return None
+
+
+def load_projects() -> dict | None:
+    """heart が持つプロジェクト台帳（ops-state ブランチにある）。
+
+    load_health() と同型。ops-state を持たない環境（CI の ops job は
+    `git fetch --depth=1 origin main` しかしない）では None を返し、
+    呼び出し側は節ごと出さない。ここで落ちると CI が赤くなる。
+    """
+    for ref in ("origin/ops-state", "ops-state"):
+        try:
+            out = subprocess.run(
+                ["git", "show", f"{ref}:projects.json"],
+                cwd=ROOT, capture_output=True, text=True, timeout=30, check=True,
+            ).stdout
+            return json.loads(out)
+        except Exception:  # noqa: BLE001
+            continue
+    return None
+
+
+def load_project_specs() -> dict[str, dict]:
+    """archive.jsonl から id → 立案（why / cell / dod）。
+
+    追記専用で同じ id の行が複数ありうる。runner と同じく最後の行を採る
+    （ops/projects/README.md）。
+    """
+    p = OPS / "projects" / "archive.jsonl"
+    specs: dict[str, dict] = {}
+    if not p.exists():
+        return specs
+    for line in p.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except ValueError:
+            continue
+        if rec.get("id"):
+            specs[rec["id"]] = rec
+    return specs
 
 
 MERGED_LIMIT = 60
@@ -489,6 +553,84 @@ def render_archive(tasks: list[dict]) -> str:
     return "".join(rows)
 
 
+# ---------------------------------------------------------------- projects
+
+
+def _tokens(n) -> str:
+    """予算は桁が大きい。1.5M / 320k まで丸めて読める幅にする。"""
+    try:
+        n = float(n)
+    except (TypeError, ValueError):
+        return "—"
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f}M"
+    if n >= 1_000:
+        return f"{n / 1_000:.0f}k"
+    return f"{n:.0f}"
+
+
+def render_projects(doc: dict | None, specs: dict[str, dict]) -> str:
+    """heart のプロジェクト台帳を主列の節として描く。
+
+    doc が None（ops-state を持たない環境）なら空文字を返し、節そのものを出さない。
+    projects.json に載っていない案（archive.jsonl の棄却案）は出さない。ここは
+    「いま動いているもの」の画面であって、立案の全記録ではない。
+    """
+    if doc is None:
+        return ""
+
+    projects = doc.get("projects") or []
+    live = sorted(projects, key=lambda p: (PROJECT_ORDER.get(p.get("state"), 9),
+                                           str(p.get("id", ""))))
+
+    if not live:
+        body = ('<p class="empty">動いているプロジェクトはありません。'
+                '次の curriculum が立案します。</p>')
+    else:
+        rows = []
+        for p in live:
+            pid = str(p.get("id", "—"))
+            state = str(p.get("state", ""))
+            label, tone = PROJECT_STATE_META.get(state, (state or "—", "idle"))
+            spec = specs.get(pid, {})
+
+            meta = [f'<span class="pj__id">{E(pid)}</span>']
+            cell = spec.get("cell") or []
+            if cell:
+                meta.append(f'<span>{E("・".join(str(c) for c in cell))}</span>')
+            # 拒否権の期限は窓が閉じたあとも「もう止められない」を示すので終端以外は出す。
+            # 終端（納品済み/停止/拒否）では過ぎた期限は雑音にしかならない。
+            deadline = p.get("veto_deadline")
+            if deadline and state not in ("delivered", "stalled", "vetoed"):
+                meta.append(f'<span>拒否権の期限 {E(until_time(deadline))}</span>')
+            for n in (p.get("prs") or []):
+                meta.append(f'<a href="https://github.com/{REPO}/pull/{E(str(n))}">'
+                            f'PR #{E(str(n))}</a>')
+
+            why = spec.get("why") or ""
+            why_html = f'<p class="pj__why">{E(clip(why, 130))}</p>' if why else ""
+
+            budget = p.get("budget") or {}
+            used, cap = budget.get("used_tokens", 0) or 0, budget.get("soft_cap", 0) or 0
+            bar = meter("予算", used, cap, f"{_tokens(used)} / {_tokens(cap)} tok")
+
+            rows.append(f"""
+          <li class="pj">
+            <div class="pj__head">{chip(label, tone)}
+              <h3 class="pj__title">{E(clip(p.get("title"), 78))}</h3></div>
+            <p class="pj__meta">{"".join(meta)}</p>
+            {why_html}{bar}
+          </li>""")
+        body = f'<ul class="pj-list">{"".join(rows)}</ul>'
+
+    n_open = sum(1 for p in live if p.get("state") not in ("delivered", "stalled", "vetoed"))
+    return f"""<section class="sec" id="heart-projects">
+      <div class="sec__h"><h2>プロジェクト</h2>
+        <span class="sec__n">{len(live)} 件・進行中 {n_open}</span></div>
+      {body}
+    </section>"""
+
+
 # ---------------------------------------------------------------- pulse
 
 
@@ -719,6 +861,7 @@ def build() -> str:
     tasks = backlog.get("tasks", [])
     prs, merged = fetch_prs()
     health = load_health()
+    projects = load_projects()
     runs = state.get("runs", []) or []
     journal = parse_journal()
 
@@ -757,6 +900,7 @@ def build() -> str:
         stage_label=E(str(state.get("vision_stage_label", ""))),
         cadence=E(resolve_cadence(state) or "巡回間隔 未設定"),
         pulse=render_pulse(state, health, prs, runs),
+        projects=render_projects(projects, load_project_specs()),
         queue=queue_html, n_queue=qs["total"], lede=E(lede),
         cluster=render_cluster(health),
         archive=render_archive(tasks), n_total=len(tasks), n_done=n_done,
@@ -900,6 +1044,9 @@ code {{ font-family:var(--mono); font-size:.78em; background:var(--idle-soft);
    背の高い順番待ちの高さが 1 行目にも配分され、右側に数百 px の空白が空く
    （2026-08-06 に 1280px で実際に 440px 空いた）。 */
 .grid {{ display:flex; flex-direction:column; gap:1.35rem; min-width:0; }}
+/* 主列は必ずこの箱でまとめる。.grid の直下に節を増やすと、広い画面の
+   2 カラムが 3 セル目に折り返して版面が崩れる。 */
+.col {{ display:flex; flex-direction:column; gap:1.35rem; min-width:0; }}
 .side {{ display:contents; }}
 .grid .note {{ order:-1; }}
 .rail {{ display:flex; flex-direction:column; gap:1.35rem; min-width:0; }}
@@ -982,6 +1129,25 @@ code {{ font-family:var(--mono); font-size:.78em; background:var(--idle-soft);
   .q__rank {{ font-size:1.14rem; }}
   .q__head {{ flex-direction:column; align-items:flex-start; gap:.22rem; }}
   .q__title {{ min-width:0; }}
+}}
+
+/* --- プロジェクト --- */
+/* 順番待ちと同じ台帳の罫線。順位の数字は付けない（プロジェクトは優先度順ではなく
+   状態順で、番号を振ると着手順に読めてしまう）。 */
+.pj-list {{ display:flex; flex-direction:column; }}
+.pj {{ display:flex; flex-direction:column; gap:.24rem; min-width:0;
+  padding:.75rem 0 .8rem; border-top:1px solid var(--rule2); }}
+.pj:first-child {{ border-top:1px solid var(--rule); }}
+.pj__head {{ display:flex; flex-wrap:wrap; align-items:baseline; gap:.45rem; }}
+.pj__title {{ font-size:.92rem; font-weight:600; line-height:1.5;
+  text-wrap:balance; flex:1; min-width:12rem; }}
+.pj__meta {{ font-family:var(--mono); font-size:.71rem; color:var(--ink3);
+  display:flex; flex-wrap:wrap; gap:.15rem .75rem; }}
+.pj__id {{ color:var(--ink2); }}
+.pj__why {{ font-size:.8rem; color:var(--ink2); }}
+@media (max-width:560px) {{
+  .pj__head {{ flex-direction:column; align-items:flex-start; gap:.22rem; }}
+  .pj__title {{ min-width:0; }}
 }}
 
 /* --- 書き置き --- */
@@ -1097,11 +1263,14 @@ footer {{ color:var(--ink3); font-size:.73rem; font-family:var(--mono);
   {pulse}
 
   <div class="grid">
+    <div class="col">
+    {projects}
     <section class="sec q-sec">
       <div class="sec__h"><h2>順番待ち</h2><span class="sec__n">{n_queue} 件・優先度順</span></div>
       <p class="lede">{lede}</p>
       <ol class="q">{queue}</ol>
     </section>
+    </div>
 
     <div class="side">
       <form class="note" method="post" action="/feedback">
