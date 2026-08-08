@@ -51,6 +51,47 @@
       },
       "created": "2026-08-08",
       "veto_deadline": "2026-08-08T06:13:24Z"
+    },
+    {
+      "id": "P-0001",
+      "title": "ダッシュボードに heart-and-projects のプロジェクトビューを追加する",
+      "state": "announced",
+      "branch": "project/p-0001",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "python3 ops/dashboard/build.py && grep -q 'id=\"heart-projects\"' ops/dashboard/index.html",
+        "python3 ops/dashboard/build.py && grep -q 'P-0001' ops/dashboard/index.html"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-08",
+      "veto_deadline": "2026-08-08T07:58:56Z"
+    },
+    {
+      "id": "P-0011",
+      "title": "ops-health-reporter を heart 対応にし、心臓の生存を再び観測可能にする",
+      "state": "announced",
+      "branch": "project/p-0011",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "python3 ops/check_health_reporter_target.py",
+        "grep -q 'autopilot-heart' apps/ops-health-reporter/report.py",
+        "grep -q 'check_health_reporter_target.py' .github/workflows/ci.yml"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2000000
+      },
+      "created": "2026-08-08",
+      "veto_deadline": "2026-08-08T07:58:56Z"
     }
   ],
   "chores": [],
