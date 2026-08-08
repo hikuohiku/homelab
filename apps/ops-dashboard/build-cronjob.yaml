@@ -1,0 +1,118 @@
+# ダッシュボードの生成と配信を定期化する (P-0014)。
+#
+# それまで `ops/dashboard/build.py` は runner Job の verify の副作用でしか走っておらず、
+# 「ダッシュボードが更新される」ことが誰の仕事でもなかった。プロジェクトが 1 本も
+# 走っていない時間帯はページが止まったままになる。ここが定期実行の持ち主になる。
+#
+# 配信経路の残り (ops-dashboard ブランチ → Deployment の fetcher が 60 秒ごとに
+# raw.githubusercontent から取得 → http.server) は既存のまま。ここは build.py を
+# 定期的に走らせて publish() させるだけで、経路には触らない。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ops-dashboard-build
+  namespace: ops-dashboard
+spec:
+  # fetcher の取得間隔 (60 秒) より十分粗く、人間が「1 日数回、数秒だけ見る」画面として
+  # 古びない程度。ops-health-reporter と同じ 30 分にして、健全性レポートが更新された
+  # 直後にダッシュボードも追随する形にする。
+  # spec.timeZone は指定しない = ノードの JST 評価だが、30 分毎なので実害がない
+  # (ops/memory/substrate.md)
+  schedule: "*/30 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      # clone + GitHub API (PR 一覧と CI 状態) + publish。API が遅いときの余裕を見る
+      activeDeadlineSeconds: 600
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            # UID/GID はイメージ側 (ghcr.io/hikuohiku/homelab-autopilot) の非 root ユーザに
+            # 合わせる。apps/autopilot/heart-deployment.yaml と同じ値
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            fsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: build
+              # build.py は load_health() / load_projects() / load_heartbeat() が
+              # `git show origin/<branch>:<path>` を subprocess で呼ぶため、python3 と git が
+              # 同じコンテナに要る (init で clone → 別コンテナで実行、の分割ができない)。
+              # 両方を持つのはこのイメージだけ。
+              #
+              # 注意: このダイジェストは apps/autopilot/deployment.yaml ・
+              # heart-deployment.yaml と同じ値の二重管理になる。
+              # ops/check_autopilot_image_pin.py は deployment.yaml しか見ないので、
+              # イメージを上げるときはここも手で揃えること
+              image: ghcr.io/hikuohiku/homelab-autopilot@sha256:6d0cf8b13d602f189d75b48ef654cb0cfd0fe999740782928199097b7451bf75
+              terminationMessagePolicy: FallbackToLogsOnError
+              command:
+                - sh
+                - -c
+                # public repo なので clone に認証は要らない (token は build.py が
+                # GitHub API と publish に使うだけ)。credential helper を置かない
+                - |
+                  set -eu
+                  git clone --quiet --depth=1 "$REPO_URL" "$REPO_DIR"
+                  cd "$REPO_DIR"
+                  # --depth=1 の clone は single-branch になり refspec が main だけになる。
+                  # 明示 refspec で取らないと origin/<branch> が生えず、build.py の
+                  # load_projects() / load_heartbeat() / load_health() が黙って None に
+                  # 落ちて「節が出ないだけ」の静かな劣化になる
+                  for b in ops-state ops-health-report; do
+                    git fetch --quiet --depth=1 origin \
+                      "+refs/heads/$b:refs/remotes/origin/$b" ||
+                      echo "warning: origin/$b を取得できませんでした" >&2
+                  done
+                  exec python3 ops/dashboard/build.py
+              env:
+                - name: REPO_URL
+                  value: https://github.com/hikuohiku/homelab.git
+                - name: REPO_DIR
+                  value: /work/repo
+                - name: HOME
+                  value: /work/home
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+                # PR 一覧の取得と ops-dashboard ブランチへの publish に使う。
+                # ExternalSecret は新設せず、server.py 用に既にある
+                # apps/ops-dashboard/external-secret.yaml の Secret をそのまま参照する
+                - name: AUTOPILOT_GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: ops-dashboard-github-token
+                      key: token
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                # 同じイメージを使う heart Deployment に合わせる。root FS を read-only に
+                # 締めた実測がまだ無く、締めるなら別の変更として実機で確かめる
+                readOnlyRootFilesystem: false
+              resources:
+                # memory limits は付けない: 実測できる環境が無く、OOMKill は回復しないため
+                # 裏付けの無い値で「縛る」変更をしない (CHARTER §4, T-0055 の教訓)。
+                # CPU limits は超過しても throttle で回復するので付けてよい
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                  # clone (main の全履歴ではなく depth=1) + 生成物
+                  ephemeral-storage: 512Mi
+                limits:
+                  cpu: 500m
+              volumeMounts:
+                - name: work
+                  mountPath: /work
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: work
+              emptyDir: {}
+            - name: tmp
+              emptyDir: {}
