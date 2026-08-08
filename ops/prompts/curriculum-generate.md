@@ -13,10 +13,12 @@ curriculum 第 1 段: 発散生成。判定 (採択) は別セッション (curr
 1. `ops/VISION.md` — 何を目指しているか。**候補は VISION との差分から生まれる**
 2. `ops/projects/archive.jsonl` — 過去の全案 (採択・棄却・失敗を含む)。
    **既出と同型の案を出さない。** 失敗した案は「なぜ失敗したか」を乗り越える形なら再提案してよい
-3. `ops/memory/` — 意味記憶 (substrate.md には実行環境の実測制約がある)
-4. `ops/journal/` の直近 — 最近何が起きているか
-5. `ops/inventory.json` / ops-health-report ブランチの `ops/health/latest.json` — 環境の現状
-6. リポジトリ全体 (CLAUDE.md、apps/、docs/) — 現実の姿
+3. `ops/projects/seeds.md` — 種プロジェクトの候補プールと旧 backlog からの移送分。
+   立案の原料 (丸写しせず、今も価値が残るかを判断する)
+4. `ops/memory/` — 意味記憶 (substrate.md には実行環境の実測制約がある)
+5. `ops/journal/` の直近 — 最近何が起きているか
+6. `ops/inventory.json` / ops-health-report ブランチの `ops/health/latest.json` — 環境の現状
+7. リポジトリ全体 (CLAUDE.md、apps/、docs/) — 現実の姿
 
 ## 案の出し方
 
