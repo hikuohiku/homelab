@@ -51,8 +51,11 @@ spec:
               drop: ["ALL"]
             readOnlyRootFilesystem: false
           env:
+            # Phase 2 (2026-08-08): shadow 並走の実績 (300 ビート無エラー・veto 疎通・
+            # 判断ログの検分) を受けて active に切替。以後 heart は Job spawn / merge /
+            # Discord 送信を実際に行う
             - name: HEART_MODE
-              value: shadow
+              value: active
             - name: AUTOPILOT_IMAGE
               value: ghcr.io/hikuohiku/homelab-autopilot@sha256:6d0cf8b13d602f189d75b48ef654cb0cfd0fe999740782928199097b7451bf75
             - name: CLAUDE_CODE_OAUTH_TOKEN
