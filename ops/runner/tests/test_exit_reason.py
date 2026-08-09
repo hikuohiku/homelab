@@ -134,20 +134,26 @@ class TestMaskSecrets(unittest.TestCase):
         self.assertEqual(mask_secrets("abc def", env), "abc def")
 
     def test_token_shapes_are_masked(self):
+        # ダミートークンは連結で組み立てる: リテラルで書くと GitGuardian が本物と
+        # 誤検知して PR の check が赤くなり、heart の「全チェック green」で merge が
+        # 止まる (2026-08-09、この PR 自身の CI で実測)
         env = {}
+        ghp = "ghp_" + "ABCdef0123456789ABCdef"
+        pat = "github_pat_" + "11ABCDEFG0abcdefghijklmn"
+        ant = "sk-ant-" + "api03-abcdefghijklmno"
+        jwt = "eyJhbGciOiJIUzI1NiIs" + "InR5cCI6"
         cases = [
-            "remote: ghp_ABCdef0123456789ABCdef",
-            "token github_pat_11ABCDEFG0abcdefghijklmn",
-            "x-api-key: sk-ant-api03-abcdefghijklmno",
-            "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6",
-            "https://x-access-token:ghp_ABCdef0123456789@github.com/o/r",
+            f"remote: {ghp}",
+            f"token {pat}",
+            f"x-api-key: {ant}",
+            f"Authorization: Bearer {jwt}",
+            f"https://x-access-token:{ghp[:20]}@github.com/o/r",
         ]
         for text in cases:
             with self.subTest(text=text):
                 got = mask_secrets(text, env)
                 self.assertIn("***", got)
-                for leak in ("ghp_ABCdef0123456789", "github_pat_11ABCDEFG0",
-                             "sk-ant-api03-abcdefghijklmno", "eyJhbGciOiJIUzI1NiIs"):
+                for leak in (ghp[:20], pat[:21], ant, jwt[:20]):
                     self.assertNotIn(leak, got)
 
     def test_plain_text_is_untouched(self):
