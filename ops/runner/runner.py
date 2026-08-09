@@ -131,6 +131,17 @@ def parse_usage_limit_reset(text):
         return None
 
 
+def should_withhold_review(failure_kind, review_exists):
+    """reviewer が上限で死んだ回を「レビュー不合格」に読み替えないための判定 (純関数)。
+
+    verdict=fail を書くと heart は review_cycles を 1 消費して worker に偽の findings を
+    渡す。上限が続けば rules.review.max_cycles で review_rejected = ここでもループが
+    止まる。reviewer が verdict を書き切っていれば (review.json が在れば) それは有効な
+    結果なので、書かずに終えるのは「上限で死に、かつ verdict が無い」回だけ。
+    """
+    return failure_kind == "usage_limit" and not review_exists
+
+
 def mask_secrets(text, env=None):
     """stderr に混ざった秘密を潰す純関数。env を引数で受けるのはテストのため。"""
     if not text:
@@ -427,6 +438,40 @@ class Runner:
             "stderr_tail": info.get("stderr_tail", ""),
         }
 
+    def hit_usage_limit(self):
+        return (self.last_session or {}).get("failure_kind") == "usage_limit"
+
+    def quota_wait_or_yield(self, waited, budget, **result_kw):
+        """usage_limit で死んだ回の待機。initializer とループの両方から呼ぶ。
+
+        戻り値は `(累積待機秒, rc)`。rc が None なら待機し終えたので同じセッションを
+        再試行してよい。rc が int なら `waiting_quota` を書き終えているので、その rc で
+        プロセスを終える (heart が resume_after まで待って runner を出し直す)。
+        沈黙は禁物 — heartbeat ログが唯一の外からの観測経路なので必ず log() する。
+        """
+        wait = self.quota_wait_seconds()
+        remaining = budget - waited
+        reset_at = (self.last_session or {}).get("reset_at")
+        if wait > remaining:
+            resume_after = (
+                datetime.now(timezone.utc) + timedelta(seconds=wait)
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            log(
+                f"usage_limit: 待機 {wait}s が残り予算 {remaining}s を超える。"
+                f"waiting_quota で終える (resume_after={resume_after})"
+            )
+            self.write_result(
+                "waiting_quota", resume_after=resume_after,
+                **result_kw, **self.failure_fields(),
+            )
+            return waited, 0
+        log(
+            f"usage_limit: {wait}s 待機して再開する "
+            f"(reset_at={reset_at}, 待機予算 {waited + wait}/{budget}s)"
+        )
+        time.sleep(wait)
+        return waited + wait, None
+
     def quota_wait_seconds(self):
         """上限が明けるまでの待機秒。reset 時刻が取れなければ既定値。"""
         reset_at = (self.last_session or {}).get("reset_at")
@@ -522,6 +567,11 @@ class Runner:
         progress = self.progress_md
         first_time = not self.project_md.exists()
         verify = self.run_verify()
+        # この runner プロセスが上限待ちに使ってよい総量。Job の生存時間
+        # (activeDeadlineSeconds) より session_max_seconds の方が先に効くので、
+        # これを待機予算の上限として読む。initializer も同じ財布から待つ
+        quota_wait_budget = self.rules["runner"]["session_max_seconds"]
+        quota_waited = 0
         if first_time:
             if any(v["ok"] for v in verify):
                 # 始める前から通っている受入基準は「基準になっていない」。
@@ -532,23 +582,41 @@ class Runner:
                     verify=verify,
                 )
                 return 1
-            outcome = self.run_session(
-                self.prompt_text("initializer"), "s0-init"
-            )
-            if outcome != "completed":
+            while True:
+                if self.budget.exhausted():
+                    # max_sessions_per_project は無限ループの最後の歯止め
+                    # (待機予算とは別軸)。上限リトライでもここは外さない
+                    self.write_result("budget_exhausted", verify=verify)
+                    return 0
+                outcome = self.run_session(
+                    self.prompt_text("initializer"), "s0-init"
+                )
+                if outcome == "completed":
+                    break
+                if self.hit_usage_limit():
+                    # **新規プロジェクトの最初のセッションこそ最も上限に当たりやすい。**
+                    # ここを stalled + incident のままにすると、本プロジェクトが消しに
+                    # 来た症状 (上限を実装詰まりと読み違える) が initializer にだけ
+                    # residual として残る (P-0023 / P-0025 の死に方)
+                    quota_waited, rc = self.quota_wait_or_yield(
+                        quota_waited, quota_wait_budget, verify=verify
+                    )
+                    if rc is not None:
+                        return rc
+                    continue
                 self.write_result(
-                    "error", error=f"initializer: {outcome}", **self.failure_fields()
+                    "error",
+                    error=(
+                        f"initializer: {outcome} "
+                        f"(failure_kind={self.failure_fields()['failure_kind']})"
+                    ),
+                    **self.failure_fields(),
                 )
                 return 1
             self.push_if_committed()
 
         consecutive_inactive = 0
         consecutive_error = 0
-        # この runner プロセスが上限待ちに使ってよい総量。Job の生存時間
-        # (activeDeadlineSeconds) より session_max_seconds の方が先に効くので、
-        # これを待機予算の上限として読む
-        quota_wait_budget = self.rules["runner"]["session_max_seconds"]
-        quota_waited = 0
         # レビュー差し戻し (findings) 付きで起動された場合、verify が全 green のままでも
         # 最低 1 セッションは findings 対応を回す。これが無いと品質理由の fail
         # (verify green のまま) に一度も対処せず即 ready_for_review を再宣言してしまう
@@ -582,32 +650,14 @@ class Runner:
             )
             self.push_if_committed()
             findings_pending = False
-            if (self.last_session or {}).get("failure_kind") == "usage_limit":
+            if self.hit_usage_limit():
                 # 上限は器の外側の事実であって停滞ではない。連続エラーに数えず、
-                # 明けるまで待って同じセッションを再開する。
-                # 沈黙は禁物 — heartbeat ログが唯一の外からの観測経路
-                wait = self.quota_wait_seconds()
-                remaining = quota_wait_budget - quota_waited
-                reset_at = (self.last_session or {}).get("reset_at")
-                if wait > remaining:
-                    resume_after = (
-                        datetime.now(timezone.utc) + timedelta(seconds=wait)
-                    ).strftime("%Y-%m-%dT%H:%M:%SZ")
-                    log(
-                        f"usage_limit: 待機 {wait}s が残り予算 {remaining}s を超える。"
-                        f"waiting_quota で終える (resume_after={resume_after})"
-                    )
-                    self.write_result(
-                        "waiting_quota", resume_after=resume_after, verify=verify,
-                        **self.failure_fields(),
-                    )
-                    return 0
-                log(
-                    f"usage_limit: {wait}s 待機して再開する "
-                    f"(reset_at={reset_at}, 待機予算 {quota_waited + wait}/{quota_wait_budget}s)"
+                # 明けるまで待って同じセッションを再開する
+                quota_waited, rc = self.quota_wait_or_yield(
+                    quota_waited, quota_wait_budget, verify=verify
                 )
-                quota_waited += wait
-                time.sleep(wait)
+                if rc is not None:
+                    return rc
             elif outcome == "inactive_killed":
                 consecutive_inactive += 1
                 if consecutive_inactive >= 2:
@@ -649,6 +699,18 @@ class Runner:
             self.prompt_text("reviewer", extra, from_main=True), "review"
         )
         review_path = self.project_dir / "review.json"
+        if should_withhold_review(
+            self.failure_fields()["failure_kind"], review_path.exists()
+        ):
+            # 上限で死んだ回を「レビュー不合格」に読み替えない。ここで verdict=fail を
+            # 書くと review_cycles が 1 減り、worker には偽の findings が渡る。
+            # 何も書かずに非ゼロで終え、heart 側の既存の見張り
+            # (REVIEW_TIMEOUT_HOURS × REVIEW_MAX_RETRIES) の再試行に任せる
+            log(
+                "usage_limit: reviewer セッションが上限で死んだ。review.json を書かず "
+                "非ゼロで終える (heart の reviewer 再試行に任せる)"
+            )
+            return 1
         verdict = {"verdict": "fail", "findings": ["reviewer セッションが verdict を書かなかった"]}
         if review_path.exists():
             try:
@@ -676,8 +738,13 @@ class Runner:
             self.prompt_text("curriculum-generate", extra), "cur-gen"
         )
         if outcome != "completed" or not gen_out.exists():
+            # incident 通知の本文に出るのは error フィールドだけなので、死因を本文に含める
             self.write_result(
-                "error", error=f"curriculum generate: {outcome}",
+                "error",
+                error=(
+                    f"curriculum generate: {outcome} "
+                    f"(failure_kind={self.failure_fields()['failure_kind']})"
+                ),
                 **self.failure_fields(),
             )
             return 1
@@ -691,7 +758,12 @@ class Runner:
         )
         if outcome != "completed" or not judge_out.exists():
             self.write_result(
-                "error", error=f"curriculum judge: {outcome}", **self.failure_fields()
+                "error",
+                error=(
+                    f"curriculum judge: {outcome} "
+                    f"(failure_kind={self.failure_fields()['failure_kind']})"
+                ),
+                **self.failure_fields(),
             )
             return 1
         try:

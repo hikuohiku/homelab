@@ -88,6 +88,19 @@ autopilot namespace の Pod (heart / runner / reviewer / …) が動く環境の
   同じセッションを再開する。待機予算は `rules.runner.session_max_seconds` (7200s) で、
   超える場合は stalled ではなく result state `waiting_quota` + `resume_after` で終える。
   heart は `active` のまま `quota_wait_until` まで待って runner を出し直す — 設計 (2026-08-09), P-0026
+- **「上限は停滞ではない」は「無限に待ってよい」ではない。** runner の 7200s は 1 プロセス内の
+  上限にすぎず、`waiting_quota` → respawn → また `waiting_quota` の**周回そのものには時限が無い**。
+  `max_concurrent` は 1 なので、黙って待ち続ける 1 件が他の全プロジェクトのスロットを塞ぐ。
+  連続待ちを `quota_wait_count` で数え、`reconcile.QUOTA_WAIT_MAX_ROUNDS` を超えたら
+  `quota_wait_exhausted` で人間に渡す (上限が明けていないか、死因の判定が誤っている)。
+  reconcile.py 冒頭の不変条件「恒久的に黙って待つ状態を作らない」に例外を作らない —
+  設計 (2026-08-09), P-0026 レビュー指摘 [1]
+- 上限は **initializer / worker ループ / reviewer の 3 箇所**で制御に効く。特に
+  **新規プロジェクトの最初のセッション (initializer) こそ最も上限に当たりやすい**。
+  reviewer が上限で死んだ回は review.json を書かない — 書くと `verdict=fail` として
+  `review_cycles` を消費し、`max_cycles` で `review_rejected` = ここでもループが止まる
+  (heart 側の `REVIEW_TIMEOUT_HOURS` × `REVIEW_MAX_RETRIES` の再試行に任せる) —
+  設計 (2026-08-09), P-0026 レビュー指摘 [2][3]
 
 ## 観測経路 (壊すと自分の異常を誰も検知できなくなる)
 

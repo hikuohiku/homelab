@@ -408,6 +408,61 @@ class TestQuotaWait(unittest.TestCase):
         self.assertEqual(d["projects"][0]["state"], "stalled")
         self.assertNotIn("spawn_runner", kinds(actions))
 
+    def test_repeated_quota_waits_are_bounded(self):
+        # 「恒久的に黙って待つ状態を作らない」は上限待ちにも掛かる。runner の
+        # 待機予算は 1 プロセス内の上限にすぎず、waiting_quota → respawn →
+        # また waiting_quota の周回には時限が無い。max_concurrent=1 では
+        # この 1 件が他の全プロジェクトのスロットを塞ぎ続ける (レビュー指摘 [1])
+        p = project(
+            state="active", job="runner-p-0001-a1",
+            quota_wait_count=reconcile.QUOTA_WAIT_MAX_ROUNDS,
+        )
+        d, actions = reconcile.decide(
+            doc(p), facts(results={"P-0001": self.result("2026-08-07T14:00:00Z")}),
+            RULES, NOW,
+        )
+        p = d["projects"][0]
+        self.assertEqual(p["state"], "stalled")
+        self.assertEqual(p["stalled_reason"], "quota_wait_exhausted")
+        # 札も回数も落とす。残すと人間が active に戻した次の waiting_quota で
+        # 即また stalled になり、再開できない停止になる
+        self.assertNotIn("quota_wait_until", p)
+        self.assertNotIn("quota_wait_count", p)
+        self.assertIn("consume_result", kinds(actions))
+        notes = [a for a in actions if a["type"] == "notify"]
+        self.assertEqual([n["ntype"] for n in notes], ["question"])
+
+    def test_a_non_quota_result_resets_the_round_count(self):
+        # 数えるのは「連続」の待ち。間にセッションが動いた回があれば数え直す
+        p = project(
+            state="active", job="runner-p-0001-a1",
+            quota_wait_count=reconcile.QUOTA_WAIT_MAX_ROUNDS,
+            prs=[42],
+        )
+        d, _ = reconcile.decide(
+            doc(p),
+            facts(results={"P-0001": {"state": "ready_for_review", "pr": 42}}),
+            RULES, NOW,
+        )
+        p = d["projects"][0]
+        self.assertEqual(p["state"], "in_review")
+        self.assertNotIn("quota_wait_count", p)
+
+    def test_rounds_below_the_limit_keep_waiting(self):
+        p = project(
+            state="active", job="runner-p-0001-a1",
+            quota_wait_count=reconcile.QUOTA_WAIT_MAX_ROUNDS - 1,
+        )
+        d, actions = reconcile.decide(
+            doc(p), facts(results={"P-0001": self.result("2026-08-07T14:00:00Z")}),
+            RULES, NOW,
+        )
+        p = d["projects"][0]
+        self.assertEqual(p["state"], "active")
+        self.assertEqual(p["quota_wait_count"], reconcile.QUOTA_WAIT_MAX_ROUNDS)
+        self.assertEqual(p["quota_wait_until"], "2026-08-07T14:00:00Z")
+        self.assertNotIn("notify", kinds(actions))
+
 
 class TestReviewFlow(unittest.TestCase):
     def test_ready_for_review_records_pr_and_spawns_reviewer(self):
