@@ -325,6 +325,90 @@ class TestActiveObservation(unittest.TestCase):
         self.assertIn("consume_result", kinds(actions))
 
 
+class TestQuotaWait(unittest.TestCase):
+    """アカウント利用上限 (P-0026) は器の外側の事実であって停滞ではない。
+
+    runner が waiting_quota で rc=0 終了した回を stalled にせず、resume_after まで
+    active のまま待って再開する遷移表。
+    """
+
+    def result(self, resume_after):
+        return {
+            "state": "waiting_quota",
+            "failure_kind": "usage_limit",
+            "stderr_tail": "Claude AI usage limit reached",
+            "resume_after": resume_after,
+        }
+
+    def test_waiting_quota_does_not_stall(self):
+        p = project(state="active", job="runner-p-0001-a1")
+        d, actions = reconcile.decide(
+            doc(p), facts(results={"P-0001": self.result("2026-08-07T14:00:00Z")}),
+            RULES, NOW,
+        )
+        p = d["projects"][0]
+        self.assertEqual(p["state"], "active")
+        self.assertNotIn("stalled_reason", p)
+        self.assertEqual(p["quota_wait_until"], "2026-08-07T14:00:00Z")
+        self.assertIn("consume_result", kinds(actions))
+        # 上限待ちは障害ではないので通知しない
+        self.assertNotIn("notify", kinds(actions))
+        self.assertNotIn("spawn_runner", kinds(actions))
+
+    def test_waiting_quota_without_resume_after_resumes_immediately(self):
+        p = project(state="active", job="runner-p-0001-a1")
+        d, _ = reconcile.decide(
+            doc(p), facts(results={"P-0001": self.result(None)}), RULES, NOW
+        )
+        self.assertEqual(d["projects"][0]["quota_wait_until"], "2026-08-07T12:00:00Z")
+
+    def test_waits_silently_until_the_deadline(self):
+        # 待っている間に Job が succeeded で消えても drift を数えない
+        # (数えると 3 ビートで stalled になり、上限対策がループを止める)
+        p = project(
+            state="active", job="runner-p-0001-a1",
+            quota_wait_until="2026-08-07T13:00:00Z",
+        )
+        d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
+        self.assertEqual(d["projects"][0]["state"], "active")
+        self.assertEqual(kinds(actions), [])
+        self.assertNotIn("drift_count", d["projects"][0])
+
+    def test_respawns_when_the_deadline_arrives(self):
+        p = project(
+            state="active", job="runner-p-0001-a1",
+            quota_wait_until="2026-08-07T11:59:00Z",
+        )
+        d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
+        p = d["projects"][0]
+        self.assertEqual(p["state"], "active")
+        self.assertNotIn("quota_wait_until", p)
+        spawns = [a for a in actions if a["type"] == "spawn_runner"]
+        self.assertEqual(len(spawns), 1)
+        self.assertTrue(spawns[0]["respawn"])
+
+    def test_breaker_holds_the_ticket_instead_of_dropping_it(self):
+        p = project(
+            state="active", job="runner-p-0001-a1",
+            quota_wait_until="2026-08-07T11:59:00Z",
+        )
+        d, actions = reconcile.decide(doc(p), facts(breaker_tripped=True), RULES, NOW)
+        self.assertEqual(kinds(actions), [])
+        # 札を落とすと次のビートで job 梯子に落ちて即 respawn してしまう
+        self.assertEqual(
+            d["projects"][0]["quota_wait_until"], "2026-08-07T11:59:00Z"
+        )
+
+    def test_human_stop_still_wins_over_quota_wait(self):
+        p = project(
+            state="active", job="runner-p-0001-a1",
+            quota_wait_until="2026-08-07T11:59:00Z",
+        )
+        d, actions = reconcile.decide(doc(p), facts(stop_all=True), RULES, NOW)
+        self.assertEqual(d["projects"][0]["state"], "stalled")
+        self.assertNotIn("spawn_runner", kinds(actions))
+
+
 class TestReviewFlow(unittest.TestCase):
     def test_ready_for_review_records_pr_and_spawns_reviewer(self):
         p = project(state="active", job="runner-p-0001-a1")

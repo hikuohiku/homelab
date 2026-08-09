@@ -209,6 +209,25 @@ def decide(doc, facts, rules, now):
             actions.append(_action("spawn_runner", pid))
 
         elif state == "active":
+            # --- 上限待ち (P-0026) は停滞ではないので stalled にしない ---
+            # runner が waiting_quota で rc=0 終了した後の待ち。Job は succeeded で
+            # 残る (active でも failed でもない) ため、下の job 梯子に入れると
+            # 「消えた Job」扱いで即 respawn したり drift を数えたりしてしまう。
+            # 時刻が来るまでここで止める
+            wait_until = p.get("quota_wait_until")
+            if wait_until:
+                if parse_iso(wait_until) > now:
+                    continue
+                if breaker:
+                    # breaker 中は新しい仕事を作らない。待ち札は持ったまま、
+                    # 復帰したビートで再開する
+                    continue
+                # max_concurrent は見ない: このプロジェクトは active のまま
+                # スロットを占めており、再開しても同時実行数は増えない
+                p.pop("quota_wait_until", None)
+                actions.append(_action("spawn_runner", pid, respawn=True))
+                continue
+
             result = results.get(pid)
             job = jobs.get(p.get("job", ""), None) if jobs is not None else None
             if result and result.get("state") == "ready_for_review":
@@ -239,6 +258,12 @@ def decide(doc, facts, rules, now):
                     f"{pid} が予算 (soft cap) を使い切りました。"
                     "継続する価値があれば予算を積んで再開を指示してください",
                 )
+            elif result and result.get("state") == "waiting_quota":
+                # アカウントの利用上限は器の外側の事実であって、プロジェクトの停滞
+                # ではない。通知も出さない (障害ではない)。projects.json の state は
+                # active のまま、resume_after まで待って runner を出し直す
+                actions.append(_action("consume_result", pid))
+                p["quota_wait_until"] = result.get("resume_after") or now_iso(now)
             elif result and result.get("state") in (
                 "spec_error", "error", "stalled_inactive"
             ):
