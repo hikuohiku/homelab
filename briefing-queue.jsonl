@@ -2,3 +2,4 @@
 {"at": "2026-08-09T06:37:43Z", "source": "issue-comment 5230181271", "body": "(通知予算超過分のまとめ、1 件)\n- [notify] 2026-08-08T06:34:19Z P-0002 をveto により中止しました"}
 {"at": "2026-08-09T08:42:43Z", "source": "issue-comment 5230628802", "body": "(通知予算超過分のまとめ、1 件)\n- [announce] 2026-08-08T08:38:34Z P-0012: ダッシュボードを heart-and-projects の真実に一致させ、配信を定期化する\n検証: python3 ops/dashboard/build.py && ! grep -q '順番待ち' ops/dashboard/index.html; python3 ops/dashboard/build.py && grep -q 'id=\"heart-projects\"' ops/dashboard/index.html && python3 -c \"import re,sys; h=open('ops/dashboard/index.html').read(); ass"}
 {"at": "2026-08-09T09:20:16Z", "source": "issue-comment 5230768934", "body": "(通知予算超過分のまとめ、1 件)\n- [deliver] 2026-08-08T09:17:56Z P-0011: ops-health-reporter を heart 対応にし、心臓の生存を再び観測可能にする を納品しました"}
+{"at": "2026-08-09T09:45:59Z", "source": "issue-comment 5230867684", "body": "(通知予算超過分のまとめ、1 件)\n- [incident] 2026-08-08T09:44:51Z P-0012 の runner が spec_error で終了: 開始前に verify が pass している"}
