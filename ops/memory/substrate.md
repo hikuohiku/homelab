@@ -62,6 +62,33 @@ autopilot namespace の Pod (heart / runner / reviewer / …) が動く環境の
   無いもの: gh, terraform, kustomize 単体 (`kubectl kustomize` は使える), nix, just, sops — verified_at: 2026-08-06
 - restic バイナリはあるが B2/restic の credential はエージェント環境に無い (allowlist で機械検査) — verified_at: 2026-08-07
 
+## claude セッション / 利用上限
+
+> この節は consolidation ではなく P-0026 の worker が追記した (spec の DoD (5) が名指しで
+> 要求している例外。README「書き手は consolidation の PR のみ」の破れは P-0015 に次いで 2 例目)。
+
+- **アカウントの利用上限は器の外側の事実であり、プロジェクトの停滞ではない。** 器 (runner /
+  reviewer / curriculum の各セッション) は人間の対話セッションと**同一サブスクリプションを
+  共有している**ので、人間が対話で使った分だけ器のセッションが即死する。器の実装や spec の
+  難易度とは無関係に起きる — verified_at: 2026-08-09, 2026-08-08 の実績 (26 セッション / 名目 $50.9 を使って
+  プロジェクト 0 件前進、P-0023 と P-0025 が両方 stalled)
+- 上限で死んだセッションは **実消費ゼロ**。runner の「トークン不明なら 50,000」概算を
+  適用すると、待って再開する前に soft cap が尽きる (`ops/runner/runner.py` の `Session.run()` で
+  `failure_kind == "usage_limit"` の回だけ概算を外している) — 設計 (2026-08-09)
+- 死因は `claude` の **stderr にしか出ない**。2026-08-09 以前の runner は
+  `stderr=subprocess.DEVNULL` で起動していたため、器に残る記録は「3 回連続で異常終了」だけで、
+  上限と本当の実装詰まりが同じ顔に見えていた (同じ案を作り直した P-0023→P-0025 の往復の原因)。
+  現在は result.json の `failure_kind` (`usage_limit`/`auth`/`network`/`unknown`) と
+  `stderr_tail` (マスク済み末尾 2000 文字) に残る — verified_at: 2026-08-09, P-0026
+- **上限の実文字列はまだ観測できていない。** `ops/runner/runner.py` の `FAILURE_PATTERNS` は
+  claude CLI の既知の出力形を根拠にした候補 (`Claude AI usage limit reached`、
+  `…reached|<epoch>`、`rate_limit_error`、`429` + `rate limit` 等) であり、実測ではない。
+  実際の文言を観測したらその回の `stderr_tail` を証拠に表とテストへ追記すること — 2026-08-09 時点で未実測
+- 上限と判定した回は「3 回連続 error」に数えず、reset 時刻 (取れなければ 900 秒) まで待って
+  同じセッションを再開する。待機予算は `rules.runner.session_max_seconds` (7200s) で、
+  超える場合は stalled ではなく result state `waiting_quota` + `resume_after` で終える。
+  heart は `active` のまま `quota_wait_until` まで待って runner を出し直す — 設計 (2026-08-09), P-0026
+
 ## 観測経路 (壊すと自分の異常を誰も検知できなくなる)
 
 - heartbeat 行 `[autopilot] <ts> iteration #N start|end exit=<rc> elapsed=<n>s` の産出元は
