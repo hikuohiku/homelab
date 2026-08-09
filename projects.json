@@ -512,7 +512,51 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-09",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-09T14:32:42Z",
+        "verify": [
+          {
+            "cmd": "grep -q 'restic-backup-credentials' apps/vaultwarden/restic-backup-cronjob.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'restic-backup-credentials' apps/immich/restic-backup-cronjob.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'restic-backup-credentials' apps/coder/restic-backup-cronjob.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'restic-backup-credentials' apps/coder/workspace-home-backup-cronjob.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0029",
@@ -532,7 +576,33 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-09",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-09T14:32:42Z",
+        "verify": [
+          {
+            "cmd": "test -f ops/projects/logs/P-0029/inventory-sweep.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -qE 'vaultwarden|immich' ops/projects/logs/P-0029/inventory-sweep.md",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: ops/projects/logs/P-0029/inventory-sweep.md: No such file or directory\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
