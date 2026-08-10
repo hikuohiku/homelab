@@ -462,6 +462,9 @@ def decide(doc, facts, rules, now):
                 if spec.get("id") and spec["id"] not in existing:
                     _register_spec(doc, spec, rules, now)
                     existing.add(spec["id"])
+            # 実りの有無を記録する。次のアイドルで即座に立案してよいか (実りあり) /
+            # min_interval の間隔を置くべきか (空振り) の判定に使う (2026-08-10)
+            doc["last_curriculum_dry"] = not cur.get("adopted_specs")
             actions.append(_action("consume_curriculum"))
             curriculum_pending = False
         elif cur.get("pr_open") and cur.get("checks_green"):
@@ -480,13 +483,30 @@ def decide(doc, facts, rules, now):
                 text=f"curriculum Job がエラー終了: {str(cur.get('error', ''))[:200]}",
             )
         )
+        # エラーは空振り扱い: 即再立案せず min_interval を置く (連打防止)
+        doc["last_curriculum_dry"] = True
         curriculum_pending = False
 
-    non_terminal = [p for p in doc["projects"] if p["state"] not in TERMINAL_STATES]
-    curriculum_idle = not non_terminal and not curriculum_pending
+    # アイドルの定義 (2026-08-10 改定、人間の指摘「アイドル中に何もしない理由が無い」):
+    #   - 拒否権窓で待機中の announced (deadline が未来) はスロットを使っていないので
+    #     「仕事がある」に数えない。窓 24h の案件 1 つが立案を丸一日塞ぐ実害があった
+    #   - min_interval は空振り (採択ゼロ / エラー) の後にだけ適用する。実りある回の後の
+    #     アイドルは「仕事が終わった」なので即座に次を立案してよい。間隔が守っているのは
+    #     「同じ世界に同じ問いを連打してトークンを燃やす」ことだけ
+    blocking = [
+        p for p in doc["projects"]
+        if p["state"] not in TERMINAL_STATES
+        and not (
+            p["state"] == "announced"
+            and parse_iso(p.get("veto_deadline", now_iso(now))) > now
+        )
+    ]
+    curriculum_idle = not blocking and not curriculum_pending
     last_curriculum = doc.get("last_curriculum_at")
     min_gap = timedelta(hours=rules["curriculum"].get("min_interval_hours", 6))
     gap_ok = last_curriculum is None or (now - parse_iso(last_curriculum)) >= min_gap
+    if doc.get("last_curriculum_dry") is False:
+        gap_ok = True
     if curriculum_idle and gap_ok and not breaker and not stop_all:
         doc["last_curriculum_at"] = now_iso(now)
         actions.append(_action("spawn_curriculum"))
