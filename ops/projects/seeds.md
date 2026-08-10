@@ -5,7 +5,24 @@ heart-and-projects の設計時 (2026-08-07) に洗い出した「器が自分�
 **curriculum-generate はここを立案の原料として読む** (丸写しではなく、現状に照らして
 価値が残っているかを判断してから案にする)。実装済みになった項目は消してよい。
 
-## 設計時に仕込んだ種
+## 【主食】homelab 本体の仕事 (成果に数えるのはこちら。VISION 段階 2)
+
+H1. **restic を append-only 鍵に切り替える (旧 T-0120)** — 鍵は 2026-08-07 に Doppler 登録済みで
+    着手可能。4 つの backup CronJob の secretKeyRef を <app>-restic-backup-credentials へ。
+    restic の lock 削除が append-only 鍵で失敗する既知の癖の実機検証込み (writer capability)
+H2. **バージョン更新運用の再開** — inventory.json の追従が 2026-08-06 から止まっている。
+    vaultwarden 放置は全停止事故 (#49) の前科あり。上流を調べ、note の除外規定に従って更新 PR を出す
+    定常サイクルを回す (かつての旧 loop の主業務。いまは誰もやっていない)
+H3. **immich postgres 16.14-1.1.1 の宿題 (旧 T-0112/T-0029)** — CrashLoopBackOff の実ログを
+    pods/log で自力調査 (今は権限がある)。原因確定 → vchord 更新のやり直し (irreversible、要 24h 窓)
+H4. **PBS 退役の前提を埋める (旧 T-0117/T-0116)** — coder workspace home backup の復元試験。
+    済めば PBS (qemu/112) が完全冗長になり退役提案できる
+H5. **syncthing 移行の完遂 (旧 T-0140)** — データ移行は人間の鍵 (LXC 101 の cert 取り出し) だが、
+    受け入れ側の検証・手順書は器の仕事
+H6. **homelab の新機能** — 人間が欲しいものを聞くのが最良の原料 (issue #56 / Discord で募集する)。
+    例: メディア系サービス、監視の可視化、ネットワーク改善など。提案してから作る
+
+## 【維持費】設計時に仕込んだ種
 
 1. ~~check_app_list_sync / check_autopilot_image_pin の CI 配線~~ — token に workflow scope が
    付いたので実装可能。**注意: `.github/` は人間レビュー必須パス** (merge は人間を待つ)
@@ -58,4 +75,14 @@ heart-and-projects の設計時 (2026-08-07) に洗い出した「器が自分�
 17. **自己コメントの再摂取を除外する** — outbox の digest を issue #56 に代送すると、
     次のビートの collect_feedback がそれを人間の声として review_needed に数える
     (「(通知予算超過分のまとめ」プレフィクスの除外が無い)。無害だが帳簿が濁る
+18. ~~【最優先・人間の鍵作業】器のアイデンティティ分離~~ — **人間が意図的に却下 (2026-08-09)**。
+    理由:「PR 通知が増えて面倒。git で復元でき、バックアップの壁は健在」。壁 #7 (ハーネス保護) は
+    存在しないことを**仕様として受容**する。器の実効的な歯止めは独立レビュー + CI + soak + veto +
+    append-only バックアップ。**このシードを再提案しないこと** (状況が変わった場合のみ、変化を明記して新シードとして)
+    — (旧記載) — 2026-08-09、ハーネス保護
+    (CODEOWNERS + ruleset) が初日から無効だったと判明。器が人間本人の PAT で行動しているため
+    「hikuohiku の PR を hikuohiku が merge」となり、作者≠レビュアーが構造的に成立しない
+    (#416 と #422 はレビュー無しで器が自己 merge していた)。修正は器専用の machine user
+    アカウント + PAT への差し替え (人間の作業)。完了までは、保護パスを触るプロジェクトの
+    成果 PR は事実上ノーチェックで merge されることを前提に運用する
 

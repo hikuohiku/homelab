@@ -56,6 +56,10 @@ spec:
             # Discord 送信を実際に行う
             - name: HEART_MODE
               value: active
+            # テンポ改善 (2026-08-09): 1 ビート 5 秒・LLM ゼロなので 60 秒に詰めても
+            # コストはほぼ増えない。遷移ごとの待ちが半減する
+            - name: HEART_BEAT_SECONDS
+              value: "60"
             - name: AUTOPILOT_IMAGE
               value: ghcr.io/hikuohiku/homelab-autopilot@sha256:6d0cf8b13d602f189d75b48ef654cb0cfd0fe999740782928199097b7451bf75
             - name: CLAUDE_CODE_OAUTH_TOKEN
