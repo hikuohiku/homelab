@@ -27,6 +27,14 @@ class TestTriage(unittest.TestCase):
         v = triage.classify("ダッシュボードの配色が見づらい", RULES)
         self.assertEqual(v["kind"], "review_needed")
 
+    def test_resume_keywords(self):
+        for text in ("再開してください", "resume"):
+            self.assertEqual(triage.classify(text, RULES)["kind"], "resume_all", text)
+
+    def test_narrative_resume_mention_is_not_resume(self):
+        long = "この間の障害のあと自動で再開する仕組みが欲しいという話を" * 3
+        self.assertEqual(triage.classify(long, RULES)["kind"], "review_needed")
+
     def test_veto_takes_precedence_over_stop(self):
         # 「P-0003 は止めて」のような文は全停止でなく該当プロジェクトの veto
         v = triage.classify("veto P-0003 (これは止めて、他は続けて)", RULES)

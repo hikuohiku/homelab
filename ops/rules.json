@@ -4,7 +4,9 @@
   "veto": {
     "window_hours": 24,
     "_comment": "予告から着手までの拒否権窓。アイドル (走行プロジェクト 0) かつ非不可逆なら 0 で即着手。irreversible=true のプロジェクトは常にこの窓を待つ。窓の短縮は、人間が veto を 1 回実際に通した疎通実績 (trust.json の veto_drill_passed) が無い限り行わない",
-    "stop_keywords": ["止めて", "止まって", "やめて", "中止", "stop", "abort", "veto"]
+    "stop_keywords": ["止めて", "止まって", "やめて", "中止", "stop", "abort", "veto"],
+    "resume_keywords": ["再開", "resume"],
+    "_comment_resume": "全停止 (stop_engaged) の解除。停止はコメントを読んだ 1 ビートで終わらず、これらのキーワードを人間が書くまで新規の spawn (runner/curriculum/critic) と予告を止め続ける"
   },
   "soak": {
     "minutes": 30,
