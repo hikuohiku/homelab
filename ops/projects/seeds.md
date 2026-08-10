@@ -85,4 +85,12 @@ H6. **homelab の新機能** — 人間が欲しいものを聞くのが最良�
     (#416 と #422 はレビュー無しで器が自己 merge していた)。修正は器専用の machine user
     アカウント + PAT への差し替え (人間の作業)。完了までは、保護パスを触るプロジェクトの
     成果 PR は事実上ノーチェックで merge されることを前提に運用する
+19. **merge 判定を「ruleset 必須チェック」基準にする** — heart の checks_green は全 check-run の
+    成功を要求するため、ruleset 必須外の外部チェック (GitGuardian) の誤検知 1 つで merging が
+    永久停止する。GG は過去コミットも走査するので修正 push でも赤が残る (#421 で 12h 停止)。
+    必須チェック名の一覧を rules.json に持ち、それだけで判定する
+20. **conflict した成果 PR の rework 経路** — merging 中の PR が main の変更と conflict すると、
+    CI 自体が走らず (merge ref が作れない) 沈黙で詰まる。heart が mergeable=CONFLICTING を検知したら
+    runner を「main を merge して解消せよ」モードで respawn する (#421 で実測。手動解消に人間 2 回分の
+    往復を要した)
 
