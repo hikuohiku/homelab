@@ -800,6 +800,26 @@
         "broken": []
       },
       "veto_deadline": "2026-08-11T05:14:39Z"
+    },
+    {
+      "id": "P-0044",
+      "title": "ダッシュボードのプロジェクトビューから『済んだ失敗』のノイズを消す (3 層表示)",
+      "state": "proposed",
+      "branch": "project/p-0044",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "python3 ops/dashboard/build.py && grep -q 'id=\"heart-projects-closed\"' ops/dashboard/index.html",
+        "python3 ops/dashboard/build.py && python3 -c \"h=open('ops/dashboard/index.html').read(); c=h.find('id=\\\"heart-projects-closed\\\"'); assert c>=0; assert h.find('P-0012')>c and h.find('P-0002')>c, '仕切り直し済みの終端が折り畳みの外にある'\""
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2000000
+      },
+      "created": "2026-08-10",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
