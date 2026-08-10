@@ -656,7 +656,60 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-10",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-10T05:13:26Z",
+        "verify": [
+          {
+            "cmd": "test -f docs/immich-postgres-upgrade.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'FATAL' docs/immich-postgres-upgrade.md",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: docs/immich-postgres-upgrade.md: No such file or directory\n"
+          },
+          {
+            "cmd": "grep -q '16.14-1.1.1' docs/immich-postgres-upgrade.md",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: docs/immich-postgres-upgrade.md: No such file or directory\n"
+          },
+          {
+            "cmd": "test -f ops/projects/logs/P-0035/upgrade-rehearsal-job.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -c \"import json,sys; t=[x for x in json.load(open('ops/inventory.json'))['targets'] if x['id']=='immich-postgres'][0]; sys.exit(0 if 'docs/immich-postgres-upgrade.md' in t.get('note','') else 1)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0039",
@@ -681,7 +734,60 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-10",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-10T05:13:26Z",
+        "verify": [
+          {
+            "cmd": "test \"$(grep -rl 'kind: NetworkPolicy' apps/ | wc -l)\" -ge 3",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "test -f docs/network-policy.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -qE 'default-deny|既定拒否' docs/network-policy.md",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: docs/network-policy.md: No such file or directory\n"
+          },
+          {
+            "cmd": "grep -qi 'networkpolicy' apps/vaultwarden/kustomization.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -qi 'networkpolicy' apps/immich/kustomization.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
