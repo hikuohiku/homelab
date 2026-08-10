@@ -190,7 +190,9 @@ data:
                             # B2 application key）。削除権限つきの coder-restic-credentials は
                             # 下の retention CronJob だけが使う。T-0106 で分離し P-0028 で
                             # 切り替えた。append-only 鍵でも上の RESTIC_BACKUP_SCRIPT の
-                            # restic unlock は成功する（P-0028 で実測）。詳細は docs/backup.md
+                            # restic unlock と backup 終了時の lock 除去は成功する
+                            # （2026-08-10 に切替後の本番リポジトリで子 Job 2 本を実走させ、
+                            # rc=0・残留 lock 0 件を実測）。詳細は docs/backup.md
                             "env": [
                                 {"name": "WORKSPACE_ID", "value": workspace_id},
                                 {"name": "WORKSPACE_NAME", "value": workspace_name},

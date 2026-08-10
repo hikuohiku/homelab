@@ -4,9 +4,8 @@
 
 ## 現況
 
-受入 **4/4 green**（2026-08-10、自分で実測）。manifest の切り替えとプローブ実測、
-`docs/backup.md` への追記まで完了。**残るのは merge → ArgoCD sync 後の手動 Job 4 本**
-（DoD のうち verify に入っていない部分。下の「次のセッションへ」参照）。
+受入 **4/4 green**。**DoD もすべて充足した**（セッション 2 で実機実測を完了）。
+レビュー指摘 4 件はすべて解消済み。**このプロジェクトでやり残していることは無い。**
 
 ## やったこと（セッション 1、2026-08-10）
 
@@ -80,6 +79,88 @@ hide マーカー）は**残してある**。append-only 鍵では消せず、�
 全消しするスクリプトを書くのは本番データへの誤爆リスクに見合わないと判断した。
 docs/backup.md の「残骸」節に記載済み。
 
+## やったこと（セッション 2、2026-08-10 — レビュー指摘 4 件の解消）
+
+前回のレビューは 4 件差し戻した。**全部つぶした。**
+
+### 指摘 1: DoD 後半（実機の手動 Job 4 本）が未実施 → **実施した**
+
+前セッションの「merge 後でないとできない」は誤り。レビューの指摘どおり `preview` で
+merge 前に実クラスタへ流せる。**注意: この worker 環境に `just` バイナリは無い**（`command not found`）。
+justfile の `preview` レシピと等価な `kubectl patch` を直接打った:
+
+```
+kubectl patch application apps -n argocd --type json -p '[{"op":"remove","path":"/spec/syncPolicy/automated"}]'
+kubectl patch application <app> -n argocd --type merge -p '{"spec":{"source":{"targetRevision":"project/p-0028"}}}'
+# 戻すとき: targetRevision を HEAD に戻し、apps の syncPolicy.automated を {prune:true,selfHeal:true} で復元
+```
+
+手順と結果:
+
+1. vaultwarden / immich / coder の 3 Application を `project/p-0028` に向け、
+   `argocd.argoproj.io/refresh=hard` で強制リフレッシュ → 3 本とも rev `2f4a766d` に Synced。
+2. **live の CronJob を先に確認**（切替前は 4 本とも旧 Secret だったことも記録済み）。
+   切替後は backup 3 本が `<app>-restic-backup-credentials`、retention 3 本は
+   `<app>-restic-credentials` のまま、workspace-home の ConfigMap も新 Secret 4 箇所。
+3. 04:03 UTC（13:03 JST、夜間スケジュールと無衝突）に手動 Job を 4 本。**6 本すべて rc=0**
+   （オーケストレータの子 Job 2 本を含む）。所要 24〜36 秒。詳細な表は `docs/backup.md` に。
+4. 直後に append-only 鍵で 4 リポジトリに `restic list locks` → **4 本とも rc=0・出力 0 行**。
+   スナップショットも 4 パスすべてに増えている（`vaultwarden` 7 / `immich` 7 /
+   `coder-postgres` 7 / `coder-workspace-homes` 4）。
+5. 手動 Job・子 Job・検証用 Job をすべて削除。**preview を reset して root `apps` の
+   auto-sync を復元済み**（全 13 アプリ Synced/Healthy、CronJob は `main` の旧 Secret 参照に戻っている
+   = 未 merge なので正しい状態）。
+
+**新しく分かった実測事実**（前セッションが推定にとどめていた部分）:
+
+- `b2_list_file_versions` で見ると、**バケット内の hide マーカー 18 件はすべて 2026-08-10
+  03:51〜04:05 UTC のもの**。それ以前（削除権限つき鍵だけで日次バックアップを回していた期間）の
+  hide マーカーは **1 件も無い**。「append-only 鍵の削除 = hide / 削除権限つき鍵の削除 = 実削除」が
+  本番でもそのまま現れた。前セッションの推論の直接証拠。
+- **既知の癖（無害）**: 子 Job `chb-7fdb7787…` のログに
+  `Load(<lock/d4b32b1c2b>) failed: b2_download_file_by_name: 404` が出た。直前の Job が hide した
+  lock が一覧 API にはまだ見えるのに download が 404 になる一瞬のずれ。**restic は警告のみで
+  続行し rc=0 で完走**する。次にこのログを見た人が事故と誤認しないよう docs に明記した。
+- **副作用**: append-only 鍵では lock 除去が hide になるため、lock の旧版 + hide マーカーが
+  永久に積もる（1 日 6 版程度 × 200 バイト弱 = 年 1 MB 未満）。`forget --prune` は restic から
+  見えないこれらを回収しない。容量は無視できるので放置の判断。
+
+### 指摘 2: 実測より強い主張が manifest / docs に残っている → **測った範囲だけに直した**
+
+指摘のとおり、前セッションが「本番 4 リポジトリで rc=0」と書いたときに本番で通していたのは
+`snapshots` / `list locks` / lock 0 件の `unlock` だけだった。今回、本番で書き込みと lock 除去を
+実際に通したので、**主張を弱めるのではなく実測で裏付ける形で解消**した。
+`docs/backup.md` の実測節を **(a) 使い捨てリポジトリ / (b) 本番の読み取り確認 / (c) 本番 4 本の
+手動 Job** の 3 つに分け、どれをどこで測ったかが読み取れるようにした。
+`apps/vaultwarden/restic-backup-cronjob.yaml` と
+`apps/coder/workspace-home-backup-cronjob.yaml` のコメントも「切替後の本番リポジトリで
+手動 Job を起こして rc=0・残留 lock 0 件を実測」に具体化した。
+
+### 指摘 3: 切替と矛盾する古い記述が 4 か所 → **4 か所とも直した**
+
+- `apps/{vaultwarden,immich,coder}/restic-external-secret.yaml` の backup 用 ExternalSecret:
+  「参照する CronJob はまだ無いので日次バックアップに影響しない」→ **逆の警告**に書き換えた。
+  「この ExternalSecret は日次バックアップの単一障害点。消すと 4 本の backup が止まる」。
+  将来 Doppler キーや ExternalSecret を消す事故の予防が目的。
+- 同ファイルの削除権限つき側のコメント「登録が完了し次第 T-0120 で切り替える」→
+  「P-0028 (T-0120) で切り替え済み。この Secret を使うのは retention だけ」に修正。
+- `docs/backup.md` の T-0106 節「現状は追加のみで…まだ切り替えていない」→
+  当時の記述だと明示したうえで「もう当てはまらない」と書き、新しい節へのポインタにした。
+- `docs/backup.md` の Doppler 表の `B2_ACCOUNT_ID` の説明も「backup と共用」→「retention 専用」に修正。
+
+### 指摘 4: B2 の残骸を人間に押し付けている → **消した**
+
+`b2:<bucket>:append-only-probe`（**18 版 / 3354 バイト**）を削除権限つき鍵を使う使い捨て Job で
+削除した。二重の誤爆防止をかけた:
+
+1. 削除対象は `append-only-probe/` で**前方一致する版だけ**。本番の 4 パス
+   (`vaultwarden/` `immich/` `coder-postgres/` `coder-workspace-homes/`) のいずれとも前方一致しない。
+2. 削除ループ内でも 1 版ごとに `assert name.startswith(PREFIX)`。
+
+削除前に全プレフィックスの版数を記録し（probe 18 / coder-postgres 38 /
+coder-workspace-homes 129 / immich 46 / vaultwarden 38）、削除後に probe 配下が 0 版になったことを
+確認した。**バケットに autopilot が片付けられない残骸は無い。**
+
 ## 発見 (このプロジェクトの外へ渡すもの)
 
 - **T-0106 由来の ArgoCD `Degraded` は解消している。** 13 アプリすべて `Synced` / `Healthy`
@@ -98,26 +179,49 @@ docs/backup.md の「残骸」節に記載済み。
 - `apps/immich` の `kubectl kustomize` は helm バイナリが要る（`--enable-helm` でも
   `helm: executable file not found`）。worker 環境では immich の kustomize 検証ができない。
 
+（セッション 2 で追加）
+
+- **worker 環境に `just` バイナリが無い。** CLAUDE.md と justfile は `just preview` を
+  唯一の手順として書いているが、ヘッドレスの worker からは使えない。等価な `kubectl patch` を
+  手で打つ必要がある（上に記載）。**`just preview` は root `apps` の auto-sync を消すので、
+  戻し忘れるとクラスタが宣言的でない状態のまま放置される。** worker 向けに
+  「`just` が無い環境での preview 手順」を CLAUDE.md か justfile のコメントに書くか、
+  `just` を worker イメージに入れるのが望ましい。**別プロジェクトの種。**
+- **日次 backup が毎回フルスキャンしている（parent snapshot が効いていない）。**
+  vaultwarden / immich / coder-postgres の手動 Job のログはいずれも
+  `no parent snapshot found, will read all files` だった。restic の親選択は既定で
+  `host,paths` グループなので、**Job ごとに変わる Pod 名がホスト名になり毎回別グループ扱い**に
+  なっているのが原因と思われる（未確認の推定）。データは内容アドレスで重複排除されるので
+  B2 の容量とアップロード量は正しく抑えられている（immich は 340 MiB 読んで 1.8 MiB 追加）が、
+  **毎回全ファイルを読む I/O は無駄**。workspace home の子 Job だけは
+  `using parent snapshot` が出ており、こちらは効いている（`--host` か `--group-by` の
+  指定差と思われる）。`--host` を固定すれば揃うはず。**別プロジェクトの種。**
+- **B2 の hide マーカーは今後ずっと積もる。** 気にするなら B2 のライフサイクル規則を
+  `<path>/locks/` プレフィックスに限定して入れる手はあるが、**規則の範囲を誤ると
+  append-only の防御そのものが無効になる**（`docs/backup.md` に警告済み）。
+  管理コンソール作業なので人間の領分（CHARTER §4）。容量は年 1 MB 未満なので急がない。
+- **完全な不変性が要るなら B2 の Object Lock**（`fileLockConfiguration` は現状読めず未設定と思われる）。
+  append-only 鍵は「恒久削除」は防ぐが「hide で見えなくする」ことは防げない。人間の
+  管理コンソール作業。**別プロジェクトの種**（セッション 1 の発見の再掲）。
+
 ## 次のセッションへ
 
-**受入 4 項目は全部 green。残りは DoD の「実機で 4 本の手動 Job」だけ。**
-これは merge → ArgoCD sync の後でないと意味がない（古い定義のまま起こすと誤認する）。手順:
+**やることは無い。** 受入 4/4 green、DoD の実機実測も完了、レビュー指摘 4 件も全部解消した。
+次のセッションが起きたら、まず `git log` と wrapper の実測結果を見て、
+**本当に差し戻されているのか（新しいレビュー指摘があるのか）を確認すること。**
+無ければ何も足さない。**この PR に論点を追加しない**（1 PR 1 論点）。
 
-1. `kubectl get cronjob <name> -n <ns> -o yaml | grep -A2 secretKeyRef` で
-   **`<app>-restic-backup-credentials` に変わっていることを先に確認する。**
-   対象: `vaultwarden-restic-backup`(vaultwarden) / `immich-restic-backup`(immich) /
-   `coder-restic-backup`(coder) / `coder-workspace-home-backup`(coder、ConfigMap 側)
-2. `kubectl create job -n <ns> <name>-manual-<date> --from=cronjob/<name>` で 4 本。
-   **スケジュール（JST 02:45 / 03:10 / 03:30 / 03:40、retention は日曜 04:00〜04:30）と
-   重ならない時間帯に。** `concurrencyPolicy: Forbid` は手動 Job には効かない。
-3. `coder-workspace-home-backup` はオーケストレータ。**追うのは子 Job `chb-<workspace-id>` の
-   ログ**。子は `ttlSecondsAfterFinished: 3600` で消えるので取り切る前に消える。
-   同名の子が残っていると 409 でスキップされる（エラーにならず「作った」と見える）。
-   現在の workspace は 2 つ（`general` / `test`）。
-4. 終わったら `kubectl delete job` する（手動 Job は ArgoCD 管理外なので prune されない）。
-5. 結果（rc・所要時間・追加されたスナップショット・lock の残骸の有無）をこの PROGRESS と
-   `docs/backup.md` に追記する。
+もし新しい指摘で実機の再確認が要るなら、上の「指摘 1」の手順をそのまま再実行できる。
+そのときの罠を 3 つ残す:
 
-**罠**: プローブで確認済みなので手動 Job は成功するはずだが、vaultwarden と coder-postgres は
-initContainer（sqlite コピー / pg_dump）を持つ。そちらの失敗は credential 切り替えとは無関係。
-ログはコンテナを指定して読むこと（`-c restic-backup`）。
+- **`just` は無い。** `kubectl patch` を直接打つ（コマンドは上に記載）。
+  **終わったら必ず preview を reset して root `apps` の auto-sync を戻す。**
+  戻し忘れるとクラスタが宣言的でない状態で放置される。
+- **子 Job `chb-<workspace-id>` は固定名。** `ttlSecondsAfterFinished: 3600` で消えるまでに
+  ログを取ること。前回分が残っていると 409 でスキップされ、**エラーにならず「作った」と見える**。
+  現在の workspace は 2 つ（`general` / `test`）。
+- **vaultwarden と coder-postgres は initContainer**（sqlite コピー / pg_dump）を持つ。
+  そちらの失敗は credential 切り替えとは無関係。ログは `-c restic-backup` を付けて読む。
+
+**未 merge なので、いまクラスタで動いているのは `main` の定義（旧・削除権限つき鍵）。**
+切り替えが実際に効くのは merge → ArgoCD sync の後。それ自体は wrapper と heart の領分。
