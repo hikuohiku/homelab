@@ -42,11 +42,14 @@ spec:
                   set -eu
                   restic snapshots >/dev/null 2>&1 || restic init
                   restic backup /mnt/immich-library
+              # credential は backup 専用の append-only 鍵（deleteFiles を持たない B2 application
+              # key）。削除権限つきの immich-restic-credentials は下の retention CronJob だけが
+              # 使う。T-0106 で分離し P-0028 で切り替えた。詳細は docs/backup.md
               env:
                 - name: RESTIC_B2_BUCKET
                   valueFrom:
                     secretKeyRef:
-                      name: immich-restic-credentials
+                      name: immich-restic-backup-credentials
                       key: RESTIC_B2_BUCKET
                 # bucket 名の後ろの "immich" がリポジトリパスの区切り。vaultwarden/coder-postgres
                 # とは同じ bucket・同じ credential で末尾だけ変える設計 (T-0069/T-0070 参照)
@@ -55,17 +58,17 @@ spec:
                 - name: RESTIC_PASSWORD
                   valueFrom:
                     secretKeyRef:
-                      name: immich-restic-credentials
+                      name: immich-restic-backup-credentials
                       key: RESTIC_PASSWORD
                 - name: B2_ACCOUNT_ID
                   valueFrom:
                     secretKeyRef:
-                      name: immich-restic-credentials
+                      name: immich-restic-backup-credentials
                       key: B2_ACCOUNT_ID
                 - name: B2_ACCOUNT_KEY
                   valueFrom:
                     secretKeyRef:
-                      name: immich-restic-credentials
+                      name: immich-restic-backup-credentials
                       key: B2_ACCOUNT_KEY
               # immich-library PVC は immich-server コンテナの UID で書かれており、このジョブは
               # 所有権に関わらず正しく読む必要があるため pvc-usage-cronjob.yaml (T-0080) と同じ

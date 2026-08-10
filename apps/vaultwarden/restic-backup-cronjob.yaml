@@ -127,11 +127,17 @@ spec:
                   restic backup /mnt/vaultwarden-data /staging/db.sqlite3 \
                     --exclude db.sqlite3 --exclude db.sqlite3-wal --exclude db.sqlite3-shm \
                     --exclude icon_cache
+              # credential は backup 専用の append-only 鍵（deleteFiles を持たない B2 application
+              # key）。削除権限つきの vaultwarden-restic-credentials は下の retention CronJob
+              # （forget --prune）だけが使う。T-0106 で分離し P-0028 で切り替えた。
+              # append-only 鍵でも上の restic unlock と backup 終了時の lock 除去は成功する
+              # （restic の B2 backend が削除に b2_hide_file を使い、これは writeFiles だけで通る。
+              # P-0028 で本番 4 リポジトリすべて rc=0 を実測）。詳細は docs/backup.md
               env:
                 - name: RESTIC_B2_BUCKET
                   valueFrom:
                     secretKeyRef:
-                      name: vaultwarden-restic-credentials
+                      name: vaultwarden-restic-backup-credentials
                       key: RESTIC_B2_BUCKET
                 # bucket 名の後ろの "vaultwarden" がリポジトリパスの区切り。immich/coder-postgres
                 # は同じ bucket ・同じ credential で末尾だけ変えて使う想定 (T-0068/T-0070)
@@ -140,17 +146,17 @@ spec:
                 - name: RESTIC_PASSWORD
                   valueFrom:
                     secretKeyRef:
-                      name: vaultwarden-restic-credentials
+                      name: vaultwarden-restic-backup-credentials
                       key: RESTIC_PASSWORD
                 - name: B2_ACCOUNT_ID
                   valueFrom:
                     secretKeyRef:
-                      name: vaultwarden-restic-credentials
+                      name: vaultwarden-restic-backup-credentials
                       key: B2_ACCOUNT_ID
                 - name: B2_ACCOUNT_KEY
                   valueFrom:
                     secretKeyRef:
-                      name: vaultwarden-restic-credentials
+                      name: vaultwarden-restic-backup-credentials
                       key: B2_ACCOUNT_KEY
               securityContext:
                 runAsUser: 0
