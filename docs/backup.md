@@ -311,7 +311,7 @@ DoD(3)（オーケストレータ Pod の実メモリ/CPU 使用量確認）は�
 |---|---|
 | `RESTIC_PASSWORD` | restic リポジトリの暗号化パスワード（新規に決めて登録） |
 | `RESTIC_B2_BUCKET` | Backblaze B2 のバケット名 |
-| `B2_ACCOUNT_ID` | B2 application key ID（**実際には削除権限を持つ鍵**。retention CronJob の `forget --prune` と backup CronJob の両方がこのキーを共用しているため。append-only にはなっていない — 下記 T-0106 参照） |
+| `B2_ACCOUNT_ID` | B2 application key ID（**削除権限を持つ鍵**。`forget --prune` に削除権限が要るため。2026-08-10 以降、このキーを使うのは **retention CronJob だけ** — backup 側は下記「append-only 鍵への切り替え」で `*_APPEND_ONLY` に分離済み） |
 | `B2_ACCOUNT_KEY` | 同上 application key |
 
 登録後、`ops-health-report`（`pod_issues`）で `vaultwarden-restic-backup` CronJob の Job が
@@ -331,10 +331,11 @@ CronJob に共用されており、削除権限を持つ鍵であることが判
 `B2_ACCOUNT_ID_APPEND_ONLY`/`B2_ACCOUNT_KEY_APPEND_ONLY` を参照する。retention CronJob
 （削除が必須）は引き続き既存の `<app>-restic-credentials` を使う。
 
-**現状は追加のみで、既存の backup CronJob の参照先はまだ切り替えていない。** 新しい Doppler キーが
-まだ存在しないため、新しい ExternalSecret は登録が済むまで `SecretSyncedError` のまま Ready に
-ならない想定だが、どの CronJob もまだこの新しい Secret を参照していないため、現行の日次バックアップ
-には影響しない。
+**この時点（2026-08-06）では ExternalSecret を追加しただけで、backup CronJob の参照先は
+まだ切り替えていなかった。** 切り替えは 2026-08-10 に P-0028 (T-0120) で完了している
+→ 下記「append-only 鍵への切り替え」。**現在は 4 本の backup CronJob すべてが
+`<app>-restic-backup-credentials` にのみ依存する**ので、この節の「新しい Secret を参照する
+CronJob がまだ無いので日次バックアップに影響しない」という当時の記述は**もう当てはまらない**。
 
 **人間への依頼（T-0106, needs-human）**: Backblaze の管理コンソールで、既存バケット向けの
 新しい Application Key を発行する。Capabilities は `listBuckets`/`listFiles`/`readFiles`/
@@ -342,11 +343,135 @@ CronJob に共用されており、削除権限を持つ鍵であることが判
 applicationKey を Doppler（`homelab/prd`）に `B2_ACCOUNT_ID_APPEND_ONLY` /
 `B2_ACCOUNT_KEY_APPEND_ONLY` として登録する。
 
-**登録後の切り替え（T-0120, blocked）**: `kubectl get externalsecret <app>-restic-backup-credentials
--n <app>` で Ready を確認した上で、4つの backup CronJob（`vaultwarden-restic-backup` /
-`immich-restic-backup` / `coder-restic-backup` / `coder-workspace-home-backup` の動的 Job
-テンプレート）の `B2_ACCOUNT_ID`/`B2_ACCOUNT_KEY` の `secretKeyRef.name` を新しい
-`<app>-restic-backup-credentials` に切り替える。retention CronJob 側は変更しない。
+**登録後の切り替え（T-0120 → P-0028 で完了、2026-08-10）**: 下記「append-only 鍵への切り替え」を参照。
+
+## append-only 鍵への切り替え (T-0120 / P-0028, 2026-08-10)
+
+人間が 2026-08-07 に発行・Doppler 登録した `B2_ACCOUNT_ID_APPEND_ONLY` /
+`B2_ACCOUNT_KEY_APPEND_ONLY` を、4 つの backup CronJob が実際に使うようにした。
+
+### 何をどう切り替えたか
+
+4 ファイル × 4 つの env（`RESTIC_B2_BUCKET` / `RESTIC_PASSWORD` / `B2_ACCOUNT_ID` /
+`B2_ACCOUNT_KEY`）の `secretKeyRef.name` を `<app>-restic-credentials` から
+`<app>-restic-backup-credentials` に変更した。
+
+| ファイル | 対象 |
+|---|---|
+| `apps/vaultwarden/restic-backup-cronjob.yaml` | `vaultwarden-restic-backup` CronJob |
+| `apps/immich/restic-backup-cronjob.yaml` | `immich-restic-backup` CronJob |
+| `apps/coder/restic-backup-cronjob.yaml` | `coder-restic-backup` CronJob |
+| `apps/coder/workspace-home-backup-cronjob.yaml` | 動的 Job テンプレート（ConfigMap 内 `build_job()`） |
+
+**4 つの retention CronJob は変更していない**。`forget --prune` には削除権限が要るため、
+引き続き `<app>-restic-credentials`（削除権限つき鍵）を使う。ExternalSecret 3 本
+（`apps/*/restic-external-secret.yaml`）にも手を入れていない。参照する側を向け替えただけ。
+
+新旧 Secret は `RESTIC_PASSWORD` / `RESTIC_B2_BUCKET` に同じ Doppler キーを使うため、
+バケットもリポジトリパスも暗号化パスワードも変わらない。**append-only 鍵で書いたスナップショットは
+既存の削除権限つき鍵からそのまま読める**（復元手順は変わらない）。
+
+### 実測（2026-08-10、使い捨て Job による）
+
+2 つの鍵の capability を B2 の `b2_authorize_account` で直接確認した:
+
+| 鍵 | capabilities |
+|---|---|
+| backup 用（`*_APPEND_ONLY`） | `listBuckets` `listFiles` `readFiles` `writeFiles`（**`deleteFiles` なし**） |
+| retention 用（既存） | 上記 + `deleteFiles` + バケット設定系 |
+
+人間の発行内容は依頼どおりで、意図した真の append-only 鍵だった。
+
+#### (a) 使い捨てリポジトリでの事前プローブ
+
+**当初の懸念（append-only 鍵では restic の lock を消せず backup が壊れる）は起きない。**
+本番と別の使い捨てリポジトリパス `append-only-probe` で append-only 鍵だけを使い、
+`init` → `unlock`（lock 0 件）→ `backup` → `list locks` → `backup` → `unlock` →
+`unlock --remove-all` → `snapshots` を通したところ、**全コマンド rc=0**、`list locks` は
+毎回空だった。つまり lock の作成も除去もできている。
+
+理由は B2 の API 設計にある。**restic の B2 backend は削除に `b2_delete_file_version` ではなく
+`b2_hide_file` を使える**。`b2_hide_file` は `writeFiles` だけで通るため、`deleteFiles` の無い鍵でも
+「restic から見た削除」は成功する。`b2_list_file_versions` で実際に確認した:
+
+- append-only 鍵で消した lock / snapshot → `action=hide` のマーカーが増え、元の `action=upload`
+  の版はバケットに残ったまま
+- 削除権限つき鍵で `forget --prune` → 該当の版そのものが一覧から消える（hide マーカーも増えない）
+
+#### (b) 本番 4 リポジトリでの読み取り確認
+
+切り替え前に、本番 4 リポジトリ（`vaultwarden` / `immich` / `coder-postgres` /
+`coder-workspace-homes`）に対して append-only 鍵で `snapshots` / `list locks` / `unlock` を打ち、
+**4 本とも rc=0**、残留 lock は 0 件だった。**この段階では書き込み（`backup`）は通していない**
+（本番リポジトリに捨てるためのスナップショットを作らないため）。書き込みの実測は次の (c)。
+
+#### (c) 本番 4 本の手動 Job（切り替え後の本番実測）
+
+`just preview <app> project/p-0028` で vaultwarden / immich / coder の 3 Application を
+このブランチに向け、ArgoCD の同期後に **live の CronJob の `secretKeyRef` が
+`<app>-restic-backup-credentials` になっていること・retention 側が
+`<app>-restic-credentials` のままであることを確認してから**、4 本すべてから手動 Job を
+1 回ずつ起こした（2026-08-10 04:03 UTC = 13:03 JST。夜間スケジュールと重ならない時間帯）。
+
+| Job | 所要 | 結果 | 追加されたスナップショット |
+|---|---|---|---|
+| `vaultwarden-restic-backup` | 26s | rc=0 | `4226960a`（4 files / 1.748 MiB → 158 KiB stored） |
+| `immich-restic-backup` | 26s | rc=0 | `b3e788eb`（82 files / 340.715 MiB → 1.835 MiB stored） |
+| `coder-restic-backup` | 24s | rc=0 | `37de93ef`（1 file / 933.200 KiB → 520 KiB stored） |
+| `coder-workspace-home-backup`（オーケストレータ） | 27s | rc=0 | 子 Job を 2 件作成 |
+| └ 子 `chb-0cd09458…`（workspace `general`） | 36s | rc=0 | `318e3fd4`（32420 files / 2.973 GiB、親 `b9d83e77` からの差分 2.425 MiB） |
+| └ 子 `chb-7fdb7787…`（workspace `test`） | 27s | rc=0 | `8e41ce61`（3156 files / 925.316 MiB、差分 0 B） |
+
+**6 本すべて成功。**`vaultwarden` と `coder-workspace-homes` のスクリプトは `restic unlock` を
+含むが、`set -eu` の下で非 0 を返さなかった。実行直後に append-only 鍵で 4 リポジトリすべてに
+`restic list locks` を打ち、**4 本とも rc=0・出力 0 行（残留 lock なし）**を確認した。
+つまり **backup が自分で張った lock を append-only 鍵で除去できている**（(a) の推論が本番でも成立）。
+
+`b2_list_file_versions` で裏を取ったところ、**バケット内の hide マーカー 18 件はすべて
+2026-08-10 03:51〜04:05 UTC のもの**で、それ以前（削除権限つき鍵だけで日次バックアップを
+回していた期間）の hide マーカーは 1 件も無い。上の「append-only 鍵の削除は hide になる /
+削除権限つき鍵の削除は実削除」という違いが本番でもそのとおり現れている。
+
+**既知の癖（無害）**: 直前に別の Job が lock を hide した直後に別の restic プロセスが走ると、
+`Load(<lock/…>) failed: b2_download_file_by_name: 404: File with such name does not exist.` が
+警告として出ることがある（子 Job `chb-7fdb7787…` で実際に発生）。hide の反映が一覧 API と
+ダウンロード API で一瞬ずれるためで、**restic は警告のみで続行し rc=0 で完走する**。
+
+**運用上の副作用（容量は無視できる）**: append-only 鍵では lock の除去が hide になるため、
+lock ファイルの旧版と hide マーカーがバケットに残り続ける。1 日あたり 6 版程度・1 版 200 バイト弱
+なので年間でも 1 MB に満たない。`forget --prune`（削除権限つき鍵）は restic から見えない
+これらの版を回収しないので、**積もり続ける**点だけ承知しておく。
+
+### これで何が守られるか / 守られないか
+
+- **守られる**: node01 が侵害されても、backup 用鍵で B2 上のバックアップを**恒久的には消せない**。
+  restic の削除操作は hide にしかならず、元の版はバケットに残る。バケットの
+  `lifecycleRules` は空（実測）で `bucketType` は `allPrivate` のため、hide された版が自動で
+  完全消滅することもない。
+- **守られない**: hide 自体は backup 用鍵でできる。攻撃者は**バックアップを「見えなくする」ことは
+  できる**（restic からは消えたように見える）。復旧には削除権限つき鍵かマスターキーで hide マーカーを
+  消す作業が要る = 復元までの時間は奪われる。完全な不変性が要るなら B2 の Object Lock
+  （現状 `fileLockConfiguration` は読めず未設定と思われる）が必要 — これは人間の管理コンソール作業。
+- **注意**: バケットに `lifecycleRules` を後から入れると（例「最新版のみ保持」）、hide された版が
+  恒久削除され、この防御は無効になる。**このバケットのライフサイクル規則は空のまま維持すること。**
+
+### 戻し方
+
+`secretKeyRef.name` を `<app>-restic-credentials` に戻す revert PR 1 本。データは失われない
+（同じバケット・同じリポジトリパス・同じ `RESTIC_PASSWORD`）。消せずに積もった lock が問題になった
+場合は、削除権限つき鍵で `restic unlock --remove-all` を打つ使い捨て Job で片付けられる
+（retention の manifest を変える必要はない）。
+
+### 残骸（片付け済み）
+
+使い捨てのプローブが作った B2 リポジトリ `b2:<bucket>:append-only-probe`（18 版 / 3354 バイト）は
+**2026-08-10 に削除した**。append-only 鍵では消せないため、削除権限つき鍵を使う使い捨て Job から
+`b2_list_file_versions` → `b2_delete_file_version` を回した。誤爆防止として
+**`append-only-probe/` で前方一致する版だけ**を対象にし（本番の 4 パス `vaultwarden/` /
+`immich/` / `coder-postgres/` / `coder-workspace-homes/` のいずれとも前方一致しない）、
+削除ループ内でも 1 版ごとにプレフィックスを assert した。削除後に同プレフィックスの版数が
+0 であること、本番 4 プレフィックスの版数が削除前と変わらないことを確認済み。バケットに
+autopilot が片付けられない残骸は無い。
 
 ## わかっていること（repo から）
 

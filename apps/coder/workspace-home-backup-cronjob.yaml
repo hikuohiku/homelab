@@ -10,10 +10,11 @@
 # Kubernetes API 経由で生成する。生成された Job は ttlSecondsAfterFinished で自動 GC
 # されるため、このオーケストレータ自身は Job の削除権限を持たない（作成のみ）。
 #
-# credential は既存の coder-postgres 用 (T-0070, `coder-restic-credentials`) をそのまま流用する。
+# credential は coder-postgres の backup と同じ `coder-restic-backup-credentials`
+# （backup 専用の B2 鍵。T-0106 で分離し P-0028 で切り替えた。docs/backup.md 参照）を流用する。
 # 同じ Backblaze B2 バケット・同じ暗号化パスワードで、リポジトリパス末尾のみ
 # "coder-workspace-homes" に変える設計（vaultwarden/immich/coder-postgres と同型）。
-# 新規の Doppler 登録は不要
+# 下の retention CronJob だけは削除権限つきの `coder-restic-credentials` を使い続ける
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -185,13 +186,20 @@ data:
                             "name": "restic-backup",
                             "image": RESTIC_IMAGE,
                             "command": ["sh", "-c", RESTIC_BACKUP_SCRIPT],
+                            # credential は backup 専用の append-only 鍵（deleteFiles を持たない
+                            # B2 application key）。削除権限つきの coder-restic-credentials は
+                            # 下の retention CronJob だけが使う。T-0106 で分離し P-0028 で
+                            # 切り替えた。append-only 鍵でも上の RESTIC_BACKUP_SCRIPT の
+                            # restic unlock と backup 終了時の lock 除去は成功する
+                            # （2026-08-10 に切替後の本番リポジトリで子 Job 2 本を実走させ、
+                            # rc=0・残留 lock 0 件を実測）。詳細は docs/backup.md
                             "env": [
                                 {"name": "WORKSPACE_ID", "value": workspace_id},
                                 {"name": "WORKSPACE_NAME", "value": workspace_name},
                                 {
                                     "name": "RESTIC_B2_BUCKET",
                                     "valueFrom": {"secretKeyRef": {
-                                        "name": "coder-restic-credentials",
+                                        "name": "coder-restic-backup-credentials",
                                         "key": "RESTIC_B2_BUCKET",
                                     }},
                                 },
@@ -204,21 +212,21 @@ data:
                                 {
                                     "name": "RESTIC_PASSWORD",
                                     "valueFrom": {"secretKeyRef": {
-                                        "name": "coder-restic-credentials",
+                                        "name": "coder-restic-backup-credentials",
                                         "key": "RESTIC_PASSWORD",
                                     }},
                                 },
                                 {
                                     "name": "B2_ACCOUNT_ID",
                                     "valueFrom": {"secretKeyRef": {
-                                        "name": "coder-restic-credentials",
+                                        "name": "coder-restic-backup-credentials",
                                         "key": "B2_ACCOUNT_ID",
                                     }},
                                 },
                                 {
                                     "name": "B2_ACCOUNT_KEY",
                                     "valueFrom": {"secretKeyRef": {
-                                        "name": "coder-restic-credentials",
+                                        "name": "coder-restic-backup-credentials",
                                         "key": "B2_ACCOUNT_KEY",
                                     }},
                                 },
