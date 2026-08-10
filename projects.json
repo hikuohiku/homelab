@@ -1139,7 +1139,78 @@
         "soft_cap": 3500000
       },
       "created": "2026-08-10",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-10T13:06:11Z",
+        "verify": [
+          {
+            "cmd": "test -f docs/disaster-recovery.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -qE 'RTO|所要時間' docs/disaster-recovery.md",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: docs/disaster-recovery.md: No such file or directory\n"
+          },
+          {
+            "cmd": "grep -qE '復元できない|再発行が要る' docs/disaster-recovery.md",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: docs/disaster-recovery.md: No such file or directory\n"
+          },
+          {
+            "cmd": "test -f ops/tests/test_restore_coverage.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_restore_coverage -v",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "test_restore_coverage (unittest.loader._FailedTest.test_restore_coverage) ... ERROR\n\n======================================================================\nERROR: test_restore_coverage (unittest.loader._FailedTest.test_restore_coverage)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_restore_coverage\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 137, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_restore_coverage'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "test -f ops/projects/logs/P-0054/restore-drill.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'sha256' ops/projects/logs/P-0054/restore-drill.md",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: ops/projects/logs/P-0054/restore-drill.md: No such file or directory\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0055",
@@ -1164,7 +1235,78 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-10",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-10T13:06:11Z",
+        "verify": [
+          {
+            "cmd": "python3 -c \"import json,sys; d=json.load(open('nix/images/proxmox-cloud/flake.lock')); sys.exit(0 if d['nodes']['nixpkgs']['locked']['lastModified'] > 1785828668 else 1)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "test -f ops/check_flake_freshness.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 ops/check_flake_freshness.py",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-yv_n6zfc/repo/ops/check_flake_freshness.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "grep -q 'check_flake_freshness' .github/workflows/ci.yml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "test -f docs/os-updates.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'k3s' docs/os-updates.md",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: docs/os-updates.md: No such file or directory\n"
+          },
+          {
+            "cmd": "test -f ops/projects/logs/P-0055/image-build.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
