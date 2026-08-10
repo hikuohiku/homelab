@@ -182,15 +182,18 @@ immich の `clip_index` / `face_index` は `lists = [1]` で作られており�
 
 複製上で通しで 1 回成功させた。各段の実測:
 
-| 段 | コマンド | 実測 |
-|---|---|---|
-| 1 | `ALTER EXTENSION vchord UPDATE;` | **437.575 ms**（0.4.3 → 1.1.1。連鎖は postgres が解決する） |
-| 2 | `REINDEX INDEX clip_index;` | **664.895 ms**（128 kB / 19 行） |
-| 3 | `REINDEX INDEX face_index;` | **34.177 ms**（88 kB / 2 行） |
-| 4 | `ALTER DATABASE immich SET vchordrq.probes = 1;` | 即時 |
+複製上で通しで成功させた（2 回。2 回目はレビュー指摘を直したマニフェストで再生した）。各段の実測:
+
+| 段 | コマンド | 1 回目 (05:41Z) | 2 回目 (05:58Z) |
+|---|---|---|---|
+| 1 | `ALTER EXTENSION vchord UPDATE;` | 437.575 ms | **239.738 ms**（0.4.3 → 1.1.1。連鎖は postgres が解決する） |
+| 2 | `REINDEX INDEX clip_index;` | 664.895 ms | **496.802 ms**（128 kB / 19 行） |
+| 3 | `REINDEX INDEX face_index;` | 34.177 ms | **25.569 ms**（88 kB / 2 行） |
+| 4 | `ALTER DATABASE immich SET vchordrq.probes = 1;` | 即時 | 即時 |
 
 REINDEX は `INFO: clustering: using 4 threads` を出しつつ 1 秒未満で終わる。**現在のデータ量では
 ダウンタイムはほぼ無視できる。** 将来データが増えたら再測すること（この数字は 19 行 + 2 行のもの）。
+2 回の実行で 2 倍近いばらつきがあるので、ミリ秒の値そのものではなく「秒未満」という桁だけを信じること。
 
 更新後の状態（本番想定の形で起動した Job から）:
 
@@ -212,17 +215,30 @@ REINDEX は `INFO: clustering: using 4 threads` を出しつつ 1 秒未満で�
 ## 本番に適用するときの手順（別プロジェクトの入力。DoD 6）
 
 **このプロジェクトでは実行していない。** 以下は複製上で検証済みの内容をそのまま本番の形に
-書き下したもの。
+書き下したもの。検証の内訳は 2 通りある:
+
+- **既存 PGDATA を持ったまま更新する経路**（通常の更新）: Job `p-0035-rehearsal-build` →
+  `-reproduce` → `-verify`。本番ダンプから作った複製に対して通しで 1 回成功させた。
+- **PGDATA が空の状態から起動する経路**（PVC を作り直した災害復旧）: Job
+  `p-0035-rehearsal-bootstrap`。空の使い捨て PVC に対して init-permissions → init-bootstrap →
+  main container の連鎖を 1 回通した（下の「災害復旧経路を殺さないこと」）。
 
 ### `apps/immich/postgres.yaml` に必要な差分
 
 1. image を `16.14-1.1.1` に
 2. `command: ["postgres"]` を明示（`args` の先頭 `-c` がコマンド名に解釈される #244 の再発防止）
-3. **`init-permissions` initContainer に `chmod 0700` を足す**（原因 A）:
-   ```sh
-   chown -R 26:999 /var/lib/postgresql/data && chmod 0700 /var/lib/postgresql/data/pgdata
-   ```
+3. **`init-permissions` initContainer に `chmod 0700` を足す**（原因 A）。
    fsGroup が毎回 2770 に戻すので、Pod が作り直されるたびに必要。**1 回直せば済む話ではない。**
+
+   **ただし `&&` で 1 本に繋いではいけない。** PGDATA の存在で守ること:
+   ```sh
+   set -eu
+   chown -R 26:999 /var/lib/postgresql/data
+   if [ -d /var/lib/postgresql/data/pgdata ]; then
+     chmod 0700 /var/lib/postgresql/data/pgdata
+   fi
+   ```
+   理由は次節（「災害復旧経路を殺さないこと」）。
 4. **`/var/run/postgresql` に `emptyDir` をマウントする**（原因 B）:
    ```yaml
    volumeMounts:
@@ -236,7 +252,66 @@ REINDEX は `INFO: clustering: using 4 threads` を出しつつ 1 秒未満で�
    `readinessProbe` の `pg_isready -U immich` が既定パスを見て失敗するので、
    **emptyDir を被せる方を採る**（この形で `pg_isready` が通ることを確認済み）。
 5. #257 の `init-bootstrap` initContainer（PGDATA が空のときだけ initdb する経路）は
-   災害復旧用に引き続き要る。P-0035 では触っていない。
+   災害復旧用に引き続き要る。ロジックは 1 行も変えなくてよい（下で空 PVC から実測した）。
+
+### 災害復旧経路を殺さないこと（空 PVC からの起動、実測）
+
+item 3 の chmod を `chown -R … && chmod 0700 $PGDATA` と 1 本に繋ぐと、**PVC を作り直した直後
+（= PGDATA がまだ存在しない = 災害復旧そのもの）に init-permissions が exit 1 する**。
+initContainer は順に実行されるので、その後ろの `init-bootstrap` は一度も走らない。
+PGDATA を作る主体が init-bootstrap しかいない以上、Deployment は `Init:CrashLoopBackOff` から
+**自然回復しない**。通常運用の再起動では PGDATA が常に存在するため、この壊れ方は
+「PVC を失って復旧しようとした、まさにその瞬間」にだけ表面化する。
+
+空の使い捨て PVC (`p-0035-rehearsal-fresh`) を使う Job `p-0035-rehearsal-bootstrap` で、
+旧い形と修正形を同じ Pod の中で連続して実測した:
+
+```
+=== reset: make this PVC look freshly created ===
+drwxrwsrwx    2 root     999           4096 Aug 10 05:57 .
+=== control: the OLD init-permissions form against an empty PVC ===
+old_form_rc=1
+chmod: /var/lib/postgresql/data/pgdata: No such file or directory
+CONFIRMED: the old form exits 1, so init-bootstrap would never run
+```
+
+修正形（`[ -d … ]` で守る）はそのまま抜け、後続が正常に走る:
+
+```
+PGDATA does not exist yet; leaving chmod to the bootstrap path
+/var/lib/postgresql/data mode=2777 owner=26:999
+PGDATA created by initdb: mode=2700 owner=26:999
+bootstrap succeeded in 4s
+```
+
+そのうえで **本番と同じ argv** (`postgres -c shared_preload_libraries=vchord.so`) の main container が
+起動し、**本番と同じ probe** (`pg_isready -U immich`) が通ることまで確認した:
+
+```
+/var/run/postgresql:5432 - accepting connections
+ready_rc=0
+2026-08-10 05:58:03.169 UTC [9] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
+2026-08-10 05:58:03.284 UTC [9] LOG:  database system is ready to accept connections
+```
+
+復旧直後のデータベースの状態（**カタログは最初から 1.1.1**。空なので REINDEX も probes も要らない）:
+
+```
+ extname | extversion            server_version = 16.14 (Debian 16.14-1.pgdg12+1)
+---------+------------           db_size        = 7999 kB
+ plpgsql | 1.0                   vchordrq.probes = (未設定)
+ vchord  | 1.1.1
+ vector  | 0.8.3
+```
+
+補足 2 点:
+
+- initdb が作る PGDATA は `0700` ではなく **`2700`**（親ディレクトリに fsGroup が付けた setgid が
+  継承される）。postgres のパーミッション検査は group/other のビットしか見ないので **2700 でも通る**
+  （上のログのとおり実際に起動している）。だから空 PVC の経路で chmod は要らない。
+- ここでダンプを流し戻して immich がインデックスを作り直した場合は、更新経路と同じく
+  `ALTER DATABASE immich SET vchordrq.probes = 1;` が要る（復旧直後の空 DB では `vchordrq.probes` は
+  未設定のまま）。
 
 ### DB 側に当てる手順
 
@@ -257,23 +332,37 @@ image を 16.9-0.4.3 へ戻すと、今度は新形式のインデックスを�
 ```bash
 kubectl apply -f ops/projects/logs/P-0035/upgrade-rehearsal-job.yaml
 kubectl wait --for=condition=complete --timeout=30m \
-  job/p-0035-rehearsal-build job/p-0035-rehearsal-reproduce job/p-0035-rehearsal-verify -n immich
-for j in build reproduce verify; do
+  job/p-0035-rehearsal-build job/p-0035-rehearsal-reproduce job/p-0035-rehearsal-verify \
+  job/p-0035-rehearsal-bootstrap -n immich
+for j in build reproduce verify bootstrap; do
   echo "===== $j ====="; kubectl logs -n immich -l job-name=p-0035-rehearsal-$j --all-containers --tail=-1
 done
 kubectl delete -f ops/projects/logs/P-0035/upgrade-rehearsal-job.yaml   # 撤収（使い捨て PVC ごと消える）
 ```
 
-3 つの Job は PVC 上の sentinel で順序を取るので 1 回の apply で順に走る。実測の所要時間は
-build 44s / reproduce 42s / verify 50s。
+Job は 4 本。`build` → `reproduce` → `verify` は 1 つの使い捨て PVC を共有し、その上の sentinel で
+順序を取る（1 回の apply で順に走る）。`bootstrap` は別 PVC を使う独立した検証（空 PVC =
+災害復旧経路）なので並行に走る。実測の所要時間は build 48s / reproduce 52s / verify 59s /
+bootstrap 21s（apply から全 Job complete まで 59s）。
+
+> **sentinel の扱いに注意**: PVC は Job を消しても残るので、前回の実行が書いた sentinel を
+> 次の実行の待ち側が拾うと「本番相当でない複製」に対して結論が出てしまう。マニフェストでは
+> (1) build の**最初の** initContainer `reset-state` が他の何よりも先に sentinel と PGDATA を消し、
+> (2) 待ち側は **sentinel の不在を一度観測してから出現を待つ** 2 段構えにしてある。
+> どちらか片方だけでは、apply 直後に 3 つの Pod が同時に立つ窓を塞げない。
 
 ### 出典
 
+すべて 2026-08-10 の実測。マニフェストをレビュー指摘で直したあと、**全 Job を通しで再実行して
+取り直したログ**（05:57〜05:58Z）を出典とする。
+
 | 何 | どこ |
 |---|---|
-| 複製の作成・ダンプの sha256 | Job `p-0035-rehearsal-build` (pod `p-0035-rehearsal-build-7jjfl`), 2026-08-10T05:40Z |
-| FATAL 1 / FATAL 2・移行手順の実測時間 | Job `p-0035-rehearsal-reproduce` (pod `p-0035-rehearsal-reproduce-wcgn4`), 2026-08-10T05:41:14Z〜 |
-| 本番想定の形での起動確認・`pg_isready` | Job `p-0035-rehearsal-verify` (pod `p-0035-rehearsal-verify-6gf98`), 2026-08-10T05:41:25Z〜 |
+| 複製の作成・ダンプの sha256 | Job `p-0035-rehearsal-build` (pod `p-0035-rehearsal-build-msbgs`), 2026-08-10T05:57:56Z〜 |
+| FATAL 1 / FATAL 2・移行手順の実測時間（2 回目） | Job `p-0035-rehearsal-reproduce` (pod `p-0035-rehearsal-reproduce-jtlwp`), 2026-08-10T05:58:35Z〜 |
+| 本番想定の形での起動確認・`pg_isready` | Job `p-0035-rehearsal-verify` (pod `p-0035-rehearsal-verify-drqh8`), 2026-08-10T05:58:41Z〜 |
+| 空 PVC からの災害復旧経路・旧 init-permissions の対照実験 | Job `p-0035-rehearsal-bootstrap` (pod `p-0035-rehearsal-bootstrap-lntm6`), 2026-08-10T05:57:57Z〜 |
+| FATAL 1 / FATAL 2 の初出・移行手順の実測時間（1 回目） | Job `p-0035-rehearsal-{build,reproduce,verify}` (pod `…-7jjfl` / `…-wcgn4` / `…-6gf98`), 2026-08-10T05:40〜05:41Z |
 | 旧イメージでの対照実験（FATAL 1 の再現） | Pod `p-0035-stage-b2`, 2026-08-10T05:32:59Z |
 | image config の Entrypoint/Cmd | GHCR registry API (`/v2/tensorchord/cloudnative-vectorchord/blobs/<config digest>`), 2026-08-10 |
 | `/var/run/postgresql` の mode/owner | Pod `p-0035-runprobe`（`16.14-1.1.1` を uid 26 で実行）, 2026-08-10 |

@@ -100,6 +100,115 @@ Job `p-0035-stage-a` / Pod `p-0035-{probe,probe2,stage-b,stage-b2,stage-c,stage-
 「戻し方」節にある **REINDEX 後に image を 16.9-0.4.3 へ戻す経路だけが未検証（推測のまま）**
 なので、そこを複製上で潰すのが一番価値がある。
 
+### セッション 2 (2026-08-10) — レビュー指摘 2 件の解消
+
+前回のレビューで差し戻された 2 件を潰した。**どちらも「マニフェストの記述が実測を先回りしていた」
+種類の指摘**で、直したうえで**全 Job を通しで再実行して実測を取り直した**。
+
+#### 指摘 1: 災害復旧経路を殺す init-permissions
+
+docs の「本番に適用するときの手順」item 3 が `chown -R … && chmod 0700 $PGDATA` を指示しつつ、
+item 5 で init-bootstrap（PGDATA が空のときだけ initdb する経路）を残していた。PVC 新規作成直後は
+PGDATA が無いので chmod が exit 1 → `&&` 連結の init-permissions ごと失敗 → 後続の init-bootstrap が
+一度も走らない → PGDATA を作る主体がいないまま `Init:CrashLoopBackOff` から自然回復しない。
+**予行演習では一度も踏まれていない経路だった**（Job 3 は常に build が作った既存 pgdata に対してしか
+走っていない）のに、docs は「複製上で検証済み」と書いていた。
+
+直した内容:
+
+- docs item 3 を `[ -d … ]` で守る形に書き換え、新節「災害復旧経路を殺さないこと」を追加。
+- Job 3 の `init-permissions` を同じ形に修正。
+- **Job 4 `p-0035-rehearsal-bootstrap` を新設**（別の空 PVC `p-0035-rehearsal-fresh` を使うので
+  他の 3 本と順序関係を持たず並行に走る）。中で対照実験 → 修正形 → #257 の init-bootstrap →
+  本番と同じ argv の main container、を一続きで通す。
+
+実測（pod `p-0035-rehearsal-bootstrap-lntm6`、2026-08-10T05:57:57Z〜、Job 21s）:
+
+```
+=== control: the OLD init-permissions form against an empty PVC ===
+old_form_rc=1
+chmod: /var/lib/postgresql/data/pgdata: No such file or directory
+CONFIRMED: the old form exits 1, so init-bootstrap would never run
+--- 修正形 ---
+PGDATA does not exist yet; leaving chmod to the bootstrap path
+PGDATA created by initdb: mode=2700 owner=26:999
+bootstrap succeeded in 4s
+--- 本番と同じ argv + 本番と同じ probe ---
+/var/run/postgresql:5432 - accepting connections
+ready_rc=0
+2026-08-10 05:58:03.284 UTC [9] LOG:  database system is ready to accept connections
+```
+
+**副産物 2 つ**（docs に書いた）:
+
+- initdb が作る PGDATA は `0700` ではなく **`2700`**。親に fsGroup が付けた setgid を継承するため。
+  postgres のパーミッション検査は group/other のビットしか見ないので **2700 でも通る**（実際に起動した）。
+  つまり空 PVC の経路では chmod は要らない。だから「存在するときだけ chmod」で正しい。
+- 災害復旧直後の DB はカタログが**最初から vchord 1.1.1 / vector 0.8.3**（更新経路だと vector は
+  0.8.0 のまま残るのと対照的）。`vchordrq.probes` は未設定なので、ダンプを流し戻して immich が
+  インデックスを作り直したら更新経路と同じく `ALTER DATABASE … SET vchordrq.probes = 1` が要る。
+
+#### 指摘 2: sentinel の順序保証が成立していなかった
+
+ヘッダは「build は毎回 PGDATA と sentinel を消してから始める」と書いていたが、実際の削除は build の
+**main container の先頭**で、その手前に initContainer が 2 つ（chown -R と 18MB のダンプ copy）あった。
+reproduce / verify の待ち側は Pod 起動直後 t=0 から同じ sentinel を見るので、PVC に前回の残骸がある
+状態で apply すると数秒で古い sentinel を拾い、build が `rm -rf` している最中の PGDATA に対して
+postgres を起動しうる（単一ノードなので RWO PVC を 3 Pod が同時にマウントできる）。
+
+直した内容 — **2 段構えにした。片方だけでは窓が塞がらない**:
+
+1. build の**最初の** initContainer `reset-state`（root）が、他の何よりも先に sentinel と PGDATA を消す。
+   build の main container は「掃除済みであること」を assert するだけに変えた（汚れていたら exit 1）。
+2. 待ち側 (`wait-for-build` / `wait-for-upgrade`) を **「sentinel の不在を一度観測してから、
+   その後の出現を待つ」** 2 フェーズに変えた。1 だけだと「待ち側が reset-state より先に 1 回目の
+   判定をする」窓が残るため。
+
+ヘッダの「再実行時の注意」もこの実装に合わせて書き直した（何を保証していて、なぜ 2 段必要かを明記）。
+
+実測ログ（`p-0035-rehearsal-reproduce-jtlwp`）:
+
+```
+phase 1: wait until any stale sentinel is gone
+absent at attempt 1
+phase 2: wait for this run's build to finish
+replica ready at 2026-08-10T05:58:32Z
+```
+
+#### 再実行の結果（全 4 Job green）
+
+`kubectl apply -f …` 1 回で 4 本とも Complete。apply から全 Job complete まで **59s**
+（build 48s / reproduce 52s / verify 59s / bootstrap 21s）。FATAL 1 / FATAL 2 とも 1 文字違わず再現し、
+移行手順も通った。**時間はばらつく**ので docs の表は 1 回目と 2 回目を並記した:
+
+| 段 | 1 回目 | 2 回目 |
+|---|---|---|
+| `ALTER EXTENSION vchord UPDATE;` | 437.575 ms | 239.738 ms |
+| `REINDEX INDEX clip_index;` | 664.895 ms | 496.802 ms |
+| `REINDEX INDEX face_index;` | 34.177 ms | 25.569 ms |
+
+docs の「出典」表も、この再実行で取り直したログ（pod 名 4 本）に差し替えた。1 回目のログは
+FATAL の初出として別行に残してある。`ops/inventory.json` の note にも指摘 1 の要点
+（chmod を PGDATA の存在で守ること）を 1 文追記した。
+
+#### 後始末
+
+`kubectl delete -f …` で PVC 2 本 + Job 4 本を削除。`kubectl get jobs,pods,pvc -n immich | grep p-0035`
+は空。本番 `immich-postgres` は Running / RESTARTS 0 / age 3d15h のままで、セッション開始時と同じ
+（更新も再起動もしていない）。
+
+#### 次のセッションへの一言
+
+**受入 5 項目を自分で実行して 5/5 green、`python3 ops/validate.py` も 0 error**（warning 2 件は
+着手前から存在し P-0035 と無関係）。レビュー指摘 2 件はどちらも実測で裏づけて閉じた。
+やり残しは無いのでこのままレビューへ。
+
+もしさらに追加を求められたら、**未検証で残っているのは docs「戻し方」節の 1 点だけ**:
+REINDEX 後に image を `16.9-0.4.3` へ戻す経路は**推測のまま**（新形式のインデックスを旧 `.so` が
+読めないはずなので image を戻したうえで再 REINDEX が要る、と書いてある）。複製上で潰せる。
+その場合は build → reproduce まで走らせてから、旧イメージの Pod を同じ PVC に当てて
+検索クエリのエラー文言を取ればよい（`upgrade-rehearsal-job.yaml` の Job 2 が雛形になる）。
+
 ## 発見 (スコープ外だが次に渡したいこと)
 
 <!-- 1 行ずつ。ここに書くだけで、このプロジェクトでは手を出さない -->
@@ -110,3 +219,4 @@ Job `p-0035-stage-a` / Pod `p-0035-{probe,probe2,stage-b,stage-b2,stage-c,stage-
 - 本番 `postgres.yaml` は現状 `docker-entrypoint.sh` の暗黙の `chmod 00700` に依存して動いている。今は無害だが、誰かが `command:` を足した瞬間に壊れる潜在的な脆さ（#257 が実際にこれで落ちた）。16.9 に据え置く場合でも `init-permissions` に `chmod 0700` を足しておく価値がある。
 - `immich-library/backups/` が mode 700 / uid 999 のため、将来の復元ツールを uid 999 以外で動かすなら root の staging 段が必ず要る。docs/backup.md の「復元時の注意」はこの点に触れていない。
 - `ops/validate.py` の warning 2 件（T-0035 の refs 切れ / todo 0 件）は着手前から存在し、P-0035 とは無関係。
+- 「initContainer の command を `&&` で 1 本に繋ぐと、片方が任意の状態で失敗したとき後続の initContainer ごと死ぬ」は immich-postgres 固有の話ではない。`apps/` 配下の他の initContainer にも同じ形が無いか一度 sweep する価値がある（P-0035 では見ていない）。

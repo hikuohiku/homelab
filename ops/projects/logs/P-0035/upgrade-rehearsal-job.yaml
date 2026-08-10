@@ -11,13 +11,16 @@
 #
 #     kubectl apply -f ops/projects/logs/P-0035/upgrade-rehearsal-job.yaml
 #     kubectl wait --for=condition=complete --timeout=30m \
-#       job/p-0035-rehearsal-build job/p-0035-rehearsal-reproduce job/p-0035-rehearsal-verify -n immich
-#     for j in build reproduce verify; do
+#       job/p-0035-rehearsal-build job/p-0035-rehearsal-reproduce job/p-0035-rehearsal-verify \
+#       job/p-0035-rehearsal-bootstrap -n immich
+#     for j in build reproduce verify bootstrap; do
 #       echo "===== $j ====="; kubectl logs -n immich -l job-name=p-0035-rehearsal-$j --all-containers --tail=-1
 #     done
 #
-# 3 つの Job は PVC 上の sentinel ファイルで順序を取るので、1 回の apply でそのまま順に走る
-# （待ち側の Job は wait-for-previous initContainer で前段の完走を待つ）。
+# build → reproduce → verify の 3 つは PVC 上の sentinel ファイルで順序を取るので、1 回の
+# apply でそのまま順に走る（待ち側の Job は wait-for-previous initContainer で前段の完走を待つ）。
+# bootstrap Job は別 PVC を使う独立した検証（空 PVC = 災害復旧経路）なので、他の 3 つとは
+# 順序関係を持たず並行に走る。
 #
 # ## 撤収
 #
@@ -28,9 +31,20 @@
 # ## 再実行時の注意
 #
 # PVC は Job を消しても残る。Job の .spec.template は immutable なので、中身を変えて再実行する
-# ときは `kubectl delete -f` してから apply し直す。build Job は毎回 PGDATA と sentinel を
-# 消してから始めるので、途中で失敗した状態を次の実行が拾うことはない
-# （T-0111 run #75 が実際に踏んだ罠への対処）。
+# ときは `kubectl delete -f` してから apply し直す。
+#
+# **前回の残骸を次の実行が拾わないための仕掛け**（T-0111 run #75 が実際に踏んだ罠への対処）:
+#
+#   - build Job の **最初の initContainer** `reset-state` が、他の何よりも先に sentinel と
+#     PGDATA を消す。ここが最初でなければならない: 以前はこの掃除が build の main container
+#     にあり、その手前で initContainer が 2 つ（chown -R と 18MB のダンプ copy）走っていた。
+#     3 つの Job は apply 直後に同時に Pod を作るので、reproduce / verify の待ち側は
+#     その数秒〜数十秒のあいだ **前回の実行が残した sentinel** を観測でき、build が
+#     PGDATA を消している最中に postgres を起動しうる（単一ノードなので RWO PVC を
+#     3 Pod が同時にマウントできてしまう）。
+#   - それでも「待ち側が reset-state より先に 1 回目の判定をする」窓は残るので、待ち側は
+#     **sentinel の不在を一度観測してから、その後の出現を待つ**（下の wait-for-* を参照）。
+#     この 2 段構えで、前回の sentinel を今回のものと取り違える経路が無くなる。
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -65,9 +79,25 @@ spec:
       securityContext:
         fsGroup: 999
       initContainers:
-        - name: init-permissions
+        # ★ この Pod で最初に走るコンテナでなければならない。sentinel の削除がこれより
+        #   後ろにあると、reproduce / verify の待ち側が前回の実行の sentinel を観測して
+        #   走り出す（ヘッダの「再実行時の注意」参照）。掃除 → chown の順で、掃除に
+        #   関係ない仕事はここに足さないこと。
+        - name: reset-state
           image: busybox:1.38.0
-          command: ["sh", "-c", "chown -R 26:999 /var/lib/postgresql/data"]
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              ROOT=/var/lib/postgresql/data
+              echo "=== reset-state at $(date -u +%Y-%m-%dT%H:%M:%SZ) ==="
+              ls -la "$ROOT" || true
+              rm -f "$ROOT/.p-0035-replica-ready" "$ROOT/.p-0035-upgraded"
+              rm -rf "$ROOT/pgdata"
+              chown -R 26:999 "$ROOT"
+              echo "--- after reset ---"
+              ls -la "$ROOT"
           securityContext:
             runAsUser: 0
           volumeMounts:
@@ -110,11 +140,16 @@ spec:
               say() { echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) $* ==="; }
               ROOT=/var/lib/postgresql/data
 
-              # PVC は Job をまたいで残る。前回の残骸（PGDATA・sentinel）を必ず消してから始める。
-              say "wipe PGDATA and stale sentinels"
-              rm -f "$ROOT"/.p-0035-replica-ready "$ROOT"/.p-0035-upgraded
-              rm -rf "${PGDATA:?}"/* "${PGDATA:?}"/.[!.]* 2>/dev/null
-              ls -la "$PGDATA" 2>/dev/null || echo "(PGDATA does not exist yet)"
+              # PGDATA と sentinel の削除は initContainer `reset-state` が済ませている
+              # （待ち側に前回の sentinel を観測させないため、Pod の最初に置いてある）。
+              # ここではその結果だけを確認し、汚れていたら進まない。
+              say "assert reset-state left a clean slate"
+              ls -la "$ROOT"
+              for f in .p-0035-replica-ready .p-0035-upgraded; do
+                [ -e "$ROOT/$f" ] && { echo "stale sentinel $f survived reset-state"; exit 1; }
+              done
+              [ -e "$PGDATA" ] && { echo "PGDATA survived reset-state"; exit 1; }
+              echo "clean: no sentinels, no PGDATA"
 
               T0=$(date +%s)
               say "initdb"
@@ -267,9 +302,23 @@ spec:
             - -c
             - |
               set -u
+              S=/var/lib/postgresql/data/.p-0035-replica-ready
+              # 2 段構えで待つ。PVC は Job をまたいで残るので、apply 直後に見えた sentinel が
+              # 前回の実行のものである可能性がある。まず「消える（もしくは最初から無い）」のを
+              # 見届け、そのうえで今回の build が書くのを待つ。build の最初の initContainer
+              # reset-state がこの削除をする。
+              echo "phase 1: wait until any stale sentinel is gone"
+              for i in $(seq 1 120); do
+                [ -e "$S" ] || { echo "absent at attempt $i"; break; }
+                echo "stale sentinel still present ($(cat "$S" 2>/dev/null)); waiting"
+                sleep 5
+              done
+              [ -e "$S" ] && { echo "stale sentinel never cleared; build did not start"; exit 1; }
+
+              echo "phase 2: wait for this run's build to finish"
               for i in $(seq 1 180); do
-                if [ -s /var/lib/postgresql/data/.p-0035-replica-ready ]; then
-                  echo "replica ready at $(cat /var/lib/postgresql/data/.p-0035-replica-ready)"
+                if [ -s "$S" ]; then
+                  echo "replica ready at $(cat "$S")"
                   exit 0
                 fi
                 sleep 5
@@ -462,9 +511,20 @@ spec:
             - -c
             - |
               set -u
+              S=/var/lib/postgresql/data/.p-0035-upgraded
+              # wait-for-build と同じ 2 段構え。理由はそちらのコメントを参照。
+              echo "phase 1: wait until any stale sentinel is gone"
+              for i in $(seq 1 120); do
+                [ -e "$S" ] || { echo "absent at attempt $i"; break; }
+                echo "stale sentinel still present ($(cat "$S" 2>/dev/null)); waiting"
+                sleep 5
+              done
+              [ -e "$S" ] && { echo "stale sentinel never cleared; build did not start"; exit 1; }
+
+              echo "phase 2: wait for this run's reproduce to finish"
               for i in $(seq 1 240); do
-                if [ -s /var/lib/postgresql/data/.p-0035-upgraded ]; then
-                  echo "upgrade done at $(cat /var/lib/postgresql/data/.p-0035-upgraded)"
+                if [ -s "$S" ]; then
+                  echo "upgrade done at $(cat "$S")"
                   exit 0
                 fi
                 sleep 5
@@ -475,12 +535,26 @@ spec:
               mountPath: /var/lib/postgresql/data
         # ★ 本番 postgres.yaml の init-permissions に足すべき chmod。fsGroup が 0700 を 2770 に
         #   変えてしまい、command: ["postgres"] では docker-entrypoint.sh の chmod が効かないため。
+        #
+        #   **chmod は必ず「PGDATA が存在するときだけ」にする。** `chown … && chmod …` と
+        #   1 本に繋ぐと、PVC を作り直した直後（PGDATA がまだ無い = 災害復旧）に chmod が
+        #   exit 1 → initContainer 全体が失敗 → 後ろの init-bootstrap が一度も走らず、
+        #   PGDATA を作る主体がいないまま Init:CrashLoopBackOff から永久に抜けられない。
+        #   この経路は Job 4 (p-0035-rehearsal-bootstrap) が空 PVC で実測している。
         - name: init-permissions
           image: busybox:1.38.0
           command:
             - sh
             - -c
-            - "chown -R 26:999 /var/lib/postgresql/data && chmod 0700 /var/lib/postgresql/data/pgdata"
+            - |
+              set -eu
+              chown -R 26:999 /var/lib/postgresql/data
+              if [ -d /var/lib/postgresql/data/pgdata ]; then
+                chmod 0700 /var/lib/postgresql/data/pgdata
+              else
+                echo "PGDATA does not exist yet; leaving chmod to the bootstrap path"
+              fi
+              stat -c '%n mode=%a owner=%u:%g' /var/lib/postgresql/data
           securityContext:
             runAsUser: 0
           volumeMounts:
@@ -575,5 +649,282 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: p-0035-rehearsal-data
+        - name: run
+          emptyDir: {}
+---
+# ===========================================================================
+# Job 4 / 4: 災害復旧経路（PVC を新規作成した直後 = PGDATA が空）を空の使い捨て PVC で通す。
+#
+# 上の 3 つとは PVC が別なので順序関係を持たず、並行に走ってよい。ここで確かめるのは
+# 「本番に適用するときの手順」が **既存 PGDATA だけでなく空 PGDATA でも成立するか**:
+#
+#   control-old-init-permissions → 旧い `chown && chmod` 形が空 PVC で exit 1 することの実測
+#   init-permissions             → 修正形（PGDATA があるときだけ chmod）が exit 0 で抜ける
+#   init-bootstrap               → #257 (833922fe) の経路が initdb → createdb → CREATE EXTENSION
+#   postgres (main)              → 本番と同じ argv で起動し、本番と同じ pg_isready probe が通る
+#
+# 旧い形のままだと init-permissions が落ちて init-bootstrap が一度も走らず、PGDATA を作る
+# 主体がいないまま Init:CrashLoopBackOff から自然回復しない。この Job はその境目を実測する。
+# ===========================================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: p-0035-rehearsal-fresh
+  namespace: immich
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: p-0035-rehearsal-bootstrap
+  namespace: immich
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 1800
+  template:
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        fsGroup: 999
+      initContainers:
+        # 対照実験。PVC は Job をまたいで残るので、まず PGDATA を消して「作りたての PVC」に
+        # 戻したうえで、レビュー前の init-permissions（chown と chmod を && で 1 本に繋いだ形）
+        # を実行し、exit code を記録する。ここが 0 で終わったら前提が崩れているので Job を
+        # 失敗させる（そのときは下の init-permissions の修正が不要になったということ）。
+        - name: control-old-init-permissions
+          image: busybox:1.38.0
+          command:
+            - sh
+            - -c
+            - |
+              set -u
+              ROOT=/var/lib/postgresql/data
+              echo "=== reset: make this PVC look freshly created ==="
+              rm -rf "$ROOT/pgdata"
+              ls -la "$ROOT"
+
+              echo "=== control: the OLD init-permissions form against an empty PVC ==="
+              sh -c 'chown -R 26:999 /var/lib/postgresql/data && chmod 0700 /var/lib/postgresql/data/pgdata'
+              RC=$?
+              echo "old_form_rc=$RC"
+              [ "$RC" -eq 0 ] && { echo "UNEXPECTED: the old form succeeded on an empty PVC"; exit 1; }
+              echo "CONFIRMED: the old form exits $RC, so init-bootstrap would never run"
+              exit 0
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+        # ★ 本番 postgres.yaml に入れるべき形。上の対照実験と 1 行だけ違う（chmod を
+        #   PGDATA の存在で守っている）。Job 3 の init-permissions と同一。
+        - name: init-permissions
+          image: busybox:1.38.0
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              chown -R 26:999 /var/lib/postgresql/data
+              if [ -d /var/lib/postgresql/data/pgdata ]; then
+                chmod 0700 /var/lib/postgresql/data/pgdata
+              else
+                echo "PGDATA does not exist yet; leaving chmod to the bootstrap path"
+              fi
+              stat -c '%n mode=%a owner=%u:%g' /var/lib/postgresql/data
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+        # #257 (833922fe) の init-bootstrap。**ロジックは 1 行も変えていない。**
+        # 違うのは (a) POSTGRES_PASSWORD が本番 Secret ではなく使い捨て値、
+        # (b) 最後にログを stdout へも出して kubectl logs から読めるようにした点だけ。
+        - name: init-bootstrap
+          image: ghcr.io/tensorchord/cloudnative-vectorchord:16.14-1.1.1
+          command:
+            - bash
+            - -c
+            - |
+              set -u
+              if [ -s "$PGDATA/PG_VERSION" ]; then
+                echo "PGDATA already initialized, skip bootstrap" | tee /dev/termination-log
+                exit 0
+              fi
+
+              LOGFILE=/tmp/pg-bootstrap.log
+              : > "$LOGFILE"
+              T0=$(date +%s)
+
+              initdb --username="$POSTGRES_USER" --pwfile=<(printf '%s\n' "$POSTGRES_PASSWORD") $POSTGRES_INITDB_ARGS -D "$PGDATA" >>"$LOGFILE" 2>&1
+              INITDB_RC=$?
+              if [ "$INITDB_RC" -ne 0 ]; then
+                echo "bootstrap failed: initdb_rc=$INITDB_RC"; cat "$LOGFILE"
+                echo "bootstrap failed: initdb_rc=$INITDB_RC" > /dev/termination-log
+                exit 1
+              fi
+              echo "PGDATA created by initdb: $(stat -c 'mode=%a owner=%u:%g' "$PGDATA")"
+
+              echo "host all all all scram-sha-256" >> "$PGDATA/pg_hba.conf"
+
+              pg_ctl -D "$PGDATA" -o "-c listen_addresses='' -c unix_socket_directories=/tmp -p 5432" -w start >>"$LOGFILE" 2>&1
+              BOOT_START_RC=$?
+              if [ "$BOOT_START_RC" -ne 0 ]; then
+                echo "bootstrap failed: boot_start_rc=$BOOT_START_RC"; cat "$LOGFILE"
+                echo "bootstrap failed: boot_start_rc=$BOOT_START_RC" > /dev/termination-log
+                exit 1
+              fi
+
+              CREATEDB_RC=0
+              if [ "$POSTGRES_DB" != "postgres" ]; then
+                createdb --username="$POSTGRES_USER" --host=/tmp "$POSTGRES_DB" >>"$LOGFILE" 2>&1
+                CREATEDB_RC=$?
+              fi
+              pg_ctl -D "$PGDATA" -w stop >>"$LOGFILE" 2>&1
+              if [ "$CREATEDB_RC" -ne 0 ]; then
+                echo "bootstrap failed: createdb_rc=$CREATEDB_RC"; cat "$LOGFILE"
+                echo "bootstrap failed: createdb_rc=$CREATEDB_RC" > /dev/termination-log
+                exit 1
+              fi
+
+              pg_ctl -D "$PGDATA" -o "-c listen_addresses=* -c unix_socket_directories=/tmp -c shared_preload_libraries=vchord.so -p 5432" -w start >>"$LOGFILE" 2>&1
+              START_RC=$?
+              if [ "$START_RC" -ne 0 ]; then
+                echo "bootstrap failed: start_rc=$START_RC"; cat "$LOGFILE"
+                echo "bootstrap failed: start_rc=$START_RC" > /dev/termination-log
+                exit 1
+              fi
+
+              PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "CREATE EXTENSION IF NOT EXISTS vchord CASCADE;" >>"$LOGFILE" 2>&1
+              EXT_RC=$?
+              pg_ctl -D "$PGDATA" -w stop >>"$LOGFILE" 2>&1
+              if [ "$EXT_RC" -ne 0 ]; then
+                echo "bootstrap failed: extension_rc=$EXT_RC"; cat "$LOGFILE"
+                echo "bootstrap failed: extension_rc=$EXT_RC" > /dev/termination-log
+                exit 1
+              fi
+
+              echo "bootstrap succeeded in $(( $(date +%s) - T0 ))s"
+              echo "--- pg-bootstrap.log ---"; cat "$LOGFILE"
+              echo "PGDATA now: $(stat -c 'mode=%a owner=%u:%g' "$PGDATA")"
+              echo "bootstrap succeeded" > /dev/termination-log
+              exit 0
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 26
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: POSTGRES_USER
+              value: immich
+            - name: POSTGRES_DB
+              value: immich
+            - name: POSTGRES_PASSWORD
+              value: p-0035-rehearsal-throwaway
+            - name: POSTGRES_INITDB_ARGS
+              value: "--data-checksums"
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+      containers:
+        - name: postgres
+          image: ghcr.io/tensorchord/cloudnative-vectorchord:16.14-1.1.1
+          command:
+            - bash
+            - -c
+            - |
+              set -u
+              say() { echo "=== $(date -u +%Y-%m-%dT%H:%M:%SZ) $* ==="; }
+              FAILED=0
+
+              stat -c '%n mode=%a owner=%u:%g' "$PGDATA" /var/run/postgresql
+
+              # ↓ 本番 Deployment の command: ["postgres"] + args と同じ argv
+              say "start from a PGDATA that init-bootstrap just created"
+              postgres -c shared_preload_libraries=vchord.so > /tmp/server.log 2>&1 &
+              PGPID=$!
+
+              say "wait for pg_isready -U immich (the production probe, verbatim)"
+              READY=1
+              for i in $(seq 1 60); do
+                if pg_isready -U "$POSTGRES_USER"; then READY=0; break; fi
+                sleep 2
+              done
+              echo "ready_rc=$READY"
+              cat /tmp/server.log
+              [ "$READY" -eq 0 ] || { echo "server never became ready"; exit 1; }
+
+              Q() { psql -U "$POSTGRES_USER" -d "$POSTGRES_DB" -P pager=off "$@"; }
+              say "state of a disaster-recovery database"
+              Q -c "SELECT extname, extversion FROM pg_extension ORDER BY 1;"
+              Q -Atc "SELECT 'server_version=' || current_setting('server_version');"
+              Q -Atc "SELECT 'db_size=' || pg_size_pretty(pg_database_size('$POSTGRES_DB'));"
+              # 復旧直後の空 DB には vchordrq インデックスがまだ無いので probes は効いてこない。
+              # ダンプを流し込んで immich がインデックスを作り直した後には、更新経路と同じく
+              # ALTER DATABASE ... SET vchordrq.probes = 1 が要る（docs 参照）。
+              Q -Atc "SELECT 'vchordrq.probes=' || current_setting('vchordrq.probes');"
+
+              say "shut down"
+              kill -INT "$PGPID"; wait "$PGPID"
+              tail -5 /tmp/server.log
+
+              MSG="rehearsal_bootstrap failed=$FAILED"
+              echo "$MSG"; echo "$MSG" > /dev/termination-log
+              exit "$FAILED"
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 26
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: POSTGRES_USER
+              value: immich
+            - name: POSTGRES_DB
+              value: immich
+            - name: POSTGRES_PASSWORD
+              value: p-0035-rehearsal-throwaway
+            - name: POSTGRES_INITDB_ARGS
+              value: "--data-checksums"
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: run
+              mountPath: /var/run/postgresql
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: p-0035-rehearsal-fresh
         - name: run
           emptyDir: {}
