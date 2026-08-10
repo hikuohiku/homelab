@@ -632,6 +632,56 @@
         "until": "2026-08-10T04:33:37Z",
         "baseline_unhealthy": []
       }
+    },
+    {
+      "id": "P-0035",
+      "title": "immich-postgres の vchord 更新を、本番データの複製で最後まで予行演習して決着させる",
+      "state": "proposed",
+      "branch": "project/p-0035",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "test -f docs/immich-postgres-upgrade.md",
+        "grep -q 'FATAL' docs/immich-postgres-upgrade.md",
+        "grep -q '16.14-1.1.1' docs/immich-postgres-upgrade.md",
+        "test -f ops/projects/logs/P-0035/upgrade-rehearsal-job.yaml",
+        "python3 -c \"import json,sys; t=[x for x in json.load(open('ops/inventory.json'))['targets'] if x['id']=='immich-postgres'][0]; sys.exit(0 if 'docs/immich-postgres-upgrade.md' in t.get('note','') else 1)\""
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-10",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0039",
+      "title": "横移動を止める — NetworkPolicy が 1 件も無いクラスタに既定拒否を入れ、自分で破りにいって塞がったことを確かめる",
+      "state": "proposed",
+      "branch": "project/p-0039",
+      "irreversible": true,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": true,
+      "verify": [
+        "test \"$(grep -rl 'kind: NetworkPolicy' apps/ | wc -l)\" -ge 3",
+        "test -f docs/network-policy.md",
+        "grep -qE 'default-deny|既定拒否' docs/network-policy.md",
+        "grep -qi 'networkpolicy' apps/vaultwarden/kustomization.yaml",
+        "grep -qi 'networkpolicy' apps/immich/kustomization.yaml"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-10",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
