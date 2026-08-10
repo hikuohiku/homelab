@@ -1,0 +1,208 @@
+name: NixOS image (flake update / build)
+
+# 土台（nixpkgs = カーネル・k3s・systemd）の更新を、器が自分で回せるようにするための経路（P-0055）。
+#
+# なぜ CI でやるのか: autopilot の実行環境には nix が無い（ops/CHARTER.md §5.2）。
+# flake.lock を手で書くこともできない — narHash は nix でしか計算できず、でっち上げれば
+# `nix flake check` が NAR hash mismatch で落ちる。よって「更新」も「ビルド」もここで行う。
+#
+# 入口:
+#   (a) main 以外への push（nix/images/proxmox-cloud/** かこの workflow 自身が変わったとき）
+#   (b) repository_dispatch（event type: flake-update）。POST /repos/<owner>/<repo>/dispatches は
+#       器の token でも 204 で通る（実測 2026-08-10）。ただし repository_dispatch は default
+#       ブランチの workflow 定義しか実行しないので、この workflow が main に入った後の定常運転用。
+#   workflow_dispatch は入口にしない: 器の token では 403 Resource not accessible（実測 2026-08-10）。
+#
+# ci.yml の nix job（`nix flake check --no-build` = 評価のみ）は触らない。ビルドは重く、
+# 全 PR に載せると数十分になる。paths で絞ったこちらに置く。ruleset の必須チェック一覧は
+# 人間専有（§5.2）なので、この workflow は必須チェックにはならない — 落ちても
+# マージは止まらない。止めたい検証は ci.yml の ops job 側（ops/check_flake_freshness.py）に置く。
+
+on:
+  push:
+    branches-ignore: [main]
+    paths:
+      - "nix/images/proxmox-cloud/**"
+      - ".github/workflows/nixos-image.yml"
+  repository_dispatch:
+    types: [flake-update]
+
+permissions:
+  contents: read
+
+# concurrency は敢えて設定しない。cancel-in-progress は「次の push で走行中のビルドが消える」、
+# cancel なしの直列化は「前のビルドが終わるまで次が始まらない」。どちらもビルド 1 回の実測を
+# 失うか大幅に遅らせる。ビルドの記録を取ることがこの workflow の目的なので、並走させる。
+
+jobs:
+  update:
+    name: flake update (dry run, no push)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: DeterminateSystems/nix-installer-action@v22
+
+      # authToken/signingKey が無いため pull（substituter）専用。push は一切行わない（ops/CHARTER.md §5.4）。
+      - uses: cachix/cachix-action@v17
+        with:
+          name: hikuohiku
+
+      - name: Evaluate before / update / evaluate after
+        working-directory: nix/images/proxmox-cloud
+        run: |
+          set -uo pipefail
+
+          # 評価は失敗しても job を止めない。lock の base64 出力（この job の本体）まで必ず届かせる。
+          dump_versions() {
+            label="$1"
+            for attr in \
+              "services.k3s.package.version" \
+              "boot.kernelPackages.kernel.version" \
+              "system.nixos.version"; do
+              value=$(nix eval --raw ".#nixosConfigurations.proxmox-cloud.config.${attr}" 2>&1 | tail -1)
+              echo "P0055 ${label} ${attr} = ${value}"
+            done
+          }
+
+          dump_lock() {
+            label="$1"
+            python3 - "$label" <<'PY'
+          import json, sys, time
+          label = sys.argv[1]
+          data = json.load(open("flake.lock"))
+          now = time.time()
+          for name, node in sorted(data["nodes"].items()):
+              locked = node.get("locked")
+              if not locked or "lastModified" not in locked:
+                  continue
+              age = (now - locked["lastModified"]) / 86400
+              print(
+                  f"P0055 {label} lock {name} rev={locked.get('rev')} "
+                  f"lastModified={locked['lastModified']} age={age:.1f}d"
+              )
+          PY
+          }
+
+          echo "::group::before"
+          dump_lock before
+          dump_versions before
+          echo "::endgroup::"
+
+          echo "::group::nix flake update"
+          nix flake update
+          echo "::endgroup::"
+
+          echo "::group::after"
+          dump_lock after
+          dump_versions after
+          echo "::endgroup::"
+
+          echo "::group::git diff flake.lock"
+          git --no-pager diff -- flake.lock
+          echo "::endgroup::"
+
+      # リポジトリへ push しない。CI からブランチへ push すると worker の未 push commit と
+      # 非 fast-forward で衝突する。ログに出して worker が写す方が安全で、写した値が
+      # そのまま commit され、その push でこの workflow の build job が同じ lock を実際にビルドする。
+      - name: Emit updated flake.lock (base64, single line)
+        working-directory: nix/images/proxmox-cloud
+        run: |
+          set -euo pipefail
+          echo "P0055 sha256 of updated flake.lock:"
+          sha256sum flake.lock
+          echo "P0055_FLAKE_LOCK_BASE64_BEGIN"
+          base64 -w0 flake.lock
+          echo
+          echo "P0055_FLAKE_LOCK_BASE64_END"
+
+  build:
+    name: nix build (toplevel + qcow2)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # qcow2 は数 GB になる。GitHub ホストランナーの / は 20 GB 程度しか空いていないので、
+      # 使わないツールチェインを先に落としておく（落ちたら「ビルドが通らない」と区別が付かない）。
+      - name: Free disk space
+        run: |
+          set -uo pipefail
+          df -h /
+          sudo rm -rf \
+            /usr/share/dotnet \
+            /usr/local/lib/android \
+            /opt/ghc \
+            /usr/local/share/boost \
+            "${AGENT_TOOLSDIRECTORY:-/opt/hostedtoolcache}" || true
+          df -h /
+
+      - uses: DeterminateSystems/nix-installer-action@v22
+
+      - uses: cachix/cachix-action@v17
+        with:
+          name: hikuohiku
+
+      # ビルドされる lock が何を指しているか。update job の "after" と突き合わせるための実測値。
+      - name: Show what this commit builds
+        working-directory: nix/images/proxmox-cloud
+        run: |
+          set -uo pipefail
+          python3 - <<'PY'
+          import json, time
+          data = json.load(open("flake.lock"))
+          now = time.time()
+          for name, node in sorted(data["nodes"].items()):
+              locked = node.get("locked")
+              if not locked or "lastModified" not in locked:
+                  continue
+              age = (now - locked["lastModified"]) / 86400
+              print(
+                  f"P0055 built lock {name} rev={locked.get('rev')} "
+                  f"lastModified={locked['lastModified']} age={age:.1f}d"
+              )
+          PY
+          for attr in \
+            "services.k3s.package.version" \
+            "boot.kernelPackages.kernel.version" \
+            "system.nixos.version"; do
+            value=$(nix eval --raw ".#nixosConfigurations.proxmox-cloud.config.${attr}" 2>&1 | tail -1)
+            echo "P0055 built ${attr} = ${value}"
+          done
+
+      # toplevel が通ることが、docs/os-updates.md の (A) in-place 経路
+      # （node01 で nixos-rebuild を打つ）が机上の空論でないことの機械的な裏付けになる。
+      # qcow2 より軽いので先に回し、評価エラーはここで落とす。
+      - name: Build system.build.toplevel
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          nix build ./nix/images/proxmox-cloud#nixosConfigurations.proxmox-cloud.config.system.build.toplevel \
+            --no-link --print-out-paths --print-build-logs > toplevel-path.txt
+          end=$(date +%s)
+          out=$(cat toplevel-path.txt)
+          echo "P0055 toplevel out=${out}"
+          echo "P0055 toplevel seconds=$((end - start))"
+          # nix path-info --json は nix のバージョンで dict / list が入れ替わる。
+          # 参考値なので、読めなければ unknown にしてビルド本体は止めない。
+          size=$(nix path-info -S --json "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); e=list(d.values())[0] if isinstance(d,dict) else d[0]; print(e.get("closureSize"))' || echo unknown)
+          echo "P0055 toplevel closure bytes=${size}"
+          df -h /
+
+      # release-image.yml の Build qcow2 step と同じ経路。あちらは release 発行込みで
+      # workflow_dispatch 専用（器からは叩けない）なので、ビルドだけをここで回せるようにする。
+      - name: Build qcow2 image
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          nix build ./nix/images/proxmox-cloud#packages.x86_64-linux.qcow2 \
+            --no-link --print-out-paths --print-build-logs > qcow2-path.txt
+          end=$(date +%s)
+          out=$(cat qcow2-path.txt)
+          echo "P0055 qcow2 out=${out}"
+          echo "P0055 qcow2 seconds=$((end - start))"
+          ls -l "$out"
+          for f in "$out"/*; do
+            echo "P0055 qcow2 bytes=$(stat -c '%s' "$f") file=$f"
+            sha256sum "$f" | sed 's/^/P0055 qcow2 sha256 /'
+          done
+          df -h /

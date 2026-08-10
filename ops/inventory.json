@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_comment": "autopilot がバージョン更新を監視する対象。行番号は書かない（腐るため）。match は該当行を grep するための文字列。mirrors は同じバージョンを書いている別ファイル（更新時は必ず同じ PR で揃える）。policy: auto=patch/minor まで自動更新可 / manual=常に人間へ / pinned=意図的に固定、上げない。observability_impact: この対象が壊れると何が観測・操作できなくなるか（CHARTER §4『到達性を失いうる変更』の該当判定材料、T-0059）。該当しないものは省略する（無いこと自体が『安全』の証拠にはならないので、無指定＝未評価であって『影響なし確認済み』ではない）",
+  "_comment": "autopilot がバージョン更新を監視する対象。行番号は書かない（腐るため）。match は該当行を grep するための文字列。mirrors は同じバージョンを書いている別ファイル（更新時は必ず同じ PR で揃える）。policy: auto=patch/minor まで自動更新可 / manual=常に人間へ / pinned=意図的に固定、上げない。observability_impact: この対象が壊れると何が観測・操作できなくなるか（CHARTER §4『到達性を失いうる変更』の該当判定材料、T-0059）。該当しないものは省略する（無いこと自体が『安全』の証拠にはならないので、無指定＝未評価であって『影響なし確認済み』ではない）。upstream_rev / last_checked: 器が最後に上流を見たときの rev と、その時刻（UTC の ISO8601、CHARTER §7.2）。current（今このリポジトリに入っている版）との差がそのまま『追いつくべき距離』になる。2026-08-10 時点では nixpkgs だけが持つ（P-0055。tag ではなく rev で追う対象は現状これだけ）",
   "targets": [
     {
       "id": "argocd-chart",
@@ -188,12 +188,14 @@
       "id": "nixpkgs",
       "kind": "flake",
       "name": "nixpkgs (nixos-unstable)",
-      "current": "flake.lock の rev",
+      "current": "e72e4f299401a3689d4b3d5fc6496b11db7064eb",
       "file": "nix/images/proxmox-cloud/flake.lock",
       "match": "nixpkgs",
       "upstream": "github:NixOS/nixpkgs",
+      "upstream_rev": "f13ff45afd1bb73e640eaa08a7066dbed07e3238",
+      "last_checked": "2026-08-10T13:20:03Z",
       "policy": "manual",
-      "note": "unstable 追従。更新は NixOS イメージの再ビルド + node01 の入れ替えを伴うので人間へ。2026-08-05: 人間が nix flake update を実行（2025-12-08→2026-08-04、#146）。configuration.nix が services.k3s のバージョンを pin していないため、この更新が次のイメージリリース時に k3s 1.34.2→1.35.6 のマイナー更新として反映される。影響確認は T-0062（apps/ の manifest には影響なしと確認済み、node01 の cgroup v2 確認のみ T-0063 needs-human として残る）。次のホップ（k3s 1.36 系）では containerd 2.x が必須になる（1.35 が containerd 1.x をサポートする最終版）ため、その時点で改めて確認が要る"
+      "note": "unstable 追従。更新は NixOS イメージの再ビルド + node01 の入れ替えを伴うので人間へ。2026-08-05: 人間が nix flake update を実行（2025-12-08→2026-08-04、#146）。configuration.nix が services.k3s のバージョンを pin していないため、この更新が次のイメージリリース時に k3s 1.34.2→1.35.6 のマイナー更新として反映される。影響確認は T-0062（apps/ の manifest には影響なしと確認済み、node01 の cgroup v2 確認のみ T-0063 needs-human として残る）。次のホップ（k3s 1.36 系）では containerd 2.x が必須になる（1.35 が containerd 1.x をサポートする最終版）ため、その時点で改めて確認が要る。2026-08-10 (P-0055): current を『flake.lock の rev』という説明文から実際の locked rev に変え、upstream_rev / last_checked を足した。腐敗は ops/check_flake_freshness.py が CI の ops job で見張る（各 input の lastModified が 60 日超で落ち、45 日で警告）。同スクリプトが current と flake.lock の rev の一致も検査するので、lock だけ更新して台帳を直し忘れると CI が落ちる。更新手順は docs/os-updates.md"
     },
     {
       "id": "tf-provider-proxmox",
@@ -216,7 +218,8 @@
       "mirrors": [
         ".github/workflows/direct-push-guard.yml",
         ".github/workflows/release-image.yml",
-        ".github/workflows/build-autopilot-image.yml"
+        ".github/workflows/build-autopilot-image.yml",
+        ".github/workflows/nixos-image.yml"
       ],
       "upstream": "github:actions/checkout",
       "policy": "auto",
@@ -266,6 +269,9 @@
       "current": "v17",
       "file": ".github/workflows/release-image.yml",
       "match": "cachix/cachix-action@",
+      "mirrors": [
+        ".github/workflows/nixos-image.yml"
+      ],
       "upstream": "github:cachix/cachix-action",
       "policy": "auto",
       "note": "T-0047 (run #17) で v15→v17 に更新。破壊的変更は Node24 ランタイムのみ。T-0050 (run #19) でこのファイルの実際の呼び出し（`name:` のみ、`authToken` 無し）を action 本体のソースで確認し、`authToken`/`signingKey` 無しでは push を一切行わない（pushMode=None）ため v17 の push 失敗伝播修正はこの workflow に影響しないと確定した（ops/CHARTER.md §5.4）",
@@ -290,6 +296,9 @@
       "current": "v22",
       "file": ".github/workflows/release-image.yml",
       "match": "DeterminateSystems/nix-installer-action@",
+      "mirrors": [
+        ".github/workflows/nixos-image.yml"
+      ],
       "upstream": "github:DeterminateSystems/nix-installer-action",
       "policy": "auto",
       "note": "T-0042 (run #16) で @main の floating ref から固定した。Action 自体の pin と、実際にインストールされる Nix のバージョンは無関係（upstream README に明記）",

@@ -250,6 +250,34 @@ GROUPS = [
             (".github/workflows/build-autopilot-image.yml", lambda: extract_all_action_tags(
                 ".github/workflows/build-autopilot-image.yml", "actions/checkout"
             )),
+            (".github/workflows/nixos-image.yml", lambda: extract_all_action_tags(
+                ".github/workflows/nixos-image.yml", "actions/checkout"
+            )),
+        ],
+    },
+    {
+        # P-0055 で nixos-image.yml を足した時点で、release-image.yml だけだった 2 つの pin が
+        # 二重管理になった。T-0114（build-autopilot-image.yml が mirrors から漏れていた）と
+        # 同じ穴を最初から塞いでおく。
+        "name": "DeterminateSystems/nix-installer-action tag (P-0055, inventory: gha-nix-installer-action)",
+        "targets": [
+            (".github/workflows/release-image.yml", lambda: extract_all_action_tags(
+                ".github/workflows/release-image.yml", "DeterminateSystems/nix-installer-action"
+            )),
+            (".github/workflows/nixos-image.yml", lambda: extract_all_action_tags(
+                ".github/workflows/nixos-image.yml", "DeterminateSystems/nix-installer-action"
+            )),
+        ],
+    },
+    {
+        "name": "cachix/cachix-action tag (P-0055, inventory: gha-cachix-cachix-action)",
+        "targets": [
+            (".github/workflows/release-image.yml", lambda: extract_all_action_tags(
+                ".github/workflows/release-image.yml", "cachix/cachix-action"
+            )),
+            (".github/workflows/nixos-image.yml", lambda: extract_all_action_tags(
+                ".github/workflows/nixos-image.yml", "cachix/cachix-action"
+            )),
         ],
     },
     {

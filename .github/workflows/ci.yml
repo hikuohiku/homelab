@@ -158,6 +158,11 @@ jobs:
         run: python3 -m unittest discover -s ops/tests -t .
       - name: check duplicated version pins are in sync
         run: python3 ops/check_version_sync.py
+      - name: check NixOS flake inputs are not rotting
+        # 土台（カーネル・k3s・systemd の供給元）は policy=manual で、誰も上げなければ
+        # 据え置かれる。アプリ層で起きた #49 と同じ構造なので、ここで機械の目にする（P-0055）。
+        # 落ちたときは失敗メッセージが直し方を出す。戻すならこのステップを消す revert 1 本。
+        run: python3 ops/check_flake_freshness.py
       - name: check pvc-usage-reporter script is in sync across namespaces
         run: python3 ops/check_pvc_usage_script_sync.py
       - name: check ops-health-reporter targets the live autopilot deployment
