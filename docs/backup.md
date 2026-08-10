@@ -42,6 +42,16 @@ issue #56 (2026-08-05 04:40:59) で人間から新方針: **PBS は重すぎる�
 | `vaultwarden-data` | パスワードマネージャ本体（SQLite） | T-0069 |
 | `coder-postgres-data` | Coder 制御プレーン（ユーザー・workspace・監査ログ） | T-0070（実装済み・credential 登録待ち） |
 | `coder-<workspace-id>-home`（動的作成、`apps/coder/templates/personal/main.tf`） | workspace ごとの `/home/coder`（dotfiles・ghq clone 等） | T-0078（実装済み・cooldown中、credential 登録不要） |
+| `syncthing-data` | syncthing の identity（`cert.pem`/`key.pem`）・設定・同期フォルダ | P-0047（2026-08-10 に追加。復元試験まで完了） |
+
+> ⚠ **この表が「2026-08-05 時点」であること自体が、syncthing が 5 日間丸腰だった原因**。
+> 棚卸し（T-0065）は 2026-08-05、syncthing の新設は 2026-08-06 で、**棚卸しの後に増えたものは
+> 誰も拾わなかった**。人間の棚卸しは「やった時点」でしか効かない。同じ穴を繰り返さないため、
+> P-0047 で `ops/tests/test_backup_coverage.py` を足し、「PVC を宣言しているアプリには
+> kustomization に配線済みの restic backup CronJob がある」を CI で検査するようにした。
+> **この表を手で更新し続けることに依存しない。** ただしテストにも死角がある（helm が
+> レンダリングする PVC と、Terraform が動的に作る `coder-<workspace-id>-home` は静的スキャンに
+> 映らない）ので、その 2 種類だけはこの表が引き続き唯一の記録になる。
 
 ## 実サイズの実測 (T-0066, run #50)
 
@@ -188,6 +198,45 @@ vaultwarden/coder-postgres）と異なり、対象 PVC (`coder-<workspace-id>-ho
   復元試験はまだ行っていない。デプロイ後の初回実行確認・復元試験・オーケストレータの実メモリ
   使用量確認は別タスクとして backlog に追跡する
 
+## syncthing の restic バックアップ (P-0047, 2026-08-10)
+
+`apps/syncthing/restic-backup-cronjob.yaml` に実装した。既存 3 アプリと同型（1 ファイルに
+backup + retention の 2 CronJob、`apps/syncthing/restic-external-secret.yaml` に
+append-only 鍵と削除鍵の 2 本の ExternalSecret）。**新規発明はゼロで、Doppler への新規登録も
+不要だった**（既存キーをそのまま参照。ClusterSecretStore はクラスタスコープなので syncthing
+namespace から引ける）。
+
+- **なぜ優先度が高いか**: syncthing は **削除が同期で伝播しうる唯一のアプリ**で、事故が最も
+  「戻せない」形で出る。加えて `config/cert.pem` と `config/key.pem` は syncthing のデバイス ID
+  そのもので、失うと再発行しかなく既存ピアからは「別デバイス」に見える（再ペアリングが要る）。
+  同期する実データ（T-0140）が来る前から、既に戻せないデータを持っている
+- **スケジュール**: backup 毎日 03:55 JST / retention 毎週日曜 04:50 JST。既存 4 本の帯
+  （backup 2:45/3:10/3:30/3:40、retention 3:45/4:00/4:10/4:30）と衝突しない。既存 CronJob と
+  同じく `spec.timeZone` は書かず node01 の time.timeZone（JST）で評価される
+- **リポジトリパス**: `b2:$(RESTIC_B2_BUCKET):syncthing`（既存の
+  `vaultwarden`/`immich`/`coder-postgres`/`coder-workspace-homes` と同じバケットで末尾だけ変える）
+- **保持世代**: 既存 3 本と同じ `--keep-daily 7 --keep-weekly 4 --keep-monthly 6`
+- **本番 PVC は readOnly マウントのみ**。backup 側の securityContext は immich/vaultwarden と
+  同じ `runAsUser: 0` + `drop: ALL` + `add: DAC_READ_SEARCH`（PVC は PUID/PGID=1000 で書かれ
+  `config/` が 0700 のため、所有権に関わらず読む必要がある）
+
+### 除外するものと、その理由
+
+2026-08-10 に稼働中 Pod の中身を実測してから決めた（**綴りを推測で書くと `--exclude` は
+黙って効かない**）。当時の PVC 内の実ファイルは 10 個で、うち 4 個を除外し 6 個を取っている。
+
+| 除外パス | 理由 |
+|---|---|
+| `config/index-v2/`（`main.db` / `main.db-shm` / `main.db-wal` / `.tmp/`） | syncthing 2.x の内部インデックス DB（SQLite）。稼働中の Pod が書き続けているため無停止コピーでは WAL と本体が torn になりうる。一方これは**同期フォルダを再スキャンすれば作り直せる派生キャッシュ**で、復元時は空のまま起動すれば syncthing が再構築する。整合しないコピーを持つより持たない方が安全 |
+| `config/syncthing.lock` | 稼働中プロセスのロックファイル（0 バイト）。復元先に持ち込むと紛らわしいだけ |
+
+vaultwarden 方式（online backup API を叩く initContainer）は**採らなかった**。syncthing に
+とっての本体は同期ファイルと identity であって index DB ではない。
+
+> **未確認**: index DB を除外した状態から復元して syncthing を起動し、再スキャンで
+> インデックスが再構築されることは**まだ実機で試していない**（T-0140 未着手で同期フォルダが
+> 空のため、再スキャンすべき実データが無い）。実データ移行後に確認すべき事項。
+
 ## 復元試験（T-0071）
 
 人間の新方針（issue #56, 2026-08-05 04:40:59「試したことのないバックアップは、バックアップでは
@@ -301,6 +350,36 @@ DoD(3)（オーケストレータ Pod の実メモリ/CPU 使用量確認）は�
 **T-0071 は immich・vaultwarden・coder-postgres の3コンポーネント全て完了。**
 これに依存していた T-0023（coder メジャー更新）・T-0027（immich メジャー更新）・T-0029
 （immich postgres/vchord メジャー更新）は `blocked_by` が解消したため `todo` に戻した。
+
+### syncthing（完了、2026-08-10、P-0047）
+
+T-0071 とは別プロジェクト。実出力の全文は
+[`ops/projects/logs/P-0047/restore-drill.md`](../ops/projects/logs/P-0047/restore-drill.md)。
+使い捨て PVC `syncthing-restore-drill`(1Gi) へ `restic restore latest` し、**原本の sha256 と
+突き合わせるところまで**やった（「取れている」ではなく「戻せる」を確認する）。
+
+| 項目 | 結果 |
+|---|---|
+| backup 結果 | 成功（Job 17 秒、restic 本体 6 秒。snapshot `8608514d`、6 files / 14.577 KiB） |
+| restore 結果 | 成功（`Restored 9 files/dirs`、Job 27 秒） |
+| 代表ファイルの sha256 | `cert.pem` / `key.pem` / `config.xml` / `config.xml.v0` / `https-cert.pem` / `https-key.pem` の **6 本すべて原本と完全一致** |
+| ファイル数 | `restic ls -l latest` の 6 件 = 復元結果 6 件（原本 10 件との差 4 件は意図した `--exclude`） |
+| 所有権 / パーミッション | `1000:1000`・`config/` は 0700 まで復元された |
+| 使った鍵 | **append-only 鍵のみ**（`syncthing-restic-backup-credentials`）。復元は `readFiles` で足りるので削除鍵を持ち出す必要は無い |
+
+検証用の PVC / Job / 手動 Job は確認後すべて削除した。B2 側のリポジトリとスナップショットは
+append-only 鍵では消せないため残している（5.006 KiB、放置してよい）。
+
+**復元 Job には `CHOWN` / `FOWNER` / `DAC_OVERRIDE` が要る**（backup 側の
+`DAC_READ_SEARCH` だけでは足りない）。restic は所有権を `1000:1000` に戻すので `CHOWN` が要り、
+chown した**後**は root でも「所有者ではない」ため `utimensat` に `FOWNER` が要る。どちらが
+欠けても中身自体は全部書けるが restic は `Fatal` で終わる。同じことが
+「coder workspace home（完了、2026-08-07、T-0117）」に既に書いてあり、P-0047 では読まずに
+2 回踏み直した。**次に復元する人は最初からこの 3 つを付けること。**
+
+> **規模の限界**: この試験は実データ移行（T-0140）の前に行ったので、確認できた規模は
+> **6 ファイル・14.577 KiB**（syncthing 自身の identity と設定のみ）。同期フォルダに実データが
+> 流れ込んだ後の規模での再試験は別途要る。
 
 ### 必要な Doppler 登録（T-0067）
 
