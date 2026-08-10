@@ -321,6 +321,39 @@ class TestVeto(unittest.TestCase):
         # 停止中に curriculum を回さない
         self.assertNotIn("spawn_curriculum", kinds(actions))
 
+    def test_stop_engages_and_persists_across_beats(self):
+        """「止めて」は受信ビート限りで消えない。全 stalled 化の次のビートは
+        アイドルに見えるが、人間が再開と言うまで spawn を一切しない
+        (2026-08-10 の全停止要求で curriculum が再点火しかけた再発防止)。"""
+        # 受信ビート: フラグが doc に永続化される
+        d, _ = reconcile.decide(doc(), facts(stop_all=True), RULES, NOW)
+        self.assertTrue(d["stop_engaged"])
+        # 次のビート: stop_all=False でもアイドルで spawn しない
+        d2, actions = reconcile.decide(d, facts(), RULES, NOW)
+        self.assertNotIn("spawn_curriculum", kinds(actions))
+        self.assertTrue(d2["stop_engaged"])
+        # 停止中に登録された採択 spec も走り出さず stalled に落ちる
+        spec = {"id": "P-0090", "title": "t", "verify": ["false"]}
+        d3, actions = reconcile.decide(d2, facts(adopted_specs=[spec]), RULES, NOW)
+        self.assertEqual(
+            [p["state"] for p in d3["projects"] if p["id"] == "P-0090"], ["stalled"]
+        )
+        self.assertNotIn("spawn_runner", kinds(actions))
+
+    def test_resume_clears_engaged_stop(self):
+        d, actions = reconcile.decide(
+            doc(stop_engaged=True), facts(resume_all=True), RULES, NOW
+        )
+        self.assertFalse(d["stop_engaged"])
+        # 解除されたビートから通常運転 (アイドルなら立案してよい)
+        self.assertIn("spawn_curriculum", kinds(actions))
+
+    def test_stop_wins_over_resume_in_same_beat(self):
+        d, _ = reconcile.decide(
+            doc(), facts(stop_all=True, resume_all=True), RULES, NOW
+        )
+        self.assertTrue(d["stop_engaged"])
+
 
 class TestActiveObservation(unittest.TestCase):
     def test_jobs_none_means_unobservable_not_missing(self):

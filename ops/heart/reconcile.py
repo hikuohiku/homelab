@@ -132,7 +132,17 @@ def decide(doc, facts, rules, now):
     """(projects doc, facts) -> (新 doc, actions)。doc は破壊的に更新して返す。"""
     actions = []
     vetoes = set(facts.get("vetoes", []))
+    # 「止めて」は受信したビートだけでなく、人間が「再開」と言うまで効き続ける。
+    # stop_all はコメント既読カーソルの進みとともに次ビートで False に戻るため、
+    # そのままでは全 stalled 化 → 全部終端 → アイドル判定 → curriculum が再点火して
+    # 器全体が勝手に走り直す (2026-08-10 の全停止要求で実際に起きかけた)。
+    # doc に永続化し、同ビートに両方来たら停止を優先する
     stop_all = facts.get("stop_all", False)
+    if facts.get("resume_all") and not stop_all:
+        doc["stop_engaged"] = False
+    if stop_all:
+        doc["stop_engaged"] = True
+    stop_all = stop_all or bool(doc.get("stop_engaged"))
     breaker = facts.get("breaker_tripped", False)
     jobs = facts.get("jobs")  # None = 観測失敗 (「無い」と区別する)
     results = facts.get("results", {})

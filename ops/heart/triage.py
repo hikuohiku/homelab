@@ -38,7 +38,7 @@ def _matches_stop(text, kw):
 def classify(text, rules):
     """1 コメント/書き置き -> {"kind": ..., "projects": [...]}
 
-    kind: "stop_all" | "veto" | "review_needed"
+    kind: "stop_all" | "veto" | "resume_all" | "review_needed"
     """
     text = text or ""
     vetoes = VETO_RE.findall(text)
@@ -47,4 +47,8 @@ def classify(text, rules):
     for kw in rules["veto"]["stop_keywords"]:
         if _matches_stop(text, kw):
             return {"kind": "stop_all", "projects": []}
+    # 全停止 (stop_engaged) の解除。stop の後に評価する = 両方に読める文は停止に倒す
+    for kw in rules["veto"].get("resume_keywords", []):
+        if _matches_stop(text, kw):
+            return {"kind": "resume_all", "projects": []}
     return {"kind": "review_needed", "projects": []}

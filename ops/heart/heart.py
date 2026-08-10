@@ -326,16 +326,16 @@ class Heart:
         except Exception as e:
             log(f"PR collection failed: {e}")
             open_prs, merged_prs = {}, {}
-        vetoes, stop_all, review_needed, cursors = facts.collect_feedback(
+        vetoes, stop_all, review_needed, resume_all, cursors = facts.collect_feedback(
             self.gh, self.repo_dir, cursors, self.cfg.rules,
             self.cfg.feedback_issue, self.cfg.feedback_branch,
         )
-        if vetoes or stop_all or review_needed:
+        if vetoes or stop_all or review_needed or resume_all:
             # kill switch の受信は必ず可視化する (該当プロジェクトが無く action が
             # 生まれない場合でも、veto 疎通試験の結果を外から確認できるように)
             log(
                 f"feedback received: vetoes={vetoes} stop_all={stop_all} "
-                f"review_needed={len(review_needed)}"
+                f"resume_all={resume_all} review_needed={len(review_needed)}"
             )
         curriculum = facts.collect_curriculum(
             self.cfg.data_dir, self.repo_dir, self.gh
@@ -360,6 +360,7 @@ class Heart:
             "health_fresh": health_fresh,
             "vetoes": vetoes,
             "stop_all": stop_all,
+            "resume_all": resume_all,
             "breaker_tripped": tripped,
             "running_runners": running,
             "curriculum": curriculum,
