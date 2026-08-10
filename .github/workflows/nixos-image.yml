@@ -201,7 +201,12 @@ jobs:
           echo "P0055 qcow2 out=${out}"
           echo "P0055 qcow2 seconds=$((end - start))"
           ls -l "$out"
-          for f in "$out"/*; do
+          # $out 直下には nixos.qcow2 のほかに nix-support/ という**ディレクトリ**がある。
+          # `for f in "$out"/*` で回すとそれも掴み、sha256sum が
+          # 「Is a directory」で exit 1 → set -e でこの step 全体が落ちる。
+          # image 自体は既にビルドできているのに job が赤くなる（実測: run 31393309084、
+          # qcow2 は 1123614720 バイトで出来ていた）。通常ファイルだけを回す。
+          find "$out" -type f | sort | while read -r f; do
             echo "P0055 qcow2 bytes=$(stat -c '%s' "$f") file=$f"
             sha256sum "$f" | sed 's/^/P0055 qcow2 sha256 /'
           done
