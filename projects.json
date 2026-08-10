@@ -870,7 +870,42 @@
         "soft_cap": 2500000
       },
       "created": "2026-08-10",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-10T07:38:36Z",
+        "verify": [
+          {
+            "cmd": "grep -q '_critic_due' ops/heart/reconcile.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q '/data/critic' ops/prompts/curriculum-generate.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -rq 'critic_due\\|spawn_critic' ops/heart/tests/",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
