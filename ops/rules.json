@@ -19,7 +19,7 @@
     "_comment": "stream-json result の total_cost_usd の当日合計がこの値を超えたら新規 spawn のみ停止して通知する。走行中の Job は殺さない (決定 #9)。値は名目コスト (OAuth 定額でも計上される) で、実請求と一致しない点に注意"
   },
   "runner": {
-    "max_concurrent": 1,
+    "max_concurrent": 2,
     "session_max_seconds": 7200,
     "inactivity_nudge_seconds": 1800,
     "inactivity_kill_seconds": 3600,
@@ -48,7 +48,7 @@
   "curriculum": {
     "exploration_quota": 0.25,
     "recent_cell_window": 5,
-    "min_interval_hours": 6,
+    "min_interval_hours": 3,
     "_comment": "直近 window 件と同一セル [domain, kind] の案は判定で減点。exploration_quota は『修繕以外 (調査・実験・新規性駆動) を全プロジェクトの 1/4 以上に保つ』の下限"
   },
   "allowed_autopilot_doppler_keys": [

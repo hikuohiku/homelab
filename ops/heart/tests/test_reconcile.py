@@ -72,15 +72,29 @@ def gate(*records):
 
 
 class TestAnnounce(unittest.TestCase):
-    def test_proposed_becomes_announced_with_zero_window_when_idle(self):
+    def test_proposed_with_zero_window_activates_same_beat(self):
+        """アイドルかつ可逆 → 窓 0 で、予告と同じビートで着手まで進む
+        (2026-08-09 テンポ改善。1 ビートを空費しない)。"""
         d, actions = reconcile.decide(
             doc(project(adopt_gate=gate())), facts(), RULES, NOW
         )
         p = d["projects"][0]
-        self.assertEqual(p["state"], "announced")
+        self.assertEqual(p["state"], "active")
         self.assertIn("announce", kinds(actions))
-        # アイドルかつ非不可逆 → 窓 0 (即着手可能な deadline)
+        self.assertIn("spawn_runner", kinds(actions))
         self.assertEqual(p["veto_deadline"], "2026-08-07T12:00:00Z")
+
+    def test_zero_window_respects_concurrency_cap(self):
+        """同一ビートで複数の窓ゼロ案が湧いても cap を超えない。"""
+        p1 = project(adopt_gate=gate())
+        p2 = project(id="P-0002", branch="project/p-0002", adopt_gate=gate())
+        p3 = project(id="P-0003", branch="project/p-0003", adopt_gate=gate())
+        d, actions = reconcile.decide(doc(p1, p2, p3), facts(), RULES, NOW)
+        spawns = [a for a in actions if a["type"] == "spawn_runner"]
+        self.assertEqual(len(spawns), RULES["runner"]["max_concurrent"])
+        states = [q["state"] for q in d["projects"]]
+        self.assertEqual(states.count("active"), RULES["runner"]["max_concurrent"])
+        self.assertEqual(states.count("announced"), 3 - RULES["runner"]["max_concurrent"])
 
     def test_irreversible_always_waits_window(self):
         d, _ = reconcile.decide(
@@ -193,7 +207,8 @@ class TestAdoptGate(unittest.TestCase):
             adopt_gate=gate({"cmd": "test -f x", "ok": False, "rc": 1}),
         )
         d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
-        self.assertEqual(d["projects"][0]["state"], "announced")
+        # 窓ゼロ連鎖 (2026-08-09) により予告と同じビートで active まで進む
+        self.assertEqual(d["projects"][0]["state"], "active")
         self.assertIn("announce", kinds(actions))
 
     def test_bounced_spec_frees_the_curriculum(self):
@@ -238,6 +253,10 @@ class TestActivate(unittest.TestCase):
         self.assertNotIn("spawn_runner", kinds(actions))
 
     def test_concurrency_cap(self):
+        # cap の境界そのものを検査するため、設定値に依存せず cap=1 を注入する
+        import copy
+        rules1 = copy.deepcopy(RULES)
+        rules1["runner"]["max_concurrent"] = 1
         ready = project(id="P-0002", state="announced",
                         branch="project/p-0002",
                         veto_deadline="2026-08-07T11:00:00Z")
@@ -245,7 +264,7 @@ class TestActivate(unittest.TestCase):
         d, actions = reconcile.decide(
             doc(running, ready),
             facts(running_runners=1, jobs={"runner-p-0001-a1": {"active": True}}),
-            RULES, NOW,
+            rules1, NOW,
         )
         self.assertEqual(d["projects"][1]["state"], "announced")
         self.assertNotIn("spawn_runner", kinds(actions))
@@ -651,7 +670,8 @@ class TestArchiveAdoption(unittest.TestCase):
         d, _ = reconcile.decide(doc(), facts(adopted_specs=[self.SPEC]), RULES, NOW)
         d["projects"][0]["adopt_gate"] = gate()  # heart.execute() が書き戻す想定
         d, actions = reconcile.decide(d, facts(adopted_specs=[self.SPEC]), RULES, NOW)
-        self.assertEqual(d["projects"][0]["state"], "announced")
+        # 窓ゼロ連鎖 (2026-08-09) により予告と同じビートで active まで進む
+        self.assertEqual(d["projects"][0]["state"], "active")
         self.assertIn("announce", kinds(actions))
 
     def test_terminal_project_is_not_resurrected(self):

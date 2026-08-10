@@ -192,6 +192,16 @@ def decide(doc, facts, rules, now):
             p["state"] = "announced"
             p["veto_deadline"] = _veto_deadline(p, facts, rules, now)
             actions.append(_action("announce", pid))
+            # 窓ゼロ (アイドルかつ可逆) なら同じビートで着手する。予告→着手の間で
+            # 1 ビートを空費しない (2026-08-09 テンポ改善)。breaker はこの分岐の
+            # 冒頭で弾いてあるのでここでは capacity だけ見る
+            if (
+                parse_iso(p["veto_deadline"]) <= now
+                and running < rules["runner"]["max_concurrent"]
+            ):
+                p["state"] = "active"
+                running += 1
+                actions.append(_action("spawn_runner", pid))
 
         elif state == "announced":
             if parse_iso(p["veto_deadline"]) > now:
