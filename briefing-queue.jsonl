@@ -13,3 +13,4 @@
 {"at": "2026-08-09T13:42:59Z", "source": "issue-comment 5231822322", "body": "(通知予算超過分のまとめ、1 件)\n- [announce] 2026-08-08T13:41:10Z P-0025: 実績台帳が空っぽ — 納品・失敗・実消費を archive.jsonl と projects.json に本当に書く\n検証: python3 -c \"import json,sys; rows=[json.loads(l) for l in open('ops/projects/archive.jsonl') if l.strip()]; done={r['id'] for r in rows if 'result' in r}; sys.exit(0 if {'P-0001','P-0004','P-0011','P-0012','P-0013','P-0014'} <= d"}
 {"at": "2026-08-09T13:47:21Z", "source": "issue-comment 5231840877", "body": "(通知予算超過分のまとめ、1 件)\n- [incident] 2026-08-08T13:45:20Z P-0025 の runner が error で終了: initializer: error"}
 {"at": "2026-08-10T08:19:02Z", "source": "ops/feedback/inbox/F-20260810T081759Z-e389cc.json", "body": "時間の表示JSTにしてほしい。"}
+{"at": "2026-08-10T08:20:07Z", "source": "ops/feedback/inbox/F-20260810T081948Z-266ad8.json", "body": "ダッシュボードにアイコン欲しい。"}
