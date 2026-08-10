@@ -516,6 +516,19 @@ def decide(doc, facts, rules, now):
         doc["last_curriculum_dry"] = True
         curriculum_pending = False
 
+    # 走行中の curriculum Job も「立案中」。result.json は Job 完走まで存在しないので、
+    # 結果ファイルだけを見ると走行中の 10 数分が「立案していない」に見える。eager 立案
+    # (実りの直後は min_interval 免除) と重なると、アイドルの毎ビートに新しい Job を
+    # spawn し続ける (2026-08-10 に毎分 1 Job の暴走が実際に起きた)。
+    # jobs 観測に失敗したビート (None) は「走っていない」と断定できないので spawn しない
+    if jobs is None:
+        curriculum_pending = True
+    elif any(
+        name.startswith("curriculum-") and st.get("active")
+        for name, st in jobs.items()
+    ):
+        curriculum_pending = True
+
     # アイドルの定義 (2026-08-10 改定、人間の指摘「アイドル中に何もしない理由が無い」):
     #   - 拒否権窓で待機中の announced (deadline が未来) はスロットを使っていないので
     #     「仕事がある」に数えない。窓 24h の案件 1 つが立案を丸一日塞ぐ実害があった

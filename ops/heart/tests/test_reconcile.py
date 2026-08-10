@@ -831,6 +831,32 @@ class TestCurriculum(unittest.TestCase):
         )
         self.assertNotIn("spawn_curriculum", kinds(actions))
 
+    def test_running_curriculum_job_blocks_next_spawn(self):
+        """走行中の curriculum Job がある間は次を spawn しない。result.json は完走まで
+        存在しないので、Job の観測で塞ぐ (2026-08-10 の毎分 1 Job 暴走の再発防止)。"""
+        d, actions = reconcile.decide(
+            doc(last_curriculum_at="2026-08-07T11:59:00Z", last_curriculum_dry=False),
+            facts(jobs={"curriculum-system-a123": {"active": True, "failed": False,
+                                                   "succeeded": False}}),
+            RULES, NOW,
+        )
+        self.assertNotIn("spawn_curriculum", kinds(actions))
+
+    def test_completed_curriculum_job_does_not_block_spawn(self):
+        """完走済み (active=False) の curriculum Job 残骸は立案を塞がない。"""
+        d, actions = reconcile.decide(
+            doc(),
+            facts(jobs={"curriculum-system-a123": {"active": False, "failed": False,
+                                                   "succeeded": True}}),
+            RULES, NOW,
+        )
+        self.assertIn("spawn_curriculum", kinds(actions))
+
+    def test_jobs_unobservable_blocks_curriculum_spawn(self):
+        """jobs 観測に失敗したビートは「走っていない」と断定できないので spawn しない。"""
+        d, actions = reconcile.decide(doc(), facts(jobs=None), RULES, NOW)
+        self.assertNotIn("spawn_curriculum", kinds(actions))
+
 
 class TestCritic(unittest.TestCase):
     """日次の自己観測 (P-0045)。24h ごと、かつ前回以降に活動があったときだけ spawn。
