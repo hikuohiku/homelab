@@ -493,7 +493,7 @@
     {
       "id": "P-0028",
       "title": "restic バックアップを append-only 鍵に切り替え、実機で backup 成功と lock の挙動を確かめる (旧 T-0120)",
-      "state": "merging",
+      "state": "soaking",
       "branch": "project/p-0028",
       "irreversible": false,
       "capabilities": [
@@ -567,7 +567,11 @@
       "review_requested_at": "2026-08-10T04:14:28Z",
       "review_retries": 0,
       "review_cycles": 1,
-      "merging_since": "2026-08-10T04:22:03Z"
+      "merging_since": "2026-08-10T04:22:03Z",
+      "soak": {
+        "until": "2026-08-10T04:54:16Z",
+        "baseline_unhealthy": []
+      }
     },
     {
       "id": "P-0029",
