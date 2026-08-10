@@ -63,6 +63,10 @@ pin したバージョンは誰も上げなければ据え置かれる。2026-08
 週次点検の手順は `/weekly-maintenance`（`.claude/commands/weekly-maintenance.md`）、
 実行記録は `Maintenance.md`。対象は vaultwarden のみで、手順は毎回の振り返りで更新する。
 
+土台（NixOS / k3s / カーネル）の更新は ArgoCD の経路に乗らない。flake 更新 → CI ビルド →
+node01 の差し替え → rollback の一本道は [`docs/os-updates.md`](docs/os-updates.md)。
+腐敗（flake.lock の据え置き）は `ops/check_flake_freshness.py` が CI で見張る。
+
 node01 の root disk は 256 GiB（2026-08-04 にオンライン拡張）。`local-path` PVC の容量は
 実ディスクを予約しないため、実使用量は引き続き監視する。拡張手順は
 [`docs/node01-storage.md`](docs/node01-storage.md)。
