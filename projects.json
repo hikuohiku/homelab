@@ -725,7 +725,7 @@
     {
       "id": "P-0039",
       "title": "横移動を止める — NetworkPolicy が 1 件も無いクラスタに既定拒否を入れ、自分で破りにいって塞がったことを確かめる",
-      "state": "announced",
+      "state": "stalled",
       "branch": "project/p-0039",
       "irreversible": true,
       "capabilities": [
@@ -799,7 +799,8 @@
         "passed": [],
         "broken": []
       },
-      "veto_deadline": "2026-08-11T05:14:39Z"
+      "veto_deadline": "2026-08-11T05:14:39Z",
+      "stalled_reason": "human_stop"
     },
     {
       "id": "P-0044",
@@ -926,7 +927,7 @@
     {
       "id": "P-0046",
       "title": "写真の実データを持つ唯一の宿題を返す — immich-postgres の vchord 更新を本番に当て、3 回目で終わらせる",
-      "state": "announced",
+      "state": "stalled",
       "branch": "project/p-0046",
       "irreversible": true,
       "capabilities": [
@@ -1010,7 +1011,8 @@
         "passed": [],
         "broken": []
       },
-      "veto_deadline": "2026-08-11T08:31:09Z"
+      "veto_deadline": "2026-08-11T08:31:09Z",
+      "stalled_reason": "human_stop"
     },
     {
       "id": "P-0047",
@@ -1117,7 +1119,7 @@
     {
       "id": "P-0054",
       "title": "「node01 が今日消えた」を演じきる — Git と B2 だけで戻せるものと、戻せないものを名指しする",
-      "state": "active",
+      "state": "stalled",
       "branch": "project/p-0054",
       "irreversible": false,
       "capabilities": [
@@ -1214,12 +1216,13 @@
       "veto_deadline": "2026-08-10T13:07:28Z",
       "spawn_count": 1,
       "job": "runner-p-0054-a1",
-      "drift_count": 0
+      "drift_count": 0,
+      "stalled_reason": "human_stop"
     },
     {
       "id": "P-0055",
       "title": "アプリだけ新しく、土台は古びる — NixOS / k3s の更新を器の定常業務にし、1 サイクル実際に回す",
-      "state": "active",
+      "state": "stalled",
       "branch": "project/p-0055",
       "irreversible": false,
       "capabilities": [],
@@ -1314,12 +1317,13 @@
       "veto_deadline": "2026-08-10T13:07:28Z",
       "spawn_count": 1,
       "job": "runner-p-0055-a1",
-      "drift_count": 0
+      "drift_count": 0,
+      "stalled_reason": "human_stop"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-10T12:45:39Z",
-  "last_activity_at": "2026-08-10T13:07:28Z",
+  "last_activity_at": "2026-08-10T13:39:01Z",
   "last_critic_at": "2026-08-10T08:28:43Z",
   "last_curriculum_dry": false
 }
