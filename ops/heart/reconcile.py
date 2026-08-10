@@ -44,9 +44,17 @@ def _action(kind, project_id=None, **kw):
 
 
 def _veto_deadline(project, facts, rules, now):
-    """予告からの拒否権窓の期限。アイドルかつ非不可逆なら即着手 (窓 0)。
-    不可逆ラベル付きは常に窓を待つ (決定 #3)。"""
-    if not project.get("irreversible") and facts.get("running_runners", 0) == 0:
+    """予告からの拒否権窓の期限。空きスロットがあり非不可逆なら即着手 (窓 0)。
+    不可逆ラベル付きは常に窓を待つ (決定 #3)。
+
+    「アイドル (走行 0)」でなく「空きスロット」基準にする理由 (2026-08-10):
+    完全アイドル基準だと、merging で詰まった 1 件が cap に空きがあっても
+    全案件を 24h 窓に落とし、パイプライン全体が渋滞する実害が出た
+    (P-0026 の GitGuardian 詰まりの裏で P-0028/P-0029 が一晩眠った)。
+    窓の基準は稼働率 (「何もしてない時間が嫌」) なので、空きスロットは埋める。"""
+    if not project.get("irreversible") and facts.get("running_runners", 0) < rules[
+        "runner"
+    ]["max_concurrent"]:
         return now_iso(now)
     hours = rules["veto"]["window_hours"]
     return now_iso(now + timedelta(hours=hours))
@@ -200,13 +208,14 @@ def decide(doc, facts, rules, now):
 
         elif state == "announced":
             if parse_iso(p["veto_deadline"]) > now:
-                # 窓の繰り上げ: 予告時に「他が走行中」だったために窓が付いた可逆案は、
-                # アイドルになった時点で即着手してよい (窓の基準は安全性でなく稼働率 —
-                # 決定 #3「何もしてない時間が嫌」)。不可逆案は繰り上げない
+                # 窓の繰り上げ: 予告時に満席だったために窓が付いた可逆案は、
+                # スロットが空いた時点で即着手してよい (窓の基準は安全性でなく稼働率 —
+                # 決定 #3「何もしてない時間が嫌」)。不可逆案は繰り上げない。
+                # 「完全アイドル」基準は 2026-08-10 に「空きスロット」基準へ変更
+                # (merging 詰まり 1 件が全案件を渋滞させた実害。_veto_deadline と同旨)
                 if (
                     p.get("irreversible")
-                    or facts.get("running_runners", 0) > 0
-                    or running > 0
+                    or running >= rules["runner"]["max_concurrent"]
                 ):
                     continue
                 p["veto_deadline"] = now_iso(now)
