@@ -819,7 +819,33 @@
         "soft_cap": 2000000
       },
       "created": "2026-08-10",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-10T07:32:54Z",
+        "verify": [
+          {
+            "cmd": "python3 ops/dashboard/build.py && grep -q 'id=\"heart-projects-closed\"' ops/dashboard/index.html",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "wrote ops/dashboard/index.html (43481 bytes)\npublished to branch ops-dashboard\n"
+          },
+          {
+            "cmd": "python3 ops/dashboard/build.py && python3 -c \"h=open('ops/dashboard/index.html').read(); c=h.find('id=\\\"heart-projects-closed\\\"'); assert c>=0; assert h.find('P-0012')>c and h.find('P-0002')>c, '仕切り直し済みの終端が折り畳みの外にある'\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "wrote ops/dashboard/index.html (43481 bytes)\npublished to branch ops-dashboard\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    h=open('ops/dashboard/index.html').read(); c=h.find('id=\"heart-projects-closed\"'); assert c>=0; assert h.find('P-0012')>c and h.find('P-0002')>c, '仕切り直し済みの終端が折り畳みの外にある'\n                                                                                              ^^^^\nAssertionError\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
