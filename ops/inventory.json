@@ -188,14 +188,14 @@
       "id": "nixpkgs",
       "kind": "flake",
       "name": "nixpkgs (nixos-unstable)",
-      "current": "e72e4f299401a3689d4b3d5fc6496b11db7064eb",
+      "current": "f13ff45afd1bb73e640eaa08a7066dbed07e3238",
       "file": "nix/images/proxmox-cloud/flake.lock",
       "match": "nixpkgs",
       "upstream": "github:NixOS/nixpkgs",
       "upstream_rev": "f13ff45afd1bb73e640eaa08a7066dbed07e3238",
-      "last_checked": "2026-08-10T13:20:03Z",
+      "last_checked": "2026-08-10T13:42:00Z",
       "policy": "manual",
-      "note": "unstable 追従。更新は NixOS イメージの再ビルド + node01 の入れ替えを伴うので人間へ。2026-08-05: 人間が nix flake update を実行（2025-12-08→2026-08-04、#146）。configuration.nix が services.k3s のバージョンを pin していないため、この更新が次のイメージリリース時に k3s 1.34.2→1.35.6 のマイナー更新として反映される。影響確認は T-0062（apps/ の manifest には影響なしと確認済み、node01 の cgroup v2 確認のみ T-0063 needs-human として残る）。次のホップ（k3s 1.36 系）では containerd 2.x が必須になる（1.35 が containerd 1.x をサポートする最終版）ため、その時点で改めて確認が要る。2026-08-10 (P-0055): current を『flake.lock の rev』という説明文から実際の locked rev に変え、upstream_rev / last_checked を足した。腐敗は ops/check_flake_freshness.py が CI の ops job で見張る（各 input の lastModified が 60 日超で落ち、45 日で警告）。同スクリプトが current と flake.lock の rev の一致も検査するので、lock だけ更新して台帳を直し忘れると CI が落ちる。更新手順は docs/os-updates.md"
+      "note": "unstable 追従。更新は NixOS イメージの再ビルド + node01 の入れ替えを伴うので人間へ。2026-08-05: 人間が nix flake update を実行（2025-12-08→2026-08-04、#146）。configuration.nix が services.k3s のバージョンを pin していないため、この更新が次のイメージリリース時に k3s 1.34.2→1.35.6 のマイナー更新として反映される。影響確認は T-0062（apps/ の manifest には影響なしと確認済み、node01 の cgroup v2 確認のみ T-0063 needs-human として残る）。次のホップ（k3s 1.36 系）では containerd 2.x が必須になる（1.35 が containerd 1.x をサポートする最終版）ため、その時点で改めて確認が要る。2026-08-10 (P-0055): current を『flake.lock の rev』という説明文から実際の locked rev に変え、upstream_rev / last_checked を足した。腐敗は ops/check_flake_freshness.py が CI の ops job で見張る（各 input の lastModified が 60 日超で落ち、45 日で警告）。同スクリプトが current と flake.lock の rev の一致も検査するので、lock だけ更新して台帳を直し忘れると CI が落ちる。更新手順は docs/os-updates.md。2026-08-10 (P-0055 s2): 器が CI 経由で実際に更新した 1 サイクル目。e72e4f29 (2026-08-04) → f13ff45a (2026-08-07)。k3s は 1.35.6+k3s1 のまま動かず（＝1.36 へのホップは起きていないので pin は入れていない）、カーネルが 6.18.42 → 6.18.43、system.nixos.version が 26.11.20260804.e72e4f2 → 26.11.20260807.f13ff45。sops-nix / flake-parts は上流 HEAD が lock と同一で動かなかった（実測 ops/projects/logs/P-0055/image-build.md）"
     },
     {
       "id": "tf-provider-proxmox",
