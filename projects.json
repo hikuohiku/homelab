@@ -1113,11 +1113,63 @@
         "until": "2026-08-10T09:36:49Z",
         "baseline_unhealthy": []
       }
+    },
+    {
+      "id": "P-0054",
+      "title": "「node01 が今日消えた」を演じきる — Git と B2 だけで戻せるものと、戻せないものを名指しする",
+      "state": "proposed",
+      "branch": "project/p-0054",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "test -f docs/disaster-recovery.md",
+        "grep -qE 'RTO|所要時間' docs/disaster-recovery.md",
+        "grep -qE '復元できない|再発行が要る' docs/disaster-recovery.md",
+        "test -f ops/tests/test_restore_coverage.py",
+        "python3 -m unittest ops.tests.test_restore_coverage -v",
+        "test -f ops/projects/logs/P-0054/restore-drill.md",
+        "grep -q 'sha256' ops/projects/logs/P-0054/restore-drill.md"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3500000
+      },
+      "created": "2026-08-10",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0055",
+      "title": "アプリだけ新しく、土台は古びる — NixOS / k3s の更新を器の定常業務にし、1 サイクル実際に回す",
+      "state": "proposed",
+      "branch": "project/p-0055",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "python3 -c \"import json,sys; d=json.load(open('nix/images/proxmox-cloud/flake.lock')); sys.exit(0 if d['nodes']['nixpkgs']['locked']['lastModified'] > 1785828668 else 1)\"",
+        "test -f ops/check_flake_freshness.py",
+        "python3 ops/check_flake_freshness.py",
+        "grep -q 'check_flake_freshness' .github/workflows/ci.yml",
+        "test -f docs/os-updates.md",
+        "grep -q 'k3s' docs/os-updates.md",
+        "test -f ops/projects/logs/P-0055/image-build.md"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-10",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-10T12:45:39Z",
-  "last_activity_at": "2026-08-10T13:05:01Z",
+  "last_activity_at": "2026-08-10T13:06:11Z",
   "last_critic_at": "2026-08-10T08:28:43Z",
-  "last_curriculum_dry": true
+  "last_curriculum_dry": false
 }
