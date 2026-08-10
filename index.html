@@ -183,8 +183,17 @@ code { font-family:var(--mono); font-size:.78em; background:var(--idle-soft);
   text-wrap:balance; flex:1; min-width:12rem; }
 .pj__meta { font-family:var(--mono); font-size:.71rem; color:var(--ink3);
   display:flex; flex-wrap:wrap; gap:.15rem .75rem; }
-.pj__id { color:var(--ink2); }
+.pj__id { font-family:var(--mono); font-size:.71rem; color:var(--ink2); }
 .pj__why { font-size:.8rem; color:var(--ink2); }
+/* 納品層・終端層は 1 行に落とす（P-0044）。畳んだ先が現役層と同じ密度だと、
+   開いた瞬間にまた雑音に戻る。罫線の流儀は .pj のまま（border-top、面で囲わない）。 */
+.pj--slim { flex-direction:row; flex-wrap:wrap; align-items:baseline;
+  gap:.2rem .55rem; padding:.34rem 0; }
+.pj--slim .pj__title { font-size:.82rem; font-weight:500; }
+.pj__note { font-family:var(--mono); font-size:.71rem; color:var(--ink3); }
+/* 太い罫線は画面のいちばん上の 1 本だけ。リストが 3 本に増えても層の頭ごとに
+   太線を引かない（層の見出しは .sub が持つ）。 */
+.pj-list--slim .pj:first-child { border-top:1px solid var(--rule2); }
 @media (max-width:560px) {
   .pj__head { flex-direction:column; align-items:flex-start; gap:.22rem; }
   .pj__title { min-width:0; }
@@ -267,122 +276,32 @@ footer { color:var(--ink3); font-size:.73rem; font-family:var(--mono);
   <header class="mast">
     <span class="mast__h">autopilot — homelab 当直記録</span>
     <span class="mast__stage">段階 2・器を安定させる</span>
-    <span class="mast__meta"><span>心拍 2 分ごと</span><span>生成 2026-08-10 07:41 UTC</span></span>
+    <span class="mast__meta"><span>心拍 2 分ごと</span><span>生成 2026-08-10 07:47 UTC</span></span>
   </header>
 
   <p class="banner banner--ok" id="sent" hidden>書き置きを預かりました。次の鼓動で読まれます。<span id="sentid"></span></p>
 
   
-  <div class="pulsebox"><div class="pulse"><div class="pulse__cell"><p class="pulse__k">heart の鼓動</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>鼓動しています</p><p class="pulse__s">拍 #218・最終 7 分前</p></div><div class="pulse__cell"><p class="pulse__k">homelab のアプリ</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>13 / 13 正常</p><p class="pulse__s">11 分前の観測</p></div><div class="pulse__cell"><p class="pulse__k">出している変更</p><p class="pulse__v"><span class="dot dot--idle" aria-hidden="true"></span>なし</p><p class="pulse__s">CI が通れば自分でマージします</p></div><div class="pulse__cell"><p class="pulse__k">heart の Pod</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>常駐しています</p><p class="pulse__s">readyReplicas 1 / 1</p></div></div></div>
+  <div class="pulsebox"><div class="pulse"><div class="pulse__cell"><p class="pulse__k">heart の鼓動</p><p class="pulse__v"><span class="dot dot--warn" aria-hidden="true"></span>鼓動が遅れています</p><p class="pulse__s">拍 #218・最終 13 分前</p></div><div class="pulse__cell"><p class="pulse__k">homelab のアプリ</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>13 / 13 正常</p><p class="pulse__s">17 分前の観測</p></div><div class="pulse__cell"><p class="pulse__k">出している変更</p><p class="pulse__v"><span class="dot dot--idle" aria-hidden="true"></span>なし</p><p class="pulse__s">CI が通れば自分でマージします</p></div><div class="pulse__cell"><p class="pulse__k">heart の Pod</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>常駐しています</p><p class="pulse__s">readyReplicas 1 / 1</p></div></div></div>
 
   <div class="grid">
     <div class="col">
     <section class="sec" id="heart-projects">
       <div class="sec__h"><h2>プロジェクト</h2>
         <span class="sec__n">17 件・進行中 2</span></div>
-      <ul class="pj-list">
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--crit">停止</span>
-              <h3 class="pj__title">ダッシュボードを heart-and-projects の真実に一致させ、配信を定期化する</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0012</span><span>observability・repair</span></p>
-            <p class="pj__why">人間の実指摘 (2026-08-08)。ページの主役が凍結済みの旧 backlog (「あなたの手が要るのは 12 件」) のままで、内容の多くが権限開放後の現実と食い違う嘘になっている。P-0001 は節を足す仕様には合格したがページ全体の真実性は誰の仕様で…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--crit">停止</span>
-              <h3 class="pj__title">ダッシュボードを heart-and-projects の真実に一致させ、配信を定期化する</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0013</span><span>observability・repair</span></p>
-            <p class="pj__why">人間の実指摘 (2026-08-08)。ページの主役が凍結済みの旧 backlog (「あなたの手が要るのは 12 件」) のままで、内容の多くが権限開放後の現実と食い違う嘘になっている。P-0001 は節を足す仕様には合格したがページ全体の真実性は誰の仕様で…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--crit">停止</span>
-              <h3 class="pj__title">実績台帳が空っぽ — 納品・失敗・実消費を archive.jsonl と projects.json に本当に書く</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0023</span><span>self・repair</span></p>
-            <p class="pj__why">ops/projects/README.md は『結果は heart が result フィールド付きの行として追記する』と宣言しているが、archive.jsonl 14 行のどこにも result キーが無い (キーの和集合に存在しない)。delivere…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--crit">停止</span>
-              <h3 class="pj__title">実績台帳が空っぽ — 納品・失敗・実消費を archive.jsonl と projects.json に本当に書く</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0025</span><span>self・repair</span></p>
-            <p class="pj__why">ops/projects/README.md は『結果は heart が result フィールド付きの行として追記する』と宣言しているが、archive.jsonl 14 行のどこにも result キーが無い (キーの和集合に存在しない)。delivere…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
+      <p class="sub">進行中 2 件</p><ul class="pj-list">
           <li class="pj">
             <div class="pj__head"><span class="chip chip--warn">予告中</span>
               <h3 class="pj__title">横移動を止める — NetworkPolicy が 1 件も無いクラスタに既定拒否を入れ、自分で破りにいって塞がったことを確かめる</h3></div>
             <p class="pj__meta"><span class="pj__id">P-0039</span><span>security・feature</span><span>拒否権の期限 21 時間後</span></p>
-            <p class="pj__why">`grep -rl &#x27;kind: NetworkPolicy&#x27; apps/` の結果は **0 件**。単一ノードの上で、パスワード (vaultwarden)・写真 (immich)・開発環境 (coder)・そして外部 API に自由に出ていく器 (aut…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
+            <p class="pj__why">`grep -rl &#x27;kind: NetworkPolicy&#x27; apps/` の結果は **0 件**。単一ノードの上で、パスワード (vaul…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
           </li>
           <li class="pj">
             <div class="pj__head"><span class="chip chip--sig">実行中</span>
               <h3 class="pj__title">ダッシュボードのプロジェクトビューから『済んだ失敗』のノイズを消す (3 層表示)</h3></div>
             <p class="pj__meta"><span class="pj__id">P-0044</span><span>observability・repair</span><span>拒否権の期限 到来済み</span></p>
-            <p class="pj__why">人間の実指摘 (2026-08-10)「プロジェクトにゴミがいっぱい溜まってて見づらい」。仕切り直しで置き換え済みの stalled/vetoed (P-0002/P-0012/P-0013/P-0023/P-0025 等) が現役・納品と同格で並び続け、一覧…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 2.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--ok">納品済み</span>
-              <h3 class="pj__title">ダッシュボードに heart-and-projects のプロジェクトビューを追加する</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0001</span><span>observability・feature</span><a href="https://github.com/hikuohiku/homelab/pull/408">PR #408</a></p>
-            <p class="pj__why">人間がプロジェクトの現在地 (予告中/実行中/レビュー中/納品済み・予算消費・拒否権期限) を一目で見る場所が無い。Discord は push 型の断片で、pull 型の全体像はダッシュボードの仕事。旧体制への最大の不満『ダッシュボードが更新されない・フロー…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--ok">納品済み</span>
-              <h3 class="pj__title">エージェント自身の脳 (claude-code CLI) と土台イメージのバージョンを固定し、監視対象に入れる</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0004</span><span>security・prevent</span><a href="https://github.com/hikuohiku/homelab/pull/406">PR #406</a></p>
-            <p class="pj__why">images/autopilot/Dockerfile は `npm install -g @anthropic-ai/claude-code` を pin 無しで実行し、FROM も node:22-alpine のタグ参照。つまりイメージを再ビルドするたび…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 1.5M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--ok">納品済み</span>
-              <h3 class="pj__title">ops-health-reporter を heart 対応にし、心臓の生存を再び観測可能にする</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0011</span><span>observability・repair</span><a href="https://github.com/hikuohiku/homelab/pull/409">PR #409</a></p>
-            <p class="pj__why">VISION の第一原理は『ループが止まらないこと』なのに、その心臓 (autopilot-heart) の生死を見る計器が壊れている。ops-health-report の autopilot 節は 2026-08-08T05:30Z 時点で deploym…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 2.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--ok">納品済み</span>
-              <h3 class="pj__title">ダッシュボードを heart-and-projects の真実に一致させ、配信を定期化する</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0014</span><span>observability・repair</span><a href="https://github.com/hikuohiku/homelab/pull/414">PR #414</a></p>
-            <p class="pj__why">人間の実指摘 (2026-08-08)。ページの主役が凍結済みの旧 backlog (「あなたの手が要るのは 12 件」) のままで、内容の多くが権限開放後の現実と食い違う嘘になっている。P-0001 は節を足す仕様には合格したがページ全体の真実性は誰の仕様で…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--ok">納品済み</span>
-              <h3 class="pj__title">壊れた仕様を予告する前に殺す — 採択と予告の間に『新品 clone で verify を実測する』ゲートを置く</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0015</span><span>self・prevent</span><a href="https://github.com/hikuohiku/homelab/pull/416">PR #416</a></p>
-            <p class="pj__why">VISION『完成は verify の実測だけが宣言する』の裏面が抜けている。今は spec が壊れていることを runner が起動してから気づく: P-0012 と P-0013 は連続で spec_error (開始前に verify が pass して…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 2.5M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--ok">納品済み</span>
-              <h3 class="pj__title">セッションが上限で死んだのか詰まったのかを見分ける — runner に死因を残させ、上限は『待って再開』に落とす</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0026</span><span>self・prevent</span><a href="https://github.com/hikuohiku/homelab/pull/421">PR #421</a></p>
-            <p class="pj__why">VISION の第一原理『ループが止まらないこと』が、いま最も直接的に破れている箇所。metrics.jsonl の beat 146 時点で P-0023 と P-0025 が両方 stalled、2026-08-08 の当日実績は 26 セッション / 名…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--ok">納品済み</span>
-              <h3 class="pj__title">器が沈黙したことを、器の外側から気づく — GitHub Actions に外部 watchdog を置く</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0027</span><span>observability・prevent</span><a href="https://github.com/hikuohiku/homelab/pull/422">PR #422</a></p>
-            <p class="pj__why">rules.json の heartbeat.stale_seconds には『watchdog (外部) が ops-state の heartbeat をこの時間以上 stale と見たら通知』と書いてあるが、その外部 watchdog は存在しない。今の…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--ok">納品済み</span>
-              <h3 class="pj__title">restic バックアップを append-only 鍵に切り替え、実機で backup 成功と lock の挙動を確かめる (旧 T-0120)</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0028</span><span>security・repair</span><a href="https://github.com/hikuohiku/homelab/pull/430">PR #430</a></p>
-            <p class="pj__why">人間が 2026-08-07 に発行・登録した append-only 鍵が未使用のまま。現行の backup CronJob は削除権限つき鍵を使い続けており、node01 侵害時にバックアップごと消せる。壁 #6 の実効化の最終工程。homelab 本体の…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--ok">納品済み</span>
-              <h3 class="pj__title">バージョン更新運用を再開する — inventory 全対象の上流調査と更新 PR (旧 loop の主業務の引き継ぎ)</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0029</span><span>k8s・repair</span><a href="https://github.com/hikuohiku/homelab/pull/429">PR #429</a></p>
-            <p class="pj__why">inventory.json の追従が 2026-08-06 の旧 loop 停止以来止まっている。vaultwarden の放置は全クライアント同期停止事故 (#49) の前科があり、『誰も上げなければ据え置かれる』はこの homelab の最重要リスク。h…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--ok">納品済み</span>
-              <h3 class="pj__title">immich-postgres の vchord 更新を、本番データの複製で最後まで予行演習して決着させる</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0035</span><span>k8s・investigate</span><a href="https://github.com/hikuohiku/homelab/pull/433">PR #433</a></p>
-            <p class="pj__why">inventory の immich-postgres は 16.9-0.4.3 に据え置かれたまま、2 回上げて 2 回 revert している (#244→#247、#257→run #77)。最後の失敗は『pods/log 権限が無く FATAL の実文…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--idle">拒否</span>
-              <h3 class="pj__title">ops-health-reporter を heart 対応にし、心臓の生存を再び観測可能にする</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0002</span><span>observability・repair</span></p>
-            <p class="pj__why">VISION の第一原理は『ループが止まらないこと』なのに、その心臓 (autopilot-heart) の生死を見る計器が壊れている。ops-health-report の autopilot 節は 2026-08-08T05:30Z 時点で deploym…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 2.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li></ul>
+            <p class="pj__why">人間の実指摘 (2026-08-10)「プロジェクトにゴミがいっぱい溜まってて見づらい」。仕切り直しで置き換え済みの stalled/vetoe…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 2.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
+          </li></ul><p class="sub">納品済み 10 件</p><ul class="pj-list pj-list--slim"><li class="pj pj--slim"><span class="chip chip--ok">納品済み</span><span class="pj__id">P-0035</span><h3 class="pj__title">immich-postgres の vchord 更新を、本番データの複製で最後まで予行演習して決着させる</h3></li><li class="pj pj--slim"><span class="chip chip--ok">納品済み</span><span class="pj__id">P-0028</span><h3 class="pj__title">restic バックアップを append-only 鍵に切り替え、実機で backup 成功と lock の挙動を確かめる (…</h3></li><li class="pj pj--slim"><span class="chip chip--ok">納品済み</span><span class="pj__id">P-0029</span><h3 class="pj__title">バージョン更新運用を再開する — inventory 全対象の上流調査と更新 PR (旧 loop の主業務の引き継ぎ)</h3></li><li class="pj pj--slim"><span class="chip chip--ok">納品済み</span><span class="pj__id">P-0026</span><h3 class="pj__title">セッションが上限で死んだのか詰まったのかを見分ける — runner に死因を残させ、上限は『待って再開』に落とす</h3></li><li class="pj pj--slim"><span class="chip chip--ok">納品済み</span><span class="pj__id">P-0027</span><h3 class="pj__title">器が沈黙したことを、器の外側から気づく — GitHub Actions に外部 watchdog を置く</h3></li></ul><details class="fold"><summary>それ以前の 5 件</summary><ul class="pj-list pj-list--slim"><li class="pj pj--slim"><span class="chip chip--ok">納品済み</span><span class="pj__id">P-0015</span><h3 class="pj__title">壊れた仕様を予告する前に殺す — 採択と予告の間に『新品 clone で verify を実測する』ゲートを置く</h3></li><li class="pj pj--slim"><span class="chip chip--ok">納品済み</span><span class="pj__id">P-0014</span><h3 class="pj__title">ダッシュボードを heart-and-projects の真実に一致させ、配信を定期化する</h3></li><li class="pj pj--slim"><span class="chip chip--ok">納品済み</span><span class="pj__id">P-0011</span><h3 class="pj__title">ops-health-reporter を heart 対応にし、心臓の生存を再び観測可能にする</h3></li><li class="pj pj--slim"><span class="chip chip--ok">納品済み</span><span class="pj__id">P-0001</span><h3 class="pj__title">ダッシュボードに heart-and-projects のプロジェクトビューを追加する</h3></li><li class="pj pj--slim"><span class="chip chip--ok">納品済み</span><span class="pj__id">P-0004</span><h3 class="pj__title">エージェント自身の脳 (claude-code CLI) と土台イメージのバージョンを固定し、監視対象に入れる</h3></li></ul></details><details class="fold" id="heart-projects-closed"><summary>終わった案 5 件（停止・拒否。もう誰も動かしません）</summary><ul class="pj-list pj-list--slim"><li class="pj pj--slim"><span class="chip chip--crit">停止</span><span class="pj__id">P-0012</span><h3 class="pj__title">ダッシュボードを heart-and-projects の真実に一致させ、配信を定期化する</h3><span class="pj__note">spec_error</span></li><li class="pj pj--slim"><span class="chip chip--crit">停止</span><span class="pj__id">P-0013</span><h3 class="pj__title">ダッシュボードを heart-and-projects の真実に一致させ、配信を定期化する</h3><span class="pj__note">spec_error</span></li><li class="pj pj--slim"><span class="chip chip--crit">停止</span><span class="pj__id">P-0023</span><h3 class="pj__title">実績台帳が空っぽ — 納品・失敗・実消費を archive.jsonl と projects.json に本当に書く</h3><span class="pj__note">error</span></li><li class="pj pj--slim"><span class="chip chip--crit">停止</span><span class="pj__id">P-0025</span><h3 class="pj__title">実績台帳が空っぽ — 納品・失敗・実消費を archive.jsonl と projects.json に本当に書く</h3><span class="pj__note">error</span></li><li class="pj pj--slim"><span class="chip chip--idle">拒否</span><span class="pj__id">P-0002</span><h3 class="pj__title">ops-health-reporter を heart 対応にし、心臓の生存を再び観測可能にする</h3></li></ul></details>
     </section>
     <section class="sec" id="human-keys">
       <div class="sec__h"><h2>あなたの手が要ること</h2>
