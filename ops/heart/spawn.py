@@ -18,9 +18,16 @@ def _job_name(kind, project_id, attempt):
     return base[:63].rstrip("-")
 
 
-def build_job(cfg, kind, *, project=None, attempt=0, extra_env=None):
-    """kind: runner | reviewer | curriculum | consolidation | critic | chore"""
-    pid = project["id"] if project else "system"
+def build_job(cfg, kind, *, project=None, project_id=None, attempt=0, extra_env=None):
+    """kind: runner | reviewer | curriculum | consolidation | critic | chore
+
+    project_id は project を持たない Job (critic 等) の結果置き場を分けるための
+    明示指定。既定の "system" は **curriculum の結果置き場** で、
+    facts.collect_curriculum() がそこの result.json を読む。critic を既定のまま
+    走らせると、critic のエラーが「curriculum Job がエラー終了」として通知され、
+    last_curriculum_dry まで書き換わる (P-0045)。
+    """
+    pid = project_id or (project["id"] if project else "system")
     name = _job_name(kind, pid, attempt)
     capabilities = (project or {}).get("capabilities", [])
     use_writer = kind == "runner" and "kubectl-write" in capabilities
@@ -158,9 +165,12 @@ def build_job(cfg, kind, *, project=None, attempt=0, extra_env=None):
     }
 
 
-def create(k8s, cfg, kind, *, project=None, attempt=0, extra_env=None):
+def create(k8s, cfg, kind, *, project=None, project_id=None, attempt=0, extra_env=None):
     """Job を作成する。既に同名があれば (409) その名前を返して正常扱い。"""
-    job = build_job(cfg, kind, project=project, attempt=attempt, extra_env=extra_env)
+    job = build_job(
+        cfg, kind, project=project, project_id=project_id,
+        attempt=attempt, extra_env=extra_env,
+    )
     name = job["metadata"]["name"]
     try:
         k8s.create_job(cfg.namespace, job)

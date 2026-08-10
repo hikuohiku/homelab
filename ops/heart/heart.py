@@ -15,6 +15,7 @@ HEARTBEAT_RE (report.py) がこれを拾って自己ハング検知に使うた�
 書式を変えるときは report.py と CHARTER §2 を同時に変えること。
 """
 
+import json
 import os
 import signal
 import sys
@@ -140,6 +141,35 @@ class Heart:
                             self.k8s_client(), self.cfg, "curriculum",
                             attempt=int(time.time()) // 60 % 1000000,
                         )
+                elif kind == "spawn_critic":
+                    if shadow:
+                        log("[shadow] spawn critic")
+                    else:
+                        extra = self.prepare_critic_input(sf, doc, now)
+                        # 結果置き場を "system" (curriculum の領分) と分ける。
+                        # attempt は curriculum と同じく分単位の時刻で一意にする
+                        # (固定名だと TTL 6h 内の残骸に 409 で黙って負ける)
+                        spawn.create(
+                            self.k8s_client(), self.cfg, "critic",
+                            project_id="critic",
+                            attempt=int(time.time()) // 60 % 1000000,
+                            extra_env=extra,
+                        )
+                        log(f"spawned critic (input={extra['CRITIC_INPUT']})")
+                elif kind == "notify_critic":
+                    text = self.critic_summary()
+                    if shadow:
+                        log(f"[shadow] notify[critic] {text[:80]}")
+                    elif text:
+                        notifier.send("critic", text, now)
+                    else:
+                        # 所見ファイルが無い = critic が rc=0 で終わったのに何も
+                        # 書いていない。黙って消さずに人間に見せる
+                        notifier.send(
+                            "incident",
+                            "critic Job が正常終了したが /data/critic/ に所見が無い",
+                            now,
+                        )
                 elif kind == "kill_job":
                     if shadow:
                         log(f"[shadow] kill job {a.get('job')}")
@@ -164,15 +194,22 @@ class Heart:
                         log(f"[shadow] notify[{a.get('ntype')}] {a.get('text', '')[:80]}")
                     else:
                         notifier.send(a.get("ntype", "notify"), a.get("text", ""), now)
-                elif kind in ("consume_result", "consume_review", "consume_curriculum"):
+                elif kind in (
+                    "consume_result", "consume_review",
+                    "consume_curriculum", "consume_critic",
+                ):
                     # 消費した事実ファイルを退避する。残すと次のビートが同じ事実を
                     # 再消費して状態機械が発振する (レビュー指摘 [0])
                     name = {
                         "consume_result": "result.json",
                         "consume_review": "review.json",
                         "consume_curriculum": "result.json",
+                        "consume_critic": "result.json",
                     }[kind]
-                    target = "system" if kind == "consume_curriculum" else pid
+                    target = {
+                        "consume_curriculum": "system",
+                        "consume_critic": "critic",
+                    }.get(kind, pid)
                     if shadow:
                         log(f"[shadow] consume {target}/{name}")
                     else:
@@ -192,6 +229,65 @@ class Heart:
         dst = src.parent / "processed" / f"{now_iso(now).replace(':', '')}-{name}"
         dst.parent.mkdir(parents=True, exist_ok=True)
         src.rename(dst)
+
+    # --- critic (日次の自己観測) の入出力 ---
+    def critic_dir(self):
+        d = self.cfg.data_dir / "critic"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def recent_transcripts(self, limit=3):
+        """直近に書かれた transcript のパス (新しい順)。critic が精読する対象。"""
+        entries = []
+        if self.transcripts.is_dir():
+            for path in self.transcripts.rglob("*.jsonl"):
+                try:
+                    entries.append((path.stat().st_mtime, str(path)))
+                except OSError:
+                    continue
+        entries.sort(reverse=True)
+        return [p for _, p in entries[:limit]]
+
+    def prepare_critic_input(self, sf, doc, now):
+        """指標を集計して /data/critic/input-<日付>.json に落とし、Job に渡す env を返す。
+
+        「候補区間の特定は指標側 (heart) がやり、critic は絞られた対象だけを読む」
+        — ops/prompts/critic.md が冒頭で宣言している分業。ここで絞らないと critic は
+        2000 行超の metrics.jsonl を生読みすることになる (生読みは上位モデルでも低精度)。
+        """
+        day = now_iso(now)[:10]
+        summary = metrics.summarize_beats(sf.read_jsonl("metrics.jsonl"), now)
+        summary["stalled"] = metrics.summarize_stalled(doc)
+        summary["targets"] = self.recent_transcripts()
+        path = self.critic_dir() / f"input-{day}.json"
+        with open(path, "w") as f:
+            json.dump(summary, f, ensure_ascii=False, indent=2)
+            f.write("\n")
+        return {
+            "CRITIC_INPUT": str(path),
+            "CRITIC_TARGETS": ",".join(summary["targets"]),
+            "CRITIC_OUTPUT": str(self.critic_dir() / f"{day}.md"),
+        }
+
+    def critic_summary(self, limit=1200):
+        """最新の所見ファイルの冒頭。Discord は 1900 字で切るので要点だけ載せる。
+
+        今日の日付で決め打たず更新時刻で選ぶ: critic Job は UTC の日付をまたいで
+        終わることがあり、決め打つと静かに取り逃す。
+        """
+        files = []
+        for path in self.critic_dir().glob("*.md"):
+            try:
+                files.append((path.stat().st_mtime, path))
+            except OSError:
+                continue
+        if not files:
+            return ""
+        path = max(files)[1]
+        text = path.read_text(errors="replace").strip()
+        if not text:
+            return ""
+        return f"{path.name}\n{text[:limit]}" + ("…" if len(text) > limit else "")
 
     # --- beat ---
     def beat(self, i):
@@ -244,6 +340,7 @@ class Heart:
         curriculum = facts.collect_curriculum(
             self.cfg.data_dir, self.repo_dir, self.gh
         )
+        critic = facts.collect_critic(self.cfg.data_dir)
         adopted_specs = list(facts.load_adopted_specs(self.repo_dir).values())
         tripped, breaker_info = metrics.breaker_tripped(
             sf, self.cfg.rules, self.transcripts, now
@@ -266,6 +363,7 @@ class Heart:
             "breaker_tripped": tripped,
             "running_runners": running,
             "curriculum": curriculum,
+            "critic": critic,
             "adopted_specs": adopted_specs,
         }
         doc, actions = reconcile.decide(doc, f, self.cfg.rules, now)

@@ -832,5 +832,119 @@ class TestCurriculum(unittest.TestCase):
         self.assertNotIn("spawn_curriculum", kinds(actions))
 
 
+class TestCritic(unittest.TestCase):
+    """日次の自己観測 (P-0045)。24h ごと、かつ前回以降に活動があったときだけ spawn。
+
+    「活動があったときだけ」が本体: 何も動いていない器を毎日読ませない。
+    critic 自身の action は活動に数えない (数えると自分で自分の条件を作り続ける)。
+    """
+
+    def quiet(self, **kw):
+        """action が 1 つも生まれないビートの doc。
+        空振り直後 (min_interval 内) の完全アイドルがそれに当たる。"""
+        base = {"last_curriculum_at": "2026-08-07T11:00:00Z", "last_curriculum_dry": True}
+        base.update(kw)
+        return doc(**base)
+
+    def test_quiet_beat_really_has_no_actions(self):
+        """以降のテストの土台。ここが崩れると活動判定のテストが全部無意味になる。"""
+        d, actions = reconcile.decide(self.quiet(), facts(), RULES, NOW)
+        self.assertEqual(kinds(actions), [])
+        self.assertNotIn("last_activity_at", d)
+
+    def test_no_critic_without_any_activity(self):
+        d, actions = reconcile.decide(self.quiet(), facts(), RULES, NOW)
+        self.assertNotIn("spawn_critic", kinds(actions))
+        self.assertNotIn("last_critic_at", d)
+
+    def test_first_activity_makes_critic_due(self):
+        """初回 (last_critic_at 無し) は 24h を待たず、活動が記録され次第 spawn。"""
+        d, actions = reconcile.decide(doc(), facts(), RULES, NOW)
+        self.assertIn("spawn_curriculum", kinds(actions))  # これが「活動」
+        self.assertEqual(d["last_activity_at"], "2026-08-07T12:00:00Z")
+        self.assertIn("spawn_critic", kinds(actions))
+        self.assertEqual(d["last_critic_at"], "2026-08-07T12:00:00Z")
+
+    def test_critic_rate_limited_within_interval(self):
+        """24h 未経過。活動があっても spawn しない。"""
+        d, actions = reconcile.decide(
+            doc(last_critic_at="2026-08-07T00:00:00Z"), facts(), RULES, NOW
+        )
+        self.assertIn("spawn_curriculum", kinds(actions))
+        self.assertNotIn("spawn_critic", kinds(actions))
+        self.assertEqual(d["last_critic_at"], "2026-08-07T00:00:00Z")
+
+    def test_interval_elapsed_but_no_activity_since(self):
+        """24h 経ったが前回 critic 以降の活動が無い = 読むものが増えていない。"""
+        d, actions = reconcile.decide(
+            self.quiet(last_critic_at="2026-08-06T10:00:00Z",
+                       last_activity_at="2026-08-06T09:00:00Z"),
+            facts(), RULES, NOW,
+        )
+        self.assertNotIn("spawn_critic", kinds(actions))
+        self.assertEqual(d["last_critic_at"], "2026-08-06T10:00:00Z")
+
+    def test_interval_elapsed_with_activity_since(self):
+        d, actions = reconcile.decide(
+            self.quiet(last_critic_at="2026-08-06T10:00:00Z",
+                       last_activity_at="2026-08-06T23:00:00Z"),
+            facts(), RULES, NOW,
+        )
+        self.assertIn("spawn_critic", kinds(actions))
+        self.assertEqual(d["last_critic_at"], "2026-08-07T12:00:00Z")
+
+    def test_critic_does_not_sustain_itself(self):
+        """critic を spawn したビートの action だけでは、翌日の critic は due にならない。
+        自励発振 (毎日 critic → その action が活動 → また毎日 critic) の防止。"""
+        d, actions = reconcile.decide(doc(), facts(), RULES, NOW)
+        self.assertIn("spawn_critic", kinds(actions))
+        later = NOW + timedelta(hours=25)
+        # 2 ビート目は立案側を黙らせ、critic の結果だけが来ている状態にする
+        d["last_curriculum_at"] = "2026-08-08T12:30:00Z"
+        d["last_curriculum_dry"] = True
+        d, actions = reconcile.decide(
+            d, facts(critic={"state": "done"}), RULES, later
+        )
+        self.assertEqual(kinds(actions), ["consume_critic", "notify_critic"])
+        # consume/notify/spawn_critic は活動に数えないので、活動の刻みは 1 ビート目のまま
+        self.assertEqual(d["last_activity_at"], "2026-08-07T12:00:00Z")
+        # 活動が increment されていない以上、24h 経っていても次は due にならない
+        self.assertEqual(d["last_critic_at"], "2026-08-07T12:00:00Z")
+
+    def test_breaker_blocks_critic(self):
+        d, actions = reconcile.decide(
+            doc(last_activity_at="2026-08-07T11:00:00Z"),
+            facts(breaker_tripped=True), RULES, NOW,
+        )
+        self.assertNotIn("spawn_critic", kinds(actions))
+        self.assertNotIn("last_critic_at", d)
+
+    def test_stop_all_blocks_critic(self):
+        d, actions = reconcile.decide(
+            doc(last_activity_at="2026-08-07T11:00:00Z"),
+            facts(stop_all=True), RULES, NOW,
+        )
+        self.assertNotIn("spawn_critic", kinds(actions))
+
+    def test_critic_result_is_consumed_and_notified(self):
+        d, actions = reconcile.decide(
+            self.quiet(), facts(critic={"state": "done"}), RULES, NOW
+        )
+        self.assertIn("consume_critic", kinds(actions))
+        self.assertIn("notify_critic", kinds(actions))
+
+    def test_critic_error_is_an_incident(self):
+        """critic が黙って死ぬのを許さない。curriculum の結果置き場 (system) とは
+        別ディレクトリなので、curriculum の incident と取り違えない。"""
+        d, actions = reconcile.decide(
+            self.quiet(), facts(critic={"state": "error", "error": "boom"}), RULES, NOW
+        )
+        self.assertIn("consume_critic", kinds(actions))
+        notes = [a for a in actions if a["type"] == "notify"]
+        self.assertEqual(notes[0]["ntype"], "incident")
+        self.assertIn("boom", notes[0]["text"])
+        self.assertNotIn("notify_critic", kinds(actions))
+
+
 if __name__ == "__main__":
     unittest.main()

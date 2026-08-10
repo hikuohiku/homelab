@@ -227,6 +227,27 @@ def load_adopted_specs(repo_dir):
     return specs
 
 
+def collect_critic(data_dir):
+    """critic Job の結果 (/data/projects/critic/result.json) を観測する。無ければ None。
+
+    curriculum (= "system") とは別ディレクトリにしてある (spawn.build_job の
+    project_id)。同居させると critic のエラーが curriculum のエラーとして
+    処理されるため。collect_results() もこのディレクトリを拾うが、id "critic" の
+    プロジェクトは projects.json に存在しないので decide 側では無視される。
+    """
+    path = data_dir / "projects" / "critic" / "result.json"
+    if not path.exists():
+        return None
+    try:
+        with open(path) as f:
+            result = json.load(f)
+    except (OSError, ValueError):
+        # 書きかけ・壊れた result は「観測できなかった」でなく「異常終了」として
+        # 扱う。放置すると消費されずに毎ビート読み直すファイルが残り続ける
+        return {"state": "error", "error": "result.json が読めない"}
+    return {"state": result.get("state"), "error": result.get("error")}
+
+
 def collect_curriculum(data_dir, repo_dir, gh):
     """curriculum Job の結果 (/data/projects/system/result.json) と、その採択 PR の
     状態・採択 spec を観測する。無ければ None。"""
