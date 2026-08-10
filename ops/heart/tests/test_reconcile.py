@@ -103,12 +103,23 @@ class TestAnnounce(unittest.TestCase):
         deadline = reconcile.parse_iso(d["projects"][0]["veto_deadline"])
         self.assertEqual(deadline - NOW, timedelta(hours=RULES["veto"]["window_hours"]))
 
-    def test_busy_waits_window_even_if_reversible(self):
+    def test_full_slots_wait_window_even_if_reversible(self):
+        """窓が付く条件は「満席」(空きスロット無し)。2026-08-10 に完全アイドル基準から変更。"""
+        import copy
+        rules1 = copy.deepcopy(RULES)
+        rules1["runner"]["max_concurrent"] = 1
         d, _ = reconcile.decide(
-            doc(project(adopt_gate=gate())), facts(running_runners=1), RULES, NOW
+            doc(project(adopt_gate=gate())), facts(running_runners=1), rules1, NOW
         )
         deadline = reconcile.parse_iso(d["projects"][0]["veto_deadline"])
         self.assertGreater(deadline, NOW)
+
+    def test_free_slot_gives_zero_window_even_if_others_run(self):
+        """cap に空きがあれば走行中でも窓ゼロ (稼働率基準の一貫化)。"""
+        d, _ = reconcile.decide(
+            doc(project(adopt_gate=gate())), facts(running_runners=1), RULES, NOW
+        )
+        self.assertEqual(d["projects"][0]["veto_deadline"], "2026-08-07T12:00:00Z")
 
     def test_breaker_blocks_new_announce(self):
         d, actions = reconcile.decide(
@@ -240,17 +251,35 @@ class TestActivate(unittest.TestCase):
         self.assertEqual(d["projects"][0]["state"], "announced")
         self.assertEqual(kinds(actions), [])
 
-    def test_announced_waits_while_busy(self):
+    def test_announced_waits_while_slots_full(self):
+        import copy
+        rules1 = copy.deepcopy(RULES)
+        rules1["runner"]["max_concurrent"] = 1
         waiting = project(id="P-0002", state="announced", branch="project/p-0002",
                           veto_deadline="2026-08-07T13:00:00Z")
         busy = project(state="active", job="runner-p-0001-a1")
         d, actions = reconcile.decide(
             doc(busy, waiting),
             facts(running_runners=1, jobs={"runner-p-0001-a1": {"active": True}}),
-            RULES, NOW,
+            rules1, NOW,
         )
         self.assertEqual(d["projects"][1]["state"], "announced")
         self.assertNotIn("spawn_runner", kinds(actions))
+
+    def test_announced_catches_up_when_slot_frees(self):
+        """merging 詰まり 1 件 + 空きスロットでも待たされない (2026-08-10 の渋滞バグ修正)。"""
+        stuck = project(state="merging", prs=[42],
+                        merging_since="2026-08-07T11:30:00Z")
+        waiting = project(id="P-0002", state="announced", branch="project/p-0002",
+                          veto_deadline="2026-08-08T11:00:00Z")
+        d, actions = reconcile.decide(
+            doc(stuck, waiting),
+            facts(running_runners=1,
+                  open_prs={42: {"head": "project/p-0001", "checks_green": False}}),
+            RULES, NOW,
+        )
+        self.assertEqual(d["projects"][1]["state"], "active")
+        self.assertIn("spawn_runner", kinds(actions))
 
     def test_concurrency_cap(self):
         # cap の境界そのものを検査するため、設定値に依存せず cap=1 を注入する
