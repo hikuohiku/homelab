@@ -38,6 +38,9 @@ ADOPT_GATE_MAX_ATTEMPTS = 3  # 測定が書き戻されないまま回り続け�
 # max_concurrent=1 では上限待ちの 1 件が他の全プロジェクトのスロットを塞ぐので、
 # 連続で数えて打ち切る (FAILURE_PATTERNS の誤検知でここに落ちる可能性もある)
 QUOTA_WAIT_MAX_ROUNDS = 6
+# 自己観測 (critic) の間隔。指標 (状態別滞留・アイドル率) は日次の粒度で足り、
+# それより短くしても同じ 24h の窓を読み直すだけになる (P-0045)
+CRITIC_INTERVAL_HOURS = 24
 
 
 def _action(kind, project_id=None, **kw):
@@ -97,6 +100,32 @@ def _register_spec(doc, spec, rules, now):
             "created": now_iso(now)[:10],
         }
     )
+
+
+def _critic_due(doc, now):
+    """日次の自己観測 (critic Job) を spawn してよいか。純関数。
+
+    条件は 2 つとも要る:
+      (a) 前回 spawn から CRITIC_INTERVAL_HOURS 経過している (初回は無条件)
+      (b) 前回 spawn 以降に活動があった (actions のあるビートが 1 度でもあった)
+
+    (b) が無いと、何も動いていない器を毎日読ませてトークンだけ燃やす。
+    刻むのは **spawn した時刻** (完了時刻ではない) — curriculum と同じ流儀で、
+    Job の完了を待つ間に二重 spawn しない。
+
+    活動の記録 (doc["last_activity_at"]) には critic 自身が生んだ action を
+    数えない (decide の末尾で、critic の action を積む **前** に刻む)。
+    数えると critic が自分で自分の due 条件を成立させ続ける自励発振になる。
+    """
+    activity = doc.get("last_activity_at")
+    if not activity:
+        return False
+    last = doc.get("last_critic_at")
+    if last is None:
+        return True  # 一度も観測していない。活動が記録され次第すぐ見る
+    if (now - parse_iso(last)) < timedelta(hours=CRITIC_INTERVAL_HOURS):
+        return False
+    return parse_iso(activity) > parse_iso(last)
 
 
 def decide(doc, facts, rules, now):
@@ -510,5 +539,37 @@ def decide(doc, facts, rules, now):
     if curriculum_idle and gap_ok and not breaker and not stop_all:
         doc["last_curriculum_at"] = now_iso(now)
         actions.append(_action("spawn_curriculum"))
+
+    # --- 活動の記録 (critic の due 判定の材料) ---
+    # ここまでに積んだ action だけを「活動」と数える。この行より後に積む critic 自身の
+    # action (consume_critic / notify_critic / spawn_critic) は数えない (_critic_due 参照)
+    if actions:
+        doc["last_activity_at"] = now_iso(now)
+
+    # --- critic: 前回の所見の消費と、日次の自己観測 (P-0045) ---
+    # 器が自分の詰まり (状態別の滞留・アイドル率) と利用者面の不満を、人間より先に
+    # 見つけるための常設の器官。**見つける役であって直す役ではない** ので、ここでは
+    # 所見を人間 (notify) と次の立案 (/data/critic/) に流すところまでしかしない
+    critic = facts.get("critic")  # /data/projects/critic/result.json (無ければ None)
+    if critic:
+        # 消費しないと同じ結果を毎ビート再消費して通知が発振する (curriculum と同じ罠)
+        actions.append(_action("consume_critic"))
+        if critic.get("state") == "done":
+            # 本文は所見ファイル (/data/critic/<日付>.md) 側にあり、純関数からは
+            # 読めない。読んで整形するのは heart.execute() の仕事
+            actions.append(_action("notify_critic"))
+        else:
+            actions.append(
+                _action(
+                    "notify", "critic", ntype="incident",
+                    text=f"critic Job が {critic.get('state')} で終了: "
+                         f"{str(critic.get('error', ''))[:200]}",
+                )
+            )
+    # breaker / stop_all 中は新しい仕事を作らない (冒頭の不変条件)。
+    # max_concurrent は見ない — critic は runner スロットを消費しない別 Job
+    if _critic_due(doc, now) and not breaker and not stop_all:
+        doc["last_critic_at"] = now_iso(now)
+        actions.append(_action("spawn_critic"))
 
     return doc, actions
