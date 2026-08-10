@@ -16,9 +16,13 @@ curriculum 第 1 段: 発散生成。判定 (採択) は別セッション (curr
 3. `ops/projects/seeds.md` — 種プロジェクトの候補プールと旧 backlog からの移送分。
    立案の原料 (丸写しせず、今も価値が残るかを判断する)
 4. `ops/memory/` — 意味記憶 (substrate.md には実行環境の実測制約がある)
-5. `ops/journal/` の直近 — 最近何が起きているか
-6. `ops/inventory.json` / ops-health-report ブランチの `ops/health/latest.json` — 環境の現状
-7. リポジトリ全体 (CLAUDE.md、apps/、docs/) — 現実の姿
+5. `/data/critic/` の直近の所見 (`*.md`、新しい順に 1〜2 本。無ければ飛ばす)
+   — **器が自分で見つけた詰まりと、利用者面の不満。** 日次の critic が書いている。
+   末尾の JSON ブロック (`findings`) に構造的原因と提案が入っているので、
+   有望な `proposal` はそのまま案の種にしてよい (人間に指摘される前に自分で直す経路)
+6. `ops/journal/` の直近 — 最近何が起きているか
+7. `ops/inventory.json` / ops-health-report ブランチの `ops/health/latest.json` — 環境の現状
+8. リポジトリ全体 (CLAUDE.md、apps/、docs/) — 現実の姿
 
 ## 案の出し方
 

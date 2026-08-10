@@ -190,6 +190,33 @@ class TestSummarizeBeats(unittest.TestCase):
         self.assertEqual(s["beats"], 1)
         self.assertEqual(s["state_seconds"]["active"], 300)
 
+    def test_wall_clock_split_is_exhaustive_and_exclusive(self):
+        """working / waiting_only / empty の 3 分割は排他で、合計は elapsed に一致する。"""
+        records = [
+            beat(20, {"P-1": "active", "P-2": "announced"}),  # 仕事あり (窓待ちと同時)
+            beat(15, {"P-1": "announced"}),                   # 着手待ちだけ
+            beat(10, {"P-1": "delivered"}),                   # 終端だけ = 空
+            beat(5, {}),                                      # 何も無い
+        ]
+        s = metrics.summarize_beats(records, NOW)
+        self.assertEqual(s["working_seconds"], 300)
+        self.assertEqual(s["waiting_only_seconds"], 300)
+        self.assertEqual(s["empty_seconds"], 600)
+        self.assertEqual(
+            s["working_seconds"] + s["waiting_only_seconds"] + s["empty_seconds"],
+            s["elapsed_seconds"],
+        )
+
+    def test_idle_beats_are_not_idle_time(self):
+        """action の無いビートでも、別 Job で仕事は進んでいる。
+        idle_ratio を「空費」と読むと逆の結論になる (2026-08-10 の実測で判明:
+        idle_ratio 0.968 に対し実際に仕事が走っていたのは 86.8%)。"""
+        records = [beat(10, {"P-1": "active"}), beat(5, {"P-1": "active"})]
+        s = metrics.summarize_beats(records, NOW)
+        self.assertEqual(s["idle_ratio"], 1.0)      # heart は何もしていない
+        self.assertEqual(s["busy_seconds"], 0)
+        self.assertEqual(s["working_seconds"], 600)  # が、仕事は走っている
+
     def test_per_project_dwell(self):
         records = [beat(10, {"P-1": "merging", "P-2": "active"}), beat(5, {"P-1": "merging"})]
         s = metrics.summarize_beats(records, NOW)

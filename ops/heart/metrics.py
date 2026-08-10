@@ -18,6 +18,12 @@ RESULT_RE = re.compile(r'"type"\s*:\s*"result"')
 # 取り違えるため downtime として分ける (P-0045)
 MAX_BEAT_GAP_SECONDS = 600
 
+# 「仕事が走っていた」と数える状態。runner / reviewer / soak は Job や外部の時計が
+# 動かしているので、heart のビートに action が無くても仕事は進んでいる
+WORKING_STATES = ("active", "in_review", "merging", "soaking")
+# 仕事が走っておらず、着手待ちだけがある状態 (拒否権窓 / 予告前)
+WAITING_STATES = ("announced", "proposed")
+
 
 def scan_transcript_costs(transcripts_dir, day):
     """当日分 transcript の result イベントから total_cost_usd を合計する。
@@ -67,6 +73,12 @@ def summarize_beats(records, now, window_hours=24, max_gap_seconds=MAX_BEAT_GAP_
     projects.json に残り続けるので、延べ秒を数えると終端の山が全部を覆い隠す
     (実測: 今日 1 日で stalled 1732 / delivered 3248 ビート延べ)。終端は
     「今いくつあるか」のスナップショット (terminal_now) で足りる。
+
+    **idle_ratio (action の無いビートの割合) を「空費」と読んではいけない。**
+    実測 (2026-08-10): idle_ratio 0.968 に対し、実際に仕事が走っていた実時間は
+    86.8% だった。runner / reviewer は別 Job で動くので、heart のビートに action が
+    無いことと器が遊んでいることは全く別。器の空費を見るには壁時計の 3 分割
+    (working / waiting_only / empty、合計 = elapsed) を使うこと。
     """
     start = now - timedelta(hours=window_hours)
     beats = []
@@ -87,6 +99,9 @@ def summarize_beats(records, now, window_hours=24, max_gap_seconds=MAX_BEAT_GAP_
         "elapsed_seconds": 0,
         "downtime_seconds": 0,
         "busy_seconds": 0,
+        "working_seconds": 0,
+        "waiting_only_seconds": 0,
+        "empty_seconds": 0,
         "window_blocked_seconds": 0,
         "state_seconds": {},
         "project_seconds": {},
@@ -97,6 +112,7 @@ def summarize_beats(records, now, window_hours=24, max_gap_seconds=MAX_BEAT_GAP_
         return summary
 
     elapsed = downtime = busy = blocked = 0.0
+    working = waiting_only = empty = 0.0
     state_seconds, project_seconds, action_counts = {}, {}, {}
     for i, (at, rec) in enumerate(beats):
         nxt = beats[i + 1][0] if i + 1 < len(beats) else now
@@ -120,6 +136,14 @@ def summarize_beats(records, now, window_hours=24, max_gap_seconds=MAX_BEAT_GAP_
             state_seconds[state] = state_seconds.get(state, 0.0) + dur
             per = project_seconds.setdefault(pid, {})
             per[state] = per.get(state, 0.0) + dur
+        # 壁時計の 3 分割 (排他。合計は elapsed_seconds に一致する)
+        live = list(states.values())
+        if any(s in WORKING_STATES for s in live):
+            working += dur
+        elif any(s in WAITING_STATES for s in live):
+            waiting_only += dur
+        else:
+            empty += dur
         if any(s == "announced" for s in states.values()):
             # 1 件以上が拒否権窓で待っていた実時間 (延べではなく壁時計)。
             # 窓待ちが実作業を上回っていないかを見るための指標
@@ -132,6 +156,9 @@ def summarize_beats(records, now, window_hours=24, max_gap_seconds=MAX_BEAT_GAP_
             "elapsed_seconds": int(elapsed),
             "downtime_seconds": int(downtime),
             "busy_seconds": int(busy),
+            "working_seconds": int(working),
+            "waiting_only_seconds": int(waiting_only),
+            "empty_seconds": int(empty),
             "window_blocked_seconds": int(blocked),
             "state_seconds": {
                 k: int(v)
