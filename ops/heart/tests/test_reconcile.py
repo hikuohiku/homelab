@@ -249,7 +249,8 @@ class TestActivate(unittest.TestCase):
                     veto_deadline="2026-08-07T13:00:00Z")
         d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
         self.assertEqual(d["projects"][0]["state"], "announced")
-        self.assertEqual(kinds(actions), [])
+        self.assertNotIn("spawn_runner", kinds(actions))
+        # (窓待ち中の立案 spawn_curriculum は 2026-08-10 以降は正常。ここでは runner だけ見る)
 
     def test_announced_waits_while_slots_full(self):
         import copy
@@ -784,6 +785,44 @@ class TestCurriculum(unittest.TestCase):
             RULES, NOW,
         )
         self.assertEqual(kinds(actions), [])
+
+    def test_windowed_announced_does_not_block_curriculum(self):
+        """拒否権窓で待機中の案件はスロットを使っていないので、立案を塞がない
+        (2026-08-10、窓 24h の 1 件が立案を丸一日止めた実害への修正)。"""
+        waiting = project(state="announced", irreversible=True,
+                          veto_deadline="2026-08-08T12:00:00Z")
+        d, actions = reconcile.decide(
+            doc(waiting, last_curriculum_at="2026-08-07T11:30:00Z",
+                last_curriculum_dry=False),
+            facts(), RULES, NOW,
+        )
+        self.assertIn("spawn_curriculum", kinds(actions))
+        # 待機中の案件はそのまま (立案に巻き込まれない)
+        self.assertEqual(d["projects"][0]["state"], "announced")
+
+    def test_productive_round_allows_immediate_replan(self):
+        """実りある回 (採択あり) の後のアイドルは間隔を待たず即立案。"""
+        d, actions = reconcile.decide(
+            doc(last_curriculum_at="2026-08-07T11:59:00Z", last_curriculum_dry=False),
+            facts(), RULES, NOW,
+        )
+        self.assertIn("spawn_curriculum", kinds(actions))
+
+    def test_dry_round_keeps_min_interval(self):
+        """空振り (採択ゼロ / エラー) の後は min_interval を守る (連打防止)。"""
+        d, actions = reconcile.decide(
+            doc(last_curriculum_at="2026-08-07T11:00:00Z", last_curriculum_dry=True),
+            facts(), RULES, NOW,
+        )
+        self.assertNotIn("spawn_curriculum", kinds(actions))
+
+    def test_curriculum_merged_records_dry_flag(self):
+        d, _ = reconcile.decide(
+            doc(), facts(curriculum={"state": "curriculum_done", "pr": 7,
+                                     "pr_merged": True, "adopted_specs": []}),
+            RULES, NOW,
+        )
+        self.assertTrue(d["last_curriculum_dry"])
 
     def test_active_project_blocks_curriculum(self):
         d, actions = reconcile.decide(
