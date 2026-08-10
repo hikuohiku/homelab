@@ -93,4 +93,9 @@ H6. **homelab の新機能** — 人間が欲しいものを聞くのが最良�
     CI 自体が走らず (merge ref が作れない) 沈黙で詰まる。heart が mergeable=CONFLICTING を検知したら
     runner を「main を merge して解消せよ」モードで respawn する (#421 で実測。手動解消に人間 2 回分の
     往復を要した)
+21. **プロジェクトが産む「子 PR」の所有権** — P-0029 が出した更新 PR (#428、external-secrets
+    2.8.0→2.9.0) は project PR ではないため heart の merge 対象にならず、全 green のまま孤児に
+    なった (人間が拾って merge)。選択肢: (a) 子 PR を禁止し成果は常に project ブランチに畳む、
+    (b) result.json に子 PR 番号を列挙させ heart が CI green で merge + soak する。
+    バージョン更新運用 (1 PR 1 コンポーネントの規律) は子 PR が自然なので (b) が本命
 
