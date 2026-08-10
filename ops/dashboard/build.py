@@ -493,6 +493,13 @@ def render_projects(doc: dict | None, specs: dict[str, dict]) -> str:
             spec = specs.get(pid, {})
 
             meta = [f'<span class="pj__id">{E(pid)}</span>']
+            # 上限待ち（P-0026）は state が active のままなので、そのままだと「実行中」に
+            # 見える。動いていない待ちを動いているように描かない。状態語彙は増やさず、
+            # active の中の待ちとして chip のラベルと tone だけ差し替える
+            quota_until = p.get("quota_wait_until")
+            if state == "active" and quota_until:
+                label, tone = "上限待ち", "warn"
+                meta.append(f'<span>再開 {E(until_time(quota_until))}</span>')
             cell = spec.get("cell") or []
             if cell:
                 meta.append(f'<span>{E("・".join(str(c) for c in cell))}</span>')

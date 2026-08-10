@@ -149,6 +149,8 @@ jobs:
         run: python3 ops/validate.py
       - name: heart unit tests (state machine / triage / statefiles / breaker)
         run: python3 -m unittest discover -s ops/heart/tests -t .
+      - name: runner unit tests (セッションの死因分類 / 秘密のマスク)
+        run: python3 -m unittest discover -s ops/runner/tests -t .
       - name: check heartbeat watchdog logic (rc contract / fail-closed / triage 誤爆)
         # .github/workflows/watchdog.yml 自身は CI の検証対象外なので、判定ロジックの
         # 側をここで守る。新しい job を作らないのは ruleset の必須チェック一覧が

@@ -17,20 +17,143 @@ consolidation / critic / chore の spawn 配線は Phase 3 (heart 側 reconcile 
 有効化する。モード自体はここで先に実装しておく。
 """
 
+import collections
 import json
 import os
 import queue
+import re
 import subprocess
 import sys
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
 from ops.heart.gh import Gh, GhError  # noqa: E402
+
+# --- セッションの死因 (P-0026) ---
+# 待機の既定値はここ (モジュール定数) に置く。ops/rules.json は人間レビュー必須パスの
+# 単一情報源なので、この程度の調整のために触らない (既存キーは読むだけ)。
+DEFAULT_QUOTA_WAIT_SECONDS = 900
+MIN_QUOTA_WAIT_SECONDS = 60
+QUOTA_WAIT_MARGIN_SECONDS = 30
+STDERR_TAIL_CHARS = 2000
+STDERR_KEEP_LINES = 400
+
+# 判定順が意味を持つ (429 系は文言が重なるので上限に寄せる):
+# usage_limit > auth > network > unknown
+FAILURE_PATTERNS = (
+    ("usage_limit", (
+        r"claude ai usage limit reached",
+        r"usage limit",
+        r"5-hour limit",
+        r"limit reached ∙ resets",
+        r"rate_limit_error",
+        r"429[^\n]{0,120}rate limit",
+        r"rate limit[^\n]{0,120}429",
+    )),
+    ("auth", (
+        r"invalid api key",
+        r"authentication_error",
+        r"oauth token",
+        r"please run /login",
+        r"\b401\b",
+        r"unauthorized",
+        r"forbidden",
+    )),
+    ("network", (
+        r"enotfound",
+        r"econnrefused",
+        r"etimedout",
+        r"econnreset",
+        r"socket hang up",
+        r"fetch failed",
+        r"getaddrinfo",
+    )),
+)
+
+# stderr_tail に混ざりうる秘密。(a) 環境変数の実値そのものの literal 置換が最も確実で、
+# (b) 正規表現は env に無い経路 (git remote の埋め込み等) の保険。
+SECRET_ENV_KEYS = (
+    "AUTOPILOT_GITHUB_TOKEN",
+    "CLAUDE_CODE_OAUTH_TOKEN",
+    "ANTHROPIC_API_KEY",
+    "GITHUB_TOKEN",
+)
+SECRET_PATTERNS = (
+    (r"ghp_[A-Za-z0-9]{8,}", "***"),
+    (r"github_pat_[A-Za-z0-9_]{8,}", "***"),
+    (r"sk-ant-[A-Za-z0-9\-_]{8,}", "***"),
+    (r"(?i)\bbearer\s+[A-Za-z0-9._\-]{8,}", "Bearer ***"),
+    (r"x-access-token:[^@\s]+", "x-access-token:***"),
+)
+
+
+def classify_session_failure(stderr_tail):
+    """claude セッションの死因を 'usage_limit'|'auth'|'network'|'unknown' に分類する純関数。
+
+    上限の実文字列はこのリポジトリに残っていない (runner が stderr を DEVNULL で
+    捨ててきたのが P-0026 の発端で、journal にも記録が無い)。下の表は claude CLI の
+    既知の出力形を根拠にした候補であり、**別の文言を観測したらその回の result.json の
+    `stderr_tail` を証拠に表とテストへ追記する** — そのための stderr_tail である。
+    知らない文字列を勝手に分類しないこと (既定は 'unknown')。
+    """
+    text = (stderr_tail or "").lower()
+    if not text.strip():
+        return "unknown"
+    for kind, patterns in FAILURE_PATTERNS:
+        for pat in patterns:
+            if re.search(pat, text):
+                return kind
+    return "unknown"
+
+
+def parse_usage_limit_reset(text):
+    """上限メッセージから reset 時刻 (aware datetime) を取り出す。取れなければ None。
+
+    claude CLI は `Claude AI usage limit reached|<epoch 秒>` の形で付けることがある。
+    分類 (classify_session_failure) と時刻抽出は混ぜない。
+    """
+    if not text:
+        return None
+    m = re.search(r"limit reached\s*\|\s*(\d{9,13})", text, re.IGNORECASE)
+    if not m:
+        return None
+    value = int(m.group(1))
+    if value > 10_000_000_000:  # ミリ秒表記
+        value //= 1000
+    try:
+        return datetime.fromtimestamp(value, tz=timezone.utc)
+    except (OverflowError, OSError, ValueError):
+        return None
+
+
+def should_withhold_review(failure_kind, review_exists):
+    """reviewer が上限で死んだ回を「レビュー不合格」に読み替えないための判定 (純関数)。
+
+    verdict=fail を書くと heart は review_cycles を 1 消費して worker に偽の findings を
+    渡す。上限が続けば rules.review.max_cycles で review_rejected = ここでもループが
+    止まる。reviewer が verdict を書き切っていれば (review.json が在れば) それは有効な
+    結果なので、書かずに終えるのは「上限で死に、かつ verdict が無い」回だけ。
+    """
+    return failure_kind == "usage_limit" and not review_exists
+
+
+def mask_secrets(text, env=None):
+    """stderr に混ざった秘密を潰す純関数。env を引数で受けるのはテストのため。"""
+    if not text:
+        return ""
+    env = os.environ if env is None else env
+    for key in SECRET_ENV_KEYS:
+        value = (env.get(key) or "").strip()
+        if len(value) >= 8:
+            text = text.replace(value, "***")
+    for pat, repl in SECRET_PATTERNS:
+        text = re.sub(pat, repl, text)
+    return text
 
 
 def now_iso():
@@ -95,18 +218,32 @@ class Session:
             self.prompt,
         ]
         proc = subprocess.Popen(
-            cmd, cwd=self.cwd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            cmd, cwd=self.cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True,
         )
         q = queue.Queue()
+        # 死因の唯一の証拠。読み捨てずに末尾だけ保持する (放置すると 64KB のパイプ
+        # バッファが埋まって claude 側が書き込みでブロックする)。deque.append は
+        # スレッドセーフ
+        err_tail = collections.deque(maxlen=STDERR_KEEP_LINES)
+        result_errors = []
 
         def reader():
             for line in proc.stdout:
                 q.put(line)
             q.put(None)
 
+        def err_reader():
+            # **stderr の到着で last_event を更新しない。** 活動の定義は今まで通り
+            # stdout イベント。更新すると進捗の無い警告だけで無活動 kill が
+            # 永久に発火しなくなる
+            for line in proc.stderr:
+                err_tail.append(line)
+
         t = threading.Thread(target=reader, daemon=True)
         t.start()
+        et = threading.Thread(target=err_reader, daemon=True)
+        et.start()
 
         started = time.time()
         last_event = started
@@ -145,16 +282,41 @@ class Session:
                     usage["tokens"] += int(u.get("input_tokens") or 0) + int(
                         u.get("output_tokens") or 0
                     )
+                    # 上限メッセージが stderr でなく result イベント側に出る CLI 版が
+                    # ありうるので、エラーの回だけ本文も分類の入力に混ぜる。
+                    # 成功した回の `result` (= 最終アシスタント本文) は拾わない —
+                    # 本文が上限の話題に触れているだけで誤分類する
+                    if ev.get("is_error") or (ev.get("subtype") or "success") != "success":
+                        for key in ("subtype", "error", "result"):
+                            v = ev.get(key)
+                            if isinstance(v, str) and v:
+                                result_errors.append(v)
         proc.wait(timeout=60)
+        # 診断が本体を止めないよう、合流は短い timeout 付き。待ち切れなければ
+        # その時点の deque の中身を使う
+        et.join(timeout=5)
         # 認証エラー等で即死したセッションを completed 扱いにしない
         # (実体の無いセッションを予算いっぱい繰り返す — レビュー指摘 [14])
         if outcome == "completed" and proc.returncode != 0:
             outcome = "error"
+        info = {"failure_kind": None, "stderr_tail": "", "reset_at": None}
+        if outcome != "completed":
+            blob = "".join(err_tail) + "\n" + "\n".join(result_errors)
+            info["failure_kind"] = classify_session_failure(blob)
+            # マスクは 2000 文字に切る「前」に掛ける (切ってから掛けると
+            # 途中で切れた秘密が生き残る)
+            info["stderr_tail"] = mask_secrets(blob)[-STDERR_TAIL_CHARS:]
+            if info["failure_kind"] == "usage_limit":
+                reset = parse_usage_limit_reset(blob)
+                if reset:
+                    info["reset_at"] = reset.strftime("%Y-%m-%dT%H:%M:%SZ")
         # usage が取れない CLI バージョンでも予算が空回りしないよう、
-        # トークン不明のセッションは概算で数える (コスト非ゼロなら換算、ゼロなら定数)
-        if usage["tokens"] == 0:
+        # トークン不明のセッションは概算で数える (コスト非ゼロなら換算、ゼロなら定数)。
+        # ただし上限で即死した回は実消費ゼロなので概算を付けない — 付けると
+        # 待って再開する前に soft cap が尽きる (待機中に予算が溶ける)
+        if usage["tokens"] == 0 and info["failure_kind"] != "usage_limit":
             usage["tokens"] = int(usage["cost"] / 0.000008) if usage["cost"] else 50_000
-        return outcome, usage
+        return outcome, usage, info
 
 
 class Runner:
@@ -178,6 +340,7 @@ class Runner:
         with open(self.repo_dir / "ops" / "rules.json") as f:
             self.rules = json.load(f)
         self.gh = Gh(os.environ.get("AUTOPILOT_GITHUB_TOKEN", ""), self.repo)
+        self.last_session = {}
         self.trust_workspace()
         self.spec = self.load_spec()
         soft_cap = (self.spec.get("budget") or {}).get(
@@ -252,17 +415,77 @@ class Runner:
 
     def run_session(self, prompt, tag, cwd=None):
         self.budget.sessions += 1
-        outcome, usage = Session(
+        outcome, usage, info = Session(
             prompt, self.model, self.transcript_path(tag), self.rules,
             cwd or self.workdir(),
         ).run()
+        # 呼び出し側 5 箇所の署名を変えずに死因を渡す
+        self.last_session = info
         self.budget.used_tokens += usage["tokens"]
         self.budget.used_cost += usage["cost"]
+        kind = f" kind={info['failure_kind']}" if info.get("failure_kind") else ""
         log(
-            f"session {tag}: {outcome} tokens+={usage['tokens']} "
+            f"session {tag}: {outcome}{kind} tokens+={usage['tokens']} "
             f"total={self.budget.used_tokens}/{self.budget.soft_cap}"
         )
         return outcome
+
+    def failure_fields(self):
+        """異常終了系の write_result に載せる死因。"""
+        info = self.last_session or {}
+        return {
+            "failure_kind": info.get("failure_kind"),
+            "stderr_tail": info.get("stderr_tail", ""),
+        }
+
+    def hit_usage_limit(self):
+        return (self.last_session or {}).get("failure_kind") == "usage_limit"
+
+    def quota_wait_or_yield(self, waited, budget, **result_kw):
+        """usage_limit で死んだ回の待機。initializer とループの両方から呼ぶ。
+
+        戻り値は `(累積待機秒, rc)`。rc が None なら待機し終えたので同じセッションを
+        再試行してよい。rc が int なら `waiting_quota` を書き終えているので、その rc で
+        プロセスを終える (heart が resume_after まで待って runner を出し直す)。
+        沈黙は禁物 — heartbeat ログが唯一の外からの観測経路なので必ず log() する。
+        """
+        wait = self.quota_wait_seconds()
+        remaining = budget - waited
+        reset_at = (self.last_session or {}).get("reset_at")
+        if wait > remaining:
+            resume_after = (
+                datetime.now(timezone.utc) + timedelta(seconds=wait)
+            ).strftime("%Y-%m-%dT%H:%M:%SZ")
+            log(
+                f"usage_limit: 待機 {wait}s が残り予算 {remaining}s を超える。"
+                f"waiting_quota で終える (resume_after={resume_after})"
+            )
+            self.write_result(
+                "waiting_quota", resume_after=resume_after,
+                **result_kw, **self.failure_fields(),
+            )
+            return waited, 0
+        log(
+            f"usage_limit: {wait}s 待機して再開する "
+            f"(reset_at={reset_at}, 待機予算 {waited + wait}/{budget}s)"
+        )
+        time.sleep(wait)
+        return waited + wait, None
+
+    def quota_wait_seconds(self):
+        """上限が明けるまでの待機秒。reset 時刻が取れなければ既定値。"""
+        reset_at = (self.last_session or {}).get("reset_at")
+        if reset_at:
+            try:
+                dt = datetime.strptime(reset_at, "%Y-%m-%dT%H:%M:%SZ").replace(
+                    tzinfo=timezone.utc
+                )
+            except ValueError:
+                dt = None
+            if dt:
+                delta = (dt - datetime.now(timezone.utc)).total_seconds()
+                return int(max(MIN_QUOTA_WAIT_SECONDS, delta + QUOTA_WAIT_MARGIN_SECONDS))
+        return DEFAULT_QUOTA_WAIT_SECONDS
 
     def write_result(self, state, **kw):
         doc = {"state": state, "at": now_iso(), "budget": self.budget.snapshot()}
@@ -344,6 +567,11 @@ class Runner:
         progress = self.progress_md
         first_time = not self.project_md.exists()
         verify = self.run_verify()
+        # この runner プロセスが上限待ちに使ってよい総量。Job の生存時間
+        # (activeDeadlineSeconds) より session_max_seconds の方が先に効くので、
+        # これを待機予算の上限として読む。initializer も同じ財布から待つ
+        quota_wait_budget = self.rules["runner"]["session_max_seconds"]
+        quota_waited = 0
         if first_time:
             if any(v["ok"] for v in verify):
                 # 始める前から通っている受入基準は「基準になっていない」。
@@ -354,11 +582,36 @@ class Runner:
                     verify=verify,
                 )
                 return 1
-            outcome = self.run_session(
-                self.prompt_text("initializer"), "s0-init"
-            )
-            if outcome != "completed":
-                self.write_result("error", error=f"initializer: {outcome}")
+            while True:
+                if self.budget.exhausted():
+                    # max_sessions_per_project は無限ループの最後の歯止め
+                    # (待機予算とは別軸)。上限リトライでもここは外さない
+                    self.write_result("budget_exhausted", verify=verify)
+                    return 0
+                outcome = self.run_session(
+                    self.prompt_text("initializer"), "s0-init"
+                )
+                if outcome == "completed":
+                    break
+                if self.hit_usage_limit():
+                    # **新規プロジェクトの最初のセッションこそ最も上限に当たりやすい。**
+                    # ここを stalled + incident のままにすると、本プロジェクトが消しに
+                    # 来た症状 (上限を実装詰まりと読み違える) が initializer にだけ
+                    # residual として残る (P-0023 / P-0025 の死に方)
+                    quota_waited, rc = self.quota_wait_or_yield(
+                        quota_waited, quota_wait_budget, verify=verify
+                    )
+                    if rc is not None:
+                        return rc
+                    continue
+                self.write_result(
+                    "error",
+                    error=(
+                        f"initializer: {outcome} "
+                        f"(failure_kind={self.failure_fields()['failure_kind']})"
+                    ),
+                    **self.failure_fields(),
+                )
                 return 1
             self.push_if_committed()
 
@@ -397,16 +650,29 @@ class Runner:
             )
             self.push_if_committed()
             findings_pending = False
-            if outcome == "inactive_killed":
+            if self.hit_usage_limit():
+                # 上限は器の外側の事実であって停滞ではない。連続エラーに数えず、
+                # 明けるまで待って同じセッションを再開する
+                quota_waited, rc = self.quota_wait_or_yield(
+                    quota_waited, quota_wait_budget, verify=verify
+                )
+                if rc is not None:
+                    return rc
+            elif outcome == "inactive_killed":
                 consecutive_inactive += 1
                 if consecutive_inactive >= 2:
-                    self.write_result("stalled_inactive")
+                    self.write_result("stalled_inactive", **self.failure_fields())
                     return 1
             elif outcome == "error":
                 consecutive_error += 1
                 if consecutive_error >= 3:
                     self.write_result(
-                        "error", error="claude セッションが 3 回連続で異常終了"
+                        "error",
+                        error=(
+                            "claude セッションが 3 回連続で異常終了 "
+                            f"(failure_kind={self.failure_fields()['failure_kind']})"
+                        ),
+                        **self.failure_fields(),
                     )
                     return 1
             else:
@@ -433,6 +699,18 @@ class Runner:
             self.prompt_text("reviewer", extra, from_main=True), "review"
         )
         review_path = self.project_dir / "review.json"
+        if should_withhold_review(
+            self.failure_fields()["failure_kind"], review_path.exists()
+        ):
+            # 上限で死んだ回を「レビュー不合格」に読み替えない。ここで verdict=fail を
+            # 書くと review_cycles が 1 減り、worker には偽の findings が渡る。
+            # 何も書かずに非ゼロで終え、heart 側の既存の見張り
+            # (REVIEW_TIMEOUT_HOURS × REVIEW_MAX_RETRIES) の再試行に任せる
+            log(
+                "usage_limit: reviewer セッションが上限で死んだ。review.json を書かず "
+                "非ゼロで終える (heart の reviewer 再試行に任せる)"
+            )
+            return 1
         verdict = {"verdict": "fail", "findings": ["reviewer セッションが verdict を書かなかった"]}
         if review_path.exists():
             try:
@@ -460,7 +738,15 @@ class Runner:
             self.prompt_text("curriculum-generate", extra), "cur-gen"
         )
         if outcome != "completed" or not gen_out.exists():
-            self.write_result("error", error=f"curriculum generate: {outcome}")
+            # incident 通知の本文に出るのは error フィールドだけなので、死因を本文に含める
+            self.write_result(
+                "error",
+                error=(
+                    f"curriculum generate: {outcome} "
+                    f"(failure_kind={self.failure_fields()['failure_kind']})"
+                ),
+                **self.failure_fields(),
+            )
             return 1
         judge_model = None
         with open(self.repo_dir / "ops" / "models.json") as f:
@@ -471,7 +757,14 @@ class Runner:
             self.prompt_text("curriculum-judge", extra), "cur-judge"
         )
         if outcome != "completed" or not judge_out.exists():
-            self.write_result("error", error=f"curriculum judge: {outcome}")
+            self.write_result(
+                "error",
+                error=(
+                    f"curriculum judge: {outcome} "
+                    f"(failure_kind={self.failure_fields()['failure_kind']})"
+                ),
+                **self.failure_fields(),
+            )
             return 1
         try:
             proposals = json.loads(gen_out.read_text())
@@ -519,10 +812,11 @@ class Runner:
     # --- 単発モード (Phase 3 で spawn 配線) ---
     def mode_oneshot(self, prompt_name):
         outcome = self.run_session(self.prompt_text(prompt_name), prompt_name)
-        self.write_result(
-            "done" if outcome == "completed" else "error", outcome=outcome
-        )
-        return 0 if outcome == "completed" else 1
+        if outcome == "completed":
+            self.write_result("done", outcome=outcome)
+            return 0
+        self.write_result("error", outcome=outcome, **self.failure_fields())
+        return 1
 
     def run(self):
         log(

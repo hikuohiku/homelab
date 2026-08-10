@@ -33,6 +33,11 @@ REVIEW_TIMEOUT_HOURS = 2
 REVIEW_MAX_RETRIES = 2
 MERGING_TIMEOUT_HOURS = 24
 ADOPT_GATE_MAX_ATTEMPTS = 3  # 測定が書き戻されないまま回り続ける proposed を打ち切る
+# 上限待ち (P-0026) も例外にしない。runner の 7200s は 1 プロセス内の上限にすぎず、
+# waiting_quota → respawn → また waiting_quota の周回そのものには時限が無い。
+# max_concurrent=1 では上限待ちの 1 件が他の全プロジェクトのスロットを塞ぐので、
+# 連続で数えて打ち切る (FAILURE_PATTERNS の誤検知でここに落ちる可能性もある)
+QUOTA_WAIT_MAX_ROUNDS = 6
 
 
 def _action(kind, project_id=None, **kw):
@@ -47,11 +52,9 @@ def _veto_deadline(project, facts, rules, now):
     """予告からの拒否権窓の期限。空きスロットがあり非不可逆なら即着手 (窓 0)。
     不可逆ラベル付きは常に窓を待つ (決定 #3)。
 
-    「アイドル (走行 0)」でなく「空きスロット」基準にする理由 (2026-08-10):
-    完全アイドル基準だと、merging で詰まった 1 件が cap に空きがあっても
-    全案件を 24h 窓に落とし、パイプライン全体が渋滞する実害が出た
-    (P-0026 の GitGuardian 詰まりの裏で P-0028/P-0029 が一晩眠った)。
-    窓の基準は稼働率 (「何もしてない時間が嫌」) なので、空きスロットは埋める。"""
+    「アイドル (走行 0)」でなく「空きスロット」基準 (2026-08-10): 完全アイドル基準だと
+    merging 詰まり 1 件が全案件を 24h 窓に落とす渋滞が実際に起きた (main の同修正を
+    P-0026 merge 時に消失させないこと)。"""
     if not project.get("irreversible") and facts.get("running_runners", 0) < rules[
         "runner"
     ]["max_concurrent"]:
@@ -209,10 +212,8 @@ def decide(doc, facts, rules, now):
         elif state == "announced":
             if parse_iso(p["veto_deadline"]) > now:
                 # 窓の繰り上げ: 予告時に満席だったために窓が付いた可逆案は、
-                # スロットが空いた時点で即着手してよい (窓の基準は安全性でなく稼働率 —
-                # 決定 #3「何もしてない時間が嫌」)。不可逆案は繰り上げない。
-                # 「完全アイドル」基準は 2026-08-10 に「空きスロット」基準へ変更
-                # (merging 詰まり 1 件が全案件を渋滞させた実害。_veto_deadline と同旨)
+                # スロットが空いた時点で即着手してよい (稼働率基準、2026-08-10 に
+                # 空きスロット基準へ変更)。不可逆案は繰り上げない
                 if (
                     p.get("irreversible")
                     or running >= rules["runner"]["max_concurrent"]
@@ -228,8 +229,31 @@ def decide(doc, facts, rules, now):
             actions.append(_action("spawn_runner", pid))
 
         elif state == "active":
+            # --- 上限待ち (P-0026) は停滞ではないので stalled にしない ---
+            # runner が waiting_quota で rc=0 終了した後の待ち。Job は succeeded で
+            # 残る (active でも failed でもない) ため、下の job 梯子に入れると
+            # 「消えた Job」扱いで即 respawn したり drift を数えたりしてしまう。
+            # 時刻が来るまでここで止める
+            wait_until = p.get("quota_wait_until")
+            if wait_until:
+                if parse_iso(wait_until) > now:
+                    continue
+                if breaker:
+                    # breaker 中は新しい仕事を作らない。待ち札は持ったまま、
+                    # 復帰したビートで再開する
+                    continue
+                # max_concurrent は見ない: このプロジェクトは active のまま
+                # スロットを占めており、再開しても同時実行数は増えない
+                p.pop("quota_wait_until", None)
+                actions.append(_action("spawn_runner", pid, respawn=True))
+                continue
+
             result = results.get(pid)
             job = jobs.get(p.get("job", ""), None) if jobs is not None else None
+            if result and result.get("state") != "waiting_quota":
+                # 上限以外の結果が返ってきた = 上限は明けてセッションが動いた。
+                # 連続待ちの数え直し (数えるのは「連続」でなければ意味がない)
+                p.pop("quota_wait_count", None)
             if result and result.get("state") == "ready_for_review":
                 if result.get("pr") is not None:
                     prs_list = p.setdefault("prs", [])
@@ -258,6 +282,30 @@ def decide(doc, facts, rules, now):
                     f"{pid} が予算 (soft cap) を使い切りました。"
                     "継続する価値があれば予算を積んで再開を指示してください",
                 )
+            elif result and result.get("state") == "waiting_quota":
+                # アカウントの利用上限は器の外側の事実であって、プロジェクトの停滞
+                # ではない。通知も出さない (障害ではない)。projects.json の state は
+                # active のまま、resume_after まで待って runner を出し直す。
+                # **ただし無限には待たない** — 冒頭の不変条件「恒久的に黙って待つ状態を
+                # 作らない」はこの待ちにも掛かる
+                actions.append(_action("consume_result", pid))
+                p["quota_wait_count"] = p.get("quota_wait_count", 0) + 1
+                if p["quota_wait_count"] > QUOTA_WAIT_MAX_ROUNDS:
+                    # 上限が明けないまま周回し続けている。器の側では直せない
+                    # (待つ以外に手が無い) ので、budget_exhausted と同じ流儀で
+                    # 人間に判断を渡す。スロットもここで解放される。
+                    # 札と回数は落とす — 残すと人間が active に戻した次の
+                    # waiting_quota で即また stalled になる (再開できない停止)
+                    rounds = p.pop("quota_wait_count")
+                    p.pop("quota_wait_until", None)
+                    _stall(
+                        p, actions, "quota_wait_exhausted", "question",
+                        f"{pid} がアカウントの利用上限で {rounds} 回続けて"
+                        "待機に入りました。上限が明けていないか、死因の判定が"
+                        "誤っています。再開の判断をください",
+                    )
+                    continue
+                p["quota_wait_until"] = result.get("resume_after") or now_iso(now)
             elif result and result.get("state") in (
                 "spec_error", "error", "stalled_inactive"
             ):
