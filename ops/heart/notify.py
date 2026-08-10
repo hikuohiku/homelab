@@ -6,6 +6,9 @@
   question — 人間にしか決められないことを聞く
   incident — 障害・停滞
 review 型 (レビュー停滞) は incident と同じ扱いで送る。
+critic 型 (日次の自己観測の所見) も即時。器が自分で見つけた詰まりは、人間が
+気づく前に届いてこそ意味がある (P-0045)。予算 (daily_budget) の枠は共通なので、
+所見が溢れて他の通知を押し出すことはない。
 
 Discord が死んでいても仕事は止めない: outbox.jsonl に積み、次のビートで
 再送する。連続失敗時は issue #56 にフォールバックする (人間への到達経路を
@@ -19,7 +22,7 @@ import urllib.request
 
 from .statefiles import now_iso
 
-IMMEDIATE_TYPES = ("announce", "deliver", "question", "incident", "review")
+IMMEDIATE_TYPES = ("announce", "deliver", "question", "incident", "review", "critic")
 
 
 def veto_footer(project_id, deadline):
