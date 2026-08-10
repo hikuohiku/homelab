@@ -1,0 +1,175 @@
+# syncthing-data PVC (/var/syncthing = syncthing の identity + 設定 + 同期フォルダ) を
+# restic で Backblaze B2 へバックアップする (P-0047)。
+#
+# なぜ syncthing に backup が要るか: syncthing は **削除が同期で伝播しうる唯一のアプリ**で、
+# 事故が最も「戻せない」形で出る。加えて config/cert.pem・key.pem は syncthing のデバイス ID
+# そのもので、失うと再発行しかなく、既存ピアからは「別デバイス」に見える（再ペアリングが要る）。
+# これらは T-0140 の実データ移行を待たずに、いま既に戻せないデータである。
+#
+# 除外するもの（2026-08-10 に稼働中 Pod の中身を実測して決定。PVC 内の実ファイルは 10 個）:
+#   - config/index-v2/  — syncthing 2.x の内部インデックス DB (SQLite: main.db / main.db-shm /
+#     main.db-wal と .tmp/)。稼働中の Pod が書き続けているため、無停止コピーでは WAL と
+#     本体が torn になりうる。一方これは **同期フォルダを再スキャンすれば作り直せる派生キャッシュ**
+#     であり、復元時は空のまま起動すれば syncthing が再構築する。整合しないコピーを持つより
+#     持たない方が安全なので除外する。
+#     （vaultwarden 方式の「online backup API を叩く initContainer」は採らない。syncthing に
+#      とっての本体は同期ファイルと identity であって index DB ではない）
+#   - config/syncthing.lock — 稼働中プロセスのロックファイル（0 バイト）。復元先に持ち込むと
+#     紛らわしいだけで意味を持たない。
+# 除外しないもの: config.xml / config.xml.v0 / cert.pem / key.pem / https-cert.pem /
+#   https-key.pem と、同期フォルダ配下の実ファイル全部。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: syncthing-restic-backup
+  namespace: syncthing
+spec:
+  # JST で評価される (node01 の time.timeZone。spec.timeZone は既存 CronJob も誰も書いていない)。
+  # 既存の backup 帯 (2:45 immich / 3:10 coder / 3:30 workspace-home / 3:40 vaultwarden) と
+  # 重ならない 3:55 に置く
+  schedule: "55 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          containers:
+            - name: restic-backup
+              image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  restic snapshots >/dev/null 2>&1 || restic init
+                  restic backup \
+                    --exclude=/mnt/syncthing-data/config/index-v2 \
+                    --exclude=/mnt/syncthing-data/config/syncthing.lock \
+                    /mnt/syncthing-data
+              # credential は backup 専用の append-only 鍵（deleteFiles を持たない B2 application
+              # key）。削除権限つきの syncthing-restic-credentials は下の retention CronJob だけが
+              # 使う。型は T-0106 で分離し P-0028 で確立した。詳細は docs/backup.md
+              env:
+                - name: RESTIC_B2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: syncthing-restic-backup-credentials
+                      key: RESTIC_B2_BUCKET
+                # bucket 名の後ろの "syncthing" がリポジトリパスの区切り。
+                # 既存は vaultwarden / immich / coder-postgres / coder-workspace-homes
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):syncthing"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: syncthing-restic-backup-credentials
+                      key: RESTIC_PASSWORD
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: syncthing-restic-backup-credentials
+                      key: B2_ACCOUNT_ID
+                - name: B2_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: syncthing-restic-backup-credentials
+                      key: B2_ACCOUNT_KEY
+              # syncthing-data PVC は公式イメージの entrypoint により PUID/PGID=1000 で書かれ、
+              # config/ は 0700。このジョブは所有権に関わらず正しく読む必要があるため
+              # immich/vaultwarden と同じ最小権限パターンを使う: 読み取り時の権限チェック回避のみ
+              # 許可しフルの root 権限は持たせない。書き込みは readOnly: true でも構造的に禁止している
+              securityContext:
+                runAsUser: 0
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                  add: ["DAC_READ_SEARCH"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                # memory limits は入れない（実測が無い。既存 3 アプリの backup CronJob と同型）
+                limits:
+                  cpu: 500m
+              volumeMounts:
+                - name: syncthing-data
+                  mountPath: /mnt/syncthing-data
+                  readOnly: true
+          volumes:
+            - name: syncthing-data
+              persistentVolumeClaim:
+                claimName: syncthing-data
+                readOnly: true
+---
+# 週次で古い世代を刈る (restic forget --prune)。PVC には触れないため readOnly マウント不要。
+# 既存の retention 帯 (日曜 3:45 immich / 4:00 vaultwarden / 4:10 coder / 4:30 workspace-home)
+# と重ならない 4:50 に置く
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: syncthing-restic-retention
+  namespace: syncthing
+spec:
+  schedule: "50 4 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          containers:
+            - name: restic-forget
+              image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  restic snapshots >/dev/null 2>&1 || { echo "repository not initialized yet, skipping"; exit 0; }
+                  restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+              env:
+                - name: RESTIC_B2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: syncthing-restic-credentials
+                      key: RESTIC_B2_BUCKET
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):syncthing"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: syncthing-restic-credentials
+                      key: RESTIC_PASSWORD
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: syncthing-restic-credentials
+                      key: B2_ACCOUNT_ID
+                - name: B2_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: syncthing-restic-credentials
+                      key: B2_ACCOUNT_KEY
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m

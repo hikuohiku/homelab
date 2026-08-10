@@ -433,6 +433,18 @@
       "observability_impact": "coder workspace home (coder-<workspace-id>-home PVC) の restic バックアップ・retention CronJob が使用。壊れるとバックアップが取れなくなるが coder workspace 本体の可用性には影響しない"
     },
     {
+      "id": "syncthing-restic-image",
+      "kind": "image",
+      "name": "restic/restic (backup CronJob)",
+      "current": "0.19.1",
+      "file": "apps/syncthing/restic-backup-cronjob.yaml",
+      "match": "restic/restic:",
+      "upstream": "github:restic/restic",
+      "policy": "auto",
+      "note": "P-0047 で新設（syncthing-data は棚卸し T-0065 の後に増えたため backup が無いまま丸腰だった）。他4ファイルと同じタグ (0.19.1) を使う設計。同一ファイル内に syncthing-restic-backup と syncthing-restic-retention の2箇所。check_version_sync.py の GROUPS に5ファイル目として登録済み（vaultwarden-restic-image の note 参照）。タグを上げるときは5ファイル全部を揃えること",
+      "observability_impact": "syncthing の restic バックアップ・retention CronJob が使用。壊れるとバックアップが取れなくなるが syncthing 本体の可用性には影響しない。ただし syncthing は削除が同期で伝播しうるため、バックアップが止まったまま気づかないと事故が最も戻せない形で出る"
+    },
+    {
       "id": "syncthing",
       "kind": "image",
       "name": "syncthing/syncthing",

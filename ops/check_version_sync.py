@@ -303,7 +303,7 @@ GROUPS = [
         ],
     },
     {
-        "name": "restic/restic backup CronJob image tag (T-0098, inventory: vaultwarden-restic-image/coder-postgres-restic-image/immich-restic-image)",
+        "name": "restic/restic backup CronJob image tag (T-0098, inventory: vaultwarden-restic-image/coder-postgres-restic-image/immich-restic-image/coder-workspace-home-restic-image/syncthing-restic-image)",
         "targets": [
             ("apps/vaultwarden/restic-backup-cronjob.yaml", lambda: extract_image_tag_all(
                 "apps/vaultwarden/restic-backup-cronjob.yaml", "image: restic/restic:"
@@ -316,6 +316,9 @@ GROUPS = [
             )),
             ("apps/coder/workspace-home-backup-cronjob.yaml", lambda: extract_image_tag_all(
                 "apps/coder/workspace-home-backup-cronjob.yaml", "image: restic/restic:"
+            )),
+            ("apps/syncthing/restic-backup-cronjob.yaml", lambda: extract_image_tag_all(
+                "apps/syncthing/restic-backup-cronjob.yaml", "image: restic/restic:"
             )),
         ],
     },
