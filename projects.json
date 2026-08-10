@@ -850,6 +850,27 @@
       "spawn_count": 1,
       "job": "runner-p-0044-a1",
       "drift_count": 0
+    },
+    {
+      "id": "P-0045",
+      "title": "器が自分の詰まりと利用者の不満を、人間より先に見つける — critic の常設配線",
+      "state": "proposed",
+      "branch": "project/p-0045",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "grep -q '_critic_due' ops/heart/reconcile.py",
+        "grep -q '/data/critic' ops/prompts/curriculum-generate.md",
+        "grep -rq 'critic_due\\|spawn_critic' ops/heart/tests/"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2500000
+      },
+      "created": "2026-08-10",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
