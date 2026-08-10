@@ -75,6 +75,24 @@ PROJECT_ORDER = {
     "soaking": 5, "proposed": 6, "delivered": 7, "vetoed": 8,
 }
 
+# 終端＝もう誰も何もしないもの。ここに挙げていない状態は（statefiles.py に新しく
+# 増えたものも含めて）現役層に出す。知らない状態が黙って折り畳みへ消えるより、
+# 見えるところで浮いているほうが直せる。
+TERMINAL_STATES = ("delivered", "stalled", "vetoed")
+
+# stalled のうち「止めているのは人間」のもの。これを済んだ失敗と一緒に畳むと、
+# こちらが答えるまでループが再開しないという事実が画面から消える。語彙の単一の
+# 情報源は ops/heart/reconcile.py の _stall() 第 4 引数で、そこで question 通知を
+# 出しているものがこれ。adopt_gate_ は接頭辞で一括する（adopt_gate_unmeasurable は
+# 実体が incident だが、人間の手が要る点は同じで、扱いを分ける実益がない）。
+QUESTION_STALL_REASONS = frozenset({
+    "budget_exhausted", "quota_wait_exhausted", "merge_timeout", "pr_closed",
+})
+QUESTION_STALL_PREFIX = "adopt_gate_"
+
+# 納品層で畳まずに見せる件数。それ以前は <details> に落とす。
+DELIVERED_HEAD = 5
+
 
 def load(name: str, default=None):
     p = OPS / name
@@ -467,71 +485,165 @@ def _tokens(n) -> str:
     return f"{n:.0f}"
 
 
+def is_question_stall(p: dict) -> bool:
+    """止まっているが、次に動かすのは人間か（＝終端ではなく現役層に残すか）。"""
+    if str(p.get("state", "")) != "stalled":
+        return False
+    reason = str(p.get("stalled_reason") or "")
+    return reason in QUESTION_STALL_REASONS or reason.startswith(QUESTION_STALL_PREFIX)
+
+
+def split_projects(projects: list[dict]) -> tuple[list[dict], list[dict], list[dict]]:
+    """台帳を（現役, 納品, 終端）の 3 層に仕分ける。
+
+    層の定義を持つのはこの関数だけで、見出しの数字も描画もここが返した実体から出す
+    （以前は「進行中」の件数を数える式が描画と別に書かれていて、食い違う余地があった）。
+    """
+    live: list[dict] = []
+    delivered: list[dict] = []
+    closed: list[dict] = []
+    for p in projects:
+        state = str(p.get("state", ""))
+        if state == "delivered":
+            delivered.append(p)
+        elif state not in TERMINAL_STATES or is_question_stall(p):
+            live.append(p)
+        else:
+            closed.append(p)
+
+    def by_state(p: dict):
+        return (PROJECT_ORDER.get(p.get("state"), 9), str(p.get("id", "")))
+
+    live.sort(key=by_state)
+    closed.sort(key=by_state)
+    # 納品層の「直近」は merging_since で決める。id 順とは一致しない（P-0028 は
+    # P-0029 より後に入った）。created は日付だけで粒度が足りず、delivered_at は
+    # 台帳に無い。欠けているものは "" になって末尾へ落ちる。
+    delivered.sort(key=lambda p: str(p.get("merging_since") or ""), reverse=True)
+    return live, delivered, closed
+
+
+def _project_row(p: dict, specs: dict[str, dict]) -> str:
+    """現役層の行。誰待ちか・何のためか・予算まで出す厚い行。"""
+    pid = str(p.get("id", "—"))
+    state = str(p.get("state", ""))
+    label, tone = PROJECT_STATE_META.get(state, (state or "—", "idle"))
+    spec = specs.get(pid, {})
+
+    meta = [f'<span class="pj__id">{E(pid)}</span>']
+    # 上限待ち（P-0026）は state が active のままなので、そのままだと「実行中」に
+    # 見える。動いていない待ちを動いているように描かない。状態語彙は増やさず、
+    # active の中の待ちとして chip のラベルと tone だけ差し替える
+    quota_until = p.get("quota_wait_until")
+    if state == "active" and quota_until:
+        label, tone = "上限待ち", "warn"
+        meta.append(f'<span>再開 {E(until_time(quota_until))}</span>')
+    # 人間の回答待ちで止まったものは現役層に残るので、何を待っているかを語で出す
+    # （chip は「停止」としか言わない）。
+    if is_question_stall(p):
+        meta.append(f'<span>{E(str(p.get("stalled_reason") or ""))}</span>')
+    cell = spec.get("cell") or []
+    if cell:
+        meta.append(f'<span>{E("・".join(str(c) for c in cell))}</span>')
+    # 拒否権の期限は窓が閉じたあとも「もう止められない」を示すので終端以外は出す。
+    # 終端（納品済み/停止/拒否）では過ぎた期限は雑音にしかならない。
+    deadline = p.get("veto_deadline")
+    if deadline and state not in TERMINAL_STATES:
+        meta.append(f'<span>拒否権の期限 {E(until_time(deadline))}</span>')
+    for n in (p.get("prs") or []):
+        meta.append(f'<a href="https://github.com/{REPO}/pull/{E(str(n))}">'
+                    f'PR #{E(str(n))}</a>')
+
+    # why は 1 行の要旨として出す。層で密度を変えた（現役=厚い / 納品・終端=1 行）以上、
+    # 現役層でも 1 案が画面を何行も占めると層の差が消える。130 字は主列で 2〜3 行に
+    # 折り返していたので、1 行強に収まる 72 字に詰めた。全文は spec と PROJECT.md にある。
+    why = spec.get("why") or ""
+    why_html = f'<p class="pj__why">{E(clip(why, 72))}</p>' if why else ""
+
+    budget = p.get("budget") or {}
+    used, cap = budget.get("used_tokens", 0) or 0, budget.get("soft_cap", 0) or 0
+    bar = meter("予算", used, cap, f"{_tokens(used)} / {_tokens(cap)} tok")
+
+    return f"""
+          <li class="pj">
+            <div class="pj__head">{chip(label, tone)}
+              <h3 class="pj__title">{E(clip(p.get("title"), 78))}</h3></div>
+            <p class="pj__meta">{"".join(meta)}</p>
+            {why_html}{bar}
+          </li>"""
+
+
+def _project_slim(p: dict, note: str = "") -> str:
+    """納品層・終端層の行。chip + id + 題（+ 停止理由）だけの 1 行に落とす。
+
+    畳んだものを開いた先が現役層と同じ密度だと、開いた瞬間にまた雑音に戻る。
+    """
+    pid = str(p.get("id", "—"))
+    state = str(p.get("state", ""))
+    label, tone = PROJECT_STATE_META.get(state, (state or "—", "idle"))
+    note_html = f'<span class="pj__note">{E(note)}</span>' if note else ""
+    return (f'<li class="pj pj--slim">{chip(label, tone)}'
+            f'<span class="pj__id">{E(pid)}</span>'
+            f'<h3 class="pj__title">{E(clip(p.get("title"), 64))}</h3>'
+            f'{note_html}</li>')
+
+
+def _slim_list(items: list[dict], note_key: str = "") -> str:
+    rows = "".join(_project_slim(p, str(p.get(note_key) or "") if note_key else "")
+                   for p in items)
+    return f'<ul class="pj-list pj-list--slim">{rows}</ul>'
+
+
 def render_projects(doc: dict | None, specs: dict[str, dict]) -> str:
     """heart のプロジェクト台帳を主列の節として描く。
 
     doc が None（ops-state を持たない環境）なら空文字を返し、節そのものを出さない。
     projects.json に載っていない案（archive.jsonl の棄却案）は出さない。ここは
     「いま動いているもの」の画面であって、立案の全記録ではない。
+
+    3 層に分ける（P-0044。人間の実指摘「プロジェクトにゴミがいっぱい溜まってて
+    見づらい」）。終端は増える一方なので、行を減らすのではなく層を分ける:
+    現役は全件を厚い行で、納品済みは直近だけ、もう誰も動かさないものは畳む。
     """
     if doc is None:
         return ""
 
     projects = doc.get("projects") or []
-    live = sorted(projects, key=lambda p: (PROJECT_ORDER.get(p.get("state"), 9),
-                                           str(p.get("id", ""))))
+    live, delivered, closed = split_projects(projects)
+    total = len(live) + len(delivered) + len(closed)
 
-    if not live:
+    if not total:
         body = ('<p class="empty">動いているプロジェクトはありません。'
                 '次の curriculum が立案します。</p>')
     else:
-        rows = []
-        for p in live:
-            pid = str(p.get("id", "—"))
-            state = str(p.get("state", ""))
-            label, tone = PROJECT_STATE_META.get(state, (state or "—", "idle"))
-            spec = specs.get(pid, {})
+        parts = [f'<p class="sub">進行中 {len(live)} 件</p>']
+        if live:
+            parts.append('<ul class="pj-list">'
+                         + "".join(_project_row(p, specs) for p in live) + "</ul>")
+        else:
+            parts.append('<p class="empty">いま進行中のプロジェクトはありません。'
+                         '次の curriculum が立案します。</p>')
 
-            meta = [f'<span class="pj__id">{E(pid)}</span>']
-            # 上限待ち（P-0026）は state が active のままなので、そのままだと「実行中」に
-            # 見える。動いていない待ちを動いているように描かない。状態語彙は増やさず、
-            # active の中の待ちとして chip のラベルと tone だけ差し替える
-            quota_until = p.get("quota_wait_until")
-            if state == "active" and quota_until:
-                label, tone = "上限待ち", "warn"
-                meta.append(f'<span>再開 {E(until_time(quota_until))}</span>')
-            cell = spec.get("cell") or []
-            if cell:
-                meta.append(f'<span>{E("・".join(str(c) for c in cell))}</span>')
-            # 拒否権の期限は窓が閉じたあとも「もう止められない」を示すので終端以外は出す。
-            # 終端（納品済み/停止/拒否）では過ぎた期限は雑音にしかならない。
-            deadline = p.get("veto_deadline")
-            if deadline and state not in ("delivered", "stalled", "vetoed"):
-                meta.append(f'<span>拒否権の期限 {E(until_time(deadline))}</span>')
-            for n in (p.get("prs") or []):
-                meta.append(f'<a href="https://github.com/{REPO}/pull/{E(str(n))}">'
-                            f'PR #{E(str(n))}</a>')
+        if delivered:
+            parts.append(f'<p class="sub">納品済み {len(delivered)} 件</p>')
+            parts.append(_slim_list(delivered[:DELIVERED_HEAD]))
+            rest = delivered[DELIVERED_HEAD:]
+            if rest:
+                parts.append(f'<details class="fold"><summary>それ以前の {len(rest)} 件'
+                             f'</summary>{_slim_list(rest)}</details>')
 
-            why = spec.get("why") or ""
-            why_html = f'<p class="pj__why">{E(clip(why, 130))}</p>' if why else ""
+        if closed:
+            # 既定で閉じる。ここに入るのは仕切り直しなどで置き換え済みの終端で、
+            # 誰も次の手を打たない。件数だけ見出しに出し、中身は開いた人にだけ見せる。
+            parts.append('<details class="fold" id="heart-projects-closed">'
+                         f'<summary>終わった案 {len(closed)} 件'
+                         '（停止・拒否。もう誰も動かしません）</summary>'
+                         f'{_slim_list(closed, note_key="stalled_reason")}</details>')
+        body = "".join(parts)
 
-            budget = p.get("budget") or {}
-            used, cap = budget.get("used_tokens", 0) or 0, budget.get("soft_cap", 0) or 0
-            bar = meter("予算", used, cap, f"{_tokens(used)} / {_tokens(cap)} tok")
-
-            rows.append(f"""
-          <li class="pj">
-            <div class="pj__head">{chip(label, tone)}
-              <h3 class="pj__title">{E(clip(p.get("title"), 78))}</h3></div>
-            <p class="pj__meta">{"".join(meta)}</p>
-            {why_html}{bar}
-          </li>""")
-        body = f'<ul class="pj-list">{"".join(rows)}</ul>'
-
-    n_open = sum(1 for p in live if p.get("state") not in ("delivered", "stalled", "vetoed"))
     return f"""<section class="sec" id="heart-projects">
       <div class="sec__h"><h2>プロジェクト</h2>
-        <span class="sec__n">{len(live)} 件・進行中 {n_open}</span></div>
+        <span class="sec__n">{total} 件・進行中 {len(live)}</span></div>
       {body}
     </section>"""
 
@@ -996,8 +1108,17 @@ code {{ font-family:var(--mono); font-size:.78em; background:var(--idle-soft);
   text-wrap:balance; flex:1; min-width:12rem; }}
 .pj__meta {{ font-family:var(--mono); font-size:.71rem; color:var(--ink3);
   display:flex; flex-wrap:wrap; gap:.15rem .75rem; }}
-.pj__id {{ color:var(--ink2); }}
+.pj__id {{ font-family:var(--mono); font-size:.71rem; color:var(--ink2); }}
 .pj__why {{ font-size:.8rem; color:var(--ink2); }}
+/* 納品層・終端層は 1 行に落とす（P-0044）。畳んだ先が現役層と同じ密度だと、
+   開いた瞬間にまた雑音に戻る。罫線の流儀は .pj のまま（border-top、面で囲わない）。 */
+.pj--slim {{ flex-direction:row; flex-wrap:wrap; align-items:baseline;
+  gap:.2rem .55rem; padding:.34rem 0; }}
+.pj--slim .pj__title {{ font-size:.82rem; font-weight:500; }}
+.pj__note {{ font-family:var(--mono); font-size:.71rem; color:var(--ink3); }}
+/* 太い罫線は画面のいちばん上の 1 本だけ。リストが 3 本に増えても層の頭ごとに
+   太線を引かない（層の見出しは .sub が持つ）。 */
+.pj-list--slim .pj:first-child {{ border-top:1px solid var(--rule2); }}
 @media (max-width:560px) {{
   .pj__head {{ flex-direction:column; align-items:flex-start; gap:.22rem; }}
   .pj__title {{ min-width:0; }}
