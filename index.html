@@ -267,13 +267,13 @@ footer { color:var(--ink3); font-size:.73rem; font-family:var(--mono);
   <header class="mast">
     <span class="mast__h">autopilot — homelab 当直記録</span>
     <span class="mast__stage">段階 2・器を安定させる</span>
-    <span class="mast__meta"><span>心拍 2 分ごと</span><span>生成 2026-08-10 03:58 UTC</span></span>
+    <span class="mast__meta"><span>心拍 2 分ごと</span><span>生成 2026-08-10 04:00 UTC</span></span>
   </header>
 
   <p class="banner banner--ok" id="sent" hidden>書き置きを預かりました。次の鼓動で読まれます。<span id="sentid"></span></p>
 
   
-  <div class="pulsebox"><div class="pulse"><div class="pulse__cell"><p class="pulse__k">heart の鼓動</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>鼓動しています</p><p class="pulse__s">拍 #14・最終 4 分前</p></div><div class="pulse__cell"><p class="pulse__k">homelab のアプリ</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>13 / 13 正常</p><p class="pulse__s">28 分前の観測</p></div><div class="pulse__cell"><p class="pulse__k">出している変更</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>3 件が審査中</p><p class="pulse__s">CI が通れば自分でマージします</p></div><div class="pulse__cell"><p class="pulse__k">heart の Pod</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>常駐しています</p><p class="pulse__s">readyReplicas 1 / 1</p></div></div><ul class="prs"><li class="pr pr--ok"><span class="dot dot--ok" aria-hidden="true"></span><a class="pr__t" href="https://github.com/hikuohiku/homelab/pull/430">P-0028: restic バックアップを append-only 鍵に切り替え、実機で backup 成功と lock の挙動を確かめる…</a><span class="pr__n">#430</span><span class="chip chip--ok">CI green</span></li><li class="pr pr--ok"><span class="dot dot--ok" aria-hidden="true"></span><a class="pr__t" href="https://github.com/hikuohiku/homelab/pull/429">P-0029: バージョン更新運用を再開する — inventory 全対象の上流調査と更新 PR (旧 loop の主業務の引き継ぎ)</a><span class="pr__n">#429</span><span class="chip chip--ok">CI green</span></li><li class="pr pr--ok"><span class="dot dot--ok" aria-hidden="true"></span><a class="pr__t" href="https://github.com/hikuohiku/homelab/pull/428">chore(external-secrets): Helm chart 2.8.0 -&gt; 2.9.0 (P-0029)</a><span class="pr__n">#428</span><span class="chip chip--ok">CI green</span></li></ul></div>
+  <div class="pulsebox"><div class="pulse"><div class="pulse__cell"><p class="pulse__k">heart の鼓動</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>鼓動しています</p><p class="pulse__s">拍 #18・最終 59 秒前</p></div><div class="pulse__cell"><p class="pulse__k">homelab のアプリ</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>13 / 13 正常</p><p class="pulse__s">30 分前の観測</p></div><div class="pulse__cell"><p class="pulse__k">出している変更</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>3 件が審査中</p><p class="pulse__s">CI が通れば自分でマージします</p></div><div class="pulse__cell"><p class="pulse__k">heart の Pod</p><p class="pulse__v"><span class="dot dot--ok" aria-hidden="true"></span>常駐しています</p><p class="pulse__s">readyReplicas 1 / 1</p></div></div><ul class="prs"><li class="pr pr--ok"><span class="dot dot--ok" aria-hidden="true"></span><a class="pr__t" href="https://github.com/hikuohiku/homelab/pull/430">P-0028: restic バックアップを append-only 鍵に切り替え、実機で backup 成功と lock の挙動を確かめる…</a><span class="pr__n">#430</span><span class="chip chip--ok">CI green</span></li><li class="pr pr--ok"><span class="dot dot--ok" aria-hidden="true"></span><a class="pr__t" href="https://github.com/hikuohiku/homelab/pull/429">P-0029: バージョン更新運用を再開する — inventory 全対象の上流調査と更新 PR (旧 loop の主業務の引き継ぎ)</a><span class="pr__n">#429</span><span class="chip chip--ok">CI green</span></li><li class="pr pr--ok"><span class="dot dot--ok" aria-hidden="true"></span><a class="pr__t" href="https://github.com/hikuohiku/homelab/pull/428">chore(external-secrets): Helm chart 2.8.0 -&gt; 2.9.0 (P-0029)</a><span class="pr__n">#428</span><span class="chip chip--ok">CI green</span></li></ul></div>
 
   <div class="grid">
     <div class="col">
@@ -307,15 +307,15 @@ footer { color:var(--ink3); font-size:.73rem; font-family:var(--mono);
           </li>
           <li class="pj">
             <div class="pj__head"><span class="chip chip--sig">レビュー中</span>
+              <h3 class="pj__title">restic バックアップを append-only 鍵に切り替え、実機で backup 成功と lock の挙動を確かめる (旧 T-0120)</h3></div>
+            <p class="pj__meta"><span class="pj__id">P-0028</span><span>security・repair</span><span>拒否権の期限 到来済み</span><a href="https://github.com/hikuohiku/homelab/pull/430">PR #430</a></p>
+            <p class="pj__why">人間が 2026-08-07 に発行・登録した append-only 鍵が未使用のまま。現行の backup CronJob は削除権限つき鍵を使い続けており、node01 侵害時にバックアップごと消せる。壁 #6 の実効化の最終工程。homelab 本体の…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
+          </li>
+          <li class="pj">
+            <div class="pj__head"><span class="chip chip--sig">レビュー中</span>
               <h3 class="pj__title">バージョン更新運用を再開する — inventory 全対象の上流調査と更新 PR (旧 loop の主業務の引き継ぎ)</h3></div>
             <p class="pj__meta"><span class="pj__id">P-0029</span><span>k8s・repair</span><span>拒否権の期限 到来済み</span><a href="https://github.com/hikuohiku/homelab/pull/429">PR #429</a></p>
             <p class="pj__why">inventory.json の追従が 2026-08-06 の旧 loop 停止以来止まっている。vaultwarden の放置は全クライアント同期停止事故 (#49) の前科があり、『誰も上げなければ据え置かれる』はこの homelab の最重要リスク。h…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
-          </li>
-          <li class="pj">
-            <div class="pj__head"><span class="chip chip--sig">実行中</span>
-              <h3 class="pj__title">restic バックアップを append-only 鍵に切り替え、実機で backup 成功と lock の挙動を確かめる (旧 T-0120)</h3></div>
-            <p class="pj__meta"><span class="pj__id">P-0028</span><span>security・repair</span><span>拒否権の期限 到来済み</span></p>
-            <p class="pj__why">人間が 2026-08-07 に発行・登録した append-only 鍵が未使用のまま。現行の backup CronJob は削除権限つき鍵を使い続けており、node01 侵害時にバックアップごと消せる。壁 #6 の実効化の最終工程。homelab 本体の…</p><div class="meter"><div class="meter__top"><span>予算</span><span class="meter__v">0 / 3.0M tok</span></div><span class="meter__track"><span class="meter__fill meter__fill--ok" style="width:0.0%"></span></span></div>
           </li>
           <li class="pj">
             <div class="pj__head"><span class="chip chip--ok">納品済み</span>
