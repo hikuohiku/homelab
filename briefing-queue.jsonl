@@ -14,3 +14,4 @@
 {"at": "2026-08-09T13:47:21Z", "source": "issue-comment 5231840877", "body": "(通知予算超過分のまとめ、1 件)\n- [incident] 2026-08-08T13:45:20Z P-0025 の runner が error で終了: initializer: error"}
 {"at": "2026-08-10T08:19:02Z", "source": "ops/feedback/inbox/F-20260810T081759Z-e389cc.json", "body": "時間の表示JSTにしてほしい。"}
 {"at": "2026-08-10T08:20:07Z", "source": "ops/feedback/inbox/F-20260810T081948Z-266ad8.json", "body": "ダッシュボードにアイコン欲しい。"}
+{"at": "2026-08-11T07:36:00Z", "source": "issue-comment 5250329411", "body": "(通知予算超過分のまとめ、1 件)\n- [announce] 2026-08-10T07:34:12Z P-0044: ダッシュボードのプロジェクトビューから『済んだ失敗』のノイズを消す (3 層表示)\n検証: python3 ops/dashboard/build.py && grep -q 'id=\"heart-projects-closed\"' ops/dashboard/index.html; python3 ops/dashboard/build.py && python3 -c \"h=open('ops/dashboard/index.html').read(); c=h.find('id=\\\"heart-projects-closed\\\"'); assert c>=0; asser"}
