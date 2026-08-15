@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-15T15:30:04Z",
+  "generated_at": "2026-08-15T16:00:04Z",
   "applications": [
     {
       "name": "agent-rbac",
@@ -360,8 +360,8 @@
       "containers": [
         {
           "name": "application-controller",
-          "cpu": "1710292n",
-          "memory": "325432Ki"
+          "cpu": "1696811n",
+          "memory": "325992Ki"
         }
       ]
     },
@@ -371,7 +371,7 @@
       "containers": [
         {
           "name": "applicationset-controller",
-          "cpu": "311748n",
+          "cpu": "236200n",
           "memory": "38004Ki"
         }
       ]
@@ -393,8 +393,8 @@
       "containers": [
         {
           "name": "notifications-controller",
-          "cpu": "37748n",
-          "memory": "26100Ki"
+          "cpu": "186263n",
+          "memory": "26104Ki"
         }
       ]
     },
@@ -404,8 +404,8 @@
       "containers": [
         {
           "name": "redis",
-          "cpu": "4330121n",
-          "memory": "7852Ki"
+          "cpu": "4325868n",
+          "memory": "7820Ki"
         }
       ]
     },
@@ -415,8 +415,8 @@
       "containers": [
         {
           "name": "repo-server",
-          "cpu": "685317n",
-          "memory": "77368Ki"
+          "cpu": "1182426n",
+          "memory": "81540Ki"
         }
       ]
     },
@@ -426,8 +426,8 @@
       "containers": [
         {
           "name": "server",
-          "cpu": "1502945n",
-          "memory": "39816Ki"
+          "cpu": "297255n",
+          "memory": "39828Ki"
         }
       ]
     },
@@ -437,8 +437,8 @@
       "containers": [
         {
           "name": "heart",
-          "cpu": "32918n",
-          "memory": "140492Ki"
+          "cpu": "676757n",
+          "memory": "140500Ki"
         }
       ]
     },
@@ -448,8 +448,8 @@
       "containers": [
         {
           "name": "dev",
-          "cpu": "47233740n",
-          "memory": "1451532Ki"
+          "cpu": "31377388n",
+          "memory": "1451916Ki"
         }
       ]
     },
@@ -459,7 +459,7 @@
       "containers": [
         {
           "name": "coder",
-          "cpu": "2197761n",
+          "cpu": "2081904n",
           "memory": "68856Ki"
         }
       ]
@@ -470,8 +470,8 @@
       "containers": [
         {
           "name": "postgres",
-          "cpu": "26111046n",
-          "memory": "61300Ki"
+          "cpu": "28466237n",
+          "memory": "62260Ki"
         }
       ]
     },
@@ -481,8 +481,8 @@
       "containers": [
         {
           "name": "dex",
-          "cpu": "158775n",
-          "memory": "16572Ki"
+          "cpu": "323031n",
+          "memory": "16568Ki"
         }
       ]
     },
@@ -492,8 +492,8 @@
       "containers": [
         {
           "name": "external-secrets",
-          "cpu": "2797141n",
-          "memory": "34552Ki"
+          "cpu": "1173427n",
+          "memory": "34588Ki"
         }
       ]
     },
@@ -503,8 +503,8 @@
       "containers": [
         {
           "name": "cert-controller",
-          "cpu": "521387n",
-          "memory": "39128Ki"
+          "cpu": "1677849n",
+          "memory": "39048Ki"
         }
       ]
     },
@@ -514,8 +514,8 @@
       "containers": [
         {
           "name": "webhook",
-          "cpu": "377382n",
-          "memory": "28760Ki"
+          "cpu": "356503n",
+          "memory": "28764Ki"
         }
       ]
     },
@@ -525,8 +525,8 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "2029881n",
-          "memory": "248168Ki"
+          "cpu": "1978171n",
+          "memory": "248164Ki"
         }
       ]
     },
@@ -536,8 +536,8 @@
       "containers": [
         {
           "name": "postgres",
-          "cpu": "26007245n",
-          "memory": "47368Ki"
+          "cpu": "22498618n",
+          "memory": "45292Ki"
         }
       ]
     },
@@ -547,8 +547,8 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "2457422n",
-          "memory": "753336Ki"
+          "cpu": "2191276n",
+          "memory": "753376Ki"
         }
       ]
     },
@@ -558,8 +558,8 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "4281153n",
-          "memory": "6352Ki"
+          "cpu": "4540798n",
+          "memory": "6632Ki"
         }
       ]
     },
@@ -569,8 +569,8 @@
       "containers": [
         {
           "name": "coredns",
-          "cpu": "1624868n",
-          "memory": "26928Ki"
+          "cpu": "1540345n",
+          "memory": "26728Ki"
         }
       ]
     },
@@ -580,8 +580,8 @@
       "containers": [
         {
           "name": "local-path-provisioner",
-          "cpu": "53005n",
-          "memory": "15020Ki"
+          "cpu": "86786n",
+          "memory": "14768Ki"
         }
       ]
     },
@@ -591,8 +591,8 @@
       "containers": [
         {
           "name": "metrics-server",
-          "cpu": "3459511n",
-          "memory": "35284Ki"
+          "cpu": "3488404n",
+          "memory": "35348Ki"
         }
       ]
     },
@@ -601,14 +601,14 @@
       "name": "ops-dashboard-6dc4f4fd49-69wcg",
       "containers": [
         {
-          "name": "httpd",
-          "cpu": "400880n",
-          "memory": "18056Ki"
+          "name": "fetcher",
+          "cpu": "1174039n",
+          "memory": "560Ki"
         },
         {
-          "name": "fetcher",
-          "cpu": "2073886n",
-          "memory": "556Ki"
+          "name": "httpd",
+          "cpu": "396494n",
+          "memory": "18056Ki"
         }
       ]
     },
@@ -618,7 +618,7 @@
       "containers": [
         {
           "name": "syncthing",
-          "cpu": "483910n",
+          "cpu": "405845n",
           "memory": "18168Ki"
         }
       ]
@@ -629,7 +629,7 @@
       "containers": [
         {
           "name": "nameserver",
-          "cpu": "74611n",
+          "cpu": "59775n",
           "memory": "6108Ki"
         }
       ]
@@ -640,8 +640,8 @@
       "containers": [
         {
           "name": "operator",
-          "cpu": "552575n",
-          "memory": "35316Ki"
+          "cpu": "498742n",
+          "memory": "35132Ki"
         }
       ]
     },
@@ -651,8 +651,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2293412n",
-          "memory": "29056Ki"
+          "cpu": "2452064n",
+          "memory": "28888Ki"
         }
       ]
     },
@@ -662,8 +662,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2745822n",
-          "memory": "37960Ki"
+          "cpu": "2215401n",
+          "memory": "37736Ki"
         }
       ]
     },
@@ -673,8 +673,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2215368n",
-          "memory": "31256Ki"
+          "cpu": "2887814n",
+          "memory": "31344Ki"
         }
       ]
     },
@@ -684,8 +684,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2309516n",
-          "memory": "33360Ki"
+          "cpu": "1955459n",
+          "memory": "33152Ki"
         }
       ]
     },
@@ -695,8 +695,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2126708n",
-          "memory": "33100Ki"
+          "cpu": "2154498n",
+          "memory": "33208Ki"
         }
       ]
     },
@@ -706,8 +706,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2109875n",
-          "memory": "29800Ki"
+          "cpu": "2240028n",
+          "memory": "30040Ki"
         }
       ]
     },
@@ -717,8 +717,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2180172n",
-          "memory": "29460Ki"
+          "cpu": "1928454n",
+          "memory": "29376Ki"
         }
       ]
     },
@@ -728,8 +728,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2931058n",
-          "memory": "39620Ki"
+          "cpu": "3084713n",
+          "memory": "39592Ki"
         }
       ]
     },
@@ -739,8 +739,8 @@
       "containers": [
         {
           "name": "vaultwarden",
-          "cpu": "160466n",
-          "memory": "77272Ki"
+          "cpu": "109795n",
+          "memory": "79944Ki"
         }
       ]
     }
@@ -748,8 +748,8 @@
   "node_metrics": [
     {
       "name": "nixos",
-      "cpu": "481315313n",
-      "memory": "5321068Ki"
+      "cpu": "495528183n",
+      "memory": "5293428Ki"
     }
   ],
   "pvc_usage": [
@@ -883,12 +883,12 @@
     ],
     "heartbeat": {
       "last_start": {
-        "timestamp": "2026-08-15T15:29:37Z",
-        "iteration": 7076
+        "timestamp": "2026-08-15T15:59:38Z",
+        "iteration": 7106
       },
       "last_end": {
-        "timestamp": "2026-08-15T15:29:37Z",
-        "iteration": 7076,
+        "timestamp": "2026-08-15T15:59:38Z",
+        "iteration": 7106,
         "exit_code": 1,
         "elapsed_seconds": 0
       }
