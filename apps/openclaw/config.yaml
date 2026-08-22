@@ -41,7 +41,9 @@ data:
             // models.json 側を変えたらここも揃えること (機械検査は未整備。inventory の note 参照)
             // OpenClaw の provider 接頭辞は opencode/ (opencode CLI の opencode-go/ とは別物。
             // 2026-08-23 実測: opencode-go/ は Unknown model で失敗した)
-            primary: "opencode/ox-alpha-free",
+            // zen カタログ実測 (2026-08-23, /zen/v1/models 64 件): ox-alpha は存在しない
+            // (opencode CLI 専用)。口の用途は軽いので glm-5.2 (プラン内課金) を使う
+            primary: "opencode/glm-5.2",
           },
         },
       },
