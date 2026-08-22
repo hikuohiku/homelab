@@ -106,9 +106,11 @@ function TranscriptLine({ event }: { event: TranscriptEvent }) {
   if (event.kind === "result") {
     return (
       <div className="result-event">
-        <span>SESSION USAGE</span>
+        {/* 1 回の LLM 呼び出し (ステップ) の消費。累計はフッターに出る */}
+        <span>このステップの消費</span>
         <strong>{compactNumber(event.usage?.total ?? 0)} tokens</strong>
         <span>${(event.usage?.costUsd ?? 0).toFixed(4)}</span>
+        {event.at && <span className="event-clock">{jstClock(event.at)}</span>}
       </div>
     );
   }
