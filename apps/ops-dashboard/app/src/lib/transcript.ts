@@ -102,7 +102,10 @@ function opencodeEvents(raw: Record<string, unknown>, lineId: string): Transcrip
   if (type === "reasoning" || part.type === "reasoning") {
     return [{ id: String(part.id ?? lineId), kind: "thinking", at, text: asText(part.text ?? raw.text) }];
   }
-  if (type === "tool") {
+  // 実測 (2026-08-22, opencode 1.18.21): tool イベントの top-level type は
+  // "tool_use" で、part.type が "tool"。type === "tool" だけだと全ツール実行が
+  // 落ちて、ライブビューが step 境界 (ステップ開始/完了) だらけになる
+  if (type === "tool" || type === "tool_use" || part.type === "tool") {
     const state = asRecord(part.state);
     const rawStatus = String(state.status ?? part.status ?? "running");
     const status = rawStatus === "completed" ? "completed" :
