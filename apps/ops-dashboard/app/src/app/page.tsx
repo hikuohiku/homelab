@@ -119,10 +119,20 @@ function TranscriptViewer({ agent }: { agent?: AgentSnapshot }) {
     setFollowing(true);
     if (!agentId) return;
     const source = new EventSource(`/api/agents/${encodeURIComponent(agentId)}/events`);
-    const onReset = () => setEvents([]);
+    // セッション切替 (reset) で画面を消さない。短いセッションを連ねる worker だと
+    // 数分ごとに全消去され「ずっと空」に見える (2026-08-22 利用者報告)。
+    // 区切り行を挟んで継続し、直近 500 イベントだけ保持する
+    const onReset = (message: MessageEvent<string>) => {
+      const data = JSON.parse(message.data) as { file?: string };
+      setEvents((current) => current.length === 0 ? current : [...current, {
+        id: `session-break-${data.file ?? Date.now()}`,
+        kind: "system" as const,
+        text: `―― セッション切替 (${data.file ?? "?"}) ――`,
+      }].slice(-500));
+    };
     const onTranscript = (message: MessageEvent<string>) => {
       const incoming = JSON.parse(message.data) as TranscriptEvent;
-      setEvents((current) => mergeTranscriptEvent(current, incoming));
+      setEvents((current) => mergeTranscriptEvent(current, incoming).slice(-500));
       setStatus("LIVE");
     };
     const onStatus = (message: MessageEvent<string>) => {
@@ -130,7 +140,7 @@ function TranscriptViewer({ agent }: { agent?: AgentSnapshot }) {
       setStatus(data.message ?? "待機中");
     };
     const onStreamError = () => setStatus("再接続中");
-    source.addEventListener("reset", onReset);
+    source.addEventListener("reset", onReset as EventListener);
     source.addEventListener("transcript", onTranscript as EventListener);
     source.addEventListener("status", onStatus as EventListener);
     source.addEventListener("stream-error", onStreamError);

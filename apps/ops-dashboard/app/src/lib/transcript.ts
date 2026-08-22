@@ -181,10 +181,15 @@ export async function findTranscriptFile(role: AgentRole, projectId: string): Pr
     .filter((name) => name.endsWith(".jsonl") && name.toLowerCase().includes(`-${prefix}`))
     .map(async (name) => {
       const file = path.join(directory, name);
-      return { file, modified: (await stat(file)).mtimeMs };
+      const info = await stat(file);
+      return { file, modified: info.mtimeMs, size: info.size };
     }));
   candidates.sort((a, b) => b.modified - a.modified);
-  return candidates[0]?.file ?? null;
+  // セッション開始直後の transcript は「作られたが 0 バイト」の時間が数十秒ある。
+  // 最新が空なら中身のある直近ファイルを返す (開いた瞬間に空画面を見せない)。
+  // 空ファイルに書き込みが始まれば mtime が進んで自然に乗り換わる
+  const nonEmpty = candidates.find((c) => c.size > 0);
+  return (nonEmpty ?? candidates[0])?.file ?? null;
 }
 
 export async function latestAction(role: AgentRole, projectId: string): Promise<{ text: string; available: boolean }> {
