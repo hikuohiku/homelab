@@ -62,6 +62,55 @@ ops/tests discover 183 件 OK。ruff F821 はこの環境に ruff/pip 無くて�
 - sqlite 読み取りは WAL の reader なので gateway の書き込みと競合しない設計のはず
   (mode=ro, timeout=5s, OperationalError は次 tick 待機)。実測は上記の送信テストで確認する
 
+### worker #2 (2026-08-22) — review 指摘 2 件のうち rebase/annotation を解消。実メッセージ実測はこのサンドボックスからは不可 (詳細と実施手順を記録)
+
+**やったこと**:
+
+- **review 指摘 #2 (config-revision) を解消**: origin/main (d6d517b6, #503 先端) に rebase。
+  deployment.yaml の annotation 部で予想どおりコンフリクト (#501 afc91404 が既に 7→8 済み)。
+  解消して **"8"→"9" へ**、コメントも「#501 が 7→8 済みのため main 相対で確実に 1 rollout
+  になるよう」と実態どおりに書き直した。rebase 後 head = `af1c7ca3` (force-with-lease で
+  project/p-0107 更新。PR #504 も同 commit を追跡し ci.yml green を API 実測)
+- rebase 後に verify を再実測し全 green: grep #1 ok / unittest 29 件 OK /
+  validate.py 0 error / ops/tests discover 全 OK / `kubectl kustomize apps/openclaw`
+  rc=0 かつ render 結果に revision=9, containers=[gateway, feedback-bridge],
+  volume→ConfigMap 参照解決を確認。digest pin・replicas・Recreate・probe は無傷
+
+**できなかったこと (重要 — 次のセッションはここから)**:
+
+- **review 指摘 #1 (実メッセージ 1 通の実測) は本セッションでは実施不能だった。**
+  前提「今すぐ実施できる」は **cluster アクセスを持つセッションでのみ真**。この worker
+  サンドボックスには cluster 資格が一切無いことを実測した:
+  - KUBECONFIG 未設定 / ~/.kube 無し / SA token 未マウント
+    (/var/run/secrets/kubernetes.io/serviceaccount 不在) → `kubectl` は localhost:8080 refused
+  - tailscale / direnv / doppler バイナリも無し (.envrc も無い) → Doppler 経由の資格取得も不可
+  - ただし network は cluster 内 (pod IP 10.42.0.183/24)。API server 10.43.0.1:443 には届くが
+    **401 (認証情報無し)**。argocd.tailae6c2.ts.net は名前解決できるが到達不可 (HTTP 000)
+  - GitHub Actions はすべて ubuntu-latest で self-hosted runner 無し → CI 経由の deploy も不可
+  - AUTOPILOT_GITHUB_TOKEN は env にあり git push / GitHub API は生きている (上記の push 実測)
+  - Telegram 側も Bot API には受信 update を注入する手段が無い (bot 自身の送信は getUpdates
+    に現れない)。実メッセージは allowlist 内の人間の送信以外に発生経路がない
+- したがって worker #1 の記録「CreateContainerConfigError 待機」も実は観測ではなく推定だった
+  可能性が高い (このサンドボックスからは pod 状態を見られない)。reviewer の実測
+  (main の openclaw pod Running/Ready, secret 解決済み) が正。
+
+**次への引き継ぎ (cluster アクセスのあるセッション / 人間がそのまま実行できる形)**:
+
+1. `just preview openclaw project/p-0107` (head = af1c7ca3 以降。annotation 9 で 1 rollout)
+2. pod Ready を待つ: `kubectl -n autopilot get pods -l app=openclaw -w`
+   (2 コンテナ [gateway feedback-bridge] になっていること)
+3. allowlist 内ユーザーから実メッセージ 1 通 (何でもよい) を送信
+4. 証跡取得:
+   - `kubectl -n autopilot logs <pod> -c feedback-bridge | grep saved`
+     → `[openclaw-feedback-bridge] … saved ops-feedback:ops/feedback/inbox/<id>.json (update N, X chars)`
+   - `git fetch origin ops-feedback && git ls-remote origin ops-feedback`
+     → 新 commit。`ops/feedback/inbox/<id>.json` が `{id, source:"telegram", received, body}`
+     形式 (kind 無し) であることを確認
+5. 証跡 (id・commit hash・時刻) を PROGRESS.md に追記してから `just preview-reset openclaw`
+- bridge は 15s poll。保存ログが出ないときは `kubectl -n autopilot logs <pod> -c feedback-bridge`
+  全体を見る (初回起動行「cursor 初期化」→ その後新着のみ)。gateway 応答の成否と無関係に
+  spool から保存されるのが決定論パススルーの証明 (merge 後観察でも同じでよい)
+
 ## 発見 (curriculum へ)
 
 - **ops/runner/tests/test_quota_flow.py の flaky テスト**:
