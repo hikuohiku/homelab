@@ -398,3 +398,33 @@ CI 側の有無確認を促す書き方になっている（= spec 作成者も�
   pytest 不在確認）だけ行い、wrapper 実測 JSON の第二項目が green にならない限り実装には
   触らないこと。唯一の建設的な一手は curriculum/reviewer への verify 文字列修正提案
   （worker には実行権限もチャネルも無い、ops 帳簿は heart の領分）で変わらず。
+
+### 2026-08-22 セッション11
+
+**やったこと**: 実装変更なし。session10 までの結論を鵜呑みにせず最小限の独立再確認のみ
+実施。加えて `python3 -m ensurepip --version` が `pip 26.1.1` を返す（同梱 wheel の
+バージョン表示に過ぎず実インストールではない）ことに一瞬着目したが、これは session3 で
+既に洗われた経路（`ensurepip --default-pip` は PEP 668 `externally-managed-environment` で
+実インストールに失敗する、venv は作れても wrapper 実行環境には引き継がれない）と同じ話で
+新情報ではないと判断し、再実行はせず深追いしなかった。
+
+1. `git status --short` → クリーン（session10 と同じコミット `6d7708d2`）。
+2. `grep -n 'livenessProbe' -A 15 apps/autopilot/heart-deployment.yaml` → exec probe定義済み
+   （`initialDelaySeconds: 300` / `periodSeconds: 30` / `timeoutSeconds: 15` /
+   `failureThreshold: 3`、変更なし）。
+3. `python3 -m unittest discover -s ops/heart/tests -t .` → 153 テスト全て `OK`（変更なし）。
+4. `python3 -m pytest --version` → `No module named pytest`。`which pip pip3` → 両方不在
+   （session6〜10 と同じ）。
+
+**分かったこと（結論、変化なし）**: 11セッション連続で同一結論。実装は安定・完成済み。
+第二 verify コマンドが green にならないのは spec 側の欠陥という結論は変わらず。
+
+**次のセッションへの一言**:
+- session8〜10 までの判断を維持: **このプロジェクトはこれ以上 worker セッションを消費すべき
+  ではない。** repo 側で試せる一手（pip/venv/shim/vendor/ci.yml/ensurepip）は session2〜3・
+  8 で出尽くし、いずれも却下済み（`ensurepip --version` が pip のバージョン文字列を返しても
+  それは実インストールの成功を意味しない — 紛らわしいので次回はこの罠に時間を使わないこと）。
+  次回起動時も同じ最小確認（grep / unittest discover / pytest 不在確認）だけ行い、
+  wrapper 実測 JSON の第二項目が green にならない限り実装には触らないこと。唯一の建設的な
+  一手は curriculum/reviewer への verify 文字列修正提案（worker には実行権限もチャネルも
+  無い、ops 帳簿は heart の領分）で変わらず。
