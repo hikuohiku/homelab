@@ -1704,12 +1704,58 @@
         "until": "2026-08-22T11:48:28Z",
         "baseline_unhealthy": []
       }
+    },
+    {
+      "id": "P-0080",
+      "title": "復旧を製品として測る — 全 backup 対象を隔離環境へ同時復元し、アプリが生き返るまでの壁時計 (RTO) を秒で出して宣言する",
+      "state": "proposed",
+      "branch": "project/p-0080",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "test -f ops/drills/restore_drill.py",
+        "python3 -m unittest ops.tests.test_restore_drill",
+        "python3 -c \"import json; r=json.load(open('ops/projects/logs/P-0080/report.json')); assert len(r['targets'])>=5 and all(t.get('rto_seconds') is not None for t in r['targets'])\""
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-22",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0085",
+      "title": "写真管理を名取り中身は数百 MB — 預ける窓口 (sync フォルダ → 自動取り込み) を実データで開通させ、immich の受け入れ側を完成させる",
+      "state": "proposed",
+      "branch": "project/p-0085",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": true,
+      "verify": [
+        "test -f apps/syncthing/photo-intake-cronjob.yaml",
+        "python3 -m unittest ops.tests.test_photo_intake",
+        "python3 -c \"import json; p=json.load(open('ops/projects/logs/P-0085/e2e-proof.json')); assert p['assets_after']>p['assets_before'] and p.get('via')=='photo-intake'\""
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2000000
+      },
+      "created": "2026-08-22",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-22T12:15:40Z",
-  "last_activity_at": "2026-08-22T13:00:46Z",
+  "last_activity_at": "2026-08-22T13:01:57Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
-  "last_curriculum_dry": true,
+  "last_curriculum_dry": false,
   "stop_engaged": false
 }
