@@ -25,7 +25,7 @@ from datetime import timedelta
 
 # adoptgate は I/O も持つが、ここから呼ぶのは純関数 (classify/describe) だけ。
 # 実測 (clone と verify 実行) は heart.execute() の run_adopt_gate が行う
-from . import adoptgate
+from . import adoptgate, tasks
 from .statefiles import TERMINAL_STATES, now_iso, parse_iso
 
 # 各待ち状態の見張り時限。恒久的に黙って待つ状態を作らない (レビュー指摘 [4][11])
@@ -504,6 +504,13 @@ def decide(doc, facts, rules, now):
             # 実りの有無を記録する。次のアイドルで即座に立案してよいか (実りあり) /
             # min_interval の間隔を置くべきか (空振り) の判定に使う (2026-08-10)
             doc["last_curriculum_dry"] = not cur.get("adopted_specs")
+            # 採択された依頼由来の案 (request_id 持ち) があれば、その依頼を
+            # 処理済みにする (P-0091)。対応づけは案に埋まった request_id の
+            # 一致だけで決定論。実行は heart.execute() が tasks.mark_processed()
+            # で行う (冪等なので再実行しても二重に刻まない)
+            done = tasks.done_ids(cur.get("adopted_specs", []))
+            if done:
+                actions.append(_action("mark_task_requests_done", ids=done))
             actions.append(_action("consume_curriculum"))
             curriculum_pending = False
         elif cur.get("pr_open") and cur.get("checks_green"):

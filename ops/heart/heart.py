@@ -23,7 +23,7 @@ import time
 import traceback
 from datetime import datetime, timezone
 
-from . import adoptgate, config, facts, gitutil, metrics, reconcile, spawn
+from . import adoptgate, config, facts, gitutil, metrics, reconcile, spawn, tasks
 from .gh import Gh
 from .notify import Notifier, veto_footer
 from .statefiles import StateFiles, now_iso
@@ -140,9 +140,28 @@ class Heart:
                         spawn.create(
                             self.k8s_client(), self.cfg, "curriculum",
                             attempt=int(time.time()) // 60 % 1000000,
-                            # 空きスロット分だけ採択してよい (judge プロンプトに渡る)
-                            extra_env={"ADOPT_LIMIT": a.get("adopt_limit", 2)},
+                            # 空きスロット分だけ採択してよい (judge プロンプトに渡る)。
+                            # 未処理のタスク依頼は立案の最優先原料として渡す (P-0091)
+                            extra_env={
+                                "ADOPT_LIMIT": a.get("adopt_limit", 2),
+                                "TASK_REQUESTS": tasks.for_env(
+                                    sf.read_jsonl(tasks.QUEUE_FILE)
+                                ),
+                            },
                         )
+                elif kind == "mark_task_requests_done":
+                    # 採択された依頼由来の案に対応する依頼を処理済みにする
+                    # (P-0091)。tasks.mark_processed() が冪等なので、このビートの
+                    # 再実行でも二重に刻まない
+                    if shadow:
+                        log(f"[shadow] mark task requests done: {a.get('ids')}")
+                    else:
+                        records = sf.read_jsonl(tasks.QUEUE_FILE)
+                        sf.rewrite_jsonl(
+                            tasks.QUEUE_FILE,
+                            tasks.mark_processed(records, a.get("ids", []), now),
+                        )
+                        log(f"task requests processed: {a.get('ids')}")
                 elif kind == "spawn_critic":
                     if shadow:
                         log("[shadow] spawn critic")
@@ -328,16 +347,19 @@ class Heart:
         except Exception as e:
             log(f"PR collection failed: {e}")
             open_prs, merged_prs = {}, {}
-        vetoes, stop_all, review_needed, resume_all, cursors = facts.collect_feedback(
-            self.gh, self.repo_dir, cursors, self.cfg.rules,
-            self.cfg.feedback_issue, self.cfg.feedback_branch,
+        vetoes, stop_all, review_needed, resume_all, task_requests, cursors = (
+            facts.collect_feedback(
+                self.gh, self.repo_dir, cursors, self.cfg.rules,
+                self.cfg.feedback_issue, self.cfg.feedback_branch,
+            )
         )
-        if vetoes or stop_all or review_needed or resume_all:
+        if vetoes or stop_all or review_needed or resume_all or task_requests:
             # kill switch の受信は必ず可視化する (該当プロジェクトが無く action が
             # 生まれない場合でも、veto 疎通試験の結果を外から確認できるように)
             log(
                 f"feedback received: vetoes={vetoes} stop_all={stop_all} "
-                f"resume_all={resume_all} review_needed={len(review_needed)}"
+                f"resume_all={resume_all} review_needed={len(review_needed)} "
+                f"task_requests={len(task_requests)}"
             )
         curriculum = facts.collect_curriculum(
             self.cfg.data_dir, self.repo_dir, self.gh
@@ -379,6 +401,13 @@ class Heart:
         sf.save_cursors(cursors)
         for item in review_needed:
             sf.append_jsonl("briefing-queue.jsonl", {"at": now_iso(now), **item})
+        # タスク依頼の受領 (P-0091)。id 重複は merge_new が落とすので、
+        # カーソル巻き戻り等で同じ note を再取り込みしても積み直さない
+        queue = sf.read_jsonl(tasks.QUEUE_FILE)
+        merged = tasks.merge_new(queue, task_requests, now)
+        if len(merged) != len(queue):
+            sf.rewrite_jsonl(tasks.QUEUE_FILE, merged)
+            log(f"task requests queued: total={len(merged)}")
         gitutil.commit_and_push_state(
             self.state_dir, self.cfg.state_branch, f"heart: beat {i} decide"
         )

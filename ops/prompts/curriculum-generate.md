@@ -10,19 +10,43 @@ curriculum 第 1 段: 発散生成。判定 (採択) は別セッション (curr
 
 ## 読むもの (この順で)
 
-1. `ops/VISION.md` — 何を目指しているか。**候補は VISION との差分から生まれる**
-2. `ops/projects/archive.jsonl` — 過去の全案 (採択・棄却・失敗を含む)。
+1. 下の「人間のタスク依頼」節の JSON 配列 — 人間からの未処理タスク依頼
+   (feedback note の `kind: task-request`。空なら飛ばす)。
+   **VISION 差分より優先する原料。**
+2. `ops/VISION.md` — 何を目指しているか。**候補は VISION との差分から生まれる**
+3. `ops/projects/archive.jsonl` — 過去の全案 (採択・棄却・失敗を含む)。
    **既出と同型の案を出さない。** 失敗した案は「なぜ失敗したか」を乗り越える形なら再提案してよい
-3. `ops/projects/seeds.md` — 種プロジェクトの候補プールと旧 backlog からの移送分。
+4. `ops/projects/seeds.md` — 種プロジェクトの候補プールと旧 backlog からの移送分。
    立案の原料 (丸写しせず、今も価値が残るかを判断する)
-4. `ops/memory/` — 意味記憶 (substrate.md には実行環境の実測制約がある)
-5. `/data/critic/` の直近の所見 (`*.md`、新しい順に 1〜2 本。無ければ飛ばす)
+5. `ops/memory/` — 意味記憶 (substrate.md には実行環境の実測制約がある)
+6. `/data/critic/` の直近の所見 (`*.md`、新しい順に 1〜2 本。無ければ飛ばす)
    — **器が自分で見つけた詰まりと、利用者面の不満。** 日次の critic が書いている。
    末尾の JSON ブロック (`findings`) に構造的原因と提案が入っているので、
    有望な `proposal` はそのまま案の種にしてよい (人間に指摘される前に自分で直す経路)
-6. `ops/journal/` の直近 — 最近何が起きているか
-7. `ops/inventory.json` / ops-health-report ブランチの `ops/health/latest.json` — 環境の現状
-8. リポジトリ全体 (CLAUDE.md、apps/、docs/) — 現実の姿
+7. `ops/journal/` の直近 — 最近何が起きているか
+8. `ops/inventory.json` / ops-health-report ブランチの `ops/health/latest.json` — 環境の現状
+9. リポジトリ全体 (CLAUDE.md、apps/、docs/) — 現実の姿
+
+## 人間のタスク依頼 (最優先の原料)
+
+OpenClaw (Telegram) やダッシュボードの書き置きから届いた構造化タスク依頼
+(feedback note の `kind: task-request`) のうち、まだ叶えられていないものが
+heart から渡される。空 (`[]`) ならこの節は飛ばしてよい。
+
+```json
+{{TASK_REQUESTS}}
+```
+
+- **人間の依頼は VISION 差分より優先して案に含める。** 「やって」と言われたことを
+  自分の興味と引き換えに握りつぶすのは秘書の本分の逆
+- 依頼から生まれた案には `"proposed_by": "human-request"` と、元依頼の `"request_id"`
+  を必ず付ける (スキーマ参照)。採択された案の `request_id` を heart が検知して
+  その依頼を処理済みにし、以後渡ってこなくする — この対応づけが破れると同じ依頼が
+  毎回立案され続ける
+- 1 依頼 1 案が基本。依頼を分解したくなったら主案だけに request_id を付け、
+  副案は通常の案として出す
+- 採択されずに残った依頼は次回も渡ってくる。前回棄却された同型案をそのまま出し直さず、
+  archive.jsonl の棄却理由を踏まえて良くしてから出すか、今回は外す
 
 ## 案の出し方
 
@@ -47,7 +71,9 @@ curriculum 第 1 段: 発散生成。判定 (採択) は別セッション (curr
  "capabilities": [],
  "touches_apps": false,
  "budget": {"soft_cap_tokens": 3000000},
- "confidence": "confident または unsure"}
+ "confidence": "confident または unsure",
+ "proposed_by": "(任意) human-request — 人間のタスク依頼から生まれた案のみ付ける。通常の案では省略",
+ "request_id": "(proposed_by: human-request のとき必須) 元依頼の id"}
 ```
 
 - `verify` が書けない案は未成熟。書ける形まで具体化するか、investigate 案に落とす

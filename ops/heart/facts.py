@@ -7,7 +7,7 @@
 import json
 from datetime import datetime, timezone
 
-from . import gitutil, triage
+from . import gitutil, tasks, triage
 from .statefiles import parse_iso
 
 
@@ -128,17 +128,40 @@ def _list_feedback_files(repo_dir, feedback_branch):
 
 def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_branch):
     """issue #56 の新着コメント + ops-feedback ブランチの新着書き置きを
-    triage して (vetoes, stop_all, review_needed, resume_all, new_cursors) を返す。
+    triage して (vetoes, stop_all, review_needed, resume_all, task_requests,
+    new_cursors) を返す。
 
     初回起動 (cursor 未初期化) は **過去の全履歴を triage しない** (レビュー指摘 [7])。
     issue #56 には 100 件超の過去コメントがあり、旧 CHARTER の引用等に停止キーワードが
     含まれるため、履歴を分類すると存在しないプロジェクトへの偽 stop_all を拾う。
     初回は「現在までを既読」としてカーソルを置くだけにする。
+
+    task_requests は構造化タスク依頼 (note のトップレベル kind == "task-request"、
+    P-0090/P-0091) の未処理キュー分。triage の fall-through で briefing に落とす前に
+    分流する (P-0091)。
     """
     vetoes = []
     stop_all = False
     resume_all = False
     review_needed = []
+    task_requests = []
+
+    def handle(body, source, kind=None):
+        """1 件のフィードバックを分類して振り分ける。停止系は task-request より先
+        (「止めて」が依頼本文に混ざっていても決定論パススルーは譲らない — P-0090
+        の絶対条件)。task-request は review_needed に落ちる直前で分流する。"""
+        nonlocal stop_all, resume_all
+        verdict = triage.classify(body, rules)
+        if verdict["kind"] == "veto":
+            vetoes.extend(verdict["projects"])
+        elif verdict["kind"] == "stop_all":
+            stop_all = True
+        elif verdict["kind"] == "resume_all":
+            resume_all = True
+        elif kind == tasks.KIND_TASK_REQUEST:
+            task_requests.append({"source": source, "body": body})
+        else:
+            review_needed.append({"source": source, "body": body})
 
     if not cursors.get("initialized"):
         new_cursors = dict(cursors)
@@ -153,8 +176,10 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
         new_cursors["seen_feedback_files"] = sorted(
             _list_feedback_files(repo_dir, feedback_branch)
         )
-        return [], False, [], False, new_cursors
+        return [], False, [], False, [], new_cursors
 
+    # issue コメントは自由文 (kind を持たない) なので通常経路。
+    # JSON note のみトップレベル kind を読む
     since = cursors.get("issue_comments_since")
     newest = since
     try:
@@ -172,15 +197,7 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
         body = c.get("body", "")
         if body.startswith("(Discord 不達のため代送)"):
             continue
-        verdict = triage.classify(body, rules)
-        if verdict["kind"] == "veto":
-            vetoes.extend(verdict["projects"])
-        elif verdict["kind"] == "stop_all":
-            stop_all = True
-        elif verdict["kind"] == "resume_all":
-            resume_all = True
-        else:
-            review_needed.append({"source": f"issue-comment {c.get('id')}", "body": body})
+        handle(body, f"issue-comment {c.get('id')}")
 
     seen = set(cursors.get("seen_feedback_files", []))
     new_seen = set(seen)
@@ -191,25 +208,21 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
         raw = gitutil.show(repo_dir, f"origin/{feedback_branch}", path)
         if raw is None:
             continue
+        kind = None
         try:
             note = json.loads(raw)
-            body = note.get("body", "")
+            body = str(note.get("body", ""))
+            k = note.get("kind")
+            if isinstance(k, str):
+                kind = k
         except ValueError:
             body = raw
-        verdict = triage.classify(body, rules)
-        if verdict["kind"] == "veto":
-            vetoes.extend(verdict["projects"])
-        elif verdict["kind"] == "stop_all":
-            stop_all = True
-        elif verdict["kind"] == "resume_all":
-            resume_all = True
-        else:
-            review_needed.append({"source": path, "body": body})
+        handle(body, path, kind)
 
     new_cursors = dict(cursors)
     new_cursors["issue_comments_since"] = newest
     new_cursors["seen_feedback_files"] = sorted(new_seen)
-    return vetoes, stop_all, review_needed, resume_all, new_cursors
+    return vetoes, stop_all, review_needed, resume_all, task_requests, new_cursors
 
 
 def load_adopted_specs(repo_dir):
