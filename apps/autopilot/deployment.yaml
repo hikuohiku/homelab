@@ -50,7 +50,7 @@ spec:
           # images/autopilot/Dockerfile の内容を指す。中身を変えたら、ビルドが
           # 終わったのを待ってこの行のダイジェストも合わせて更新する
           # （ghcr の package が private の場合は imagePullSecrets が別途要る）
-          image: ghcr.io/hikuohiku/homelab-autopilot@sha256:6d0cf8b13d602f189d75b48ef654cb0cfd0fe999740782928199097b7451bf75
+          image: ghcr.io/hikuohiku/homelab-autopilot@sha256:93a898cf0a1ec7a0363e9e2824f39670db2e3a8ca76674e755438ce8273c7bcb
           terminationMessagePolicy: FallbackToLogsOnError
           command: ["bash", "/config/loop.sh"]
           securityContext:

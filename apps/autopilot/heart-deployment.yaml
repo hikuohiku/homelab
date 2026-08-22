@@ -46,7 +46,7 @@ spec:
           # 旧 autopilot Deployment と同じイメージ・同じ digest を使う。
           # AUTOPILOT_IMAGE (heart が runner Job を spawn するときのイメージ) も
           # 必ず同じ値にする — 2 箇所が同一ファイル内で隣接しているのは意図的
-          image: ghcr.io/hikuohiku/homelab-autopilot@sha256:6d0cf8b13d602f189d75b48ef654cb0cfd0fe999740782928199097b7451bf75
+          image: ghcr.io/hikuohiku/homelab-autopilot@sha256:93a898cf0a1ec7a0363e9e2824f39670db2e3a8ca76674e755438ce8273c7bcb
           terminationMessagePolicy: FallbackToLogsOnError
           command: ["bash", "/config/heart-bootstrap.sh"]
           securityContext:
@@ -65,7 +65,7 @@ spec:
             - name: HEART_BEAT_SECONDS
               value: "60"
             - name: AUTOPILOT_IMAGE
-              value: ghcr.io/hikuohiku/homelab-autopilot@sha256:6d0cf8b13d602f189d75b48ef654cb0cfd0fe999740782928199097b7451bf75
+              value: ghcr.io/hikuohiku/homelab-autopilot@sha256:93a898cf0a1ec7a0363e9e2824f39670db2e3a8ca76674e755438ce8273c7bcb
             - name: CLAUDE_CODE_OAUTH_TOKEN
               valueFrom:
                 secretKeyRef:
