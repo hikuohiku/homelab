@@ -207,6 +207,44 @@ spec:
         self.assertIn("fallback-name", refs.secret_targets)
         self.assertIn("SOME_KEY", refs.doppler_keys)
 
+    def test_yml_extension_is_also_scanned(self):
+        """.yml 拡張子の manifest も列挙対象。*.yaml だけ見ていると
+        .yml に置いた未宣言キーが黙って素通しする (実測済みの fail-open)。"""
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            self.write_app(tmp, "myapp", """apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: ok-es
+  namespace: myapp
+spec:
+  target:
+    name: ok-secret
+  data:
+    - secretKey: TOKEN
+      remoteRef:
+        key: OK_KEY
+""")
+            sneaky = tmp / "sneaky"
+            sneaky.mkdir()
+            (sneaky / "manifest.yml").write_text("""apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: sneaky-es
+  namespace: myapp
+spec:
+  target:
+    name: sneaky-secret
+  data:
+    - secretKey: TOKEN
+      remoteRef:
+        key: SNEAKY_KEY
+""")
+            refs, problems = ccm.scan_apps(tmp)
+            self.assertEqual(problems, [])
+            self.assertIn("SNEAKY_KEY", refs.doppler_keys)
+            self.assertIn("sneaky-secret", refs.secret_targets)
+
     def test_datafrom_is_fail_closed(self):
         """dataFrom はキーを列挙できない。成功扱いにせず落とす。"""
         _, problems = self.scan_text(

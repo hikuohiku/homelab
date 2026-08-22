@@ -106,3 +106,45 @@ $ python3 ops/validate.py → 0 error, 2 warning (heartbeat STALE / comments.jso
 機能面の実装と自己レビューは完了。レビュー指摘が出たらそれだけ直すこと。
 なお validate.py の heartbeat STALE warning は本プロジェクト外 (heart の領域)。
 
+
+### セッション 3 (2026-08-22) — `.yml` 拡張子の fail-open を潰す
+
+レビュー verdict は再び空だったので、3 回目の精査。走査対象の**拡張子**に穴を
+見つけて修正した。
+
+**やったこと**
+
+1. **`.yml` 拡張子の取りこぼし修正**: `scan_apps` が `rglob("*.yaml")` のみを見ており、
+   `apps/**/*.yml` に置かれた manifest は黙って列挙から漏れる。合成 fixture で
+   「整合する .yaml + 未宣言キーの .yml」を回すと problems=0 / violations=0 で
+   **素通しを実測** (fail-open)。`*.yml` も走査するよう修正 → 同 fixture で
+   違反 2 件 (未宣言キー + 未宣言 Secret 名) を落とすことを再実測
+2. リグレッションテスト `test_yml_extension_is_also_scanned` 追加
+   (.yml の参照が doppler_keys / secret_targets に入ることを固定)
+
+**実測**
+
+```
+$ python3 -m unittest discover -s ops/tests -t . → Ran 81 tests, OK (+1)
+$ python3 ops/check_credential_map.py --selftest → rc=0
+$ python3 ops/check_credential_map.py
+ok: ... (Doppler keys 20 種 / k8s Secrets 18 種 / secretKeyRef 参照 15 組) rc=0
+$ test -f ops/check_credential_map.py && grep -q check_credential_map .github/workflows/ci.yml → 両方 OK
+$ python3 ops/validate.py → 0 error, 2 warning (セッション 2 と同じ heart 領域の環境ノイズ)
+```
+
+**分かったこと / 発見**
+
+- fail-open は「ロジックの出口」だけではなく「入力の網羅」にも起きる。セッション 2 は
+  異常経路の出口を潰したが、今回は「走査が特定のファイル名パターンを見ていない」という
+  網羅側だった。教訓: 検査器の**入力集合の定義そのもの** (どのファイルを見るか) も、
+  見逃しを実証する合成 fixture で固定する
+- 実 repo には現時点で .yml/.json manifest が 1 つも無い (`find apps -name "*.yml"` 空)。
+  なので実走査結果 (20/18/15) は修正前後で不変。将来 .yml を足した人が勝手に守られる
+- 精査は他にも回した: `_docs` の read_text 失敗 (OSError 等) は main() の catch-all で
+  rc=1 (fail-closed)、charts 除外・namespace スコープ一致・免除表の逆方向検査は問題なし
+
+**次のセッションへの一言**
+
+機能面の実装と 3 回の自己レビュー完了。レビュー指摘が出たらそれだけ直すこと。
+これ以上の自己レビューは収穫逓減と思われる (出口・入力網羅・純関数両方向は固定済み)。

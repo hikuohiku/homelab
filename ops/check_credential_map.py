@@ -190,7 +190,12 @@ def scan_apps(apps_dir: Path) -> tuple[CredentialRefs, list[str]]:
     problems: list[str] = []
     if not apps_dir.is_dir():
         return refs, [f"{apps_dir} が存在しない (repo ルートから実行しているか)"]
-    for path in sorted(apps_dir.rglob("*.yaml")):
+    # .yml も走査対象。*.yaml だけにすると .yml に置かれた ExternalSecret が
+    # 黙って列挙から漏れ、未宣言キーが検査を素通しする (実測済みの fail-open)
+    paths = sorted(
+        p for ext in ("*.yaml", "*.yml") for p in apps_dir.rglob(ext)
+    )
+    for path in paths:
         rel = path.relative_to(apps_dir).as_posix()
         # ベンダリングした helm chart は対象外 (自前で管理している manifest だけを見る)
         if "/charts/" in f"/{rel}":
