@@ -2077,3 +2077,53 @@ stalled 判断をする人間へ: コード・テスト・台帳節・失敗 run
 P-0080 は budget_exhausted、P-0114 は引き継ぎブランチの不備 (ログ未改名) で
 spec_error。この P-0115 はログ改名済みの正しい継続。予算 5M。checkpoint と
 PROGRESS.md から再開すること。
+
+## 2026-08-22 session #60 (worker, P-0115 初セッション)
+
+### やったこと
+
+1. **preflight を実行していない** (判断基準どおり): 開始が 21:01 UTC で、リセット公算
+   (08-23 00:00 UTC) まで約 3 時間。実行の情報価値ゼロ
+2. **#56 の返信を確認した** (page1+page2 ページング): 総数 171 → **174**。新規 3 件:
+   - [5382448148](https://github.com/hikuohiku/homelab/issues/56#issuecomment-5382448148)
+     (20:30:15Z, hikuohiku): ack P-0090 — 本件と無関係
+   - [5382501061](https://github.com/hikuohiku/homelab/issues/56#issuecomment-5382501061)
+     (20:42:49Z, hikuohiku): ack P-0080 — 「P-0114 として予算増額のうえ継続採択済み」
+   - [5382558416](https://github.com/hikuohiku/homelab/issues/56#issuecomment-5382558416)
+     (20:56:36Z, hikuohiku): ack P-0114 — 「引き継ぎ不備。P-0115 として修正のうえ再採択済み」
+   - **B2 cap / 本命 run の判断への言及は 0 件**。3 件ともプロジェクト台帳の確認のみで、
+     引き継ぎの分岐表の「有料化 OK」「無料枠継続」のどちらにも該当しない
+3. コード・帳簿以外のファイルは触っていない。テスト 65 件 green を再確認
+   (`python3 -m unittest ops.tests.test_restore_drill` → OK, 0.7s)。
+   report.json は `ops/projects/logs/P-0115/report.json` に改名先があることを実確認
+
+### 分かったこと
+
+- **人間は 20:30–20:56 UTC に #56 で活動中**であり、P-0115 再採択 (spec proposed_at
+  20:55:41Z) と同一時間帯。checkpoint 全文と依頼コメント
+  ([5381640246](https://github.com/hikuohiku/homelab/issues/56#issuecomment-5381640246))
+  を読んだうえで B2 判断に触れていない = 「未読」ではなく「保留」の可能性が高い。
+  #51/#52 の「未読 vs 保留」論点は「保留」寄りに更新
+- **[罠] report.json のパスは P-0080 のままで正しい**: `restore_drill.py` は
+  DEFAULT_REPORT_PATH = `ops/projects/logs/P-0080/report.json` (:98)、report 内の
+  project 名 `"P-0080"` (:1026)、ヘルプ文言 (:1057) をハードコードする。一方ログ
+  ディレクトリは P-0115 に改名済みで、既存 report.json (14:32 run 失敗記録) も
+  `ops/projects/logs/P-0115/` 配下にある。**spec verify #3 も P-0080 パスを直接見ており、
+  spec と PROJECT.md 設計 3 の両方が旧パスを指定しているため、本命 run 成功時は
+  script が `ops/projects/logs/P-0080/` を新規作成して書くのが正** (これで初めて
+  verify #3 が通る)。将来の worker が「改名に合わせて」DEFAULT_REPORT_PATH を P-0115 に
+  直すと verify #3 が永遠に通らなくなる — **変えないこと**。ログ=P-0115 /
+  report=P-0080 の不整合見えは仕様どおりの状態
+- 起動間隔: checkpoint (#59 停止 ~20:26) → 本セッション 21:01 UTC
+
+### 次セッションへの引き継ぎ (これしか読まないので必読)
+
+**時刻依存の判断基準は session #4〜#59 分から変更なし。**
+
+1. **2026-08-23 00:05 UTC 過ぎ (JST 09:05 過ぎ) の起動** → `python3 ops/drills/restore_drill.py
+   --preflight-only` を 1 回だけ実行し、rc と時刻 (UTC) をタイムライン節に必ず追記。
+   rc=0 ならまず #56 の返信を再確認 (**baseline: `since=2026-08-22T20:56:36Z`**、
+   page ページング必須)。ただし本命 run は B2 判断の明示待ちのまま — ack コメントは
+   判断ではないので、「有料化/cap 引上げ OK」「無料枠継続」の明示が出るまで実行しない
+2. **それより前の起動** → preflight も何もせず終えてよい (Class B transaction を溶かす
+   だけ)。#56 の新規コメント確認だけはする (since 上記 baseline)
