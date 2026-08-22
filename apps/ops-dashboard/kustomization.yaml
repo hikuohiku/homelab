@@ -1,24 +1,12 @@
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
+# Mission Control (Next.js) — autopilot 監視ダッシュボード。
+# PVC autopilot-data (transcripts) を読むため autopilot namespace に置く。
+# アプリ本体は app/、イメージは .github/workflows/build-dashboard-image.yml が publish
 resources:
+  - rbac.yaml
   - external-secret.yaml
   - deployment.yaml
-  - build-cronjob.yaml
   - service.yaml
   - ingress.yaml
-
-configMapGenerator:
-  - name: ops-dashboard-server
-    namespace: ops-dashboard
-    files:
-      - server.py
-
-generatorOptions:
-  # 名前にハッシュを付けない（autopilot / ops-health-reporter と同じ）。付けると
-  # スクリプトを直すたびに ConfigMap 名が変わり、CI の manifest-diff が
-  # 「オブジェクトが消えた」と判定して毎回 allow-delete の明記を要求する
-  # （ops/check_manifest_deletions.py）。
-  # server.py は起動時にしか読まれないので、中身を変えたときは Deployment 側の
-  # ops-dashboard/server-revision アノテーションも上げて Pod を作り直す
-  disableNameSuffixHash: true

@@ -1,0 +1,37 @@
+# Mission Control の読み取り専用 SA。autopilot namespace の Job/Pod の観測と
+# ログ取得だけを許す。書き込み動詞はゼロ (閲覧は read-only の設計決定)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ops-dashboard
+  namespace: autopilot
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ops-dashboard-read
+  namespace: autopilot
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["pods/log"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ops-dashboard-read
+  namespace: autopilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ops-dashboard-read
+subjects:
+  - kind: ServiceAccount
+    name: ops-dashboard
+    namespace: autopilot

@@ -2,7 +2,7 @@ apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
   name: ops-dashboard
-  namespace: ops-dashboard
+  namespace: autopilot
   annotations:
     tailscale.com/experimental-forward-cluster-traffic-via-ingress: "true"
 spec:
@@ -14,4 +14,5 @@ spec:
         number: 80
   tls:
     - hosts:
+        # 置き換え要件: URL (tailnet ホスト名) は旧ダッシュボードから据え置く
         - ops-dashboard
