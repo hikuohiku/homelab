@@ -9,3 +9,16 @@ resources:
   - agents-md.yaml
   - external-secret.yaml
   - deployment.yaml
+
+# P-0107: 決定論パススルー (feedback-bridge sidecar) のスクリプト。
+# repo の bridge.py が ConfigMap 経由でそのまま pod へ乗る (ops-health-reporter 同型)。
+# disableNameSuffixHash は deployment.yaml の config-revision annotation で再起動を
+# 制御する運用 (config.yaml と同じ) のため
+configMapGenerator:
+  - name: openclaw-bridge-script
+    namespace: autopilot
+    files:
+      - bridge.py
+
+generatorOptions:
+  disableNameSuffixHash: true
