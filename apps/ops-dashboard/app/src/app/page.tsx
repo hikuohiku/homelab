@@ -362,6 +362,7 @@ export default function Home() {
           <button className={view === "live" ? "active" : ""} onClick={() => setView("live")}><span>01</span>エージェント・ライブ</button>
           <button className={view === "projects" ? "active" : ""} onClick={() => setView("projects")}><span>02</span>プロジェクト</button>
           <button className={view === "attention" ? "active" : ""} onClick={() => setView("attention")}><span>03</span>要対応 {snapshot?.attention.length ? <em>{snapshot.attention.length}</em> : null}</button>
+          <a className="nav-page" href="/architecture" title="構成図ページを開く"><span>↗</span>構成図</a>
         </nav>
         <div className={`heart-chip ${heartBad ? "heart-chip--bad" : ""}`}>
           <i /><span><small>HEART / BEAT {snapshot?.heart.beat ?? "—"}</small><strong>{heartBad ? "要確認" : "正常"}</strong></span>
