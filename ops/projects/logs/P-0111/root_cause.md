@@ -194,12 +194,60 @@ cap が日次リセット型なら翌 08-23 夜の成功で自然復帰する。
   (2) 失敗している → cap は日次リセット型ではないか、日中に消費者が再飽和させている。
   **needs-human 化を最優先**で進めること (依頼文言は上記「修繕経路」節)。
 
+### cap リセット時刻の確定と早期判定プロトコル (セッション 4, 2026-08-22 20:28–20:45Z 実測)
+
+**公式ドキュメントで cap の性質が確定した。** Backblaze 公式の Caps & Alerts 解説 2 箇所が
+ともに「usage counters は毎日 12:00 AM GMT (= 00:00 UTC) にリセット」と明言:
+
+- https://www.backblaze.com/docs/cloud-storage-data-caps-and-alerts — "Usage counters reset daily at 12:00 AM GMT."
+- https://help.backblaze.com/hc/en-us/articles/217931138-How-to-use-B2-data-caps-alerts — "each category is reset at 12AM GMT each day"
+
+実測履歴とも整合する (08-10 夜の超過 → 08-11 日中の run 成功)。セッション 2・3 の
+「cap が日次リセット型か分からない」は解消済み。**次のリセットは 2026-08-23T00:00Z** —
+今夜 20:33Z 時点ではまだ超過中 (`p0111-cap-watch` 初回計測 403、想定どおり)。
+
+**観測装置を設置済み**: coder ns の診断 Pod `p0111-cap-watch` が **5 分おき**に append-only 鍵で
+authorize → `<config>` ダウンロードを試み、HTTP コードをタイムスタンプ付きでログ出力する
+(200 で即 `CAP_RECOVERED` を出して exit 0、最大 20 時間で自終了。manifest は同ディレクトリ
+`cap-watch.pod.yaml`)。Git 追跡ツリー外の使い捨て Pod なので appTree health には影響しない
+(セッション 2 の probe7 と同型。消費は Class B 2 トランザクション + 数百バイト/5分で無視できる)。
+
+**早期判定プロトコル (上記「判定規則」の 19:30Z 待ちを置き換える)**:
+
+任意の時刻 (リセット後なら 00:05Z 以降いつでも) で:
+
+```
+kubectl logs p0111-cap-watch -n coder | tail -5
+kubectl logs p0111-cap-watch -n coder | grep CAP_RECOVERED
+```
+
+- **CAP_RECOVERED あり** → リセット成立。定刻 run を待つ必要はない。検収を前倒しする:
+  1. 手動 Job を 1 回走行する (upload は Class A なので download cap を再飽和させない。
+     消費者が日中に再飽和させる可能性を考えれば、回復確認は早いほうがよい):
+     ```
+     kubectl create job --from=cronjob/coder-restic-backup -n coder p0111-verify-coder
+     kubectl create job --from=cronjob/immich-restic-backup -n immich p0111-verify-immich
+     ```
+     Completed を確認する (vaultwarden は本件 DoD 外だが同じ方法で検収可能)。
+  2. appTree は子の成功を即時 health 反映するので数分で Healthy に戻るはず。
+     Failed Job の残骸は引き上げない (= 削除不要、08-11〜21 の実測どおり)。
+  3. reporter 収集 (~30 分間隔, latest.json の実測) を待って verify #2 を回す。
+  注意: CronJob 定刻 (17:45/18:10/18:40Z) ±30 分の手動起動は避ける。手動 Job は成功後に
+  削除してよい (残しても health への影響はない)。
+- **00:30Z を過ぎても 403 のまま / CAP_RECOVERED なし** → ドキュメント上のリセット時刻を
+  跨いでも回復していない = 人間の cap 引き上げ待ちか、リセット直後に消費者が即座に
+  再飽和させている。**19:30Z を待たずその時点で needs-human 化** (依頼文言は「修繕経路」節)。
+- watch Pod がいない (誰かに消された/自終了済み) 場合は `cap-watch.pod.yaml` を再 apply する。
+  `GAVE_UP_AFTER_20H` 出力後もログは残るので回復時刻の実測値として読める。
+
 ## オープンな疑問 (本プロジェクトのスコープ外 — curriculum へ)
 
 - **cap を消費しているのは誰か特定できていない。** 08-10 と 08-22 に超過、08-11〜08-21 は健全。
   候補: 週次 retention (`forget --prune`, 毎週土曜夜に 4 本が一斉稼働 — 今夜も 19:00–19:45Z に完了)、
   人間の B2 コンソール/クライアント利用、クラスタ外の消費者、または cap 自体が最近引き下げられた。
-  B2 コンソールの統計画面でしか追えない。
+  B2 コンソールの統計画面でしか追えない。なおリセット時刻 (00:00 UTC) が確定したので、
+  `p0111-cap-watch` で 08-23 の回復時刻 → 再飽和までの所要が実測できれば消費者の大まかな
+  推定 (日中に数 GB 食う何か) に繋がる。
 - **P-0102 (project/p-0102 ブランチ) の restic-check CronJob は新規の大量ダウンローダーになりうる。**
   `restic check --read-data-subset=5%` を 5 リポジトリへ週次実行する設計。本日は SUSPEND=True で
   未稼働だったが、稼働開始すれば cap 消費に直接乗る。稼働前に cap との兼ね合いを評価すべき。

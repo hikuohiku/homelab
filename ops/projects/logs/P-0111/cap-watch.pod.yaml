@@ -1,0 +1,62 @@
+# P-0111 診断資産 (セッション 4, 2026-08-22 20:33Z 設置)。Git 管理のアプリではなく、
+# 一時的な観測 Pod。appTree health には影響しない (Git 追跡ツリー外のため)。
+#
+# 役割: B2 download cap の回復時刻を実測する。5 分おきに append-only 鍵で authorize し、
+# restic リポジトリの <config> (coder-postgres/config) のダウンロードを試みる。
+# - 403 → タイムスタンプ付きで記録して 5 分待つ
+# - 200 → "CAP_RECOVERED" を出力して即終了 (exit 0)
+# 最大 240 回 (= 20 時間) で自終了 (exit 1)。1 回あたりの消費は Class B トランザクション 2 回 +
+# 数百バイトのダウンロードで、cap 回復を遅らせる量ではない。
+#
+# 使い方:
+#   kubectl apply -f ops/projects/logs/P-0111/cap-watch.pod.yaml
+#   kubectl logs p0111-cap-watch -n coder | tail        # 現在値
+#   kubectl logs p0111-cap-watch -n coder | grep CAP_RECOVERED   # 回復時刻の実測
+# 判定後は削除してよい: kubectl delete pod p0111-cap-watch -n coder
+apiVersion: v1
+kind: Pod
+metadata:
+  name: p0111-cap-watch
+  namespace: coder
+  labels:
+    project: p0111
+    purpose: b2-cap-reset-watch
+spec:
+  restartPolicy: Never
+  containers:
+  - name: watch
+    image: curlimages/curl:8.12.1
+    env:
+    - name: B2_ACCOUNT_ID
+      valueFrom:
+        secretKeyRef:
+          name: coder-restic-backup-credentials
+          key: B2_ACCOUNT_ID
+    - name: B2_ACCOUNT_KEY
+      valueFrom:
+        secretKeyRef:
+          name: coder-restic-backup-credentials
+          key: B2_ACCOUNT_KEY
+    command: ["sh", "-c"]
+    args:
+    - |
+      i=0
+      while [ "$i" -lt 240 ]; do
+        i=$((i+1))
+        AUTH=$(curl -s --max-time 20 -u "$B2_ACCOUNT_ID:$B2_ACCOUNT_KEY" https://api.backblazeb2.com/b2api/v3/b2_authorize_account)
+        DL=$(printf '%s' "$AUTH" | grep -oE '"downloadUrl"[ ]*:[ ]*"[^"]*"' | head -1 | sed 's/.*:[ ]*"//;s/"$//')
+        TOK=$(printf '%s' "$AUTH" | grep -oE '"authorizationToken"[ ]*:[ ]*"[^"]*"' | head -1 | sed 's/.*:[ ]*"//;s/"$//')
+        if [ -z "$DL" ] || [ -z "$TOK" ]; then
+          echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) authorize_failed"
+        else
+          CODE=$(curl -s --max-time 30 -o /dev/null -w '%{http_code}' -H "Authorization: $TOK" "$DL/file/hikuohiku-homelab/coder-postgres/config")
+          echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) download_http=$CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) CAP_RECOVERED"
+            exit 0
+          fi
+        fi
+        sleep 300
+      done
+      echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) GAVE_UP_AFTER_20H"
+      exit 1

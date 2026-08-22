@@ -92,3 +92,36 @@ vaultwarden = Degraded)。今夜 08-22 の定刻 backup 3 本は全敗したの�
 (2) まだ Degraded なら当日分 Job (`kubectl get jobs -n {coder,immich,vaultwarden}`) の状態を確認し、
 失敗していれば cap は日次リセット型ではない or 日中に再飽和 → **needs-human 化を最優先**
 (root_cause.md「修繕経路」節の依頼文言を使用)。manifest 触りは禁止のまま。
+
+### セッション 4 (2026-08-22 20:28–20:50Z) — worker (cap リセット時刻を公式裏付け・観測 Pod 設置・早期判定プロトコル確定)
+
+**状況**: verify #1 PASS 維持 / verify #2 RED のまま (latest.json 20:00Z: coder / immich /
+vaultwarden = Degraded、失敗 Job 3 本も同様)。判定は本来 08-23 19:30Z 持ち越し — この
+待ち時間を削るのが本セッションの主題。
+
+**やったこと**: B2 cap の仕様を公式ドキュメントで確定 → coder ns に観測 Pod `p0111-cap-watch`
+を設置 (5 分おきに authorize + `<config>` download を試み、403/200 を記録。200 で即
+`CAP_RECOVERED` 出力して自終了) → root_cause.md に「cap リセット時刻の確定と早期判定プロトコル」
+節を追加し、manifest を `cap-watch.pod.yaml` として同ディレクトリに保存 → 本ログ追記。
+
+**分かったこと**:
+
+- **B2 の usage counter は毎日 00:00 GMT (= UTC) にリセットするのが公式仕様**
+  (backblaze.com/docs/cloud-storage-data-caps-and-alerts と help.backblaze.com の両方が明言)。
+  「日次リセット型か分からない」疑問は解消。次のリセットは **2026-08-23T00:00Z**。
+  実測とも整合 (08-10 夜超過 → 08-11 日中 run 成功)。
+- 観測 Pod 初回計測 2026-08-22T20:33:41Z = 403 (リセット前なので想定どおり)。手順は全段動作済み。
+- 今夜 Completed だった `coder-workspace-home-backup-29790390` は B2 触りの証拠ではない。
+  中身は python スポーナーで、workspace PVC が無ければ restic Job を 1 個も起こさず Complete する。
+- 手動 Job 起動 (`kubectl create job --from=cronjob/...`) と pod 作成/削除権限は
+  autopilot-writer SA にあることを can-i で実測 (coder / immich / vaultwarden すべて yes)。
+
+**次のセッションへの一言**: **19:30Z 待ちはもう不要。** 00:05Z 以降ならいつでも
+`kubectl logs p0111-cap-watch -n coder | grep CAP_RECOVERED` 一発で判定できる:
+(1) CAP_RECOVERED 済み → root_cause.md 新節の手順で手動 Job (`p0111-verify-coder` /
+`p0111-verify-immich`) を走らせて検収前倒しし、report 収集 (~30 分間隔) を待って verify #2 を回す。
+(2) 00:30Z 過ぎても CAP_RECOVERED 無し → ドキュメント上のリセット時刻を跨いでいるので
+**即 needs-human 化** (19:30Z まで待たない。依頼文言は「修繕経路」節)。
+Pod が消えていたら `kubectl apply -f ops/projects/logs/P-0111/cap-watch.pod.yaml` で再設置。
+検収完了後は watch Pod と手動 Job を削除してよい。manifest (apps/) 触りは禁止のまま。
+
