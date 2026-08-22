@@ -111,3 +111,31 @@ immich-cli イメージ前提は 3 点とも実機で確認:
 
 - ESO の強制再同期は delete+reapply が確実(annotation 方式は本クラスタの ESO バージョンで
   未検証)。ES は失敗状態なので消しても生成物 Secret が存在せず無害 — 今回も問題なし。
+
+
+## worker session3 (2026-08-22)
+
+### 結論: まだ blocked。変化なし — キー登録だけを待つ
+
+- **ES 強制再同期を実施**(delete → git manifest 再適用、14:49Z): Ready=False
+  `could not get secret data from provider`。= **IMMICH_API_KEY は依然 Doppler
+  (homelab/prd) に未登録**。session1 の依頼文は 2 セッション連続で未対応。
+  e2e (verify #3) はこの 1 点以外に未消化がない状態が 3 セッション続いている。
+- CronJob 適用・テスト画像投入には着手せず(session1 の罠どおり、キー無し適用は
+  CreateContainerConfigError を 10 分毎に積む)。クラスタ側の残置物も変えていない:
+  ExternalSecret のみ(失敗状態で残置)、CronJob は未適用。
+- verify #1/#2 を再実行して green 維持を実測(15 tests OK / manifest 存在)。
+
+### 次セッションへの引き継ぎ
+
+- 手順は session2 の引き継ぎのまま完全に有効: **まず ES 強制再同期(delete+reapply →
+  sleep 25 → Ready 確認)**。True になったら session1 の「e2e の Exact レシピ」に従い、
+  curl Job 経由(secret 直読み不可、autopilot-writer SA は Secret get Forbidden)で
+  assets_before/after を数える。False なら何もせず終えてよい。
+- 人間への依頼文は PROGRESS session1 記載のものをそのまま使う(キー名 IMMICH_API_KEY /
+  homelab/prd)。wrapper への blocked 報告が人間に届く経路ならそれで十分で、worker 側で
+  追加の通知手段を作る必要はない(作らない — スコープ外)。
+
+### 発見
+
+- なし(新規の罠・仮説なし。3 セッション目で手順は安定している)
