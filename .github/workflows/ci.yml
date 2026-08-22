@@ -57,6 +57,15 @@ jobs:
           python3 -m unittest discover -s ops/runner/tests -t .
           python3 -m unittest discover -s ops/tests -t .
 
+      - name: undefined-name check (ruff F821)
+        # 2026-08-22 の実事故対応: 私 (対話セッション) と autopilot が同じ関数を
+        # 並行で触り、統合漏れの未定義変数参照が遷移表テストを素通りして
+        # heart のビートを 13 分間 (自己更新まで) 全落ちさせた。F821 はこの類を
+        # 静的に捕まえる
+        run: |
+          pip install --quiet ruff
+          ruff check --select F821 ops/
+
       - name: consistency checks
         run: |
           python3 ops/check_version_sync.py
