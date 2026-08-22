@@ -471,6 +471,18 @@
       "note": "P-0090 で新設。Telegram bot gateway。digest pin は意図的（公式 docs 上 version tag は immutable だが moving tag latest/stable を追わないため）。更新手順: (1) ghcr.io/v2/openclaw/openclaw/tags/list で最新 stable version tag を確認、(2) 同 registry API でそのタグの docker-content-digest ヘッダを読む（OCI index = マルチアーキの digest を使うこと。単一アーキ manifest digest だと node01 以外のアーキで壊れる）、(3) deployment.yaml の image を差し替えて initContainer も同じ digest に揃える、(4) リリースノート全文確認。OpenClaw は起動時に startup-safe migration を走らせるが、安全に修復できない場合は gateway が exit する — そのときは同 digest で `openclaw doctor --fix` を PVC mount 付きで 1 回実行してから Deployment を再開 (docs.openclaw.ai/install/docker「Upgrading container images」)。なお openclaw.json の model primary (opencode-go/ox-alpha-free) は ops/models.json の roles と手動で揃える運用で、機械検査は未整備"
     },
     {
+      "id": "openclaw-bridge-image",
+      "kind": "image",
+      "name": "python (openclaw feedback-bridge sidecar)",
+      "current": "3.14-alpine",
+      "file": "apps/openclaw/deployment.yaml",
+      "match": "image: python:",
+      "upstream": "dockerhub:library/python",
+      "policy": "auto",
+      "note": "P-0107 で新設。決定論パススルー (feedback-bridge sidecar)。標準ライブラリのみで動く bridge.py を ConfigMap から起動する (ops-health-reporter-image と同型の根拠)",
+      "observability_impact": "壊れると Telegram 受信の ops-feedback 生保存が止まり、人間の『止めて』が heart の決定論 triage に届かなくなる (OpenClaw gateway 自体の応答は生きる)。gateway より影響面は狭いが、停止経路としては重要"
+    },
+    {
       "id": "claude-code-cli",
       "kind": "npm",
       "name": "@anthropic-ai/claude-code (autopilot の思考エンジン)",

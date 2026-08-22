@@ -18,7 +18,10 @@ spec:
       labels:
         app: openclaw
       annotations:
-        openclaw/config-revision: "8"
+        # pod を作り直したいときに上げる (ConfigMap は disableNameSuffixHash のため
+        # 内容変更だけでは再起動しない)。#501 が 7→8 済みのため、P-0107 の sidecar 追加は
+        # main 相対で確実に 1 rollout になるよう 8→9 へ
+        openclaw/config-revision: "9"
     spec:
       securityContext:
         seccompProfile:
@@ -119,6 +122,57 @@ spec:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
+        - name: feedback-bridge
+          # P-0107: Telegram 受信の決定論パススルー。gateway の spool (= state DB
+          # /home/node/.openclaw/state/openclaw.sqlite の channel_ingress_events。
+          # 「ingress-spool-*」はファイルではなく SQLite キュー。image 内ソース実測、
+          # bridge.py 冒頭コメント参照) を読み取り専用で走査し、allowlist 内送信者の
+          # 生テキストを ops-feedback ブランチへ保存する。LLM を経由しない強制が
+          # 「DB 読み取り」というコードレベルの事実になり、OpenClaw 内部には触れない。
+          # gateway が LLM 応答に失敗しても spool には受信が残るため、保存経路は生きる
+          image: python:3.14-alpine
+          terminationMessagePolicy: FallbackToLogsOnError
+          command: ["python", "/bridge/bridge.py"]
+          env:
+            - name: AUTOPILOT_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-credentials
+                  key: AUTOPILOT_GITHUB_TOKEN
+            - name: TELEGRAM_ALLOWED_USER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-credentials
+                  key: TELEGRAM_ALLOWED_USER_ID
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          volumeMounts:
+            - name: bridge-script
+              mountPath: /bridge
+              readOnly: true
+            - name: state
+              mountPath: /home/node/.openclaw
+            - name: bridge-tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            # memory の limits は付けない（substrate の規則: 実測の裏付けなしに付けない）。
+            # CPU limits は throttle で回復するため設定する。sqlite の読み取り走査と
+            # HTTP 1 桁/日の PUT 程度なので CPU もほぼ使わない見込み
+            limits:
+              cpu: 200m
+          securityContext:
+            # state PVC は initContainer が 1000:1000 に chown 済み (cursor ファイルの
+            # 書き込みもこの uid)。health-reporter CronJob と同型の最小権限構成
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
       volumes:
         - name: workspace-bootstrap
           configMap:
@@ -129,3 +183,8 @@ spec:
         - name: config-src
           configMap:
             name: openclaw-config
+        - name: bridge-script
+          configMap:
+            name: openclaw-bridge-script
+        - name: bridge-tmp
+          emptyDir: {}
