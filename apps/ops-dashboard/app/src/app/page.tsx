@@ -134,6 +134,8 @@ function TranscriptViewer({ agent }: { agent?: AgentSnapshot }) {
   useEffect(() => {
     setEvents([]);
     setFollowing(true);
+    usageMapRef.current = new Map();
+    setUsage({ tokens: 0, cost: 0 });
     if (!agentId) return;
     const source = new EventSource(`/api/agents/${encodeURIComponent(agentId)}/events`);
     // セッション切替 (reset) で画面を消さない。短いセッションを連ねる worker だと
@@ -150,6 +152,14 @@ function TranscriptViewer({ agent }: { agent?: AgentSnapshot }) {
     const onTranscript = (message: MessageEvent<string>) => {
       const incoming = JSON.parse(message.data) as TranscriptEvent;
       setEvents((current) => mergeTranscriptEvent(current, incoming).slice(-500));
+      if (incoming.usage && incoming.id) {
+        usageMapRef.current.set(incoming.id, {
+          tokens: incoming.usage.total ?? 0, cost: incoming.usage.costUsd ?? 0,
+        });
+        let tokens = 0; let cost = 0;
+        for (const entry of usageMapRef.current.values()) { tokens += entry.tokens; cost += entry.cost; }
+        setUsage({ tokens, cost });
+      }
       setStatus("LIVE");
     };
     const onStatus = (message: MessageEvent<string>) => {
@@ -172,9 +182,11 @@ function TranscriptViewer({ agent }: { agent?: AgentSnapshot }) {
     if (following && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
   }, [events, following]);
 
-  const usage = useMemo(() => events.reduce((total, event) => ({
-    tokens: total.tokens + (event.usage?.total ?? 0), cost: total.cost + (event.usage?.costUsd ?? 0),
-  }), { tokens: 0, cost: 0 }), [events]);
+  // 表示バッファ (直近 500 件) と独立に、開いてから見た usage を id 重複排除で
+  // 積み上げる。バッファ頭打ちで古い step_finish が落ちると合計が減って見えた
+  // (2026-08-22 利用者報告)。SSE 再接続の再送も id で二重計上しない
+  const usageMapRef = useRef(new Map<string, { tokens: number; cost: number }>());
+  const [usage, setUsage] = useState({ tokens: 0, cost: 0 });
 
   const onScroll = () => {
     const element = scrollRef.current;
