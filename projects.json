@@ -1847,7 +1847,33 @@
         "soft_cap": 800000
       },
       "created": "2026-08-22",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-22T14:44:57Z",
+        "verify": [
+          {
+            "cmd": "test -f apps/ops-dashboard/app/src/app/architecture/page.tsx",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'architecture' apps/ops-dashboard/app/src/app/page.tsx",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0089",
@@ -1866,7 +1892,24 @@
         "soft_cap": 800000
       },
       "created": "2026-08-22",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-22T14:44:57Z",
+        "verify": [
+          {
+            "cmd": "test -f apps/ops-dashboard/app/src/app/icon.svg",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
