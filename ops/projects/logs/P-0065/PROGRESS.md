@@ -101,3 +101,54 @@ heart-deployment.yaml の livenessProbe) を再検証し、pytest verify が red
   形）に置き換えるべき、という指摘を渡すこと。ops/ の帳簿 (backlog.json 等) は
   このセッションでは触っていない (CLAUDE.md / PROJECT.md の「やらないこと」に従い、
   heart の領分のため)。
+
+### 2026-08-22 セッション3
+
+**やったこと**: 実装変更なし。session2 の結論（pytest verify は spec 側の欠陥で
+実装側では直せない）を鵜呑みにせず、このセッションのサンドボックスで独立に再検証した。
+併せて「repo 側の変更で `python3 -m pytest ...` を実行可能にする現実的な道が本当に
+無いか」を追加で洗った。
+
+1. `grep -q 'livenessProbe' apps/autopilot/heart-deployment.yaml` → PASS（再確認、変更なし）。
+2. `python3 -m pytest --version` → `No module named pytest`（再確認）。
+3. `python3 -m pip --version` → `No module named pip`（再確認）。
+4. 新規: `python3 -m ensurepip --default-pip` を再試行 → 今回は session2 と違うエラーで
+   停止することを確認した。`error: externally-managed-environment`（PEP 668）。このサンドボックス
+   は Alpine 系で、システム Python が apk 管理下にあり `pip install` 自体が
+   `--break-system-packages` か venv 経由でないとブロックされる構成。ensurepip はさらに
+   その手前で wheel からの自己インストール subprocess が失敗して rc=1 (CalledProcessError)。
+5. 新規: ネットワーク到達性を確認した（`urllib.request.urlopen('https://pypi.org')` は
+   例外なく成功）。つまり「オフラインだから入れられない」ではなく、
+   **「システム Python が PEP 668 で保護されており、pip 自体が無い状態からは
+   venv 経由でしか入れられない」が真の制約**。
+6. とはいえ (4)(5) は decisive ではない: 百歩譲って `python3 -m venv` で venv を作り
+   そこに pytest を pip install すれば **このセッションのサンドボックス内では**
+   `python3 -m pytest ...` を green にできる可能性はある。だがそれは意味が無いと判断し
+   実行しなかった。理由: PROJECT.md 冒頭の運用モデルどおり「毎セッションはフレッシュ起動」
+   であり、python の venv やインストール状態は git 管理対象ではないので **次に verify を
+   実測する環境（wrapper の実行環境）にはそもそも引き継がれない**。venv 構築は
+   このセッション限りの自己満足の green であり、次回また red に戻る。
+7. 「repo に pytest を vendoring する」「repo ルートに `pytest.py` shim を置いて
+   `python -m pytest` の `-m` 解決 (`sys.path[0]` = cwd) を乗っ取る」の 2 案も再検討したが、
+   session2 と同じ結論で見送った。追加で気づいた懸念: repo ルートに `pytest.py` を置くと
+   **本物の pytest がインストール済みの将来の開発者環境でも、repo ルートから実行する限り
+   shim の方が `sys.path[0]` 優先で本物より先に解決される** — 一時しのぎのつもりが
+   恒久的に本物の pytest を隠す罠になる。CHARTER の精神以前に、実装として筋が悪い。
+
+**分かったこと（結論、session2 から更新なし・追加根拠のみ）**:
+- **`python3 -m pytest ops/heart/tests -k liveness -q` はこのリポジトリの標準実行環境
+  （このサンドボックス、CI、そしておそらく wrapper の verify 実行環境）のどれにも
+  pytest が存在せず、しかもシステム Python が PEP 668 で保護されているため
+  「取りあえず入れる」の敷居も高い。repo 側のコード変更でこれを恒久的に解決する経路は無い**
+  （venv はセッションを跨いで残らない、vendoring/shim は将来を壊す副作用が大きすぎる）。
+  spec の verify コマンド文字列そのものを直す以外に正攻法は無い、という session2 の結論を
+  追加証拠つきで支持する。
+
+**次のセッションへの一言**:
+- **実装は完了しており、これ以上やることは無い。** wrapper 実測 JSON を見て、万一
+  pytest verify が green に変わっていたら（wrapper 側の環境が変わった等）このプロジェクトは
+  完了。赤いままなら、それは spec 側 (`ops/projects/logs/P-0065/PROJECT.md` 採択 JSON の
+  verify 文字列) の欠陥であり、venv 構築や pip install や shim を試すだけ時間の無駄なので
+  やらないこと（session2, session3 で 2 度確認済み）。次にできる建設的な一手は
+  curriculum/reviewer 側に verify 文字列の修正案（`python3 -m unittest discover -s
+  ops/heart/tests -t . -v 2>&1 | grep -i liveness` 等）を伝えることのみ。
