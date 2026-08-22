@@ -2586,7 +2586,42 @@
         "soft_cap": 5000000
       },
       "created": "2026-08-22",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-22T20:57:15Z",
+        "verify": [
+          {
+            "cmd": "test -f ops/drills/restore_drill.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_restore_drill",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_restore_drill (unittest.loader._FailedTest.test_restore_drill)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_restore_drill\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_restore_drill'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "python3 -c \"import json; r=json.load(open('ops/projects/logs/P-0080/report.json')); assert len(r['targets'])>=5 and all(t.get('rto_seconds') is not None for t in r['targets'])\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json; r=json.load(open('ops/projects/logs/P-0080/report.json')); assert len(r['targets'])>=5 and all(t.get('rto_seconds') is not None for t in r['targets'])\n                             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'ops/projects/logs/P-0080/report.json'\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
