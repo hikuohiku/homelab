@@ -1,0 +1,218 @@
+{
+  "agent_environment": {
+    "age_binary_found": false,
+    "can_decrypt_now": false,
+    "config_keys_txt_found": false,
+    "key_env_vars_present": [],
+    "note": "在否のみを出力し値は出力しない。can_decrypt_now は楽観判定 (True でも復号成功を保証しない)",
+    "sops_binary_found": false
+  },
+  "creation_rules": [
+    {
+      "age_recipients": [
+        "age1u55u5prakalcplze25mvkr98ura4r4paduqx52xed0c8gh69j5psfp9tek"
+      ],
+      "matches_any_encrypted_file": true,
+      "path_regex": "nix/images/proxmox-cloud/secrets\\.yaml$"
+    }
+  ],
+  "encrypted_files": [
+    {
+      "keys_in_file": [
+        "doppler-token"
+      ],
+      "matched_creation_rule": {
+        "age_recipients": [
+          "age1u55u5prakalcplze25mvkr98ura4r4paduqx52xed0c8gh69j5psfp9tek"
+        ],
+        "path_regex": "nix/images/proxmox-cloud/secrets\\.yaml$"
+      },
+      "path": "nix/images/proxmox-cloud/secrets.yaml",
+      "recipients": [
+        "age1u55u5prakalcplze25mvkr98ura4r4paduqx52xed0c8gh69j5psfp9tek"
+      ],
+      "references": {
+        "doc": [
+          {
+            "lines": [
+              39
+            ],
+            "path": "CLAUDE.md"
+          },
+          {
+            "lines": [
+              44,
+              53
+            ],
+            "path": "apps/README.md"
+          },
+          {
+            "lines": [
+              3,
+              47,
+              58,
+              61
+            ],
+            "path": "docs/sops-recovery.md"
+          },
+          {
+            "lines": [
+              482
+            ],
+            "path": "ops/CHARTER.md"
+          },
+          {
+            "lines": [
+              582,
+              606,
+              611,
+              649
+            ],
+            "path": "ops/journal/2026-08.md"
+          }
+        ],
+        "log": [
+          {
+            "lines": [
+              107
+            ],
+            "path": "ops/projects/archive.jsonl"
+          },
+          {
+            "lines": [
+              13
+            ],
+            "path": "ops/projects/logs/P-0105/PROGRESS.md"
+          },
+          {
+            "lines": [
+              5,
+              34,
+              41,
+              56,
+              65
+            ],
+            "path": "ops/projects/logs/P-0105/PROJECT.md"
+          }
+        ],
+        "nix": [
+          {
+            "lines": [
+              78
+            ],
+            "path": "nix/images/proxmox-cloud/configuration.nix"
+          }
+        ],
+        "other": [
+          {
+            "lines": [
+              37
+            ],
+            "path": ".gitignore"
+          }
+        ],
+        "tooling": [
+          {
+            "lines": [
+              901,
+              902,
+              909,
+              936,
+              937,
+              943
+            ],
+            "path": "ops/archive/backlog-done.json"
+          },
+          {
+            "lines": [
+              244,
+              264
+            ],
+            "path": "ops/archive/runs.json"
+          },
+          {
+            "lines": [
+              59,
+              67,
+              97,
+              104,
+              117,
+              129,
+              130,
+              131,
+              132,
+              135,
+              137,
+              148,
+              217,
+              224,
+              274,
+              280,
+              296
+            ],
+            "path": "ops/tests/test_sops_dependency_map.py"
+          },
+          {
+            "lines": [
+              4,
+              14
+            ],
+            "path": "ops/tools/sops_dependency_map.py"
+          }
+        ]
+      }
+    }
+  ],
+  "key_locations": {
+    "key_file": {
+      "mentioned_in": [
+        {
+          "kind": "doc",
+          "path": "docs/sops-recovery.md"
+        },
+        {
+          "kind": "nix",
+          "path": "nix/images/proxmox-cloud/configuration.nix"
+        },
+        {
+          "kind": "log",
+          "path": "ops/projects/logs/P-0105/PROGRESS.md"
+        },
+        {
+          "kind": "log",
+          "path": "ops/projects/logs/P-0105/PROJECT.md"
+        },
+        {
+          "kind": "tooling",
+          "path": "ops/tests/test_sops_dependency_map.py"
+        },
+        {
+          "kind": "tooling",
+          "path": "ops/tools/sops_dependency_map.py"
+        },
+        {
+          "kind": "terraform",
+          "path": "terraform/proxmox/vm-nixos.tf"
+        }
+      ],
+      "note": "node01 全損時に消える実体。cloud-init が書き、sops.age.keyFile が読む",
+      "path_on_node": "/var/lib/sops-nix/key.txt"
+    },
+    "private_key_variable": {
+      "defined_in": [
+        "ops/tests/test_sops_dependency_map.py",
+        "terraform/proxmox/variables.tf"
+      ],
+      "name": "age_private_key",
+      "note": "値は repo 外。terraform apply 時に渡す",
+      "referenced_in": [
+        "docs/sops-recovery.md",
+        "ops/projects/logs/P-0105/PROGRESS.md",
+        "ops/tools/sops_dependency_map.py",
+        "terraform/proxmox/vm-nixos.tf"
+      ]
+    }
+  },
+  "problems": [],
+  "schema_version": 1
+}
