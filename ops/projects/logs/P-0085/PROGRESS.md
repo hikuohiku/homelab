@@ -139,3 +139,34 @@ immich-cli イメージ前提は 3 点とも実機で確認:
 ### 発見
 
 - なし(新規の罠・仮説なし。3 セッション目で手順は安定している)
+
+
+## worker session4 (2026-08-22)
+
+### 結論: まだ blocked。変化なし — キー登録だけを待つ (4 セッション連続)
+
+- **ES 強制再同期を実施**(delete → git manifest 再適用、14:52Z): Ready=False。
+  今回は Events に `Doppler API Client Error: secret 'IMMICH_API_KEY' not found` まで
+  出た = **Doppler (homelab/prd) に未登録であることをプロバイダ側が明示**。
+  session1 の依頼文は 3 セッション連続で未対応。verify #3 の未消化はこの 1 点のみ。
+- CronJob 適用・テスト画像投入には着手せず(キー無し適用は CreateContainerConfigError を
+  10 分毎に積む — session1 の罠)。クラスタ残置物は変わらず: ExternalSecret のみ
+  (失敗状態で残置)、CronJob 未適用。
+- verify #1/#2 を再実行して green 維持を実測(15 tests OK / manifest 存在)。
+
+### 次セッションへの引き継ぎ
+
+- 手順は session2/3 の引き継ぎのまま完全に有効: **まず ES 強制再同期(delete+reapply →
+  sleep 25 → Ready 確認)**。True になったら session1 の「e2e の Exact レシピ」に従う
+  (curl Job 経由で assets_before/after を数える。autopilot-writer SA は Secret get
+  Forbidden のため secret 直読みは最初から捨てる)。False なら何もせず終えてよい。
+- Ready 確認時は `kubectl describe externalsecret ... | tail` も併用すると
+  プロバイダの生エラー(Doppler クライアントメッセージ)まで読める。今回のように
+  「not found」が明示されると未登録確定の証拠として強い。
+- 人間への依頼文は PROGRESS session1 記載のものをそのまま使う。
+
+### 発見
+
+- ESO の Events には Doppler の生エラー文言が流れる(`describe` で見られる)。status 条件文
+  (`could not get secret data from provider`)より情報量が多く、「キー名タイポ」か
+  「未登録」かの切り分けに使える。
