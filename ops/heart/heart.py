@@ -357,7 +357,7 @@ class Heart:
             # kill switch の受信は必ず可視化する (該当プロジェクトが無く action が
             # 生まれない場合でも、veto 疎通試験の結果を外から確認できるように)
             log(
-                f"feedback received: vetoes={vetoes} stop_all={stop_all} "
+                f"feedback received: vetoes={vetoes} acks={acks} stop_all={stop_all} "
                 f"resume_all={resume_all} review_needed={len(review_needed)} "
                 f"task_requests={len(task_requests)}"
             )
@@ -383,6 +383,7 @@ class Heart:
             "health_green": unhealthy_apps == [],
             "health_fresh": health_fresh,
             "vetoes": vetoes,
+            "acks": acks,
             "stop_all": stop_all,
             "resume_all": resume_all,
             "breaker_tripped": tripped,

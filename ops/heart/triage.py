@@ -14,6 +14,8 @@ daily briefing に載せて人間と consolidation に見せる。取りこぼ�
 import re
 
 VETO_RE = re.compile(r"veto\s+(P-\d{4})", re.IGNORECASE)
+# 要対応キューの既読化。停止済み (stalled) の墓標をダッシュボードから下げる (2026-08-22)
+ACK_RE = re.compile(r"ack\s+(P-\d{4})", re.IGNORECASE)
 
 
 def _matches_stop(text, kw):
@@ -41,6 +43,9 @@ def classify(text, rules):
     kind: "stop_all" | "veto" | "resume_all" | "review_needed"
     """
     text = text or ""
+    acks = ACK_RE.findall(text)
+    if acks:
+        return {"kind": "ack", "projects": [a.upper() for a in acks]}
     vetoes = VETO_RE.findall(text)
     if vetoes:
         return {"kind": "veto", "projects": [v.upper() for v in vetoes]}
