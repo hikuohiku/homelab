@@ -48,3 +48,56 @@
   だけ確認してほしい (CHARTER §4 が縛る変更に対してこれを要求している)。
 - もし pytest 側の verify がまだ red なら、原因が「テストが無い/落ちている」なのか
   「pytest コマンド自体が実行不能」なのかをまず切り分けること。後者なら実装の問題ではない。
+
+### 2026-08-22 セッション2
+
+**やったこと**: 実装変更なし。session1 の実装 (liveness.py / test_liveness.py /
+heart-deployment.yaml の livenessProbe) を再検証し、pytest verify が red のままである
+原因の切り分けを完了させた。
+
+1. `grep -q 'livenessProbe' apps/autopilot/heart-deployment.yaml` → PASS (再確認)。
+2. `python3 -m unittest discover -s ops/heart/tests -t .` → 153 テスト全 green
+   (新設の 9 件含む)。実装・テスト内容そのものに問題は無い。
+3. wrapper 実測 (このセッション冒頭 JSON) でも
+   `python3 -m pytest ops/heart/tests -k liveness -q` は
+   `/usr/bin/python3: No module named pytest` で red。session1 のサンドボックスだけの
+   問題ではなく、**wrapper の実 verify 環境でも pytest が存在しない**ことが確定した。
+4. 切り分けのため以下を実施・確認した:
+   - `python3 -m pip --version` → `No module named pip`（pip も無い）。
+   - `python3 -m ensurepip --default-pip` → 失敗（`No module named pip` のまま。
+     オフライン環境で同梱 wheel からの自己インストールが機能しない構成）。
+   - `apt` / `apt-get` が存在しない（パッケージマネージャ経由の追加導入も不可）。
+   - `.github/workflows/ci.yml` を全文確認 — pytest のインストール/実行は影も形も無い
+     （`unit tests` ステップは `unittest discover` のみ、`pip install` 系ステップ自体が
+     どこにも存在しない）。
+   - リポジトリ全体 (`requirements*.txt` / `pyproject.toml` / `Pipfile` /
+     Dockerfile 等) を検索したが pytest への言及・依存宣言は一切無い。
+
+**分かったこと（結論）**:
+- **`python3 -m pytest ops/heart/tests -k liveness -q` という verify コマンドは、この
+  リポジトリが実際に使っている全ての実行環境 (このセッションのサンドボックス、wrapper の
+  実測環境、CI) のどこにも pytest が存在しないため、原理的に実行不能。** これは
+  「テストが無い/壊れている」という実装側の不備ではなく、**spec の verify コマンドの選定
+  自体が誤り**（このリポジトリの標準テストランナーは `unittest discover` であり、
+  pytest はどこにも導入されていない前提を見落として書かれたコマンド）。
+- PROJECT.md の initializer が想定していた「pytest が CI (ubuntu-latest) には pip で
+  入れられるはず」という仮説は誤りだった: CI にはそもそも pytest を入れるステップが
+  無いことを ci.yml 全文で確認済み。
+- この状況で実装側にできることは無い。CI に `pip install pytest` ステップを足す、
+  という手も考えたが: (a) それは wrapper 自身の verify 実行環境(CI ではなくこの
+  session/wrapper のサンドボックス)には影響しない ため red は変わらない、
+  (b) spec が要求していない CI 変更をスコープ外で行うことになる、の 2 点で見送った。
+  `pytest` を騙る shim を repo に置いて `-k liveness` に応答させる案も検討したが、
+  検証の実質を失わせる欺瞞的な回避策であり CHARTER の精神に反すると判断し、やらなかった。
+
+**次のセッションへの一言**:
+- **これ以上の実装作業は不要。** livenessProbe 本体・liveness.py・テストは完成しており
+  DoD を満たしている。残る red は spec 側 (`ops/projects/logs/P-0065/PROJECT.md` の
+  採択 JSON にある verify 文字列そのもの) の欠陥であり、コード変更では解消できない。
+- 次に何かするなら、curriculum/reviewer 側に「この spec の第二 verify は
+  `python3 -m pytest ...` ではなく `python3 -m unittest discover -s ops/heart/tests
+  -t . -v 2>&1 | grep -i liveness`（もしくは pytest が使えないなら `-k` 相当を諦めて
+  `python3 -m unittest ops.heart.tests.test_liveness -v` のように対象ファイルを直指定する
+  形）に置き換えるべき、という指摘を渡すこと。ops/ の帳簿 (backlog.json 等) は
+  このセッションでは触っていない (CLAUDE.md / PROJECT.md の「やらないこと」に従い、
+  heart の領分のため)。
