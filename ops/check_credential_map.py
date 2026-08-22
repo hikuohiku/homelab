@@ -126,6 +126,10 @@ DECLARED_SECRET_TARGETS = frozenset(
         "openclaw-credentials",
         "operator-oauth",
         "ops-dashboard-github-token",
+        # P-0102 (apps/restic-check)。5 リポジトリ共通の append-only 鍵の複製と
+        # Discord webhook (既存キーの参照のみ、新規 Doppler キーは無し)
+        "restic-check-restic-credentials",
+        "restic-check-webhook",
         "syncthing-restic-backup-credentials",
         "syncthing-restic-credentials",
         "vaultwarden-admin-token",

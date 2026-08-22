@@ -446,6 +446,18 @@
       "observability_impact": "syncthing の restic バックアップ・retention CronJob が使用。壊れるとバックアップが取れなくなるが syncthing 本体の可用性には影響しない。ただし syncthing は削除が同期で伝播しうるため、バックアップが止まったまま気づかないと事故が最も戻せない形で出る"
     },
     {
+      "id": "restic-check-restic-image",
+      "kind": "image",
+      "name": "restic/restic (check CronJob)",
+      "current": "0.19.1",
+      "file": "apps/restic-check/cronjob.yaml",
+      "match": "restic/restic:",
+      "upstream": "github:restic/restic",
+      "policy": "auto",
+      "note": "P-0102 で新設（5 リポジトリの週次 restic check）。backup 側5ファイルと同じタグを使う設計。同一ファイル内に restic-probe initContainer の1箇所のみ。check_version_sync.py の GROUPS に6ファイル目として登録済み（vaultwarden-restic-image の note 参照）",
+      "observability_impact": "週次 restic check CronJob が使用。壊れても既存バックアップは止まらないが、リポジトリ破損・夜間 backup 静的失敗 (鮮度超過) の検知が消え、破損は復元時に初めて判る状態へ戻る"
+    },
+    {
       "id": "syncthing",
       "kind": "image",
       "name": "syncthing/syncthing",

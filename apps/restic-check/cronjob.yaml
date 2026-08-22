@@ -1,0 +1,167 @@
+# P-0102 — 5 本の restic リポジトリの週次健康診断。
+#
+# 毎晩の backup CronJob (apps/{vaultwarden,immich,coder,syncthing}/restic-*-cronjob.yaml) は
+# あるが `restic check` は一度も走っておらず、破損は復元時に初めて判る。この CronJob が
+# 日曜朝に全 5 リポジトリを直列に検査し、(1) check --read-data-subset の結果、
+# (2) 最新 snapshot の鮮度 (24h 超で警報 = 夜間 backup が静かに死んでいる兆候) を
+# 判定して、失敗時のみ Discord へ incident 通知する。判定ロジックの単一情報源は
+# ops/restic_check_runner.py (ops/tests/test_restic_check_runner.py が CI で守る)。
+# このファイルへは ConfigMap 経由でそのコピーを載せる — 一致は
+# ops/check_restic_check_script_sync.py が CI で検査する。
+#
+# なぜ 2 コンテナか: restic バイナリと python は 1 イメージに入らない。ランタイムの
+# apk 追加は vaultwarden sqlite-snapshot 前例 (apps/vaultwarden/restic-backup-cronjob.yaml)
+# で拒否されたので、restic イメージの initContainer が検査を実行して生結果を書き出し、
+# python イメージの本体が判定・通知だけを担う。initContainer は busybox sh しか無くて
+# 安全な JSON 生成ができないため、リポジトリごとに生フィールドを staging へ書くだけにし、
+# レコード契約 {"repo","check_rc","snapshots_rc","snapshots_json"} への組み立ては
+# 本体側 job_main.py が行う (契約の意味は ops/restic_check_runner.py 冒頭の docstring)。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: restic-check
+  namespace: restic-check
+spec:
+  # JST で評価される (node01 の time.timeZone。spec.timeZone は既存 CronJob も誰も書いていない)。
+  # 日夜間 backup 帯 (2:45–3:55) と retention 帯 (日曜 3:45–4:50) を避け、retention 直後の
+  # prune 済みの状態を検査できる日曜 5:30 に置く
+  schedule: "30 5 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # 再試行しない: 失敗時の再実行は B2 からの再読み込みと Discord 通知の重複を招くだけで、
+      # 週次の診断に即時リトライの価値は無い。手動の再実行は
+      # kubectl create job --from=cronjob/restic-check で起こす
+      backoffLimit: 0
+      # 全 5 リポジトリの直列検査 (index 全読み + 各リポジトリ 5% のデータ読み) に
+      # 見合った上限。backup CronJob が 1 リポジトリの完全 backup で 3600s の実績があるので、
+      # 部分読み × 5 に対しては過大な 4h。超過時は Job が赤くなり既存の
+      # ops-health-reporter (pod_issues) 経由で気づける
+      activeDeadlineSeconds: 14400
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          # PVC を持たない純ネットワーク読み取りジョブなので、PVC 所有権回避の
+          # DAC_READ_SEARCH は不要。ops-health-reporter と同じ non-root + 全 capability 削除。
+          # fsGroup は emptyDir (/work/results) を非 root で書き共有するために要る
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            fsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          initContainers:
+            - name: restic-probe
+              image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
+              command:
+                - sh
+                - -c
+                - |
+                  set -u
+                  staging=/work/results/staging
+                  mkdir -p "$staging"
+                  # 対象リスト。ops/restic_check_runner.py の REPOS 表と同じ集合を保つこと。
+                  # 片方だけ増減させると runner が「レコード欠落 / 予期しないリポジトリ」で
+                  # 赤くなる設計なので、漏れは実行時に気づける
+                  for repo in vaultwarden immich coder-postgres coder-workspace-homes syncthing; do
+                    echo "=== $repo ==="
+                    # credential は 5 リポジトリ共通 (docs/backup.md)。secret ボリュームを
+                    # キー名のままファイルとして読む。envFrom だと 4 Secret 分の同名キー衝突が
+                    # 起こる構成だった時代の名残ではなく、単一 Secret をこの形で読むのが最短
+                    export RESTIC_PASSWORD="$(cat /creds/RESTIC_PASSWORD)"
+                    export B2_ACCOUNT_ID="$(cat /creds/B2_ACCOUNT_ID)"
+                    export B2_ACCOUNT_KEY="$(cat /creds/B2_ACCOUNT_KEY)"
+                    bucket="$(cat /creds/RESTIC_B2_BUCKET)"
+                    export RESTIC_REPOSITORY="b2:${bucket}:${repo}"
+                    # check 自体も lock を取る。append-only 鍵での lock 除去は backup/unlock で
+                    # 実績のある hide マーカー経路だが、check での完走はこれが初検証になる
+                    # (受入 #3 の evidence はこの Job ログの EVIDENCE_JSON 行から取る)
+                    restic check --read-data-subset="${RESTIC_CHECK_READ_SUBSET:-5%}" \
+                      > "$staging/$repo.check.log" 2>&1
+                    echo $? > "$staging/$repo.check_rc"
+                    tail -n 3 "$staging/$repo.check.log"
+                    restic snapshots --latest 1 --json \
+                      > "$staging/$repo.snapshots.out" 2> "$staging/$repo.snapshots.err"
+                    echo $? > "$staging/$repo.snapshots_rc"
+                  done
+                  # ここでは決して落ちない。どれかが失敗してもレコードに rc を残してあり、
+                  # 欠落を含めた判定は本体コンテナ (job_main.py) の仕事。initContainer が
+                  # 落ちるとレコード無しで Job 全体が終わり、「何が壊れたか」が消える
+                  echo "probe done: raw fields are in $staging"
+                  exit 0
+              env:
+                # restic の cache (index 再利用) を root filesystem ではなく emptyDir へ。
+                # 5 リポジトリ連続で効く。Pod ごとに捨てるので肥満しない
+                - name: XDG_CACHE_HOME
+                  value: /cache
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                # memory limits は入れない（実測が無い。既存 5 アプリの backup CronJob と同型）
+                limits:
+                  cpu: 500m
+              volumeMounts:
+                - name: creds
+                  mountPath: /creds
+                  readOnly: true
+                - name: results
+                  mountPath: /work/results
+                - name: cache
+                  mountPath: /cache
+          containers:
+            - name: evaluate
+              image: python:3.14-alpine
+              terminationMessagePolicy: FallbackToLogsOnError
+              command: ["python", "/scripts/job_main.py"]
+              env:
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+                # 判定は成功時黙る。ここが空でも runner は stderr に警告して確実に
+                # 非ゼロ終了する (通知経路の断絶を緑で誤魔化さない契約)
+                - name: RESTIC_CHECK_WEBHOOK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: restic-check-webhook
+                      key: DISCORD_WEBHOOK_URL
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              # ops-health-reporter と同じ資源クラス（JSON 組み立てと HTTP 1 回程度）のため
+              # 同じ値を流用。実使用量に張り付いた値ではないため OOMKill を誘発するリスクは低い
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: results
+                  mountPath: /work/results
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: creds
+              secret:
+                secretName: restic-check-restic-credentials
+            - name: results
+              emptyDir: {}
+            - name: cache
+              emptyDir: {}
+            - name: script
+              configMap:
+                name: restic-check-script
+            - name: tmp
+              emptyDir: {}
