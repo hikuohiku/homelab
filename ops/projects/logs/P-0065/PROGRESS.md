@@ -152,3 +152,44 @@ heart-deployment.yaml の livenessProbe) を再検証し、pytest verify が red
   やらないこと（session2, session3 で 2 度確認済み）。次にできる建設的な一手は
   curriculum/reviewer 側に verify 文字列の修正案（`python3 -m unittest discover -s
   ops/heart/tests -t . -v 2>&1 | grep -i liveness` 等）を伝えることのみ。
+
+### 2026-08-22 セッション4
+
+**やったこと**: 実装変更なし。session2/3 の結論を鵜呑みにせず、「wrapper は verify を
+どこで・どう実行しているか」を初めてソースから直接確認した（`ops/runner/runner.py`）。
+
+1. `grep -q 'livenessProbe' apps/autopilot/heart-deployment.yaml` → PASS（再確認、変更なし）。
+2. `python3 -m pytest --version` / `python3 -m pip --version` → 両方 `No module named ...`
+   （このセッションのサンドボックスで再確認、session2/3 と同じ）。
+3. **新規確認**: `ops/runner/runner.py:516` の `run_verify()` を読んだ。spec の各 verify
+   コマンドを `subprocess.run(["bash", "-c", cmd], cwd=self.repo_dir, ...)` として素の
+   ホスト環境でそのまま実行しており、`runner.py` 全体に `pip install` / `venv` / `Dockerfile`
+   の類の環境準備ステップは一切無い（`grep -n "pip\|venv\|install\|requirements\|Dockerfile"
+   ops/runner/runner.py` → 0 件）。つまり **wrapper の verify 実行環境は CI ではなく
+   runner プロセスが動いているホストそのものであり、CI 側に `pip install pytest` を足しても
+   wrapper の実測には一切影響しない**ことが確定した（session2 が「たぶん影響しない」と
+   推測に留めていた点を、実装を読んで裏付けた）。
+4. `.github/workflows/ci.yml` を再確認: heart/runner/ops のテストは一貫して
+   `python3 -m unittest discover ...`（39, 56-58行）で回っており、pytest 系のステップは
+   依然として存在しない。
+
+**分かったこと（結論、session2/3 を追加根拠つきで再確定）**:
+- **`python3 -m pytest ops/heart/tests -k liveness -q` を green にする経路は、CI を含めても
+  repo 側の変更では存在しない。** wrapper (`ops/runner/runner.py`) は verify を CI 経由ではなく
+  ホスト上で直接実行しており、その環境に pytest を持ち込む手段（永続化された pip install や
+  venv、pytest 導入済みの実行イメージへの切り替え）は本プロジェクトのスコープ（heart の
+  livenessProbe 追加）の外にある。DoD は「判定ロジックにユニットテストを付ける」であり、
+  これは `ops/heart/tests/test_liveness.py`（unittest.TestCase, 9 テスト、CI で実際に
+  実行され green）としてすでに満たされている。第二 verify コマンドの文字列自体が
+  誤りという session2/3 の結論を、実装読解による直接証拠で確定させた。
+
+**次のセッションへの一言**:
+- **これ以上の実装セッションを消費しないこと。** session2, 3, 4 の 3 回にわたり
+  「pytest がこの repo のどの実行経路にも存在せず、repo 側の変更では持ち込めない」ことを
+  異なる角度（依存関係の grep、PEP 668 制約、runner.py のソース読解）から確認済みで、
+  結論は一貫している。次回起動して wrapper 実測 JSON が両方 green なら完了、pytest 側が
+  赤いままなら実装側の問題ではないので verify コマンドの再検証は不要（venv/pip/shim を
+  再試行しない）。建設的な次の一手があるとすれば、この PROGRESS.md の内容を根拠に
+  curriculum/reviewer へ「verify 文字列を `python3 -m unittest discover -s
+  ops/heart/tests -t . -v 2>&1 | grep -i liveness` 等に差し替えるべき」と伝えること、
+  それだけ（heart/ops の帳簿は触らない、CLAUDE.md の指示どおり）。
