@@ -786,6 +786,33 @@ venv インストール手順を実行してから verify を回すこと」) �
 `apps/autopilot/heart-deployment.yaml:67`) は session2 から一度も変わっておらず、
 環境さえ整えば両 verify とも即 green になる。
 
+### 2026-08-22 セッション25
+
+**やったこと**: wrapper 実測 JSON で第2項目が red (`No module named pytest`) —
+予想どおりコンテナが作り直されていたため、session23/24 記載の手順を冒頭で再実行した
+(session25 の手順を再実行した、という以上の内容は無い)。
+
+1. `site.getusersitepackages()` → `/work/home/.local/lib/python3.14/site-packages`
+   (session22〜24 と同一)。venv 作成 → `pip install --target=<上記> pytest` → 成功
+   (pytest 9.1.1)。リポジトリ配下は一切触っていない。
+2. verify 自実測: `grep -q 'livenessProbe' apps/autopilot/heart-deployment.yaml` → rc=0
+   (67 行目)。`python3 -m pytest ops/heart/tests -k liveness -q` → **9 passed,
+   144 deselected** (rc=0)。
+3. 副作用確認: `pytest ops/heart/tests -q` → 153 passed。
+   `unittest discover -s ops/heart/tests -t .` → OK。
+4. `git status --short` → コード差分は無し (本コミットは PROGRESS.md 追記のみ)。
+
+**分かったこと**: 新規の発見なし。コンテナ再作成パターンは session22 以降 3 回連続で
+確定済みで、curriculum への運用メモ追加依頼も session24 で記録済み。
+
+**次のセッションへの一言**: 内容は session23/24 と同一。wrapper 実測で第2項目が red なら
+実装を疑わず、session23 記載のコマンドブロック (venv 作成 → `pip install --target=
+<user site-packages> pytest`) をそのまま実行 → `pytest ops/heart/tests -k liveness -q`
+で green 確認 → PROGRESS.md に「session25 の手順を再実行」と一行追記して commit。
+実装 (`ops/heart/liveness.py` / `ops/heart/tests/test_liveness.py` /
+`apps/autopilot/heart-deployment.yaml:67`) は不変、環境さえ整えば両 verify 即 green。
+レビュー指摘が来ていたらそれだけを最優先で直すこと。
+
 ### 継続の引き継ぎ (2026-08-22, human-pilot)
 
 P-0065 は opencode の external_directory 拒否バグ (#452 で修正済み) により、実装健全のまま
