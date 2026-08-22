@@ -1,0 +1,138 @@
+# 写真の受け入れ窓口 (P-0085)。syncthing-data PVC 上の photo-intake/ フォルダに放り込まれた
+# 画像・動画を 10 分毎に immich サーバへアップロードし、成功分だけ photo-intake/done/ へ
+# 移動する。「預けない理由」最大の要素は取り込みの手間なので、人間はフォルダに置くだけで
+# よい状態を作る。テスト画像 1 枚の end-to-end 通過で証明する（e2e-proof.json）。
+#
+# 重複取り込みの二重防止:
+#   1. サーバ側 — immich は checksum ベースの重複排除を組み込みで持つ。同一ファイルの
+#      再 upload はスキップされ成功扱いで返るため、Job 再実行でも二重登録されない
+#   2. ローカル側 — upload 成功分だけ done/ へ移す。失敗分は元の場所に残留し次回リトライ。
+#      done/ は find の prune 対象なので二度と選ばれない
+# done/ への移動は PVC 内 mv なので可逆（手で戻せる）。削除はどこにも行わない。
+#
+# syncthing 関連ファイルの扱い: 端末から同期中の一時ファイル (~syncthing~*.tmp) と
+# ドットファイル (.stfolder 等) は除外する。転送途中のファイルを取り込む事故を防ぐため。
+#
+# イメージ ghcr.io/immich-app/immich-cli:3.1.0 (2026-08-22 実閲覧):
+#   - ENTRYPOINT が ["node", "/usr/src/app/packages/cli/dist"] の alpine + node 24 ベース。
+#     PATH 上に immich コマンドは無いため、スクリプト内ではこの entrypoint 実体を直接叩く。
+#     パスはイメージタグ pin により固定されていることが前提（バージョン更新時に要確認）
+#   - 認証は env IMMICH_INSTANCE_URL (サーバ URL + /api) と IMMICH_API_KEY だけでよく、
+#     login 不要。auth.yml の書き出し先も IMMICH_CONFIG_DIR で /tmp へ逃がす
+#     （uid 1000 の HOME は無いので既定先への書き込みが失敗しうるため）
+#   - immich server は chart values.yaml の v3.1.0 と同じ monorepo リリースで足並みを揃える
+#
+# Service 名 immich-server / port 2283 は apps/immich/ingress.yaml の defaultBackend と
+# 実クラスタ (kubectl get svc -n immich, 2026-08-22) の双方で確認済み。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: photo-intake
+  namespace: syncthing
+spec:
+  # 「放り込んだらそのうち現れる」体験が目的なので高頻度。JST 評価は */10 では無関係。
+  schedule: "*/10 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          containers:
+            - name: photo-intake
+              image: ghcr.io/immich-app/immich-cli:3.1.0
+              terminationMessagePolicy: FallbackToLogsOnError
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  INTAKE="${INTAKE_DIR:-/var/syncthing/photo-intake}"
+                  DONE="$INTAKE/done"
+                  CLI="node /usr/src/app/packages/cli/dist"
+                  mkdir -p "$DONE"
+                  pending=$(mktemp)
+                  trap 'rm -f "$pending"' EXIT
+                  find "$INTAKE" \
+                    -path "$DONE" -prune -o \
+                    -type f \
+                    ! -name '.*' \
+                    ! -name '~syncthing~*' \
+                    \( \
+                      -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' \
+                      -o -iname '*.gif' -o -iname '*.webp' -o -iname '*.heic' \
+                      -o -iname '*.heif' -o -iname '*.avif' -o -iname '*.jxl' \
+                      -o -iname '*.tif' -o -iname '*.tiff' \
+                      -o -iname '*.dng' -o -iname '*.cr2' -o -iname '*.cr3' \
+                      -o -iname '*.nef' -o -iname '*.arw' -o -iname '*.raf' \
+                      -o -iname '*.orf' -o -iname '*.rw2' -o -iname '*.srw' \
+                      -o -iname '*.mp4' -o -iname '*.mov' -o -iname '*.m4v' \
+                      -o -iname '*.avi' -o -iname '*.mkv' -o -iname '*.webm' \
+                      -o -iname '*.mts' -o -iname '*.m2ts' -o -iname '*.ts' \
+                      -o -iname '*.3gp' -o -iname '*.wmv' -o -iname '*.flv' \
+                    \) -print > "$pending"
+                  if [ ! -s "$pending" ]; then
+                    echo "photo-intake: nothing to import"
+                    exit 0
+                  fi
+                  rc=0
+                  while IFS= read -r f; do
+                    [ -n "$f" ] || continue
+                    echo "photo-intake: uploading $f"
+                    if $CLI upload --no-progress "$f"; then
+                      rel=${f#$INTAKE/}
+                      case $rel in
+                        */*) mkdir -p "$DONE/${rel%/*}" ;;
+                      esac
+                      mv "$f" "$DONE/$rel" || rc=1
+                    else
+                      echo "photo-intake: upload failed, kept for retry: $f" >&2
+                      rc=1
+                    fi
+                  done < "$pending"
+                  if [ "$rc" -eq 0 ]; then
+                    echo "photo-intake: all pending files imported"
+                  fi
+                  exit $rc
+              env:
+                - name: IMMICH_INSTANCE_URL
+                  value: http://immich-server.immich.svc.cluster.local:2283/api
+                - name: IMMICH_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: syncthing-photo-intake-credentials
+                      key: IMMICH_API_KEY
+                - name: IMMICH_CONFIG_DIR
+                  value: /tmp/immich-cli
+              # syncthing 公式イメージの entrypoint が PUID/PGID=1000 で PVC を書いているので、
+              # intake 配下のファイルも所有者 1000:1000。CronJob 側も同じ uid/gid で動かして
+              # 移動・作成したファイルの所有者を揃える（root で動かすと syncthing 同期や
+              # 人間の手で触れなくなる）。特権は不要
+              securityContext:
+                runAsUser: 1000
+                runAsGroup: 1000
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                # memory limits は入れない（実測が無い。substrate.md の方針。CPU limits のみ可）
+                limits:
+                  cpu: 500m
+              volumeMounts:
+                - name: syncthing-data
+                  mountPath: /var/syncthing
+                  # 書き込む（done/ への移動と mkdir）ので readOnly にしない。
+                  # local-path は hostPath ベースで RWO だが node01 単一ノードのため、
+                  # syncthing Pod との同時マウントは競合しない
+          volumes:
+            - name: syncthing-data
+              persistentVolumeClaim:
+                claimName: syncthing-data
