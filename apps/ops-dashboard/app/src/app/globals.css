@@ -58,11 +58,17 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
   border: 0; border-left: 1px solid rgba(36, 65, 74, .55); background: transparent;
   padding: 0 19px; cursor: pointer; color: var(--muted); position: relative; font-size: 12px;
 }
-.masthead nav button:last-child { border-right: 1px solid rgba(36, 65, 74, .55); }
+.masthead nav > :last-child { border-right: 1px solid rgba(36, 65, 74, .55); }
 .masthead nav button span { font: 10px var(--mono); display: block; margin-bottom: 4px; }
 .masthead nav button em { font: 700 10px var(--mono); font-style: normal; background: var(--danger); color: var(--night); padding: 2px 5px; margin-left: 5px; }
 .masthead nav button.active { color: var(--ink); background: rgba(69, 214, 197, .07); }
 .masthead nav button.active::after { content: ""; height: 2px; background: var(--signal); position: absolute; inset: auto 15px 0; }
+.masthead nav .nav-page {
+  border-left: 1px solid rgba(36, 65, 74, .55);
+  padding: 0 19px; display: flex; flex-direction: column; justify-content: center; align-items: center;
+  font-size: 12px; color: var(--signal); text-decoration: none;
+}
+.masthead nav .nav-page span { font: 10px var(--mono); display: block; margin-bottom: 4px; }
 .heart-chip { justify-self: end; align-self: center; display: flex; align-items: center; gap: 10px; }
 .heart-chip > i { width: 9px; height: 9px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 15px var(--signal); }
 .heart-chip small, .heart-chip strong { display: block; text-align: right; }
