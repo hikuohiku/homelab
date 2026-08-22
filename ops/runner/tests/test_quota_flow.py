@@ -105,7 +105,14 @@ class QuotaFlowTest(unittest.TestCase):
         self.tmp = Path(self.tmpdir.name)
         self.addCleanup(self.tmpdir.cleanup)
         self.slept = []
-        patcher = mock.patch.object(R.time, "sleep", self.slept.append)
+        # R.time は共有の time モジュールなので、この patch はプロセス全体に効く。
+        # subprocess.run(timeout=) が内部で行う指数ポーリング (0.001s×2^n) まで
+        # 混入し、git が遅い環境で偽陽性を出した (2026-08-23 実測。CI でも再現)。
+        # quota 待ちは常に 60 秒以上なので、1 秒未満は捨てて意図だけを記録する
+        patcher = mock.patch.object(
+            R.time, "sleep",
+            lambda seconds: self.slept.append(seconds) if seconds >= 1 else None,
+        )
         patcher.start()
         self.addCleanup(patcher.stop)
         # mode_worker は REVIEW_FINDINGS を環境から読む。runner Job の中でこの
