@@ -7,9 +7,10 @@ drill-restore-* namespace の新規 PVC へ restore し、アプリ相当の最�
 (参照するのは credential の Doppler キーだけで、volume はすべて drill 側の新規 PVC)。
 
 使い方 (リポジトリルートで):
-    python3 ops/drills/restore_drill.py                # 実行。cluster 接続が要る
-    python3 ops/drills/restore_drill.py --dry-run      # manifest 生成だけ確認して終了
-    python3 ops/drills/restore_drill.py --keep         # 後片付け (namespace delete) を省略
+    python3 ops/drills/restore_drill.py                  # 実行。cluster 接続が要る
+    python3 ops/drills/restore_drill.py --preflight-only # B2 download 可否だけ確認して終了
+    python3 ops/drills/restore_drill.py --dry-run        # manifest 生成だけ確認して終了
+    python3 ops/drills/restore_drill.py --keep-namespaces  # 後片付け (namespace delete) を省略
 
 設計 (PROJECT.md「決めてあること」):
 - RTO = 「PVC 作成要求の時刻」から「liveness 合格の時刻」までの壁時計。どちらも
@@ -60,14 +61,30 @@ DEFAULT_OVERALL_TIMEOUT_SECONDS = 1800
 # activeDeadline (25分) までリトライを続けて時間だけが溶ける)
 PREFLIGHT_NAMESPACE = "drill-preflight"
 PROBE_JOB_NAME = "restore-drill-preflight"
-PROBE_ACTIVE_DEADLINE_SECONDS = 180
 PROBE_POLL_INTERVAL_SECONDS = 10
+# server 側の backstop (Job の activeDeadlineSeconds)。スクリプトが死んでも probe が
+# 無期限に Class C transaction を消費しないようにする壁。**client の観測窓より十分長く
+# する**: deadline で Job コントローラが pod を消すとログも数分で消えるため、証拠は
+# 生きた pod から取る必要がある (2026-08-22 実測: 180s で同時判定すると pod 跡が消えて
+# 「Failed なのに証拠なし」になった)
+PROBE_ACTIVE_DEADLINE_SECONDS = 900
+# client 側の観測窓。この秒数で Complete/Failed が出なければ判定不能として中断する。
+# 健常なら syncthing 最小リポジトリの snapshots は数十秒、403 リトライなら窓内に
+# ログが溜まる。観測打ち切り時に pod はまだ生きている (server deadline 未達) ので、
+# ログを採ってから後片付けできる
+PROBE_OBSERVE_SECONDS = 240
 
-# B2 が download cap 超過時に返す 403。raw API body の code 名と、restic の
-# ログに現れるメッセージ文面の両方に対応させる (2026-08-22 実測の両形式)
+# B2 が download cap 超過時に返す 403。raw API body の code 名、restic ログに現れる
+# メッセージ全文に加え、**文面が「403: 」で切れた形式**にも対応させる
+# (2026-08-22 実測: 同じ cap 超過でも restic のリトライ行が
+#  "Stat: b2_download_file_by_name: 403: " で終わり、理由文言が空のまま出ることがある。
+#  download API 名 + 403 の組み合わせ自体を cap 超過扱いにする — 認証不足は 401 で来るので
+#  download 系 403 は実運用上すべて cap/上限系。見逃した場合のコスト (全 unit 盲走) の方が
+#  過剰中断 (数分後の再試行) より大きい)
 DOWNLOAD_CAP_ERROR_MARKERS = (
     "download_cap_exceeded",
     "download bandwidth or transaction (Class B) cap exceeded",
+    "b2_download_file_by_name: 403",
 )
 
 # 夜間帯の回避 (JST)。backup CronJob 群 (2:45/3:10/3:30/3:40/3:55) と retention
@@ -590,6 +607,8 @@ def is_download_cap_error(text: str) -> bool:
     B2 無料枠の download 帯域 (1GB/day) や Class B transaction 数の上限を超えると
     b2_download_file_by_name が 403 を返し、restic はリトライを繰り返す。cap は
     アカウント全体で共有されるため、1 対象でもこれが出たら全対象が同じ運命になる。
+    download API 名 + 403 の組合せは理由文言が欠けていても cap 超過扱いにする
+    (DOWNLOAD_CAP_ERROR_MARKERS の注記を参照)。
     """
     return any(marker in text for marker in DOWNLOAD_CAP_ERROR_MARKERS)
 
@@ -760,11 +779,20 @@ def run_download_preflight(target: dict) -> None:
     """本番の restore を起こす前に、B2 からの download が今すぐ通るか確かめる。
 
     最小リポジトリ (syncthing) を drill-preflight namespace の使い捨て Job で
-    `restic snapshots` し、download cap 超過 (403 download_cap_exceeded) を検出したら
-    全体を中断する。cap はアカウント全体・日次で共有されるため、この状態で本番の
-    restore 群を起こしても全 unit が activeDeadline までリトライを繰り返すだけで
-    時間と Class B transaction の予算だけを消す。cap 以外の失敗は対象リポジトリ固有の
-    可能性を残すため警告にとどめ続行する。
+    `restic snapshots` し、**Job が Complete のときだけ「通る」と判定する。**
+    それ以外はすべて中断する (fail-closed):
+
+    - cap 超過 (403) を検出したら中断。cap はアカウント全体・日次で共有されるため、
+      この状態で本番の restore 群を起こしても全 unit が activeDeadline まで
+      リトライを繰り返すだけで時間と Class B transaction の予算だけを消す (実測済み)
+    - cap 以外の失敗・判定不能 (pod が上がらない、deadline 内に終わらない、ログが空)
+      も中断する。「syncthing 固有の問題なら他対象は復元できるはず」と続行させる案も
+      あったが (旧実装)、probe の存在理由は「予算を溶ける前に止まること」であり、
+      原因不明のまま全 unit を盲走させるのは本末転倒。2026-08-22 実測: 判定不能を
+      WARN+続行した結果 false OK を出し、本命 run を起こしかけた。数分後に
+      再試行すればよいだけのコストで済む方に倒す
+
+    戻れば成功。それ以外は DrillError。
     """
     log("== phase 0: B2 download preflight ==")
     apply_manifest(build_namespace_manifest(PREFLIGHT_NAMESPACE))
@@ -774,11 +802,14 @@ def run_download_preflight(target: dict) -> None:
         ))
         wait_externalsecret_ready(PREFLIGHT_NAMESPACE, target["secret_name"])
         apply_manifest(build_probe_job(target["secret_name"], target["repo_suffix"]))
-        deadline = datetime.now(timezone.utc) + timedelta(
-            seconds=PROBE_ACTIVE_DEADLINE_SECONDS
+        # 判定は client 側の観測窓で行う (PROBE_OBSERVE_SECONDS)。server 側の
+        # backstop はこれより長いので、窓を超えた時点でも pod は生きており、
+        # リトライ storm のログを採ってから後片付けできる
+        observe_until = datetime.now(timezone.utc) + timedelta(
+            seconds=PROBE_OBSERVE_SECONDS
         )
         state = "Running"
-        while datetime.now(timezone.utc) < deadline:
+        while datetime.now(timezone.utc) < observe_until:
             job = kubectl_json(["get", "job", PROBE_JOB_NAME, "-n", PREFLIGHT_NAMESPACE])
             state = job_status(job)
             if state != "Running":
@@ -787,18 +818,47 @@ def run_download_preflight(target: dict) -> None:
         if state == "Complete":
             log("  download OK: B2 から復元できる状態")
             return
+        # 生きた pod から即回収する。deadline 超過で Job コントローラに消された後は
+        # ログも短時間で消える (2026-08-22 実測)
         logs = fetch_logs_tail(PREFLIGHT_NAMESPACE, PROBE_JOB_NAME)
+        _, pods_state, _ = kubectl(
+            ["get", "pods", "-n", PREFLIGHT_NAMESPACE,
+             "-l", f"job-name={PROBE_JOB_NAME}", "-o", "wide"]
+        )
+        evidence = f"pods:\n{pods_state or '(なし)'}\nlogs:\n{logs or '(空)'}"
         if is_download_cap_error(logs):
             raise DrillError(
                 "B2 の download cap 超過を検出した (403 download_cap_exceeded)。"
                 "復元は 1 バイトも進まず全 unit がタイムアウトまでリトライするため中断する。"
-                "cap は日次で回復する (無料枠の目安: 1GB/day)。回復後に再実行すること。"
-                f"probe logs:\n{logs[:800]}"
+                "cap は日次で回復する (無料枠の目安: 1GB/day)。--preflight-only で回復を"
+                f"確認してから再実行すること。\n{evidence[:800]}"
             )
-        log(f"  WARN: probe が {state} で終了 (download cap ではない)。続行する\n{logs[:400]}")
+        raise DrillError(
+            f"probe が {state} のまま判定できず、download 可否が不明 "
+            "(cap 超過の痕跡も無い)。不明のまま本番 restore 群を起こすと盲走するため"
+            f"中断する — 原因を確認して再実行すること。\n{evidence[:800]}"
+        )
     finally:
         kubectl(["delete", "namespace", PREFLIGHT_NAMESPACE,
                  "--wait=true", "--ignore-not-found=true"])
+
+
+def run_preflight_only() -> bool:
+    """--preflight-only。phase 0 (B2 download 可否) だけを見て復元は起こさない。
+
+    全体同時復元は B2 無料枠の日次 download 上限 (~1GB/day) を 1 回で超える規模
+    (~4.2GiB、2026-08-22 実測) のため、「cap が回復したか」の確認を本命 run の起動と
+    切り離せるようにする。確認ついでに誤って全 unit を起こし、中途半端に予算を溶かす
+    事故を防ぐのが目的。戻り値は download 可能か。run_download_preflight が fail-closed
+    のため、cap 超過でも判定不能でも False を返す (rc=2。report は書かない)。
+    """
+    preflight()
+    try:
+        run_download_preflight(TARGETS[-1])
+    except DrillError as exc:
+        log(f"preflight-only: {exc}")
+        return False
+    return True
 
 
 def job_status(job: dict) -> str:
@@ -991,7 +1051,7 @@ def write_report(report: dict, path: Path) -> None:
     print(f"report written: {path}")
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--output", type=Path, default=DEFAULT_REPORT_PATH,
                         help="report.json の出力先 (default: ops/projects/logs/P-0080/report.json)")
@@ -1001,7 +1061,28 @@ def main(argv: list[str] | None = None) -> int:
                         help="後片付け (namespace delete) を省略する (デバッグ用)")
     parser.add_argument("--dry-run", action="store_true",
                         help="cluster に触れず manifest を stdout に出して終了")
-    args = parser.parse_args(argv)
+    parser.add_argument("--preflight-only", action="store_true",
+                        help="phase 0 (B2 download 可否の確認) だけを行い、restore 群は起こさず終了。"
+                             "cap 回復待ちの確認用。全体復元は無料枠の日次 download 上限を "
+                             "1 回で超えるため、安易な再実行は予算を溶かす")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_arg_parser().parse_args(argv)
+
+    if args.preflight_only:
+        try:
+            ok = run_preflight_only()
+        except DrillError as exc:
+            print(f"PREFLIGHT FAILED: {exc}", file=sys.stderr)
+            return 1
+        if not ok:
+            return 2
+        log("PREFLIGHT OK: B2 からの download が今すぐ通る状態。"
+            "ただし全体同時復元 (~4.2GiB) は無料枠の日次上限を超える — 再実行の判断は "
+            "PROGRESS.md の引き継ぎを読むこと")
+        return 0
 
     try:
         report = run_drill(args.output, args.timeout, args.keep_namespaces, args.dry_run)

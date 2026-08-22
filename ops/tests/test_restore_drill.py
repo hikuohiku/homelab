@@ -25,6 +25,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 from ops.drills.restore_drill import (
     IMMICH_LIVENESS_SH,
@@ -559,6 +560,13 @@ REAL_RESTIC_CAP_LOG = (
     "Stat: b2_download_file_by_name: 403: Cannot download file, download bandwidth or "
     "transaction (Class B) cap exceeded. See the Caps & Alerts page to increase your cap."
 )
+# 同じ cap 超過でも restic のリトライ行が「403: 」で切れて理由文言が空のまま出ることが
+# ある (2026-08-22 16:15 UTC 実測。前日の失敗 run では全文が出ていたので同条件ではない)。
+# これを見逃すと cap 超過の検出自体が失敗し、WARN 続行扱いで false OK を出す
+TODAY_TRUNCATED_CAP_LOG = (
+    "Stat(<config/>) returned error, retrying after 869.904581ms: "
+    "Stat: b2_download_file_by_name: 403: "
+)
 REAL_RAW_API_BODY = json.dumps({
     "code": "download_cap_exceeded",
     "message": "Cannot download file, download bandwidth or transaction (Class B) cap "
@@ -575,13 +583,30 @@ class TestDownloadCapDetection(unittest.TestCase):
         from ops.drills.restore_drill import is_download_cap_error
         self.assertTrue(is_download_cap_error(REAL_RESTIC_CAP_LOG))
 
+    def test_detects_truncated_restic_log_line(self):
+        """理由文言が空の「b2_download_file_by_name: 403:」だけの形式。2026-08-22 実測。"""
+        from ops.drills.restore_drill import is_download_cap_error
+        self.assertTrue(is_download_cap_error(TODAY_TRUNCATED_CAP_LOG))
+
     def test_detects_raw_api_body(self):
         from ops.drills.restore_drill import is_download_cap_error
         self.assertTrue(is_download_cap_error(REAL_RAW_API_BODY))
 
-    def test_ignores_other_403(self):
+    def test_download_api_403_is_treated_as_cap_even_without_message(self):
+        """download 系 API の 403 は理由文言が何であれ上限系として扱う。
+
+        認証不足は B2 なら 401 で来るため、download 403 の実運用上の原因は cap。
+        見逃した場合のコスト (全 unit 盲走、実測: 25 分 × 6 unit) の方が、
+        過剰中断 (数分後の再試行) より大きい。
+        """
         from ops.drills.restore_drill import is_download_cap_error
-        other = "Stat: b2_download_file_by_name: 403: unauthorized"
+        self.assertTrue(
+            is_download_cap_error("Stat: b2_download_file_by_name: 403: unauthorized")
+        )
+
+    def test_ignores_non_download_403(self):
+        from ops.drills.restore_drill import is_download_cap_error
+        other = "b2_list_buckets: 403: unauthorized"
         self.assertFalse(is_download_cap_error(other))
 
     def test_ignores_empty_and_unrelated_logs(self):
@@ -630,6 +655,154 @@ class TestPreflightProbeJob(unittest.TestCase):
         from ops.drills.restore_drill import TARGETS
         self.assertEqual(TARGETS[-1]["repo_suffix"], "syncthing")
         self.assertEqual(TARGETS[-1]["pvc_size"], "1Gi")
+
+
+def _fake_job(state: str) -> dict:
+    """job_status() が読む形の Job status。state は Complete / Failed / Running。"""
+    job: dict = {"status": {}}
+    if state in ("Complete", "Failed"):
+        job["status"]["conditions"] = [{"type": state, "status": "True"}]
+    return job
+
+
+class TestDownloadPreflightFailClosed(unittest.TestCase):
+    """phase 0 の判定は fail-closed。Complete のときだけ通る。
+
+    2026-08-22 実測の false OK (probe が deadline まで動いたまま、ログ空で
+    WARN 続行 → 本命 run を起こしかけた) の再発防止がこのクラスの存在理由。
+    """
+
+    SYNCTHING = [t for t in TARGETS if t["name"] == "syncthing-data"][0]
+
+    def test_complete_probe_passes(self):
+        from ops.drills import restore_drill
+        with mock.patch.object(restore_drill, "apply_manifest"), \
+                mock.patch.object(restore_drill, "wait_externalsecret_ready"), \
+                mock.patch.object(restore_drill, "kubectl_json",
+                                  return_value=_fake_job("Complete")), \
+                mock.patch.object(restore_drill, "kubectl",
+                                  return_value=(0, "", "")):
+            restore_drill.run_download_preflight(self.SYNCTHING)  # 送出しない
+
+    def test_cap_log_aborts_with_clear_message_and_cleans_up(self):
+        from ops.drills import restore_drill
+        kubectl_mock = mock.MagicMock(return_value=(0, "", ""))
+        with mock.patch.object(restore_drill, "apply_manifest"), \
+                mock.patch.object(restore_drill, "wait_externalsecret_ready"), \
+                mock.patch.object(restore_drill, "kubectl_json",
+                                  return_value=_fake_job("Failed")), \
+                mock.patch.object(restore_drill, "fetch_logs_tail",
+                                  return_value=TODAY_TRUNCATED_CAP_LOG), \
+                mock.patch.object(restore_drill, "kubectl", kubectl_mock):
+            with self.assertRaises(restore_drill.DrillError) as ctx:
+                restore_drill.run_download_preflight(self.SYNCTHING)
+        message = str(ctx.exception)
+        self.assertIn("download cap", message)
+        self.assertIn("download_cap_exceeded", message)
+        # 使い捨て namespace の後片付けは失敗時でも必ず行く
+        kubectl_mock.assert_any_call(
+            ["delete", "namespace", "drill-preflight",
+             "--wait=true", "--ignore-not-found=true"]
+        )
+
+    def test_inconclusive_probe_never_passes_silently(self):
+        """Running のまま証拠が空なら「OK」ではなく DrillError。
+
+        旧実装はここで WARN+続行したため、cap 超過中なのに本命 restore 群を
+        起こしかけた (2026-08-22 実測)。"""
+        from ops.drills import restore_drill
+        with mock.patch.object(restore_drill, "PROBE_ACTIVE_DEADLINE_SECONDS", 900), \
+                mock.patch.object(restore_drill, "PROBE_OBSERVE_SECONDS", 0), \
+                mock.patch.object(restore_drill, "apply_manifest"), \
+                mock.patch.object(restore_drill, "wait_externalsecret_ready"), \
+                mock.patch.object(restore_drill, "kubectl_json",
+                                  return_value={"status": {}}), \
+                mock.patch.object(restore_drill, "fetch_logs_tail", return_value=""), \
+                mock.patch.object(restore_drill, "kubectl",
+                                  return_value=(1, "No resources found", "")):
+            with self.assertRaises(restore_drill.DrillError) as ctx:
+                restore_drill.run_download_preflight(self.SYNCTHING)
+        message = str(ctx.exception)
+        self.assertIn("判定できず", message)
+        # cap 超過と誤認していないことも確認 (原因不明として中断している)
+        self.assertNotIn("download cap 超過を検出した", message)
+
+    def test_preflight_only_returns_false_on_inconclusive(self):
+        """--preflight-only は fail-closed の結果を受けて rc=2 相当 (False) になる。"""
+        from ops.drills import restore_drill
+        with mock.patch.object(restore_drill, "preflight"), \
+                mock.patch.object(restore_drill, "run_download_preflight") as phase0:
+            phase0.side_effect = restore_drill.DrillError("probe が Running のまま判定できず")
+            ok = restore_drill.run_preflight_only()
+        self.assertFalse(ok)
+
+
+class TestPreflightOnlyMode(unittest.TestCase):
+    """--preflight-only。「B2 download cap が回復したか」の確認を本命 run の起動から
+    切り離すためのモード。
+
+    全体同時復元は無料枠の日次 download 上限 (~1GB/day) を 1 回で超える規模 (~4.2GiB、
+    2026-08-22 実測) のため、「回復したか見るだけ」の起動で誤って全 unit を起こし、
+    中途半端に予算を溶かす事故を防ぐことがこのモードの存在理由。
+    """
+
+    def test_flag_defaults_to_off(self):
+        from ops.drills.restore_drill import build_arg_parser
+        args = build_arg_parser().parse_args([])
+        self.assertFalse(args.preflight_only)
+        # 既存フラグの既定値が無事であること (--keep-namespaces は --keep ではない)
+        self.assertFalse(args.keep_namespaces)
+        self.assertFalse(args.dry_run)
+
+    def test_flag_turns_on_alone(self):
+        from ops.drills.restore_drill import build_arg_parser
+        args = build_arg_parser().parse_args(["--preflight-only"])
+        self.assertTrue(args.preflight_only)
+
+    def test_run_preflight_only_checks_auth_then_smallest_repo(self):
+        """cluster 側ガード (auth + JST 時刻帯) を先に通し、phase 0 は syncthing 固定。"""
+        from ops.drills import restore_drill
+        syncthing = [t for t in TARGETS if t["name"] == "syncthing-data"][0]
+        with mock.patch.object(restore_drill, "preflight") as auth_guard, \
+                mock.patch.object(restore_drill, "run_download_preflight") as probe:
+            ok = restore_drill.run_preflight_only()
+        self.assertTrue(ok)
+        auth_guard.assert_called_once_with()
+        probe.assert_called_once_with(syncthing)
+
+    def test_main_preflight_only_never_touches_run_drill(self):
+        """このモードの本体。--preflight-only で本命の restore 群 (run_drill) を
+        起こしてはならない。"""
+        from ops.drills import restore_drill
+        with mock.patch.object(restore_drill, "run_preflight_only") as rpo, \
+                mock.patch.object(restore_drill, "run_drill") as full_run:
+            rpo.return_value = True
+            rc = restore_drill.main(["--preflight-only"])
+            self.assertEqual(rc, 0)
+            rpo.assert_called_once_with()
+            full_run.assert_not_called()
+
+    def test_main_preflight_only_returns_2_when_download_unavailable(self):
+        """cap 超過などで download 不可のとき rc=2。report は書かない (= verify #3 を
+        偽装して通さない)。"""
+        from ops.drills import restore_drill
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp) / "report.json"
+            with mock.patch.object(restore_drill, "run_preflight_only") as rpo, \
+                    mock.patch.object(restore_drill, "run_drill") as full_run:
+                rpo.return_value = False
+                rc = restore_drill.main(["--preflight-only", "--output", str(out)])
+            self.assertEqual(rc, 2)
+            full_run.assert_not_called()
+            self.assertFalse(out.exists())
+
+    def test_main_preflight_only_maps_cluster_error_to_rc1(self):
+        """cluster 到達不能などの DrillError は rc=1 (DRILL FAILED と同じ扱い)。"""
+        from ops.drills import restore_drill
+        with mock.patch.object(restore_drill, "run_preflight_only") as rpo:
+            rpo.side_effect = restore_drill.DrillError("cluster に到達できない")
+            rc = restore_drill.main(["--preflight-only"])
+        self.assertEqual(rc, 1)
 
 
 if __name__ == "__main__":
