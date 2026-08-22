@@ -27,11 +27,22 @@ function compactNumber(value: number): string {
   return new Intl.NumberFormat("ja-JP", { notation: "compact", maximumFractionDigits: 1 }).format(value);
 }
 
+// 表示時刻はすべて JST (2026-08-22 利用者指示)。サーバ/データは UTC のまま
 function formatDate(value?: string): string {
   if (!value) return "観測なし";
   return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo",
     month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit",
   }).format(new Date(value));
+}
+
+function jstClock(value?: string | number): string {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+  }).format(date);
 }
 
 function countdown(value?: string, now = Date.now()): string {
@@ -71,7 +82,10 @@ function ToolEvent({ event }: { event: TranscriptEvent }) {
       <summary>
         <span className="tool-glyph">$</span>
         <span>{event.toolName ?? "tool"}</span>
-        <span className="tool-status">{event.status === "completed" ? "完了" : event.status === "failed" ? "失敗" : "実行中"}</span>
+        <span className="tool-status">
+          {event.at && <span className="event-clock">{jstClock(event.at)} </span>}
+          {event.status === "completed" ? "完了" : event.status === "failed" ? "失敗" : "実行中"}
+        </span>
       </summary>
       {command && <pre className="tool-command">{command}</pre>}
       {output && <pre className="tool-output">{output}</pre>}
@@ -101,7 +115,10 @@ function TranscriptLine({ event }: { event: TranscriptEvent }) {
   return (
     <article className={`message-event message-event--${event.kind}`}>
       <span className="event-rail" />
-      <div className="message-event__meta">{event.kind === "error" ? "ERROR" : event.kind === "system" ? "SYSTEM" : "AGENT"}</div>
+      <div className="message-event__meta">
+        {event.kind === "error" ? "ERROR" : event.kind === "system" ? "SYSTEM" : "AGENT"}
+        {event.at && <span className="event-clock"> {jstClock(event.at)}</span>}
+      </div>
       <div className="message-event__body">{event.text || "…"}</div>
     </article>
   );
@@ -338,7 +355,7 @@ export default function Home() {
       </header>
 
       <div className="status-line" id="top">
-        <span>UTC {new Date(now).toISOString().slice(11, 19)}</span>
+        <span>JST {jstClock(now)}</span>
         <span>RUNNING <strong>{snapshot?.agents.length ?? "—"}</strong></span>
         <span>TODAY <strong>${snapshot?.todayCostUsd.toFixed(2) ?? "—"}</strong> / {snapshot?.todaySessions ?? "—"} sessions</span>
         <span>LAST HEART {formatDate(snapshot?.heart.at)}</span>

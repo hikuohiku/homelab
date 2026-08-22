@@ -40,7 +40,7 @@ function usage(input: unknown, output: unknown, cost: unknown): TokenUsage {
 
 function claudeEvents(raw: Record<string, unknown>, lineId: string): TranscriptEvent[] {
   const type = raw.type;
-  const at = typeof raw.timestamp === "string" ? raw.timestamp : undefined;
+  const at = toIso(raw.timestamp);
   if (type === "assistant" || type === "user") {
     const message = asRecord(raw.message);
     const content = Array.isArray(message.content) ? message.content : [message.content];
@@ -92,11 +92,19 @@ function claudeEvents(raw: Record<string, unknown>, lineId: string): TranscriptE
   return [];
 }
 
+function toIso(value: unknown): string | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return new Date(value).toISOString();
+  if (typeof value === "string" && value) return value;
+  return undefined;
+}
+
 function opencodeEvents(raw: Record<string, unknown>, lineId: string): TranscriptEvent[] {
   const part = asRecord(raw.part);
   const type = String(raw.type ?? part.type ?? "");
-  const at = typeof part.time === "string" ? part.time :
-    typeof raw.timestamp === "string" ? raw.timestamp : undefined;
+  // 実測: raw.timestamp は epoch ミリ秒の数値、part.time は {start,end} (ミリ秒)。
+  // 旧実装は string しか見ておらず at が常に undefined だった (JST 表示のため修正)
+  const time = asRecord(part.time);
+  const at = toIso(time.start) ?? toIso(part.time) ?? toIso(raw.timestamp);
   if (type === "text") {
     return [{ id: String(part.id ?? lineId), kind: "message", at, text: asText(part.text ?? raw.text) }];
   }
