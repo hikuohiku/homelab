@@ -413,8 +413,14 @@ class Heart:
         )
 
     def self_update_check(self):
-        tree = gitutil.run(
-            ["rev-parse", "origin/main:ops/heart"], cwd=self.repo_dir, check=False
+        # ops/heart だけでなく rules.json / models.json も監視する。config は起動時に
+        # しか読まないため、これらが main で変わったら exec し直して読み直す必要がある
+        # (2026-08-22 発覚: max_concurrent の変更が pod 再作成を伴わないと反映されなかった。
+        # それまでは image digest 変更などによる pod 再作成が偶然重なって効いていた)
+        tree = " ".join(
+            gitutil.run(["rev-parse", f"origin/main:{p}"], cwd=self.repo_dir, check=False)
+            or ""
+            for p in ("ops/heart", "ops/rules.json", "ops/models.json")
         )
         if self.start_tree is None:
             self.start_tree = tree
