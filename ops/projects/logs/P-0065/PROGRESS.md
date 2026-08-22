@@ -623,3 +623,31 @@ repo側の変更では解決不能な spec 側の欠陥という結論は変わ�
 消費すべきではない。** 新しい環境探索は不要(session3・8・12・16・17 で出尽くし済み)。次回も
 起動されるなら同じ3点確認のみで十分。唯一の建設的な一手は curriculum/reviewer への verify
 文字列修正提案(worker には権限もチャネルも無い)で変わらず。
+
+### 2026-08-22 セッション21
+
+**やったこと**: 実装変更なし。session20 の最小確認3点を再実施した上で、今回のみ
+未踏だった経路(パッケージマネージャ経由での pytest 導入可否)を追加確認。
+
+1. `git status --short` → クリーン(session20 と同じコミット `0d5fbf04`)。
+2. `grep -n 'livenessProbe' -A 15 apps/autopilot/heart-deployment.yaml` → exec probe定義済み
+   (`initialDelaySeconds: 300` / `periodSeconds: 30` / `timeoutSeconds: 15` /
+   `failureThreshold: 3`)、変更なし。
+3. `python3 -m unittest discover -s ops/heart/tests -t .` → 153 テスト全て `OK`、変更なし。
+4. `python3 -m pytest --version` / `python3 -m pip --version` → 従来通り `No module named
+   pytest` / `No module named pip`。
+5. (新規) `which apt apt-get dpkg sudo` → 全て不在。`apt-cache search pytest` →
+   command not found。`sudo -n true` → command not found (exit 127)。この環境には
+   pip 系だけでなく OS レベルのパッケージマネージャも sudo も一切存在しないことを確認。
+   pytest を後付けで導入する経路は(pip 系・apt 系のどちらも)完全に閉じている。
+
+**分かったこと**: 21セッション連続で同じ実装結論。今回追加で「apt/dpkg/sudo が
+存在しない」ことを確認し、pytest 導入不能の根拠を pip 経路だけでなく OS パッケージ
+経路でも補強した(が、結論自体は session4 から不変)。実装は完成済み、第二 verify は
+この実行環境では構造的に満たせない。
+
+**次のセッションへの一言**: session8〜20 の判断を維持。**これ以上 worker セッションを
+消費すべきではない。** 環境探索は今回の apt/dpkg/sudo 不在確認をもって完全に尽きた
+(pip系・OS系の両方を試した)。次回起動されるなら同じ3点確認のみで十分。唯一の
+建設的な一手は curriculum/reviewer への verify 文字列修正提案(worker には権限も
+チャネルも無い)で変わらず。
