@@ -464,7 +464,11 @@ class TestQuotaWait(unittest.TestCase):
         )
         d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
         self.assertEqual(d["projects"][0]["state"], "active")
-        self.assertEqual(kinds(actions), [])
+        # 待機中プロジェクト自身への action は無い (2026-08-22 以降、空きスロット
+        # 起点の spawn_curriculum / それに伴う critic はビート全体としては出うる)
+        self.assertEqual(
+            [a for a in actions if a.get("project") == "P-0001"], []
+        )
         self.assertNotIn("drift_count", d["projects"][0])
 
     def test_respawns_when_the_deadline_arrives(self):
@@ -736,8 +740,14 @@ class TestArchiveAdoption(unittest.TestCase):
         self.assertEqual(p["budget"]["soft_cap"], 500)
         self.assertIn("run_adopt_gate", kinds(actions))
         self.assertNotIn("announce", kinds(actions))
-        # 仕事が登録されたビートで curriculum は回さない
-        self.assertNotIn("spawn_curriculum", kinds(actions))
+        # 登録された spec は同ビートの立案の adopt_limit を 1 減らす
+        # (2026-08-22 空きスロット基準化。完全アイドル時代は「登録ビートで
+        # 立案しない」だったが、いまは空きが残っていれば回してよい)
+        spawns = [a for a in actions if a["type"] == "spawn_curriculum"]
+        if spawns:
+            self.assertEqual(
+                spawns[0]["adopt_limit"], RULES["runner"]["max_concurrent"] - 1
+            )
 
     def test_gated_spec_announces_on_the_next_beat(self):
         """all_fail が実測されたら、次のビートで従来通り予告に進む。"""
@@ -868,10 +878,28 @@ class TestCurriculum(unittest.TestCase):
         )
         self.assertTrue(d["last_curriculum_dry"])
 
-    def test_active_project_blocks_curriculum(self):
+    def test_active_below_cap_still_spawns_curriculum(self):
+        """空きスロットがあれば走行中でも立案する (2026-08-22「がっつり並列」改定)。
+        adopt_limit には空き数が載る。"""
         d, actions = reconcile.decide(
             doc(project(state="active", job="j"),),
             facts(jobs={"j": {"active": True}}), RULES, NOW,
+        )
+        spawns = [a for a in actions if a["type"] == "spawn_curriculum"]
+        self.assertEqual(len(spawns), 1)
+        self.assertEqual(
+            spawns[0]["adopt_limit"], RULES["runner"]["max_concurrent"] - 1
+        )
+
+    def test_full_pipeline_blocks_curriculum(self):
+        """パイプライン (窓待ちを除く非終端) が cap に達したら立案しない。"""
+        import copy
+        rules1 = copy.deepcopy(RULES)
+        rules1["runner"]["max_concurrent"] = 2
+        d, actions = reconcile.decide(
+            doc(project(state="active", job="j"),
+                project(id="P-0002", branch="project/p-0002", state="in_review")),
+            facts(jobs={"j": {"active": True}}), rules1, NOW,
         )
         self.assertNotIn("spawn_curriculum", kinds(actions))
 

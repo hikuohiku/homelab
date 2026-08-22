@@ -545,7 +545,12 @@ def decide(doc, facts, rules, now):
     #   - min_interval は空振り (採択ゼロ / エラー) の後にだけ適用する。実りある回の後の
     #     アイドルは「仕事が終わった」なので即座に次を立案してよい。間隔が守っているのは
     #     「同じ世界に同じ問いを連打してトークンを燃やす」ことだけ
-    blocking = [
+    # 2026-08-22 改定 (人間の指示「がっつり並列」): 「完全アイドル」でなく
+    # 「パイプラインに空きがある」を立案の条件にする。active 1 本が残っている間
+    # ずっと立案が止まり、max_concurrent=4 でも常時 2 本しか走らない実態があった。
+    # 深さの上限はパイプライン (窓待ちを除く非終端) を max_concurrent と比べて守り、
+    # 採択数の上限も空き分 (adopt_limit) として curriculum judge に渡す
+    pipeline = [
         p for p in doc["projects"]
         if p["state"] not in TERMINAL_STATES
         and not (
@@ -553,7 +558,8 @@ def decide(doc, facts, rules, now):
             and parse_iso(p.get("veto_deadline", now_iso(now))) > now
         )
     ]
-    curriculum_idle = not blocking and not curriculum_pending
+    free_slots = rules["runner"]["max_concurrent"] - len(pipeline)
+    curriculum_idle = free_slots > 0 and not curriculum_pending
     last_curriculum = doc.get("last_curriculum_at")
     min_gap = timedelta(hours=rules["curriculum"].get("min_interval_hours", 6))
     gap_ok = last_curriculum is None or (now - parse_iso(last_curriculum)) >= min_gap
@@ -561,7 +567,7 @@ def decide(doc, facts, rules, now):
         gap_ok = True
     if curriculum_idle and gap_ok and not breaker and not stop_all:
         doc["last_curriculum_at"] = now_iso(now)
-        actions.append(_action("spawn_curriculum"))
+        actions.append(_action("spawn_curriculum", adopt_limit=free_slots))
 
     # --- 活動の記録 (critic の due 判定の材料) ---
     # ここまでに積んだ action だけを「活動」と数える。この行より後に積む critic 自身の

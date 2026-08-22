@@ -789,7 +789,9 @@ class Runner:
     def mode_curriculum(self):
         gen_out = Path("/work/proposals.json")
         judge_out = Path("/work/adopted.json")
-        extra = {"PROPOSALS_PATH": str(gen_out), "ADOPTED_PATH": str(judge_out)}
+        extra = {"PROPOSALS_PATH": str(gen_out), "ADOPTED_PATH": str(judge_out),
+                 # 採択上限 = パイプラインの空き (heart が spawn 時に注入)
+                 "ADOPT_LIMIT": os.environ.get("ADOPT_LIMIT", "2")}
         outcome = self.run_session(
             self.prompt_text("curriculum-generate", extra), "cur-gen"
         )
