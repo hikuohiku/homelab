@@ -18,7 +18,7 @@ spec:
       labels:
         app: openclaw
       annotations:
-        openclaw/config-revision: "6"
+        openclaw/config-revision: "7"
     spec:
       securityContext:
         seccompProfile:
@@ -33,6 +33,7 @@ spec:
             - |
               set -eu
               mkdir -p /home/node/.openclaw/workspace
+              cp /workspace-bootstrap/AGENTS.md /home/node/.openclaw/workspace/AGENTS.md
               chown -R 1000:1000 /home/node/.openclaw
               cp /config-src/openclaw.json /home/node/.openclaw/openclaw.json
               chown 1000:1000 /home/node/.openclaw/openclaw.json
@@ -43,6 +44,8 @@ spec:
             runAsUser: 0
             allowPrivilegeEscalation: false
           volumeMounts:
+            - name: workspace-bootstrap
+              mountPath: /workspace-bootstrap
             - name: state
               mountPath: /home/node/.openclaw
             - name: config-src
@@ -117,6 +120,9 @@ spec:
             capabilities:
               drop: ["ALL"]
       volumes:
+        - name: workspace-bootstrap
+          configMap:
+            name: openclaw-workspace-bootstrap
         - name: state
           persistentVolumeClaim:
             claimName: openclaw-state
