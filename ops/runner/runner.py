@@ -377,6 +377,7 @@ class Runner:
         self.gh = Gh(os.environ.get("AUTOPILOT_GITHUB_TOKEN", ""), self.repo)
         self.last_session = {}
         self.trust_workspace()
+        self.setup_opencode()
         self.spec = self.load_spec()
         soft_cap = (self.spec.get("budget") or {}).get(
             "soft_cap_tokens", self.rules["runner"]["default_soft_cap_tokens"]
@@ -397,6 +398,26 @@ class Runner:
         cfg.setdefault("projects", {}).setdefault(str(self.repo_dir), {})[
             "hasTrustDialogAccepted"
         ] = True
+        path.write_text(json.dumps(cfg))
+
+    def setup_opencode(self):
+        """opencode は cwd 外の読み書きを external_directory パーミッションで
+        auto-reject する (非対話では常に拒否。2026-08-22 実測)。reviewer が /data に
+        verdict を書けず全レビューが既定 fail になり、採択 2 件が 3 巡で stalled した
+        事故の原因。/data の入出力契約 (review.json / proposals / critic) を claude と
+        同一に保つため、グローバル設定で許可する。trust_workspace と同じく起動時 1 回。"""
+        cfg_dir = (
+            Path(os.environ.get("XDG_CONFIG_HOME")
+                 or Path(os.environ.get("HOME", "/work/home")) / ".config")
+            / "opencode"
+        )
+        cfg_dir.mkdir(parents=True, exist_ok=True)
+        path = cfg_dir / "opencode.json"
+        try:
+            cfg = json.loads(path.read_text())
+        except (OSError, ValueError):
+            cfg = {"$schema": "https://opencode.ai/config.json"}
+        cfg.setdefault("permission", {})["external_directory"] = "allow"
         path.write_text(json.dumps(cfg))
 
     def load_spec(self):

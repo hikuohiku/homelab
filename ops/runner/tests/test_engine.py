@@ -82,5 +82,27 @@ class TestConsumeStreamEvent(unittest.TestCase):
         self.assertEqual(errs, [])
 
 
+class TestSetupOpencode(unittest.TestCase):
+    def test_writes_external_directory_allow(self):
+        """cwd 外 I/O の許可設定が無いと reviewer/curriculum/critic の /data 契約が
+        全滅する (2026-08-22 事故)。設定ファイルの中身を契約として固定する。"""
+        import json as _json
+        import os
+        import tempfile
+        from unittest import mock
+
+        from ops.runner import runner as r
+
+        with tempfile.TemporaryDirectory() as home:
+            with mock.patch.dict(os.environ, {"HOME": home}, clear=False):
+                os.environ.pop("XDG_CONFIG_HOME", None)
+                inst = object.__new__(r.Runner)  # __init__ は I/O だらけなので回避
+                inst.setup_opencode()
+                cfg = _json.loads(
+                    open(f"{home}/.config/opencode/opencode.json").read()
+                )
+        self.assertEqual(cfg["permission"]["external_directory"], "allow")
+
+
 if __name__ == "__main__":
     unittest.main()
