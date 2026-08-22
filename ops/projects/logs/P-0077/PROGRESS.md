@@ -148,3 +148,10 @@ $ python3 ops/validate.py → 0 error, 2 warning (セッション 2 と同じ he
 
 機能面の実装と 3 回の自己レビュー完了。レビュー指摘が出たらそれだけ直すこと。
 これ以上の自己レビューは収穫逓減と思われる (出口・入力網羅・純関数両方向は固定済み)。
+
+### 継続の引き継ぎ (2026-08-22, human-pilot)
+
+P-0071 は opencode の external_directory 拒否バグ (#452 で修正済み) により、実装健全のまま
+レビュー 3 巡既定 fail で stalled になった。この P-0077 はその全成果を引き継いだ継続で、
+verify は既に green のはず。wrapper が非初回 + verify green を検出すれば即 ready_for_review
+になる。レビュー指摘が来た場合のみ、それだけを直すこと。
