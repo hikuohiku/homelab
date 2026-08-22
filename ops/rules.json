@@ -22,12 +22,12 @@
   },
   "runner": {
     "max_concurrent": 6,
-    "session_max_seconds": 7200,
+    "session_max_seconds": 259200,
     "inactivity_nudge_seconds": 1800,
     "inactivity_kill_seconds": 3600,
-    "_timeout_comment": "session_max は inactivity_kill より十分大きくすること。同値だと無活動 kill が到達不能の死にコードになる (2026-08-07 レビュー指摘)",
+    "_timeout_comment": "session_max は inactivity_kill より十分大きくすること。2026-08-22 人間の指示『動いているのに止めるのはもったいない』で 7200→259200 (k8s Job の activeDeadline 3 日と同値 = 実質撤廃)。無活動 kill (1h) は残す — あれは働いていないセッションしか殺さない。長すぎる走行は Mission Control で人間が気づく前提",
     "default_soft_cap_tokens": 3000000,
-    "max_sessions_per_project": 60,
+    "max_sessions_per_project": 300,
     "_comment": "soft_cap はプロジェクト採択時に上書き可。超過で checkpoint 最終ターン→終了 (硬い上限ではない。heart が状況を通知し、継続価値があれば予算を積んで再開する)"
   },
   "chore": {
