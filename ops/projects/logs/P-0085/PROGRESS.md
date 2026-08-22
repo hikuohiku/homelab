@@ -78,3 +78,36 @@ immich-cli イメージ前提は 3 点とも実機で確認:
 - ops/dashboard/prs.json がセッション中に別プロセス(autopilot 側)から更新された。
   触らない・commit に含めない
 
+
+## worker session2 (2026-08-22)
+
+### 結論: まだ blocked。e2e の材料は揃ったまま、キー登録だけを待つ
+
+- ExternalSecret を**強制再同期して確認した**(delete → git manifest 再適用、14:43Z 実施):
+  Ready=False `could not get secret data from provider`。= **IMMICH_API_KEY は
+  この時点で Doppler (homelab/prd) に未登録と確定**。session1 の依頼は未対応のまま。
+- レシピの指示どおり CronJob 適用・テスト画像投入等の e2e 手順には一切着手せず終了
+  (キー無しで CronJob を適用すると CreateContainerConfigError が積み上がるため)。
+- verify #1/#2 は再実行して green 維持を実測(劣化なし)。verify #3 は引き続き failing。
+- cluster 側状態: ExternalSecret は再適用済み(session1 の手動適用と同一 spec)で残置。
+  CronJob は未適用のまま。人間がキーを登録すれば ESO が 1h 以内に自動同期する。
+
+### 次セッションへの引き継ぎ
+
+- **まず ES 強制再同期から始めること**: `kubectl delete externalsecret
+  syncthing-photo-intake-credentials -n syncthing && kubectl apply -f
+  apps/syncthing/photo-intake-external-secret.yaml` → sleep 25 → Ready 確認。
+  refreshInterval=1h のため「登録済みなのに未同期」をこれで潰せる(今回実証済みの手順)。
+- **Doppler 直確認は不可能**(doppler CLI もトークンもセッション env に無い)。
+  ESO の状態が唯一のオラクル。
+- **このセッションの kubectl CLI は `system:serviceaccount:autopilot:autopilot-writer`
+  で動いており Secret の get が Forbidden**(実測)。secret 中身を読む手順は組めないので、
+  curl Job 経由(env 参照)で実施すること — 既存レシピと矛盾しないが、secret を直接
+  見る代替案は最初から捨てること。
+- e2e の Exact レシピ自体は session1 記載のまま有効(変更点なし)。Ready=True になったら
+  それに従う。session1 の「人間への依頼文」をそのまま使ってよい。
+
+### 発見
+
+- ESO の強制再同期は delete+reapply が確実(annotation 方式は本クラスタの ESO バージョンで
+  未検証)。ES は失敗状態なので消しても生成物 Secret が存在せず無害 — 今回も問題なし。
