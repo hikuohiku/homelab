@@ -270,24 +270,20 @@ GROUPS = [
         ],
     },
     {
+        # 2026-08-22: CI を 1 ジョブに統合したため、かつての「manifests / manifest-diff の
+        # 2 箇所一致検査」は「ci ジョブから抽出できること」の検査に縮退した
         "name": "azure/setup-helm version input (T-0090, inventory: gha-setup-helm-version)",
         "targets": [
-            (".github/workflows/ci.yml (manifests job)", lambda: extract_helm_setup_version(
-                ".github/workflows/ci.yml", "manifests"
-            )),
-            (".github/workflows/ci.yml (manifest-diff job)", lambda: extract_helm_setup_version(
-                ".github/workflows/ci.yml", "manifest-diff"
+            (".github/workflows/ci.yml (ci job)", lambda: extract_helm_setup_version(
+                ".github/workflows/ci.yml", "ci"
             )),
         ],
     },
     {
         "name": "kustomize binary version (T-0090, inventory: kustomize-binary)",
         "targets": [
-            (".github/workflows/ci.yml (manifests job)", lambda: extract_kustomize_download_version(
-                ".github/workflows/ci.yml", "manifests"
-            )),
-            (".github/workflows/ci.yml (manifest-diff job)", lambda: extract_kustomize_download_version(
-                ".github/workflows/ci.yml", "manifest-diff"
+            (".github/workflows/ci.yml (ci job)", lambda: extract_kustomize_download_version(
+                ".github/workflows/ci.yml", "ci"
             )),
         ],
     },

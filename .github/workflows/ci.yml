@@ -69,9 +69,11 @@ jobs:
       # --- apps/ を触った PR だけ ---
 
       - uses: azure/setup-helm@v5
-        if: steps.ch.outputs.apps == 'true'
         with:
           version: v3.21.3
+        # if を with の後に置くのは ops/check_version_sync.py の抽出正規表現
+        # (uses 直後の with) を満たすため
+        if: steps.ch.outputs.apps == 'true'
 
       - name: install kustomize
         if: steps.ch.outputs.apps == 'true'
