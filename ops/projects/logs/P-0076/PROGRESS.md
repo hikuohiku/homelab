@@ -819,3 +819,42 @@ P-0065 は opencode の external_directory 拒否バグ (#452 で修正済み) �
 レビュー 3 巡既定 fail で stalled になった。この P-0076 はその全成果を引き継いだ継続で、
 verify は既に green のはず。wrapper が非初回 + verify green を検出すれば即 ready_for_review
 になる。レビュー指摘が来た場合のみ、それだけを直すこと。
+
+### 2026-08-22 セッション26
+
+**やったこと**: 初めてレビュー指摘が来た (「verify 第2項目が実測 red」)。実装・差分本体は
+問題なしと判定されており、指摘の解消指示は「spec 側 verify を stdlib-only に再採択してもらう。
+spec は worker が書き換えず issue #56 / backlog 経由で依頼」だったので、それをそのまま実行した。
+
+1. 重複確認: #56 の直近コメント 100 件に P-0076 言及は 0 件 → 投稿してよいことを確認。
+   `gh` CLI は本環境に無いが、env の `AUTOPILOT_GITHUB_TOKEN` + urllib POST で
+   **#56 へ再採択依頼を投稿した (201)**:
+   https://github.com/hikuohiku/homelab/issues/56#issuecomment-5379675305
+   内容: verify 第2項目を下記いずれかに置き換えた再採択の依頼 (トークン値自体はログに出していない)。
+2. 置換候補コマンドの実測 (**pytest 無しの素の環境で**、依頼文の証跡):
+   `python3 -m unittest ops.heart.tests.test_liveness -q` → rc=0 (9 tests OK)。
+   `python3 -m unittest discover -s ops/heart/tests -t . -p 'test_liveness.py'` → rc=0。
+   CI (`ci.yml:56`) も unittest discover のみで pytest 不在 — 指摘の裏付けを実読で確認済み。
+3. 冒頭で恒久手順 (venv 作成 → `pip install --target=<user site-packages> pytest`)
+   を再実行 (コンテナ作り直しで pytest は消失していた、4 回目)。spec 両 verify 自実測:
+   grep → rc=0 (`heart-deployment.yaml:67`)、`pytest -k liveness -q` → **9 passed,
+   144 deselected**。全数 153 passed、`unittest discover` OK。リポジトリ配下は未触碰。
+4. `git status --short` → コード差分は無し (本コミットは PROGRESS.md 追記のみ)。
+
+**分かったこと**:
+
+- worker からでも `AUTOPILOT_GITHUB_TOKEN` (env) と api.github.com 到達性があれば issue
+  コメントは投稿できる (`gh` 不要)。CLAUDE.md の「#56 にコメントすると次の起動で読まれる」
+  が worker にも使えることが実証された。
+- `/tmp/opencode` への書き込みは PermissionDenied だった。「一時ファイルは mktemp」教訓の再確認
+  (今回は最終的にファイルを作らず python 内で完結させた)。
+- レビューの結論として「差分本体は問題なし、この finding 解消後は再レビューで通る見込み」
+  とのこと。**実装 (`ops/heart/liveness.py` / `ops/heart/tests/test_liveness.py` /
+  `apps/autopilot/heart-deployment.yaml:67`) は以後触らないのが正解**。
+
+**次のセッションへの一言**: まず wrapper 実測 JSON を見よ (第2項目 red でも実装を疑うな)。
+その上で **#56 の自分のコメント (issuecomment-5379675305) 以降に返信・再採択反映があるか確認**
+せよ。反映されていれば spec JSON の verify 第2項目は unittest ベースに変わっているはずで、
+pytest 不要のため素の環境で即 green → 何も追加せず ready_for_review を待つだけ。
+未反映なら従来どおり session23 の venv 手順を実行してから PROGRESS 追記のみで commit
+(内容は session25 と同一になる)。**#56 への再採択依頼は投稿済みなので二重投稿しないこと**。
