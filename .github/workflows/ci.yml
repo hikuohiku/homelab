@@ -3,6 +3,12 @@ name: CI
 # autopilot が出す PR の auto-merge ゲート。
 # ここが green であることが、人間のレビュー無しにマージしてよい根拠になる。
 # 検証できない領域を増やしたら、必ずこの CI にも検証を足すこと（ops/CHARTER.md §4）。
+#
+# 2026-08-22: 5 並列ジョブ → 1 ジョブに統合。ランナー起動とツールインストールの
+# 重複が wall clock の大半だったため。変更パスに応じて重いステップ (kustomize /
+# terraform / nix) をスキップする。個人サーバーなので網羅より速度を優先する
+# (人間の指示)。check run は常に「ci」1 つ + GitGuardian で、heart の
+# checks_green 判定 (全 run が success) と両立する。
 
 on:
   pull_request:
@@ -18,24 +24,64 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  manifests:
-    name: kustomize build
+  ci:
+    name: ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # PR は merge commit なので HEAD^1 が base。push (merge) も第一親との差分
+          fetch-depth: 2
+
+      - name: detect changed paths
+        id: ch
+        run: |
+          set -euo pipefail
+          files=$(git diff --name-only HEAD^1 2>/dev/null || git show --name-only --format= HEAD)
+          echo "changed files:"; echo "$files"
+          echo "apps=$(grep -q '^apps/' <<<"$files" && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "tf=$(grep -q '^terraform/' <<<"$files" && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "nix=$(grep -qE '^(nix/|flake\.)' <<<"$files" && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      # --- ops (常に実行。純 Python で速い) ---
+
+      - name: fetch origin/main for append-only check
+        run: git fetch --no-tags --depth=1 origin main
+
+      - name: ops state validate
+        run: python3 ops/validate.py
+
+      - name: unit tests (heart / runner / watchdog logic)
+        run: |
+          python3 -m unittest discover -s ops/heart/tests -t .
+          python3 -m unittest discover -s ops/runner/tests -t .
+          python3 -m unittest discover -s ops/tests -t .
+
+      - name: consistency checks
+        run: |
+          python3 ops/check_version_sync.py
+          python3 ops/check_pvc_usage_script_sync.py
+          python3 ops/check_health_reporter_target.py
+          python3 ops/check_doc_commands.py
+          python3 ops/check_feedback.py
+          python3 ops/dashboard/build.py
+
+      # --- apps/ を触った PR だけ ---
 
       - uses: azure/setup-helm@v5
+        if: steps.ch.outputs.apps == 'true'
         with:
           version: v3.21.3
 
-      - name: Install kustomize
+      - name: install kustomize
+        if: steps.ch.outputs.apps == 'true'
         run: |
           set -euo pipefail
           curl -sSfL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.8.1/kustomize_v5.8.1_linux_amd64.tar.gz \
             | tar -xz -C /usr/local/bin kustomize
-          kustomize version
 
-      - name: Build every kustomization
+      - name: kustomize build (apps 変更時のみ)
+        if: steps.ch.outputs.apps == 'true'
         run: |
           set -uo pipefail
           fail=0
@@ -52,10 +98,8 @@ jobs:
           done < <(find apps -name kustomization.yaml | sort)
           exit $fail
 
-      - name: Validate standalone manifests parse
-        # kustomization から参照されていない YAML（apps.yaml など）を拾う。
-        # 直前の kustomize build が apps/*/charts/ に Helm chart を展開しているが、
-        # 中身は Go テンプレートで YAML ではないので除外する。
+      - name: standalone yaml parse (apps 変更時のみ)
+        if: steps.ch.outputs.apps == 'true'
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -78,110 +122,47 @@ jobs:
           print("all yaml parses")
           PY
 
-  manifest-diff:
-    name: manifest deletion guard
-    # apps root Application は prune: true。render 結果からオブジェクトが消えると
-    # 次の sync でクラスタからも消える（PVC ならデータごと）。base/head の render を
-    # 比較し、消えたオブジェクトが PR 本文で明示的に許可されていなければ落とす
-    # （ops/check_manifest_deletions.py, issue #56 2026-08-04 22:04:42）。
-    runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
-    steps:
       - uses: actions/checkout@v7
-        with:
-          path: head
-
-      - uses: actions/checkout@v7
+        if: steps.ch.outputs.apps == 'true' && github.event_name == 'pull_request'
         with:
           ref: ${{ github.event.pull_request.base.sha }}
-          path: base
+          path: _base
 
-      - uses: azure/setup-helm@v5
-        with:
-          version: v3.21.3
-
-      - name: Install kustomize
-        run: |
-          set -euo pipefail
-          curl -sSfL https://github.com/kubernetes-sigs/kustomize/releases/download/kustomize%2Fv5.8.1/kustomize_v5.8.1_linux_amd64.tar.gz \
-            | tar -xz -C /usr/local/bin kustomize
-          kustomize version
-
-      - name: Check for unexplained object deletions
+      - name: manifest deletion guard (apps 変更時のみ)
+        # apps root Application は prune: true。render 結果からオブジェクトが消えると
+        # 次の sync でクラスタからも消える（PVC ならデータごと）。
+        if: steps.ch.outputs.apps == 'true' && github.event_name == 'pull_request'
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
           printf '%s' "$PR_BODY" > /tmp/pr_body.txt
-          python3 head/ops/check_manifest_deletions.py base head /tmp/pr_body.txt
+          python3 ops/check_manifest_deletions.py _base . /tmp/pr_body.txt
 
-  terraform:
-    name: terraform validate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
+      # --- terraform/ を触った PR だけ ---
 
       - uses: hashicorp/setup-terraform@v4
+        if: steps.ch.outputs.tf == 'true'
         with:
           terraform_version: 1.15.8
           terraform_wrapper: false
 
-      - name: fmt
-        run: terraform fmt -check -recursive -diff
-
-      - name: init & validate
-        working-directory: terraform/proxmox
+      - name: terraform validate (terraform 変更時のみ)
+        if: steps.ch.outputs.tf == 'true'
         run: |
+          terraform fmt -check -recursive -diff
+          cd terraform/proxmox
           terraform init -backend=false -input=false
           terraform validate
 
-  ops:
-    name: ops state validate
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-      # ops/validate.py の check_projects_archive (追記のみ検査) が origin/main を
-      # 参照する。shallow checkout には無いので取ってくる (無くても検査はスキップに
-      # 倒れるが、CI では常に効かせたい)
-      - name: fetch origin/main for append-only check
-        run: git fetch --no-tags --depth=1 origin main
-      - name: validate
-        run: python3 ops/validate.py
-      - name: heart unit tests (state machine / triage / statefiles / breaker)
-        run: python3 -m unittest discover -s ops/heart/tests -t .
-      - name: runner unit tests (セッションの死因分類 / 秘密のマスク)
-        run: python3 -m unittest discover -s ops/runner/tests -t .
-      - name: check heartbeat watchdog logic (rc contract / fail-closed / triage 誤爆)
-        # .github/workflows/watchdog.yml 自身は CI の検証対象外なので、判定ロジックの
-        # 側をここで守る。新しい job を作らないのは ruleset の必須チェック一覧が
-        # 人間専有で、新 job は「壊れていてもマージできてしまう」ため (P-0027)
-        run: python3 -m unittest discover -s ops/tests -t .
-      - name: check duplicated version pins are in sync
-        run: python3 ops/check_version_sync.py
-      - name: check pvc-usage-reporter script is in sync across namespaces
-        run: python3 ops/check_pvc_usage_script_sync.py
-      - name: check ops-health-reporter targets the live autopilot deployment
-        run: python3 ops/check_health_reporter_target.py
-      - name: check docs reference only existing just recipes
-        run: python3 ops/check_doc_commands.py
-      - name: check human feedback ledger is consistent
-        run: python3 ops/check_feedback.py
-      - name: dashboard build.py runs without error
-        # index.html は生成物なので git 管理していない（T-0035）。壊れていないことだけここで担保する
-        run: python3 ops/dashboard/build.py
-
-  nix:
-    name: nix flake check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
+      # --- nix/ を触った PR だけ (ビルドチェックは重いので該当時のみ) ---
 
       - uses: cachix/install-nix-action@v31
+        if: steps.ch.outputs.nix == 'true'
         with:
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      # ビルド（qcow2 イメージの実体化）は重いので評価のみ。--no-build は今のところ no-op
-      # （このフレークに checks 出力が無いため）だが、将来 checks が足された事故を防ぐ保険として付ける。
-      - name: flake check (evaluation only)
+      - name: nix flake check (nix 変更時のみ)
+        if: steps.ch.outputs.nix == 'true'
         working-directory: nix/images/proxmox-cloud
         run: nix flake check --no-build --print-build-logs
