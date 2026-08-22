@@ -754,3 +754,34 @@ mkdir -p "$TARGET" && VENV="$(mktemp -d)" && python3 -m venv "$VENV" && \
 PROGRESS.md への追記だけして commit せよ (本セッションと同じ内容になるので、
 「session23 の手順を再実行した」と一行書くだけでよい)。これが複数回続くなら、
 PROJECT.md への運用メモ追加を curriculum へ依頼する以外に worker 側の打ち手は無い。
+
+### 2026-08-22 セッション24
+
+**やったこと**: wrapper 実測 JSON で第2項目が red (`No module named pytest`) —
+session23 の予測どおりコンテナが作り直されていたので、同ログ記載の手順を冒頭で再実行した。
+
+1. `site.getusersitepackages()` → `/work/home/.local/lib/python3.14/site-packages`
+   (session22/23 と同一、HOME=/work/home は不変)。
+2. `mktemp -d` で venv を作成 → venv の pip で
+   `pip install --target=<上記> pytest` → 成功 (pytest 9.1.1)。リポジトリ配下は一切触っていない。
+3. verify 自実測: `grep -q 'livenessProbe' apps/autopilot/heart-deployment.yaml` → rc=0
+   (67 行目)。`python3 -m pytest ops/heart/tests -k liveness -q` → **9 passed,
+   144 deselected** (rc=0。`which python3` は素の `/usr/bin/python3`、venv 非使用)。
+4. 副作用確認: `pytest ops/heart/tests -q` → 153 passed。
+   `unittest discover -s ops/heart/tests -t .` → OK。実装・既存テストへの影響なし。
+5. `git status --short` → コード差分は無し (本コミットは PROGRESS.md 追記のみ)。
+
+**分かったこと**: 「worker セッションをまたぐと /work/home が初期化される」パターンが
+**2 回連続で実測確定**になった (session22→23→24)。session23 の基準「複数回続くなら」に
+到達した。worker 側の打ち手は使い切った — 今後のセッションも同じ手順の繰り返しになるだけ
+なので、**curriculum による PROJECT.md への運用メモ追加** (「worker はセッション冒頭で
+venv インストール手順を実行してから verify を回すこと」) を依頼したい。発見としてここに
+記録する留めとする (PROJECT.md 本体は curriculum の領分なので worker は触らない)。
+
+**次のセッションへの一言**: 内容は session23 と同一。wrapper 実測で第2項目が red なら
+実装を疑わず、session23 記載のコマンドブロック (venv 作成 → `pip install --target=
+<user site-packages> pytest`) をそのまま実行 → `pytest ops/heart/tests -k liveness -q`
+で green 確認 → PROGRESS.md に「session24 の手順を再実行」と一行追記して commit。
+実装 (`ops/heart/liveness.py` / `ops/heart/tests/test_liveness.py` /
+`apps/autopilot/heart-deployment.yaml:67`) は session2 から一度も変わっておらず、
+環境さえ整えば両 verify とも即 green になる。
