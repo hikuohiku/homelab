@@ -20,6 +20,8 @@ spec:
     metadata:
       labels:
         app: openclaw
+      annotations:
+        openclaw/config-revision: "2"
     spec:
       securityContext:
         seccompProfile:
