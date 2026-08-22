@@ -1,0 +1,11 @@
+# P-0101 実測フィクスチャ: 正常系 (否対照: 成功出力を failure 誤分類しない)
+# observed_at: 2026-08-22T18:16-18:20Z / engine: opencode CLI v1.18.21 (--format json)
+# model: opencode-go/ox-alpha-free / cwd: mktemp 作業ディレクトリ
+# how: 通常起動。OPENCODE_API_KEY は実鍵のまま、プロキシ等の細工なし
+# rc: 0
+# expect_failure_kind: unknown
+--- stdout ---
+{"type":"step_start","timestamp":1787422617876,"sessionID":"ses_fd54f6c86ffefuCFIljkmI4hVt","part":{"id":"prt_02ab0b0fa001RYSqjecfR39ouo","messageID":"msg_02ab09f4d001Kjd7xAaDlNGbyx","sessionID":"ses_fd54f6c86ffefuCFIljkmI4hVt","type":"step-start"}}
+{"type":"text","timestamp":1787422618261,"sessionID":"ses_fd54f6c86ffefuCFIljkmI4hVt","part":{"id":"prt_02ab0b1f6001xLgEOxa2hqbXTt","messageID":"msg_02ab09f4d001Kjd7xAaDlNGbyx","sessionID":"ses_fd54f6c86ffefuCFIljkmI4hVt","type":"text","text":"ok","time":{"start":1787422618102,"end":1787422618180}}}
+{"type":"step_finish","timestamp":1787422618261,"sessionID":"ses_fd54f6c86ffefuCFIljkmI4hVt","part":{"id":"prt_02ab0b252001uy2rK4Y2etWRm3","reason":"stop","messageID":"msg_02ab09f4d001Kjd7xAaDlNGbyx","sessionID":"ses_fd54f6c86ffefuCFIljkmI4hVt","type":"step-finish","tokens":{"total":7588,"input":212,"output":13,"reasoning":3,"cache":{"write":0,"read":7360}},"cost":0}}
+--- stderr ---

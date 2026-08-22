@@ -1,0 +1,9 @@
+# P-0101 実測フィクスチャ: 認証失敗 — 鍵が誤っている
+# observed_at: 2026-08-22T18:16-18:20Z / engine: opencode CLI v1.18.21 (--format json)
+# model: opencode-go/ox-alpha-free / cwd: mktemp 作業ディレクトリ
+# how: OPENCODE_API_KEY=sk-invalid-for-fixture-test-000000 に置換して起動
+# rc: 1
+# expect_failure_kind: auth
+--- stdout ---
+{"type":"error","timestamp":1787422632545,"sessionID":"ses_fd54f22e1ffesyGHmPNOpXy1HB","error":{"name":"APIError","data":{"message":"Invalid API key.","statusCode":401,"isRetryable":false,"responseHeaders":{"cf-placement":"remote-ORD","cf-ray":"a2f3df7bfdedb8b9-PDX","connection":"keep-alive","content-length":"74","content-type":"text/plain;charset=UTF-8","date":"Sat, 22 Aug 2026 18:17:12 GMT","server":"cloudflare"},"responseBody":"{\"type\":\"error\",\"error\":{\"type\":\"AuthError\",\"message\":\"Invalid API key.\"}}","metadata":{"url":"https://opencode.ai/zen/go/v1/chat/completions"}}}}
+--- stderr ---

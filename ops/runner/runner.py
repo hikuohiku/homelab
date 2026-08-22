@@ -45,6 +45,17 @@ STDERR_KEEP_LINES = 400
 
 # 判定順が意味を持つ (429 系は文言が重なるので上限に寄せる):
 # usage_limit > auth > network > unknown
+#
+# 出典:
+#   - claude 分: 2026-08-08 の上限死以前からの既知の出力形に基づく候補 (実文字列は未観測)。
+#     models.json は PR 経由で claude に戻せるのでロールバック経路として温存する
+#   - opencode 分: P-0101 の実測 (2026-08-22, v1.18.21, 実測原本は
+#     ops/tests/fixtures/engine_stderr/)。opencode は死因を stderr に出さず stdout の
+#     type=error イベントで流すため、分類入力は consume_stream_event() が抽出した
+#     error.data.message になる
+#   - opencode の上限死 (HTTP 429) と鍵未設定は UnknownError
+#     ("Unexpected server error.") に潰され区別できない → 未観測のパターンは
+#     捏造せず unknown に落とす (P-0101, substrate「claude セッション / 利用上限」節)
 FAILURE_PATTERNS = (
     ("usage_limit", (
         r"claude ai usage limit reached",
@@ -56,6 +67,8 @@ FAILURE_PATTERNS = (
         r"rate limit[^\n]{0,120}429",
     )),
     ("auth", (
+        # "Invalid API key." (statusCode 401) は opencode v1.18.21 実測で確認済み。
+        # ただし鍵が「無い」場合は UnknownError になり auth には分類できない
         r"invalid api key",
         r"authentication_error",
         r"oauth token",
@@ -72,6 +85,9 @@ FAILURE_PATTERNS = (
         r"socket hang up",
         r"fetch failed",
         r"getaddrinfo",
+        # "Cannot connect to API: Unable to connect. ..." — 接続拒否と DNS 失敗の
+        # 2 条件で同一文言を実測 (P-0101)
+        r"cannot connect to api",
     )),
 )
 
@@ -93,13 +109,18 @@ SECRET_PATTERNS = (
 
 
 def classify_session_failure(stderr_tail):
-    """claude セッションの死因を 'usage_limit'|'auth'|'network'|'unknown' に分類する純関数。
+    """エンジンセッションの死因を 'usage_limit'|'auth'|'network'|'unknown' に分類する純関数。
 
-    上限の実文字列はこのリポジトリに残っていない (runner が stderr を DEVNULL で
-    捨ててきたのが P-0026 の発端で、journal にも記録が無い)。下の表は claude CLI の
-    既知の出力形を根拠にした候補であり、**別の文言を観測したらその回の result.json の
-    `stderr_tail` を証拠に表とテストへ追記する** — そのための stderr_tail である。
-    知らない文字列を勝手に分類しないこと (既定は 'unknown')。
+    claude は死因を stderr に出す (2026-08-09 実測)。opencode は stderr を出さず
+    stdout の type=error イベントで流すため、runner は error.data.message を
+    分類入力に混ぜる (consume_stream_event, P-0101 実測)。どちらもここには
+    「stderr の末尾 + エラーイベントから抽出した本文」が入る。
+
+    opencode v1.18.21 の実測原本は ops/tests/fixtures/engine_stderr/ で、
+    ops/tests/test_failure_patterns.py が fixture → 本関数の分類を固定する。
+    知らない文字列を勝手に分類しないこと (既定は 'unknown')。新しい文言を
+    観測したらその回の result.json の `stderr_tail` を証拠に fixture・表・テストへ
+    追記する — そのための stderr_tail である。
     """
     text = (stderr_tail or "").lower()
     if not text.strip():
@@ -116,6 +137,8 @@ def parse_usage_limit_reset(text):
 
     claude CLI は `Claude AI usage limit reached|<epoch 秒>` の形で付けることがある。
     分類 (classify_session_failure) と時刻抽出は混ぜない。
+    opencode の reset 時刻の出力形は未観測 (P-0101, v1.18.21) — 観測できたら
+    fixture を証拠にここへ足す。
     """
     if not text:
         return None

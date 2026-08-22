@@ -1,0 +1,9 @@
+# P-0101 実測フィクスチャ: 認証情報なし — 鍵が env に存在しない
+# observed_at: 2026-08-22T18:16-18:20Z / engine: opencode CLI v1.18.21 (--format json)
+# model: opencode-go/ox-alpha-free / cwd: mktemp 作業ディレクトリ
+# how: env -u OPENCODE_API_KEY で起動 (spawn.py の secret 消滅に相当)
+# rc: 1
+# expect_failure_kind: unknown
+--- stdout ---
+{"type":"error","timestamp":1787423170304,"sessionID":"ses_fd546e895ffeJglKVUxy4lbmWO","error":{"name":"UnknownError","data":{"message":"Unexpected server error. Check server logs for details.","ref":"err_e341efdf"}}}
+--- stderr ---
