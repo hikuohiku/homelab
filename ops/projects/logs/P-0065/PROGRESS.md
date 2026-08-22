@@ -232,3 +232,35 @@ heart-deployment.yaml の livenessProbe) を再検証し、pytest verify が red
   （例: `python3 -m unittest discover -s ops/heart/tests -t . -v 2>&1 | grep -i liveness`）
   を提案することだが、worker はそれを直接実行する権限もチャネルも持たない
   （ops/backlog.json 等の帳簿は heart の領分、CLAUDE.md の指示）。
+
+### 2026-08-22 セッション6
+
+**やったこと**: 実装変更なし。session2〜5 の結論（4セッション・複数角度で確認済み）を
+前提に、今回は簡潔に再確認のみ行った。
+
+1. `grep -n 'livenessProbe' -A 15 apps/autopilot/heart-deployment.yaml` → exec probe
+   （`ops.heart.liveness.main`、`initialDelaySeconds: 300` / `periodSeconds: 30` /
+   `timeoutSeconds: 15` / `failureThreshold: 3`）が定義済み（変更なし）。
+2. `python3 -m unittest discover -s ops/heart/tests -t . -v 2>&1 | grep -i liveness` →
+   `test_liveness.py` の9テスト全て `ok`（変更なし）。
+3. `python3 -m pytest --version` → `No module named pytest`。`which pip pip3` → 両方
+   コマンド自体が存在しない（session2〜5 は `pip install` が PEP 668 で拒否される、という
+   一段階先の事象を確認していたが、このセッションのサンドボックスでは pip コマンド自体が
+   無く、より徹底的に手段が無いことを確認した）。
+4. wrapper 実測 JSON（このセッション冒頭に埋め込まれたもの）も
+   `grep livenessProbe` → green、`pytest -k liveness` → `No module named pytest` で
+   session2〜5 と完全に一致。wrapper 側の実行環境にも変化なし。
+
+**分かったこと（結論、変化なし）**: 実装は完成・安定している。第二 verify コマンドは
+repo 側のどんな変更でも green にできない spec 側の欠陥という結論に、5セッション連続で
+到達した。
+
+**次のセッションへの一言**:
+- **このプロジェクトはこれ以上 worker セッションを消費すべきではない。** 実装
+  （`heart-deployment.yaml` の livenessProbe、`ops/heart/liveness.py`、
+  `ops/heart/tests/test_liveness.py`）は5セッション分の独立検証を経て完成・安定と
+  確認済み。次回起動して wrapper 実測が両方 green でなければ、それは実装の問題ではなく
+  spec の第二 verify コマンドの問題なので、pip/venv/shim の類を再試行しないこと
+  （6セッション目の今回、pip コマンド自体が存在しないことまで確認済みで、もう
+  試す余地がない）。可能な次の一手は curriculum/reviewer への verify 文字列修正提案のみ
+  （session4/5 参照）で、worker 自身にはその実行権限もチャネルも無い。
