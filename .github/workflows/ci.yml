@@ -64,6 +64,7 @@ jobs:
           python3 ops/check_health_reporter_target.py
           python3 ops/check_doc_commands.py
           python3 ops/check_feedback.py
+          python3 ops/check_credential_map.py
           python3 ops/dashboard/build.py
 
       # --- apps/ を触った PR だけ ---
