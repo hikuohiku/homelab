@@ -2051,11 +2051,34 @@
       "review_requested_at": "2026-08-22T15:35:36Z",
       "review_retries": 0,
       "merging_since": "2026-08-22T15:51:45Z"
+    },
+    {
+      "id": "P-0092",
+      "title": "判定役が「次回最優先」と指名した宿題を完済する — immich-postgres を 16.9-0.4.3 から 16.14 系へ本番更新し、写真の実データを載せる土台を現行にする",
+      "state": "proposed",
+      "branch": "project/p-0092",
+      "irreversible": true,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": true,
+      "verify": [
+        "grep -qE 'cloudnative-vectorchord:16\\.14' apps/immich/postgres.yaml",
+        "python3 -m unittest ops.tests.test_immich_pg_upgrade",
+        "grep -q '^## 本番適用記録' docs/immich-postgres-upgrade.md"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-22",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-22T15:02:57Z",
-  "last_activity_at": "2026-08-22T15:55:31Z",
+  "last_curriculum_at": "2026-08-22T15:56:44Z",
+  "last_activity_at": "2026-08-22T15:56:44Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
