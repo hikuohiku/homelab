@@ -1,0 +1,4 @@
+{"type":"system","subtype":"init","timestamp":"2026-08-22T10:00:00Z"}
+{"type":"assistant","message":{"content":[{"type":"thinking","thinking":"対象ファイルを確認する。"},{"type":"text","text":"まず構成を確認します。"},{"type":"tool_use","id":"toolu_01","name":"Bash","input":{"command":"rg --files apps"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_01","content":"apps/kustomization.yaml\n","is_error":false}]}}
+{"type":"result","subtype":"success","result":"完了しました。","total_cost_usd":0.125,"usage":{"input_tokens":1000,"output_tokens":250}}
