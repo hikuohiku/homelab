@@ -858,3 +858,26 @@ spec は worker が書き換えず issue #56 / backlog 経由で依頼」だっ�
 pytest 不要のため素の環境で即 green → 何も追加せず ready_for_review を待つだけ。
 未反映なら従来どおり session23 の venv 手順を実行してから PROGRESS 追記のみで commit
 (内容は session25 と同一になる)。**#56 への再採択依頼は投稿済みなので二重投稿しないこと**。
+
+### 2026-08-22 セッション27
+
+**やったこと**: wrapper 実測 JSON で第2項目が red (`No module named pytest`) —
+コンテナ作り直しパターン 5 回目なので、冒頭で session23 記載の恒久手順を再実行した
+(venv 作成 → `pip install --target=<user site-packages> pytest`、pytest 9.1.1)。
+
+1. **#56 確認が本セッションの主タスク**: 自分のコメント (issuecomment-5379675305) 以降の
+   コメントを API で取得 → **0 件。再採択は未反映** (今セッションの spec も pytest のまま)。
+   投稿済みのため二重投稿はしていない。
+2. spec 両 verify 自実測: grep → rc=0 (`heart-deployment.yaml:67`)、
+   `pytest -k liveness -q` → **9 passed, 144 deselected**。全数 153 passed、
+   `unittest discover` OK。リポジトリ配下は PROGRESS.md 追記のみ。
+
+**分かったこと**: 新規の発見なし。再採択は curriculum / human-pilot 側の対応待ちで、
+worker 側に打ち手は無い (#56 への追投は重複になるためしない)。
+
+**次のセッションへの一言**: まず wrapper 実測 JSON を見よ (第2項目 red でも実装を疑うな)。
+**#56 の自分のコメント (issuecomment-5379675305) 以降に返信・再採択反映があるか確認**し、
+spec JSON の verify 第2項目が unittest ベースに変わっていれば素の環境で即 green →
+何も追加せず ready_for_review を待つだけ。未反映なら session23 の venv 手順を実行してから
+PROGRESS 追記のみで commit (内容は本セッションと同一)。**#56 への再採択依頼は投稿済み、
+二重投稿禁止**。レビュー指摘が来ていたらそれだけを最優先で直すこと。
