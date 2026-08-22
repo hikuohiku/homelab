@@ -115,9 +115,13 @@ class TestAnnounce(unittest.TestCase):
         self.assertGreater(deadline, NOW)
 
     def test_free_slot_gives_zero_window_even_if_others_run(self):
-        """cap に空きがあれば走行中でも窓ゼロ (稼働率基準の一貫化)。"""
+        """cap に空きがあれば走行中でも窓ゼロ (稼働率基準の一貫化)。
+        運用値 (rules.json の max_concurrent) に依存しないよう cap=2 を注入する。"""
+        import copy
+        rules2 = copy.deepcopy(RULES)
+        rules2["runner"]["max_concurrent"] = 2
         d, _ = reconcile.decide(
-            doc(project(adopt_gate=gate())), facts(running_runners=1), RULES, NOW
+            doc(project(adopt_gate=gate())), facts(running_runners=1), rules2, NOW
         )
         self.assertEqual(d["projects"][0]["veto_deadline"], "2026-08-07T12:00:00Z")
 
@@ -273,11 +277,14 @@ class TestActivate(unittest.TestCase):
                         merging_since="2026-08-07T11:30:00Z")
         waiting = project(id="P-0002", state="announced", branch="project/p-0002",
                           veto_deadline="2026-08-08T11:00:00Z")
+        import copy
+        rules2 = copy.deepcopy(RULES)
+        rules2["runner"]["max_concurrent"] = 2
         d, actions = reconcile.decide(
             doc(stuck, waiting),
             facts(running_runners=1,
                   open_prs={42: {"head": "project/p-0001", "checks_green": False}}),
-            RULES, NOW,
+            rules2, NOW,
         )
         self.assertEqual(d["projects"][1]["state"], "active")
         self.assertIn("spawn_runner", kinds(actions))
