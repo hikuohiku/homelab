@@ -561,3 +561,25 @@ repo側の変更では解決不能な spec 側の欠陥という結論は変わ�
 消費すべきではない。** 新しい環境探索は不要（session3・8・12・16・17 で出尽くし済み）。次回も
 起動されるなら同じ3点確認のみで十分。唯一の建設的な一手は curriculum/reviewer への verify
 文字列修正提案（worker には権限もチャネルも無い）で変わらず。
+
+### 2026-08-22 セッション18
+
+**やったこと**: 実装変更なし。session17 の最小確認3点のみ再実施（新規探索なし）。
+
+1. `git status --short` → クリーン（session17 と同じコミット `f3a4f974`）。
+2. `grep -n 'livenessProbe' -A 15 apps/autopilot/heart-deployment.yaml` → exec probe定義済み
+   （`initialDelaySeconds: 300` / `periodSeconds: 30` / `timeoutSeconds: 15` /
+   `failureThreshold: 3`）、変更なし。
+3. `python3 -m unittest discover -s ops/heart/tests -t .` → 153 テスト全て `OK`、変更なし。
+4. `python3 -m pytest --version` → `No module named pytest`。`which pip pip3 pytest` → 全て
+   不在。`python3 -m pip --version` → `No module named pip`。`python3 -m venv --help` は
+   利用可能だが、session3 の記録（PROGRESS.md 124-129行）で「venv はセッションを跨いで
+   wrapper の実測環境に引き継がれない」ことが既に確定済みなので構築は試さず、変更なし。
+
+**分かったこと**: 18セッション連続で同一結論。新情報なし。実装は完成済み、第二 verify は
+この実行環境では構造的に満たせない（session4 が runner.py 読解で確定済み）。
+
+**次のセッションへの一言**: session8〜17 の判断を維持。**これ以上 worker セッションを
+消費すべきではない。** 新しい環境探索は不要（session3・8・12・16・17 で出尽くし済み）。次回も
+起動されるなら同じ3点確認のみで十分。唯一の建設的な一手は curriculum/reviewer への verify
+文字列修正提案（worker には権限もチャネルも無い）で変わらず。
