@@ -12,6 +12,11 @@ metadata:
   name: ops-dashboard-read
   namespace: autopilot
 rules:
+  # heart の生死表示に Deployment の状態を読む (2026-08-22 実測: 無いと 403 で
+  # snapshot の k8s 部分が丸ごと空になり、走行中エージェントが表示されない)
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list"]
   - apiGroups: ["batch"]
     resources: ["jobs"]
     verbs: ["get", "list", "watch"]
