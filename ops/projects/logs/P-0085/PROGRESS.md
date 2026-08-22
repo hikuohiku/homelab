@@ -3,3 +3,78 @@
 ## initializer (2026-08-22)
 
 PROJECT.md 作成。受入チェックリスト 3 項目とも failing を実測済み。実装は未着手。
+
+## worker session1 (2026-08-22)
+
+### やったこと
+
+- **前セッションの未コミット成果物を検証して引き取った**。git status に
+  photo-intake-cronjob.yaml / photo-intake-external-secret.yaml / kustomization 配線 /
+  check_credential_map.py の地図更新が未コミットで残っていた(PROGRESS には「未着手」としか
+  ないので、実装着手後にコミット前に死んだセッションの残骸)。内容を全読して問題無しと
+  判断し、そのまま採用した。**中身を疑って捨てないこと。**
+- verify #1 green(既に通っていた)/ #2 green(`ops/tests/test_photo_intake.py` を新規作成。
+  走査+純関数の両方向 15 テスト。repo 全体 96 テスト OK)/ 全 CI 一式
+  (check_version_sync, check_credential_map, kustomize build 等)も green 実測。
+  commit ff3ec488。
+- docs/photo-intake.md 新規。人間向け「預け方」1 ページ(DoD 項目)。
+
+### e2e (#3) の現在地 — **IMMICH_API_KEY の Doppler 登録待ちで停止中**
+
+- ExternalSecret をクラスタへ手動適用済み(syncthing ns)。ESO の応答は
+  `could not get secret data from provider` = **Doppler (homelab/prd) に
+  `IMMICH_API_KEY` が未登録**という確定証拠。PROJECT.md が予告した唯一の人間待ちポイント。
+- **ExternalSecret はわざと削除していない**(T-0049 型 manifest 先行)。人間がキーを登録した
+  瞬間に ESO が同期する。ArgoCD の orphan 監視は無効(values.yaml に設定なし)なので
+  git 未反映の手動オブジェクトがアプリを Degraded にしないことも確認済み。
+- **CronJob 本体はまだクラスタに適用していない。** キー登録前に適用すると 10 分毎に
+  CreateContainerConfigError の Job が積まれ、ops-health-reporter の pod_issues を汚す。
+
+### 実測で潰した不確実性(image probe Job による。実行後削除済み)
+
+immich-cli イメージ前提は 3 点とも実機で確認:
+
+| 検証 | 結果 |
+|---|---|
+| `/usr/src/app/packages/cli/dist/index.js` 存在(entrypoint パス仮定) | PATH_OK |
+| CronJob と同一の起動形 `node …/cli/dist --help`(IMMICH_CONFIG_DIR=/tmp 配下)rc=0 | HELP_RC0 |
+| busybox find 式(done/ prune・ドットファイル・~syncthing~* 除外・ネスト拾い上げ) | FIND_OK(期待通り 2 ファイルだけ選択) |
+
+### 次セッションへの引き継ぎ(e2e の Exact レシピ)
+
+1. `kubectl get externalsecret syncthing-photo-intake-credentials -n syncthing` で
+   Ready=True か確認。False のままなら何も進まず終えてよい(#3 以外は全部 green 済み)
+2. True なら:
+   a. `kubectl apply -f apps/syncthing/photo-intake-cronjob.yaml`
+   b. **assets_before を数える**: syncthing ns に curl Job(secret を env 参照)→
+      `curl -s -H "x-api-key: $IMMICH_API_KEY" http://immich-server.immich.svc.cluster.local:2283/api`
+      +`/assets/statistics`。応答 JSON の `total`(無ければ imageCount+videoCount)。
+      Service 名・ポート 2283 は実機確認済み
+   c. テスト画像を intake へ:`kubectl exec deploy/syncthing -n syncthing`(pods/exec 許可済み、
+      コンテナは uid1000 の busybox 系)で `/var/syncthing/photo-intake/test.png` を
+      base64 から生成。有効な PNG が必要(1x1 でよい)
+   d. `kubectl create job --from=cronjob/photo-intake photo-intake-e2e-$(date +%s) -n syncthing`
+      で即時起動(schedule 待ちは不要)
+   e. 完了後: test.png が `done/` へ移ったことを exec で確認 → assets_after を数える
+   f. `ops/projects/logs/P-0085/e2e-proof.json` に
+      `{"assets_before": N, "assets_after": M, "via": "photo-intake"}` 形で記録(M>N 必須)
+   g. 使い捨て Job/curl Job は削除。CronJob・ExternalSecret は残してよい(PR merge 後
+      ArgoCD が引き取る)
+3. e2e-proof.json を書けたら verify 3 項目すべて green → 完成宣言は wrapper へ任せる
+
+### 人間への依頼文(そのまま使ってよい)
+
+> immich の API キー発行をお願いします。immich Web UI (https://immich.<tailnet>.ts.net)
+> の User Settings > API Keys で鍵を作り、その値を Doppler (homelab/prd) に
+> **`IMMICH_API_KEY`** というキー名で登録してください。権限は library の読み書き系のみに
+> 絞れる場合はそれで十分です。登録されると写真取り込み経路 (P-0085) が自動で動き始めます。
+
+### 発見・罠
+
+- `mktemp` のテンプレートは X 末尾ルール(`probe-XXXXXX.yaml` は Invalid argument。
+  `mktemp -d` + ファイル名結合が安全)
+- `ghcr.io/immuch-app/...` のような pin ミスは pull 失敗という形でしか出ない。今回の
+  probe でイメージ名・タグも同時に実証された
+- ops/dashboard/prs.json がセッション中に別プロセス(autopilot 側)から更新された。
+  触らない・commit に含めない
+
