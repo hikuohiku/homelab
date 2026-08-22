@@ -775,7 +775,7 @@ class TestCurriculum(unittest.TestCase):
 
     def test_curriculum_rate_limited(self):
         d, actions = reconcile.decide(
-            doc(last_curriculum_at="2026-08-07T11:00:00Z"), facts(), RULES, NOW
+            doc(last_curriculum_at="2026-08-07T11:30:00Z"), facts(), RULES, NOW
         )
         self.assertNotIn("spawn_curriculum", kinds(actions))
 
@@ -865,7 +865,7 @@ class TestCurriculum(unittest.TestCase):
     def test_dry_round_keeps_min_interval(self):
         """空振り (採択ゼロ / エラー) の後は min_interval を守る (連打防止)。"""
         d, actions = reconcile.decide(
-            doc(last_curriculum_at="2026-08-07T11:00:00Z", last_curriculum_dry=True),
+            doc(last_curriculum_at="2026-08-07T11:30:00Z", last_curriculum_dry=True),
             facts(), RULES, NOW,
         )
         self.assertNotIn("spawn_curriculum", kinds(actions))
@@ -987,7 +987,8 @@ class TestCritic(unittest.TestCase):
     def quiet(self, **kw):
         """action が 1 つも生まれないビートの doc。
         空振り直後 (min_interval 内) の完全アイドルがそれに当たる。"""
-        base = {"last_curriculum_at": "2026-08-07T11:00:00Z", "last_curriculum_dry": True}
+        # min_interval の運用値に依存しないよう「30 分前に空振り」で静穏を作る
+        base = {"last_curriculum_at": "2026-08-07T11:30:00Z", "last_curriculum_dry": True}
         base.update(kw)
         return doc(**base)
 
