@@ -368,3 +368,33 @@ spec 側の欠陥という結論に、6セッション連続で到達してい�
   pytest 不在確認）だけ行い、wrapper 実測 JSON の第二項目が green にならない限り実装には
   触らないこと。唯一の建設的な一手は curriculum/reviewer への verify 文字列修正提案
   （worker には実行権限もチャネルも無い、ops 帳簿は heart の領分）で変わらず。
+
+### 2026-08-22 セッション10
+
+**やったこと**: 実装変更なし。session9 までの結論を鵜呑みにせず、最小限の独立再確認のみ
+実施。加えて `ops/projects/logs/P-0065/PROJECT.md` を全文読み直し、initializer が最初から
+「pytest はこの initializer のサンドボックスに入っていない」ことを実測済みで、worker に
+CI 側の pytest 有無を確認するよう指示していた（`ci.yml` は実際 `unittest discover` のみで
+pytest 未使用、session4 で確認済み）ことを再確認した。
+
+1. `git status --short` → クリーン（session9 と同じコミット `3e322f1f`）。
+2. `grep -n 'livenessProbe' -A 15 apps/autopilot/heart-deployment.yaml` → exec probe定義済み
+   （`initialDelaySeconds: 300` / `periodSeconds: 30` / `timeoutSeconds: 15` /
+   `failureThreshold: 3`、変更なし）。
+3. `python3 -m unittest discover -s ops/heart/tests -t .` → 153 テスト全て `OK`（変更なし）。
+4. `python3 -m pytest --version` → `No module named pytest`。`which pip pip3 pytest gh` →
+   全て rc=1 で不在（session6〜9 と同じ）。
+
+**分かったこと（結論、変化なし）**: 10セッション連続で同一結論。実装は安定・完成済み。
+PROJECT.md 自体が「pytest がこの環境に無い」ことを起票時点で織り込み済みで、worker に
+CI 側の有無確認を促す書き方になっている（= spec 作成者もこの verify が repo 側だけでは
+満たせない可能性を認識していたと読める）。これは新情報ではなく解釈の補強に留まる。
+第二 verify コマンドが green にならないのは spec 側の欠陥という結論は変わらず。
+
+**次のセッションへの一言**:
+- session8〜9 までの判断を維持: **このプロジェクトはこれ以上 worker セッションを消費すべき
+  ではない。** repo 側で試せる一手（pip/venv/shim/vendor/ci.yml 変更）は session4〜8 で
+  出尽くし、いずれも却下済み。次回起動時も同じ最小確認（grep / unittest discover /
+  pytest 不在確認）だけ行い、wrapper 実測 JSON の第二項目が green にならない限り実装には
+  触らないこと。唯一の建設的な一手は curriculum/reviewer への verify 文字列修正提案
+  （worker には実行権限もチャネルも無い、ops 帳簿は heart の領分）で変わらず。
