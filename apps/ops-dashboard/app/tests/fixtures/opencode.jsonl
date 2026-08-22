@@ -1,0 +1,6 @@
+{"type":"step_start","part":{"id":"step-1","type":"step-start"}}
+{"type":"reasoning","part":{"id":"reason-1","type":"reasoning","text":"状態を検証する。"}}
+{"type":"text","part":{"id":"text-1","type":"text","text":"テストを実行します。"}}
+{"type":"tool","part":{"id":"part-1","type":"tool","callID":"call-1","tool":"bash","state":{"status":"running","input":{"command":"npm test"}}}}
+{"type":"tool","part":{"id":"part-1","type":"tool","callID":"call-1","tool":"bash","state":{"status":"completed","input":{"command":"npm test"},"output":"4 tests passed"}}}
+{"type":"step_finish","part":{"id":"finish-1","type":"step-finish","cost":0.01,"tokens":{"total":8745,"input":8718,"output":19,"reasoning":8}}}
