@@ -85,16 +85,20 @@ class TestAnnounce(unittest.TestCase):
         self.assertEqual(p["veto_deadline"], "2026-08-07T12:00:00Z")
 
     def test_zero_window_respects_concurrency_cap(self):
-        """同一ビートで複数の窓ゼロ案が湧いても cap を超えない。"""
+        """同一ビートで複数の窓ゼロ案が湧いても cap を超えない。
+        運用値 (rules.json) に依存しないよう cap=2 を注入する。"""
+        import copy
+        rules2 = copy.deepcopy(RULES)
+        rules2["runner"]["max_concurrent"] = 2
         p1 = project(adopt_gate=gate())
         p2 = project(id="P-0002", branch="project/p-0002", adopt_gate=gate())
         p3 = project(id="P-0003", branch="project/p-0003", adopt_gate=gate())
-        d, actions = reconcile.decide(doc(p1, p2, p3), facts(), RULES, NOW)
+        d, actions = reconcile.decide(doc(p1, p2, p3), facts(), rules2, NOW)
         spawns = [a for a in actions if a["type"] == "spawn_runner"]
-        self.assertEqual(len(spawns), RULES["runner"]["max_concurrent"])
+        self.assertEqual(len(spawns), 2)
         states = [q["state"] for q in d["projects"]]
-        self.assertEqual(states.count("active"), RULES["runner"]["max_concurrent"])
-        self.assertEqual(states.count("announced"), 3 - RULES["runner"]["max_concurrent"])
+        self.assertEqual(states.count("active"), 2)
+        self.assertEqual(states.count("announced"), 1)
 
     def test_irreversible_always_waits_window(self):
         d, _ = reconcile.decide(

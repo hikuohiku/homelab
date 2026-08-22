@@ -21,7 +21,7 @@
     "_comment": "stream-json result の total_cost_usd の当日合計がこの値を超えたら新規 spawn のみ停止して通知する。走行中の Job は殺さない (決定 #9)。値は名目コスト (OAuth 定額でも計上される) で、実請求と一致しない点に注意"
   },
   "runner": {
-    "max_concurrent": 1,
+    "max_concurrent": 4,
     "session_max_seconds": 7200,
     "inactivity_nudge_seconds": 1800,
     "inactivity_kill_seconds": 3600,
