@@ -1,0 +1,185 @@
+# P-0111 root cause — coder / immich (vaultwarden) ArgoCD Degraded の一次原因
+
+調査日時: 2026-08-22 19:45–20:30Z (セッション 2、worker)。記載の全事実はこの時間帯の実測。
+
+## 結論 (一次原因)
+
+**Backblaze B2 アカウントのダウンロード上限 (`download_cap_exceeded`) が超過中で、
+restic がリポジトリを開く最初の 1 手 (`b2_download_file_by_name` での `<config>` 取得) が
+403 で拒否されるため、夜間 backup Job が Failed になり、ArgoCD v3.2.1 の
+`resourceHealthSource: appTree` がその子 Job の失敗を Application health に伝播している。**
+
+ExternalSecret も Doppler 鍵も一度も壊れていない。「鍵が登録されれば自然解消する」
+(substrate.md T-0106 注記, verified_at: 2026-08-06) は当初から原因を外していた —
+Degraded の源泉は鍵ではなく **backup Job の成否** であり、それは今も変わっていない。
+
+## 証拠 (実名・実測)
+
+### 1. ExternalSecret は全正常 — SecretSyncedError は存在しない
+
+`kubectl get externalsecret -A` (2026-08-22 ~19:45Z) より、本件 3 ns の該当 6 本はすべて
+`SecretSynced / True`:
+
+| namespace | name | status |
+|---|---|---|
+| coder | coder-restic-credentials | SecretSynced |
+| coder | coder-restic-backup-credentials | SecretSynced (Ready 条件の lastTransition = 作成日の 2026-08-07T17:39:02Z。以降一度も遷移していない) |
+| immich | immich-restic-credentials | SecretSynced |
+| immich | immich-restic-backup-credentials | SecretSynced |
+| vaultwarden | vaultwarden-restic-credentials | SecretSynced |
+| vaultwarden | vaultwarden-restic-backup-credentials | SecretSynced |
+
+クラスタ全体で `SecretSyncedError` ののは `syncthing/syncthing-photo-intake-credentials`
+1 本のみ (無関係。後述「発見」)。
+
+### 2. 鍵の実値は正しい — B2 authorize が実証
+
+診断 Pod (coder ns, 一時作成・削除済み) 内で k8s Secret
+`coder/coder-restic-backup-credentials` の実値を使い B2 API を直接呼んだ:
+
+```
+b2_authorize_account → HTTP 200
+capabilities: ["listBuckets", "listFiles", "readFiles", "writeFiles"]   ← deleteFiles を含まない (T-0106 の意図どおり)
+bucketName: hikuohiku-homelab
+namePrefix: null          ← ファイル名プレフィックス制限なし
+applicationKeyExpirationTimestamp: null   ← 期限切れでもない
+```
+
+Doppler キー `B2_ACCOUNT_ID_APPEND_ONLY` / `B2_ACCOUNT_KEY_APPEND_ONLY` → ESO → Secret
+の経路は値の面でも権限の面でも完全に正常。
+
+### 3. download だけが 403 — コードとメッセージを実捕獲
+
+同じトークンで restic が落ちるのと同一ファイルを取得すると:
+
+```
+GET {downloadUrl}/file/hikuohiku-homelab/coder-postgres/config → HTTP 403
+{"code": "download_cap_exceeded",
+ "message": "Cannot download file, download bandwidth or transaction (Class B) cap exceeded.
+             See the Caps & Alerts page to increase your cap."}
+```
+
+一方 `b2_list_file_names` (Class B list) は 200 で成功 — 権限不足ならこちらも通らない。
+**list が通り download だけ落ちるのは「キャップ超過」の特徴**。
+
+### 4. 鍵の種類に依存しない — full-permission 鍵も同様に 403
+
+差分テスト (同条件・同時刻):
+
+```
+append-only 鍵 (coder-restic-backup-credentials): download HTTP 403 download_cap_exceeded
+full-perm  鍵 (coder-restic-credentials):        download HTTP 403 download_cap_exceeded
+```
+
+アカウントレベルの上限であり、鍵をどう変えても治らない (= 人間が Doppler を直しても治らない)。
+
+### 5. 失敗 Job の死因 — ログ実文言
+
+例: `coder/coder-restic-backup-29790370-q2qd7` (2026-08-22T18:10Z 開始, Failed):
+
+```
+Stat(<config/>) returned error, retrying after ...: Stat: b2_download_file_by_name: 403:
+(約 20 回リトライ)
+Stat(<config/>) failed: Stat: b2_download_file_by_name: 403:
+Fatal: Fatal: create key in repository at b2:hikuohiku-homelab:coder-postgres failed:
+       Stat: b2_download_file_by_name: 403:
+```
+
+CronJob のコマンドは `restic snapshots >/dev/null 2>&1 || restic init` なので、
+snapshots の 403 が捨てられて init が走り、「create key in repository」という
+誤解を招く文言で死ぬ。**「create key」は鍵 (credential) ではなく restic リポジトリの
+マスターキー生成処理のことで、本件とは無関係**。blazer (restic の B2 バックエンド) が
+エラーメッセージ本文をログに出さないため、Job ログからだけでは cap 超過と分からない
+(→ 「発見」参照)。immich (`b2:hikuohiku-homelab:immich`)・vaultwarden
+(`b2:hikuohiku-homelab:vaultwarden-sqlite`)・coder-workspace-homes の各失敗 Job も同一文面。
+
+### 6. ArgoCD がなぜ Job 失敗で Degraded になるか
+
+Application `argocd/coder` の実測: `"resourceHealthSource": "appTree"` (v3.2.1)。
+appTree モードでは Git 追跡リソースの子 (CronJob が生成する Job) も health 評価に入る。
+実際、Git 追跡リソース単体には unhealthy が 1 つもない (status.resources の全 health=None /
+live 側の失敗 Job が源泉)。`status.health.lastTransitionTime` は
+coder=18:40:31Z / immich=18:42:55Z / vaultwarden=19:38:12Z — 各 ns の backup Job 失敗時刻と一致。
+
+## 「16 日間 Degraded」ではなかった — spec 前提の訂正
+
+ops-health-report ブランチ `ops/health/history/*.jsonl` の実測 (H=Healthy, D=Degraded):
+
+| 日 | レポート数 | cod/imm/vw の組成 | 実態 |
+|---|---|---|---|
+| 08-08, 08-09 | 各48 | 全て HHH | 鍵登録前後ですでに Healthy |
+| 08-10 | 48 | HHH×38, DDH×2, DDD×8 | 夕方の backup 失敗で夜だけ Degraded |
+| 08-11 | 48 | DDD×36, ×2, DHH×1, HHH×10 | 日中は前日失败 Job が残存、17:45Z の成功で回復 |
+| 08-12〜08-21 | 各48 | 全て HHH | **10 日間連続で全員 Healthy** |
+| 08-22 | 途中まで | HHH→DDH→DDD | 当日 17:45–19:08Z の失敗で再 Degraded |
+
+つまり:
+
+- T-0106 由来 (鍵未登録) の Degraded が 15 日間続いた事実は**ない**。鍵は 2026-08-07 に登録済みで
+  ExternalSecret は作成即 Synced、health 履歴にも鍵起因の Degraded 期間は現れない。
+- substrate.md 注記の「自然解消する」は 08-10 分については**結果的に正しかった**
+  (翌 08-11 の成功 run で解消)。P-0111 採択時の前提「15 日解消していない」は、
+  latest.json のその瞬間値を見た誤観測だった。
+- 08-22 現在の Degraded は T-0106 の残骸ではなく、**当日夜の新鮮な backup Job 失敗**である。
+
+## vaultwarden との「差分」について
+
+差分はない。manifest は 3 アプリ同型 (remoteRef キー名まで同一) で、クラスタ状態も
+「直近 backup Job の成否」という同一機構に従う。latest.json で vaultwarden だけ Healthy に見えたのは
+**CronJob スケジュール差 (immich 17:45Z / coder 18:10Z / vaultwarden 18:40Z) × report 収集タイミング**
+の鏡像にすぎない — 19:38Z 以降は vaultwarden も Degraded になった (履歴 jsonl の DDD 行が実証)。
+「1 つだけ自然回復した」という謎は存在しなかった。
+
+## なぜ 16 日 (採択時点) 解消しなかった、と言われたのか — 構造的原因
+
+1. **latest.json は最新 1 点のみ** (substrate.md 観測経路節)。過去の健康度が見えず、
+   「Degraded だ」という断片だけが記憶として蓄積した。
+2. **known-issue 扱いによる観察停止**: 「既知だから見ない」が定着し、誰も history jsonl を
+   遡らなかった。実際には 8/12〜8/21 は完全に Healthy だった。
+3. 失敗 Job ログの「create key in repository failed」と blazer のメッセージ隠蔽が、
+   「鍵まわりの問題」という誤仮説を補強した。
+
+## 修繕経路
+
+### Git で治るもの: なし
+
+manifest (ExternalSecret / CronJob / ArgoCD Application) に不備はない。鍵の付け替え・再 sync も不要
+(probe 実証済み)。無闇に触ると日次バックアップの単一障害点を叩くので触らない。
+
+### クラスタ側・外部サービス側でしか治らないもの: B2 の cap 引き上げ (人間専有)
+
+最小手順:
+
+1. Backblaze Web Console にサインイン (アカウント `1f359277c1ce`)
+2. **Caps & Alerts** ページを開く
+3. download bandwidth / Class C transaction の cap を確認し、引き上げるか上限解除する
+4. 検収方法: `kubectl delete job -n coder coder-restic-backup-29790370` 後に
+   `kubectl create job --from=cronjob/coder-restic-backup -n coder p0111-verify` で手動 1 回走行し、
+   Completed を確認 (または翌朝 17:45–18:40Z の定刻 run を待つ)
+
+needs-human 依頼文言 (案):
+
+> B2 アカウントの download cap 超過で夜間 backup が毎晩失敗し、coder/immich/vaultwarden が
+> ArgoCD Degraded になっています (health 赤)。Caps & Alerts で cap の引き上げをお願いします。
+> 詳細: ops/projects/logs/P-0111/root_cause.md
+
+### 待機で自然復帰する可能性
+
+08-11 の前例では cap 回復後に成功 run が失敗 Job を追い出し、Healthy へ戻った。
+cap が日次リセット型なら翌 08-23 夜の成功で自然復帰する。ただし**消費者が特定されていない以上、
+再発は防げない** (次節)。
+
+## オープンな疑問 (本プロジェクトのスコープ外 — curriculum へ)
+
+- **cap を消費しているのは誰か特定できていない。** 08-10 と 08-22 に超過、08-11〜08-21 は健全。
+  候補: 週次 retention (`forget --prune`, 毎週土曜夜に 4 本が一斉稼働 — 今夜も 19:00–19:45Z に完了)、
+  人間の B2 コンソール/クライアント利用、クラスタ外の消費者、または cap 自体が最近引き下げられた。
+  B2 コンソールの統計画面でしか追えない。
+- **P-0102 (project/p-0102 ブランチ) の restic-check CronJob は新規の大量ダウンローダーになりうる。**
+  `restic check --read-data-subset=5%` を 5 リポジトリへ週次実行する設計。本日は SUSPEND=True で
+  未稼働だったが、稼働開始すれば cap 消費に直接乗る。稼働前に cap との兼ね合いを評価すべき。
+- `syncthing/syncthing-photo-intake-credentials` の SecretSyncedError (Doppler キー不在と思われる)。
+  latest.json の syncthing=Degraded の寄与。本件とは無関係だが赤は赤。
+- blazer/restic が 403 の message を握りつぶす問題と、backup CronJob スクリプトが
+  `restic snapshots` のエラーを `>/dev/null` する問題の合わせ技で、Job ログから一次原因が
+  完全に見えなくなっている。スクリプトのエラー可視化は別プロジェクト候補。
