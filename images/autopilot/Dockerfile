@@ -62,7 +62,10 @@ FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a55
 RUN apk add --no-cache \
       git openssh-client ca-certificates python3 py3-yaml curl bash restic tzdata \
       chromium font-noto font-noto-cjk \
- && npm install -g @anthropic-ai/claude-code@2.1.223 \
+# opencode は claude-code と並ぶ第 2 の思考エンジン (2026-08-22)。opencode go 定額の
+# モデル (Ox alpha 等) を使うため。runner はモデル名が provider/model 形式のとき
+# opencode run を、それ以外のとき claude -p を呼ぶ。認証は OPENCODE_API_KEY (Doppler)
+ && npm install -g @anthropic-ai/claude-code@2.1.223 opencode-ai@1.18.21 \
  && npm cache clean --force
 
 # kubectl は apk に無いので公式バイナリを取る。バージョンは k3s 側（1.35 系）に合わせる。

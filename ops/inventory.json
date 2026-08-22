@@ -468,6 +468,18 @@
       "observability_impact": "壊れると全セッションが起動しない = ループが止まる。autopilot は自分自身を直せなくなり（直すための起動ができない）、復旧は人間が Dockerfile を戻して再ビルドするしかない。ArgoCD 自身（argocd-chart）と同じ『自力で直せない』側の対象"
     },
     {
+      "id": "opencode-cli",
+      "kind": "npm",
+      "name": "opencode-ai (第 2 の思考エンジン。opencode go 定額のモデルを使う)",
+      "current": "1.18.21",
+      "file": "images/autopilot/Dockerfile",
+      "match": "opencode-ai@",
+      "upstream": "npm:opencode-ai",
+      "policy": "manual",
+      "note": "2026-08-22 新設。Claude のトークン費が重く、opencode go 定額 (Ox alpha 等) へ主力を移すため。runner はモデル名が provider/model 形式のとき opencode run --format json を呼ぶ。claude-code-cli と同じく思考エンジンなので manual。認証は OPENCODE_API_KEY (Doppler → autopilot-credentials)",
+      "observability_impact": "壊れると opencode 系モデルを使う全セッションが起動しない。claude-code-cli 側が生きていれば models.json を claude 系へ戻すことで復旧できる"
+    },
+    {
       "id": "autopilot-base-image",
       "kind": "image",
       "name": "node:22-alpine (autopilot イメージの土台)",
