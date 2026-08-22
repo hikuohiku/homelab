@@ -82,6 +82,17 @@ def build_job(cfg, kind, *, project=None, project_id=None, attempt=0, extra_env=
                 }
             },
         },
+        {
+            # opencode go (第 2 の思考エンジン) の認証。runner はモデル名が
+            # provider/model 形式のとき opencode run を呼ぶ (2026-08-22)
+            "name": "OPENCODE_API_KEY",
+            "valueFrom": {
+                "secretKeyRef": {
+                    "name": "autopilot-credentials",
+                    "key": "OPENCODE_API_KEY",
+                }
+            },
+        },
     ]
     if project:
         env.append({"name": "PROJECT_BRANCH", "value": project.get("branch", "")})

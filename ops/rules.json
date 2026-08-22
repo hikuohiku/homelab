@@ -56,7 +56,8 @@
   "allowed_autopilot_doppler_keys": [
     "CLAUDE_CODE_OAUTH_TOKEN",
     "AUTOPILOT_GITHUB_TOKEN",
-    "DISCORD_WEBHOOK_URL"
+    "DISCORD_WEBHOOK_URL",
+    "OPENCODE_API_KEY"
   ],
   "_allowed_keys_comment": "apps/autopilot/ の ExternalSecret が参照してよい Doppler キーの allowlist (validate.py が CI で検査)。バックアップの retention 削除鍵・決済系 credential をエージェント環境に入れない壁の機械化。B2 の append-only 鍵すらここに無いのは、autopilot Pod は restic を直接触らない (backup CronJob 側の namespace に閉じる) ため"
 }

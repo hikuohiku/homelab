@@ -193,9 +193,64 @@ class Budget:
         }
 
 
+def build_session_cmd(model, prompt):
+    """モデル名の形式で思考エンジンを選ぶ (2026-08-22 opencode go 移行)。
+
+    provider/model 形式 (例 opencode-go/ox-alpha-free) なら opencode CLI、
+    それ以外 (例 claude-sonnet-5) なら claude CLI。どちらも 1 行 1 JSON の
+    イベントを stdout に流すので、transcript と無活動監視は共通で扱える。
+    opencode の認証は環境変数 OPENCODE_API_KEY (spawn.py が注入)。
+    """
+    if "/" in model:
+        return ["opencode", "run", "--model", model, "--format", "json", prompt]
+    return [
+        "claude", "-p",
+        "--permission-mode", "bypassPermissions",
+        "--output-format", "stream-json", "--verbose",
+        "--model", model,
+        prompt,
+    ]
+
+
+def consume_stream_event(ev, usage, result_errors):
+    """1 イベントから usage (tokens/cost) とエラー本文を拾う。両エンジン対応の純関数。
+
+    claude:   type=result に total_cost_usd / usage.input_tokens/output_tokens。
+              エラー回は subtype/error/result の本文を分類の入力に混ぜる
+    opencode: type=step_finish の part.tokens {input, output} / part.cost。
+              type=error は error.data.message (2026-08-22 v1.18.21 実測)
+    """
+    etype = ev.get("type")
+    if etype == "result":
+        usage["cost"] += float(ev.get("total_cost_usd") or 0.0)
+        u = ev.get("usage") or {}
+        usage["tokens"] += int(u.get("input_tokens") or 0) + int(
+            u.get("output_tokens") or 0
+        )
+        # 上限メッセージが stderr でなく result イベント側に出る CLI 版が
+        # ありうるので、エラーの回だけ本文も分類の入力に混ぜる。
+        # 成功した回の `result` (= 最終アシスタント本文) は拾わない —
+        # 本文が上限の話題に触れているだけで誤分類する
+        if ev.get("is_error") or (ev.get("subtype") or "success") != "success":
+            for key in ("subtype", "error", "result"):
+                v = ev.get(key)
+                if isinstance(v, str) and v:
+                    result_errors.append(v)
+    elif etype == "step_finish":
+        part = ev.get("part") or {}
+        usage["cost"] += float(part.get("cost") or 0.0)
+        t = part.get("tokens") or {}
+        usage["tokens"] += int(t.get("input") or 0) + int(t.get("output") or 0)
+    elif etype == "error":
+        err = ev.get("error") or {}
+        msg = (err.get("data") or {}).get("message") or err.get("name") or ""
+        if msg:
+            result_errors.append(str(msg))
+
+
 class Session:
-    """1 回のフレッシュ claude -p。stream-json を transcript に tee しつつ
-    無活動を監視する。"""
+    """1 回のフレッシュセッション (claude -p または opencode run)。JSON イベントを
+    transcript に tee しつつ無活動を監視する。"""
 
     def __init__(self, prompt, model, transcript_path, rules, cwd):
         self.prompt = prompt
@@ -210,13 +265,7 @@ class Session:
         max_seconds = self.rules["runner"]["session_max_seconds"]
         self.transcript.parent.mkdir(parents=True, exist_ok=True)
 
-        cmd = [
-            "claude", "-p",
-            "--permission-mode", "bypassPermissions",
-            "--output-format", "stream-json", "--verbose",
-            "--model", self.model,
-            self.prompt,
-        ]
+        cmd = build_session_cmd(self.model, self.prompt)
         proc = subprocess.Popen(
             cmd, cwd=self.cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
             text=True,
@@ -276,21 +325,7 @@ class Session:
                     ev = json.loads(line)
                 except ValueError:
                     continue
-                if ev.get("type") == "result":
-                    usage["cost"] += float(ev.get("total_cost_usd") or 0.0)
-                    u = ev.get("usage") or {}
-                    usage["tokens"] += int(u.get("input_tokens") or 0) + int(
-                        u.get("output_tokens") or 0
-                    )
-                    # 上限メッセージが stderr でなく result イベント側に出る CLI 版が
-                    # ありうるので、エラーの回だけ本文も分類の入力に混ぜる。
-                    # 成功した回の `result` (= 最終アシスタント本文) は拾わない —
-                    # 本文が上限の話題に触れているだけで誤分類する
-                    if ev.get("is_error") or (ev.get("subtype") or "success") != "success":
-                        for key in ("subtype", "error", "result"):
-                            v = ev.get(key)
-                            if isinstance(v, str) and v:
-                                result_errors.append(v)
+                consume_stream_event(ev, usage, result_errors)
         proc.wait(timeout=60)
         # 診断が本体を止めないよう、合流は短い timeout 付き。待ち切れなければ
         # その時点の deque の中身を使う

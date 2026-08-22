@@ -1,14 +1,14 @@
 {
   "version": 1,
-  "_comment": "各役のモデル指定の単一情報源。heart が Job spawn 時に環境変数 CLAUDE_MODEL として注入し、runner が claude -p --model に渡す。『無指定でアカウント既定に任せる』をやめる (再設計の決定 #8)。triage は初期実装がキーワードルールなのでモデルを持たない。値の変更は PR 経由。2026-08-22: コスト削減のため全役を sonnet に落とした (opus 全役時代は名目 $100/日に達した)。opencode go への移行を検討中",
+  "_comment": "各役のモデル指定の単一情報源。heart が Job spawn 時に環境変数 CLAUDE_MODEL として注入し、runner が claude -p --model に渡す。『無指定でアカウント既定に任せる』をやめる (再設計の決定 #8)。triage は初期実装がキーワードルールなのでモデルを持たない。値の変更は PR 経由。2026-08-22: opencode go 定額へ移行 (opus 全役時代は名目 $100/日)。provider/model 形式は runner が opencode run で実行する。ox-alpha-free の無料期間 (〜8/27 頃) が終わったら opencode go 内の別モデルへ差し替えること (inventory: opencode-cli)",
   "roles": {
-    "project": "claude-sonnet-5",
-    "review": "claude-sonnet-5",
-    "curriculum_generate": "claude-sonnet-5",
-    "curriculum_judge": "claude-sonnet-5",
-    "consolidation": "claude-sonnet-5",
-    "critic": "claude-sonnet-5",
-    "chore": "claude-sonnet-5",
+    "project": "opencode-go/ox-alpha-free",
+    "review": "opencode-go/ox-alpha-free",
+    "curriculum_generate": "opencode-go/ox-alpha-free",
+    "curriculum_judge": "opencode-go/ox-alpha-free",
+    "consolidation": "opencode-go/ox-alpha-free",
+    "critic": "opencode-go/ox-alpha-free",
+    "chore": "opencode-go/ox-alpha-free",
     "triage": "keyword"
   }
 }
