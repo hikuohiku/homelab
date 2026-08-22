@@ -32,7 +32,7 @@ apps/                — Kubernetes manifests (ArgoCD applications)
   coder/             — Coder (開発環境)
   ops-health-reporter/ — autopilot 向け ArgoCD/k8s 健全性レポーター（CronJob）
   autopilot/           — 自律運用エージェント本体（Deployment + loop.sh の常駐ループ）
-  ops-dashboard/       — 人間向けダッシュボードの配信（Deployment、ops-dashboard ブランチの index.html を fetch して http.server で配信）
+  ops-dashboard/       — 人間向けダッシュボード Mission Control（Next.js。transcript ライブ閲覧・プロジェクトボード・書き置き。app/ が実体、autopilot ns で稼働）
   syncthing/           — Syncthing（P2P ファイル同期）
 .sops.yaml            — SOPS 設定（暗号鍵の対象範囲）
 nix/images/proxmox-cloud/secrets.yaml — SOPS 暗号化ファイル（単一ファイル、トップレベルの secrets/ ディレクトリは存在しない）
@@ -82,7 +82,7 @@ node01 の root disk は 256 GiB（2026-08-04 にオンライン拡張）。`loc
 | `ops/inventory.json` | バージョン監視対象 |
 | `ops/journal/` | 起動ごとの引き継ぎ記録 |
 | `ops/validate.py` | 状態ファイルの不変条件検査（CI から実行） |
-| `ops/dashboard/build.py` | 人間向けダッシュボードの生成 |
+| `apps/ops-dashboard/app/` | 人間向けダッシュボード (Mission Control, Next.js)。transcript ライブ閲覧・プロジェクトボード |
 
 - フィードバック窓口: [#56](https://github.com/hikuohiku/homelab/issues/56)（この issue にコメントすると次の起動で読まれる）
 - ダッシュボード: `ops/state.json` の `dashboard.artifact_url`

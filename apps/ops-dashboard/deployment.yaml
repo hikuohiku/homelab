@@ -2,7 +2,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: ops-dashboard
-  namespace: ops-dashboard
+  namespace: autopilot
   labels:
     app: ops-dashboard
 spec:
@@ -16,152 +16,65 @@ spec:
     metadata:
       labels:
         app: ops-dashboard
-      annotations:
-        # server.py は起動時にしか読まれない。ConfigMap の中身を変えても Deployment の
-        # spec は変わらず Pod は作り直されないので、変えたらこの値を上げる
-        ops-dashboard/server-revision: "2"
     spec:
+      serviceAccountName: ops-dashboard
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        runAsGroup: 1000
-        fsGroup: 1000
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
         seccompProfile:
           type: RuntimeDefault
-      # T-0127 が ops-dashboard ブランチへ push する index.html を初回 sync 前に
-      # 用意する。無いと http.server コンテナが起動直後に 404 を返し続ける。
-      initContainers:
-        - name: fetch-init
-          image: alpine:3.22.5
-          terminationMessagePolicy: FallbackToLogsOnError
-          command:
-            - sh
-            - -c
-            - >-
-              wget -qO /www/index.html "$DASHBOARD_URL" ||
-              echo '<html><body>dashboard not published yet</body></html>' > /www/index.html
-          env:
-            - name: DASHBOARD_URL
-              value: https://raw.githubusercontent.com/hikuohiku/homelab/ops-dashboard/index.html
-          volumeMounts:
-            - name: www
-              mountPath: /www
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
       containers:
-        # ops-dashboard ブランチ（build.py の publish() が push する、public repo なので
-        # 認証不要で raw.githubusercontent.com から読める）を定期取得して共有 volume に置く。
-        - name: fetcher
-          image: alpine:3.22.5
+        - name: web
+          # Mission Control (Next.js)。digest の更新手順は images/autopilot/Dockerfile
+          # 冒頭コメントと同じ (build-dashboard-image.yml が push → 実測 → 反映)
+          image: ghcr.io/hikuohiku/homelab-dashboard@sha256:bf4b19c12bfb002e0a12c182b2f21af6dd7e1fb3b6ac8df760dabc7156028b20
           terminationMessagePolicy: FallbackToLogsOnError
-          command:
-            - sh
-            - -c
-            - >-
-              while true; do
-                wget -qO /www/index.html.tmp "$DASHBOARD_URL" &&
-                  mv /www/index.html.tmp /www/index.html;
-                sleep "$FETCH_INTERVAL_SECONDS";
-              done
           env:
-            - name: DASHBOARD_URL
-              value: https://raw.githubusercontent.com/hikuohiku/homelab/ops-dashboard/index.html
-            - name: FETCH_INTERVAL_SECONDS
-              value: "60"
-          volumeMounts:
-            - name: www
-              mountPath: /www
-          # memory limits は付けない: 実測できる環境が無く、OOMKill は回復しないため
-          # 裏付けの無い値で「縛る」変更をしない方針 (CHARTER §4, T-0055 の教訓)。
-          # CPU limits は超過しても throttle で回復するので付けてよい
-          resources:
-            requests:
-              cpu: 5m
-              memory: 16Mi
-            limits:
-              cpu: 50m
-          securityContext:
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
-        # T-0128 は当初 alpine 標準の busybox httpd applet を使う設計だったが、
-        # alpine:3.22.5 の busybox パッケージには httpd が含まれず（busybox-extras
-        # 側にのみ存在）CrashLoopBackOff (exitCode 127) になった (#291, run #101 で revert)。
-        # apps/ops-health-reporter・apps/{coder,vaultwarden,immich}/pvc-usage-cronjob.yaml
-        # で既に実績のある python:3.14-alpine の標準ライブラリ http.server に置き換える。
-        #
-        # 配信そのものは `python3 -m http.server` と同じ SimpleHTTPRequestHandler のまま。
-        # server.py はそれを継承して `POST /feedback` だけを足し、ダッシュボードの
-        # フォームから来た文章を ops-feedback ブランチへ 1 件 1 ファイルで書く
-        # （人間からのフィードバックの一次保管場所、CHARTER §6）。autopilot が
-        # ops/feedback.json へ取り込んで状態を進める
-        - name: httpd
-          image: python:3.14-alpine
-          terminationMessagePolicy: FallbackToLogsOnError
-          command: ["python3", "/config/server.py"]
-          env:
-            - name: WWW_ROOT
-              value: /www
-            - name: PORT
-              value: "8080"
-            - name: FEEDBACK_REPO
-              value: hikuohiku/homelab
-            # 書き置きの一次保管場所。main には直 push できない（ruleset）ため、
-            # ops-health-report / ops-dashboard と同じ専用ブランチ方式にする
-            - name: FEEDBACK_BRANCH
-              value: ops-feedback
-            - name: FEEDBACK_DIR
-              value: ops/feedback/inbox
-            # 保存に失敗したときのエラーページが「代わりにここへ手で書け」と案内する先。
-            # 投稿先ではない。ops/state.json の feedback.issue と一致させる
-            - name: FEEDBACK_ISSUE
-              value: "56"
+            - name: AUTOPILOT_NAMESPACE
+              value: autopilot
+            - name: TRANSCRIPTS_DIR
+              value: /data/transcripts
             - name: GITHUB_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: ops-dashboard-github-token
                   key: token
-                  # Secret がまだ無くても静的配信は動かす（投稿だけが 503 になり、
-                  # 画面にその旨が出る）。起動できない条件を増やさない
+                  # Secret が無くても閲覧は動かす (書き置きだけ 503 で issue #56 へ誘導)
                   optional: true
           ports:
             - name: http
-              containerPort: 8080
+              containerPort: 3000
               protocol: TCP
           volumeMounts:
-            - name: www
-              mountPath: /www
+            - name: data
+              mountPath: /data
               readOnly: true
-            - name: server
-              mountPath: /config
-              readOnly: true
+          # memory limits は付けない: 実測の裏付けなしに縛らない (CHARTER §4)
           resources:
             requests:
-              cpu: 5m
-              memory: 16Mi
+              cpu: 100m
+              memory: 256Mi
             limits:
-              cpu: 50m
+              cpu: "1"
           readinessProbe:
             httpGet:
               path: /
               port: http
-            initialDelaySeconds: 2
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /
-              port: http
             initialDelaySeconds: 5
+            periodSeconds: 15
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 10
             periodSeconds: 30
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
               drop: ["ALL"]
       volumes:
-        - name: www
-          emptyDir: {}
-        - name: server
-          configMap:
-            name: ops-dashboard-server
+        - name: data
+          persistentVolumeClaim:
+            claimName: autopilot-data
+            readOnly: true
