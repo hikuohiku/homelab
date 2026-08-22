@@ -785,3 +785,10 @@ venv インストール手順を実行してから verify を回すこと」) �
 実装 (`ops/heart/liveness.py` / `ops/heart/tests/test_liveness.py` /
 `apps/autopilot/heart-deployment.yaml:67`) は session2 から一度も変わっておらず、
 環境さえ整えば両 verify とも即 green になる。
+
+### 継続の引き継ぎ (2026-08-22, human-pilot)
+
+P-0065 は opencode の external_directory 拒否バグ (#452 で修正済み) により、実装健全のまま
+レビュー 3 巡既定 fail で stalled になった。この P-0076 はその全成果を引き継いだ継続で、
+verify は既に green のはず。wrapper が非初回 + verify green を検出すれば即 ready_for_review
+になる。レビュー指摘が来た場合のみ、それだけを直すこと。
