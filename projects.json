@@ -1918,11 +1918,52 @@
       "spawn_count": 1,
       "job": "runner-p-0089-a1",
       "drift_count": 0
+    },
+    {
+      "id": "P-0090",
+      "title": "OpenClaw を Telegram の口として導入する (デプロイ + 決定論パススルー・ブリッジ)",
+      "state": "proposed",
+      "branch": "project/p-0090",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "test -f apps/openclaw/kustomization.yaml",
+        "grep -q 'openclaw' apps/kustomization.yaml",
+        "grep -q 'TELEGRAM_BOT_TOKEN' ops/rules.json"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2500000
+      },
+      "created": "2026-08-22",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0091",
+      "title": "タスク依頼 (kind: task-request) を立案の最優先原料にする器側配線",
+      "state": "proposed",
+      "branch": "project/p-0091",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "grep -q 'task-request' ops/prompts/curriculum-generate.md",
+        "grep -rq 'task-request' ops/heart/"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1200000
+      },
+      "created": "2026-08-22",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-22T12:15:40Z",
-  "last_activity_at": "2026-08-22T14:45:53Z",
+  "last_activity_at": "2026-08-22T14:53:40Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
