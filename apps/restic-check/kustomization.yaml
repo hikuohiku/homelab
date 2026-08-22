@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - restic-external-secret.yaml
+  - cronjob.yaml
+
+# 判定スクリプト (ops/restic_check_runner.py のコピー) と取りまとめ役を載せる。
+# コピーの一致は ops/check_restic_check_script_sync.py が CI で検査する。
+# hash サフィックスを無効化しているのは既存 app と同じ (volume の secretName/configMap
+# 名を manifest 側に固定で書くため)
+configMapGenerator:
+  - name: restic-check-script
+    namespace: restic-check
+    files:
+      - restic_check_runner.py
+      - job_main.py
+
+generatorOptions:
+  disableNameSuffixHash: true

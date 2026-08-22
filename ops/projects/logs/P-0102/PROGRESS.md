@@ -62,3 +62,77 @@ PROJECT.md「設計方針」を読むこと。
 
 - なし (今回の手を動かした範囲では)。強いて挙げれば「verify コマンドが GNU 拡張オプション
   を含むと BusyBox 環境の wrapper で永遠に赤くなる」という仕組み上の論点は上の罠節参照
+
+## session3 (worker)
+
+やったこと: **受入 #1 の manifest 一式を作成** (受入 #2 は session2 で green 済み)。
+
+- `apps/restic-check/` 新設: namespace / ExternalSecret / CronJob / kustomization /
+  application (ops-health-reporter 同型) + `apps/kustomization.yaml` 登録。
+  CronJob `restic-check` は session2 計画どおり 2 コンテナ:
+  initContainer `restic-probe` (restic/restic:0.19.1) が 5 リポジトリを直列で
+  `check --read-data-subset=5%` + `snapshots --latest 1 --json`、本体 `evaluate`
+  (python:3.14-alpine) が判定・通知。schedule は日曜 05:30 JST (backup 帯 02:45–03:55 /
+  retention 帯 日曜 03:45–04:50 を避け prune 直後を検査)。backoffLimit 0 (再試行は
+  B2 再読みと Discord 通知の重複だけ)、activeDeadlineSeconds 14400
+- **session2 計画からの変更点 1 (ExternalSecret 4 本 → 1 本)**: 既存 4 namespace の
+  backup 用 ExternalSecret はどれも同一 Doppler キー参照 (RESTIC_PASSWORD 等、
+  リポジトリ違いはパス末尾だけ — docs/backup.md) なので、複製は 1 本で足りる。
+  4 本作ると同じ値を持つ Secret の量産になるだけで分離の利点が無い。webhook 用
+  (`restic-check-webhook` ← DISCORD_WEBHOOK_URL) と合わせ計 2 本
+- **session2 計画からの変更点 2 (init→main の受け渡し)**: busybox sh には安全な JSON
+  生成手段が無い (sed エスケープは restic 出力の制御文字で壊れうる)。そこで
+  initContainer は生フィールド 3 ファイル `{repo}.check_rc` / `.snapshots_rc` /
+  `.snapshots.out` を `/work/results/staging/` へ書くだけにし、本体の新スクリプト
+  `apps/restic-check/job_main.py` が runner のレコード契約 JSON へ組み立ててから
+  `restic_check_runner.main()` を呼ぶ。**runner 側の契約は 1 バイトも変えていない**
+  (ops/restic_check_runner.py をそのまま ConfigMap へコピー。一致は新設の
+  `ops/check_restic_check_script_sync.py` が CI で検査、ci.yml consistency checks に追加済み)。
+  判定ロジックは job_main.py にも 1 行も置いていない
+- 周辺帳簿の配線: `ops/check_credential_map.py` DECLARED_SECRET_TARGETS に新 Secret 2 種
+  追加 (**この検査が実際に機能した** — 登録前に discover が赤で教えてくれた)。
+  `ops/check_version_sync.py` restic GROUP に6ファイル目 + `ops/inventory.json` に
+  `restic-check-restic-image` 追加 (いずれも P-0047 の前例どおり)
+
+検証 (全部自分で実測):
+
+- `kubectl kustomize apps/restic-check` rc=0 + `kubectl apply --dry-run=client` rc=0
+  (エージェント環境に kubectl あり。render 検証に使える)
+- パイプライン結合スモーク 3 方向: 全健全→rc0 / check 失敗混在→rc1 / staging 空滅
+  (init 死に相当) →全リポジトリ MISSING_RC で rc1。EVIDENCE_JSON 行も期待形状
+- 埋め込みシェルを `sh -n` 構文検査。CI 相当をローカル回線: unittest 25 + discover 93
+  green / credential map / version sync / script sync / validate.py 0 error
+
+罠 (未解決 — 人間 = heart の判断が必要):
+
+- **受入 #1 は spec 文言どおり (`--include='*.yaml'` 付き) ではこの環境では永遠に緑に
+  ならないことを実測確定した** (wrapper 実測 + 本セッション実測の両方で BusyBox grep が
+  `--include` 非対応、rc=2 usage error。manifest の有無と無関係に必ず赤)。
+  中身としては `grep -rq 'restic-check' apps/` (--include 無し) で rc=0 を実測 —
+  「manifest が存在する」という受入の趣旨は満たしている。spec 文言は触っていない。
+  heart に (a) verify コマンドを BusyBox 対応に直すか (b) wrapper を GNU grep にするか
+  (c) 実質 green の無し版実測をもって妥協するかの判断を問いたい (issue #56 へ)
+
+次セッションへの要点 (**受入 #3 evidence の取り方**):
+
+- 前提: この CronJob がクラスタに居ること (PR merge → ArgoCD sync 後)。merge 前に
+  取るなら `just preview` 経由で apps をこのブランチへ向ける。namespace `restic-check`
+  の ExternalSecret 2 本が Sync 済み (= Secret 実体あり) になってから:
+  `kubectl create job --from=cronjob/restic-check restic-check-evidence -n restic-check`
+  → 完了待ち → `kubectl logs job/restic-check-evidence -c evaluate | grep '^EVIDENCE_JSON '`
+  の後ろの JSON をそのまま `ops/projects/logs/P-0102/check_evidence.json` に保存
+  (形状は evidence_records() が担保済み)
+- この Job 実行が **append-only 鍵での check 初検証**そのもの。check は lock を取るので、
+  lock 除去が hide マーカー経路で通るかの実証になる (backup/unlock では実績あり)。
+  もし rc≠0 が出たらそれは破損ではなく「append-only 制約下での check 挙動の発見」なので
+  PROGRESS に残すこと (安易な --no-lock 追加や削除鍵持ち込みは spec 違反)
+- 手動 Job でも webhook 通知は本番 Discord に飛ぶ (失敗時のみ)。evidence 目的で
+  失敗が予想される実験をするなら RESTIC_CHECK_WEBHOOK_URL を空にした上書き manifest で
+- python イメージは 3.14-alpine にした (session2 メモの 3.12 より既存 pin 6 箇所との
+  一致を優先)。pvc-usage GROUP へは登録していない — 単一ファイル単一箇所なので
+  二重管理が発生していないため
+
+発見 (スコープ外、curriculum が拾うこと):
+
+- なし (credential map の fail-closed が新規 ExternalSecret を正しく拾ったのは
+  機能が意図どおり働いているという好例であり、論点ではない)
