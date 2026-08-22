@@ -155,6 +155,8 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
         verdict = triage.classify(body, rules)
         if verdict["kind"] == "veto":
             vetoes.extend(verdict["projects"])
+        elif verdict["kind"] == "ack":
+            acks.extend(verdict["projects"])
         elif verdict["kind"] == "stop_all":
             stop_all = True
         elif verdict["kind"] == "resume_all":
@@ -177,7 +179,7 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
         new_cursors["seen_feedback_files"] = sorted(
             _list_feedback_files(repo_dir, feedback_branch)
         )
-        return [], False, [], False, [], new_cursors
+        return [], [], False, [], False, [], new_cursors
 
     # issue コメントは自由文 (kind を持たない) なので通常経路。
     # JSON note のみトップレベル kind を読む
@@ -223,7 +225,7 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
     new_cursors = dict(cursors)
     new_cursors["issue_comments_since"] = newest
     new_cursors["seen_feedback_files"] = sorted(new_seen)
-    return vetoes, stop_all, review_needed, resume_all, task_requests, new_cursors
+    return vetoes, acks, stop_all, review_needed, resume_all, task_requests, new_cursors
 
 
 def load_adopted_specs(repo_dir):

@@ -9,6 +9,7 @@ const FLOW_ORDER = ["proposed", "announced", "active", "in_review", "merging", "
 export function buildAttention(projects: Project[], now = new Date()): AttentionItem[] {
   const items: AttentionItem[] = [];
   for (const project of projects) {
+    if (project.acknowledged) continue; // ack P-NNNN 済みの墓標は要対応に出さない
     if (project.state === "stalled") {
       const reason = project.stalled_reason || "理由未記録";
       const question = QUESTION_REASONS.has(reason) || reason.startsWith("adopt_gate_");
