@@ -54,6 +54,30 @@ spec:
             capabilities:
               drop: ["ALL"]
             readOnlyRootFilesystem: false
+          # 2026-08-12 の事故 (beat 3173 で fork 不能に陥り、以後 9 日以上
+          # heartbeat.json が更新されないまま誰も気づけなかった) を受けて追加 (P-0065)。
+          # beat() は run() 側の try/except で例外を握りつぶすため heart は死なずに
+          # 回り続けるが、ops.heart.liveness.check() が heartbeat.json の鮮度で
+          # 「詰まっている」を検知し、失敗したら kubelet に再起動させる。
+          # しきい値 (STALE_MULTIPLIER / STALE_MARGIN_SECONDS) は ops/heart/liveness.py
+          # の 1 箇所のみに定義され、このコマンドと単体テストの双方がそこを参照する。
+          # initialDelaySeconds / periodSeconds / failureThreshold は repo clone +
+          # 初回ビートの遅さと、正常時のネットワーク揺らぎを誤検知しない余裕を持たせた
+          # 安全側の初期値で、実測の裏付けは無い (CHARTER §4)。
+          livenessProbe:
+            exec:
+              command:
+                - python3
+                - -c
+                - |
+                  import sys
+                  sys.path.insert(0, "/work/repo")
+                  from ops.heart.liveness import main
+                  main()
+            initialDelaySeconds: 300
+            periodSeconds: 30
+            timeoutSeconds: 15
+            failureThreshold: 3
           env:
             # Phase 2 (2026-08-08): shadow 並走の実績 (300 ビート無エラー・veto 疎通・
             # 判断ログの検分) を受けて active に切替。以後 heart は Job spawn / merge /
