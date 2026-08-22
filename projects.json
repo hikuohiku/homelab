@@ -1552,7 +1552,33 @@
         "soft_cap": 1000000
       },
       "created": "2026-08-22",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-22T09:38:58Z",
+        "verify": [
+          {
+            "cmd": "grep -q 'livenessProbe' apps/autopilot/heart-deployment.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m pytest ops/heart/tests -k liveness -q",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "/usr/bin/python3: No module named pytest\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0077",
@@ -1572,7 +1598,33 @@
         "soft_cap": 1000000
       },
       "created": "2026-08-22",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-22T09:38:58Z",
+        "verify": [
+          {
+            "cmd": "test -f ops/check_credential_map.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'check_credential_map' .github/workflows/ci.yml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
