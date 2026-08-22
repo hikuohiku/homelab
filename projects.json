@@ -2562,12 +2562,36 @@
       "veto_deadline": "2026-08-22T20:52:32Z",
       "spawn_count": 1,
       "job": "runner-p-0114-a1",
-      "stalled_reason": "spec_error"
+      "stalled_reason": "spec_error",
+      "acknowledged": true
+    },
+    {
+      "id": "P-0115",
+      "title": "復旧を製品として測る — 全 backup 対象を隔離環境へ同時復元し、アプリが生き返るまでの壁時計 (RTO) を秒で (P-0080 の継続 v2)",
+      "state": "proposed",
+      "branch": "project/p-0115",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "test -f ops/drills/restore_drill.py",
+        "python3 -m unittest ops.tests.test_restore_drill",
+        "python3 -c \"import json; r=json.load(open('ops/projects/logs/P-0080/report.json')); assert len(r['targets'])>=5 and all(t.get('rto_seconds') is not None for t in r['targets'])\""
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 5000000
+      },
+      "created": "2026-08-22",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-22T20:28:58Z",
-  "last_activity_at": "2026-08-22T20:56:04Z",
+  "last_activity_at": "2026-08-22T20:57:15Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
