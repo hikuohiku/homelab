@@ -1645,11 +1645,31 @@
       "review_requested_at": "2026-08-22T09:41:49Z",
       "review_retries": 0,
       "merging_since": "2026-08-22T09:50:40Z"
+    },
+    {
+      "id": "P-0078",
+      "title": "heart の livenessProbe (P-0076 の継続 v3 — verify を pytest から unittest に修正)",
+      "state": "proposed",
+      "branch": "project/p-0078",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "grep -q 'livenessProbe' apps/autopilot/heart-deployment.yaml",
+        "python3 -m unittest ops.heart.tests.test_liveness"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1000000
+      },
+      "created": "2026-08-22",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-22T09:15:37Z",
-  "last_activity_at": "2026-08-22T10:44:16Z",
+  "last_activity_at": "2026-08-22T10:47:32Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": true,
   "stop_engaged": false
