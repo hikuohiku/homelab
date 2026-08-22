@@ -2071,3 +2071,9 @@ DoD の残項目「docs/backup.md への RTO 台帳の節」は session #46 が�
 stalled 判断をする人間へ: コード・テスト・台帳節・失敗 run の記録・判断依頼コメントは
 すべて commit 済み。継続の価値は実質「B2 の課金判断 1 つ」と「それ以降の RTO 実測 1 回」に
 集約されており、判断が出るまで worker 側にやれることはない。
+
+### 継続の引き継ぎ v2 (P-0115, 2026-08-23, human-pilot)
+
+P-0080 は budget_exhausted、P-0114 は引き継ぎブランチの不備 (ログ未改名) で
+spec_error。この P-0115 はログ改名済みの正しい継続。予算 5M。checkpoint と
+PROGRESS.md から再開すること。
