@@ -19,3 +19,4 @@
 {"at": "2026-08-22T07:42:13Z", "type": "announce", "text": "P-0065: heart が詰まったら自分で気づけなくても k8s に強制再起動させる — livenessProbe を足す\n検証: grep -q 'livenessProbe' apps/autopilot/heart-deployment.yaml; python3 -m pytest ops/heart/tests -k liveness -q\n不可逆: なし / 自信: confident\n着手予定: 2026-08-22T07:42:13Z (拒否権窓)\n拒否するには issue #56 に `veto P-0065` とコメント（ダッシュボードの書き置きでも可）。走行中でも veto は有効です。"}
 {"at": "2026-08-22T07:42:13Z", "type": "announce", "text": "P-0071: credential がどこで何を握っているか、CIで機械的に裏切れないようにする\n検証: test -f ops/check_credential_map.py; grep -q 'check_credential_map' .github/workflows/ci.yml\n不可逆: なし / 自信: unsure\n着手予定: 2026-08-22T07:42:13Z (拒否権窓)\n拒否するには issue #56 に `veto P-0071` とコメント（ダッシュボードの書き置きでも可）。走行中でも veto は有効です。"}
 {"at": "2026-08-22T09:14:30Z", "type": "review", "text": "P-0071 がレビューを 3 回通らず停滞。指摘一覧を確認してください"}
+{"at": "2026-08-22T09:15:37Z", "type": "review", "text": "P-0065 がレビューを 3 回通らず停滞。指摘一覧を確認してください"}
