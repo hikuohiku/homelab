@@ -4,3 +4,4 @@
 {"type":"tool","part":{"id":"part-1","type":"tool","callID":"call-1","tool":"bash","state":{"status":"running","input":{"command":"npm test"}}}}
 {"type":"tool","part":{"id":"part-1","type":"tool","callID":"call-1","tool":"bash","state":{"status":"completed","input":{"command":"npm test"},"output":"4 tests passed"}}}
 {"type":"step_finish","part":{"id":"finish-1","type":"step-finish","cost":0.01,"tokens":{"total":8745,"input":8718,"output":19,"reasoning":8}}}
+{"type":"tool_use","timestamp":1787384162861,"sessionID":"ses_x","part":{"id":"prt_real1","type":"tool","callID":"call_real1","tool":"bash","state":{"status":"completed","input":{"command":"echo \"hello\" > sample2.txt && cat sample2.txt"},"output":"hello\n","metadata":{"exit":0}}}}
