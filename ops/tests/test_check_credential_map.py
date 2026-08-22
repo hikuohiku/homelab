@@ -5,9 +5,13 @@
 純関数 (find_violations) 側は合成入力で両方向を固定する。
 """
 
+import io
+import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 from ops import check_credential_map as ccm
 
@@ -151,6 +155,16 @@ spec:
         self.assertEqual(problems, [])
         self.assertIn(("myapp", "my-restic-credentials"), refs.consumed_secrets)
 
+    def test_pod_spec_returns_none_for_unknown_kind(self):
+        """workload 系以外の kind は None。空パスで doc 自身を返さない。
+
+        未知 kind が doc を返すと ConfigMap 等まで workload 扱いされ、
+        top-level containers を持つ文書が誤走査される。
+        """
+        self.assertIsNone(ccm._pod_spec({"kind": "ConfigMap", "data": {"k": "v"}}))
+        self.assertIsNone(ccm._pod_spec({"kind": "Service", "spec": {"ports": []}}))
+        self.assertIsNone(ccm._pod_spec({"metadata": {"name": "no-kind"}}))
+
     def test_envfrom_secretref_is_consumed(self):
         refs, problems = self.scan_text(
             """
@@ -232,6 +246,69 @@ spec:
         _, problems = self.scan_text("kind: [ExternalSecret\n  bad:: :yaml")
         self.assertEqual(len(problems), 1)
         self.assertIn("YAML が読めない", problems[0])
+
+
+class TestMainFailClosed(unittest.TestCase):
+    """main() の exit code 契約。CI はこの rc しか見ない。
+
+    「problems はあるが violations が空」のときに rc=0 を返すと、
+    dataFrom・壊れた YAML など fail-closed 対象が ::error:: を出しつつ
+    CI を緑で通ってしまう (実際にそうなっていた形)。
+    """
+
+    GOOD_ES = """
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: ok-es
+  namespace: myapp
+spec:
+  target:
+    name: ok-secret
+  data:
+    - secretKey: TOKEN
+      remoteRef:
+        key: OK_KEY
+"""
+    DATAFROM_ES = """
+apiVersion: external-secrets.io/v1
+kind: ExternalSecret
+metadata:
+  name: bulk
+  namespace: myapp
+spec:
+  target:
+    name: ok-secret
+  dataFrom:
+    - extract:
+        key: WHOLE_PROJECT
+"""
+
+    def run_main(self, tmp: Path) -> int:
+        buf = io.StringIO()
+        with mock.patch.object(ccm, "APPS_DIR", tmp), \
+             mock.patch.object(ccm, "DECLARED_DOPPLER_KEYS", frozenset({"OK_KEY"})), \
+             mock.patch.object(ccm, "DECLARED_SECRET_TARGETS", frozenset({"ok-secret"})), \
+             mock.patch.object(sys, "argv", ["check_credential_map.py"]), \
+             redirect_stdout(buf):
+            return ccm.main()
+
+    def test_problems_without_violations_still_fails(self):
+        """dataFrom (problems) のみで違反 0 件でも rc=1。fail-closed。"""
+        with tempfile.TemporaryDirectory() as d:
+            app = Path(d) / "myapp"
+            app.mkdir()
+            (app / "good.yaml").write_text(self.GOOD_ES)
+            (app / "datafrom.yaml").write_text(self.DATAFROM_ES)
+            self.assertEqual(self.run_main(Path(d)), 1)
+
+    def test_clean_fixture_passes(self):
+        """同じ土台から dataFrom を除いたら rc=0 (上のテストの対偶)。"""
+        with tempfile.TemporaryDirectory() as d:
+            app = Path(d) / "myapp"
+            app.mkdir()
+            (app / "good.yaml").write_text(self.GOOD_ES)
+            self.assertEqual(self.run_main(Path(d)), 0)
 
 
 class TestRealRepo(unittest.TestCase):

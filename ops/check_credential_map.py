@@ -169,8 +169,12 @@ def _docs(path: Path):
 def _pod_spec(doc: dict) -> dict | None:
     """kind に応じた pod spec を返す。workload 系で無ければ None。"""
     path = _POD_SPEC_PATHS.get(doc.get("kind"))
+    # 未知 kind でここを抜けると path=None→空ループ→doc 自身を返してしまう
+    # (ConfigMap 等まで workload 扱いになる)。契約は None。
+    if path is None:
+        return None
     node: object = doc
-    for key in path or ():
+    for key in path:
         node = (node or {}).get(key) if isinstance(node, dict) else None
     return node if isinstance(node, dict) else None
 
@@ -377,11 +381,11 @@ def main() -> int:
     violations = find_violations(
         refs, DECLARED_DOPPLER_KEYS, DECLARED_SECRET_TARGETS, EXEMPT_SECRET_CONSUMERS
     )
-    if problems:
-        for problem in problems:
-            print(f"::error::{problem}")
-    if violations:
-        for message in violations:
+    # problems (走査の異常) だけでも rc=1 にする。violations が空だからと
+    # 成功扱いにすると、dataFrom・壊れた YAML など fail-closed 対象が
+    # ::error:: を出しながら CI を緑で通ってしまう
+    if problems or violations:
+        for message in [*problems, *violations]:
             print(f"::error::{message}")
         print(
             "::error::credential 参照と宣言 (check_credential_map.py の地図) が"

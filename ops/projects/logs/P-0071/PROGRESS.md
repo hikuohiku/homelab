@@ -60,3 +60,49 @@ secretKeyRef する Deployment でも rc=1 (`CreateContainerConfigError にな�
 交差検査 (rules.json 側の腐り検知) は意図的にやっていない — PROJECT.md の
 「rules.json は触らない」の一歩手前なので、やりたくなったら curriculum に上げること。
 
+### セッション 2 (2026-08-22) — 自己レビューで fail-open を見つけて修正
+
+レビュー verdict が空だったので、自分でコードレビュー (セッション 1 の実装を読み直し)
+した。2 件の潜在バグを実測で確定 → 修正 → リグレッションテスト追加。すべて green。
+
+**やったこと**
+
+1. **fail-open 修正 (重大)**: `main()` が「problems あり・violations 0 件」のとき
+   `::error::` を印字しつつ rc=0 を返していた。dataFrom や壊れた YAML など
+   fail-closed 対象が CI を緑で通る — docstring が掲げる契約そのものを破っていた。
+   合成 fixture で「dataFrom ES + 宣言整合の ES」を回し rc=0 を実測 → `problems or
+   violations` で落とすよう修正 → 同 fixture で rc=1 を再測
+2. **`_pod_spec` の未知 kind 契約違反修正**: `_POD_SPEC_PATHS` に無い kind
+   (ConfigMap 等) で空パス→空ループ→doc 自身を返しており、「workload 系で無ければ
+   None」に反していた。top-level `containers` を持つ非 workload 文書が誤走査されうる。
+   path is None なら即 None を返すよう修正
+3. リグレッションテスト 3 本追加 (`test_pod_spec_returns_none_for_unknown_kind`,
+   `TestMainFailClosed.test_problems_without_violations_still_fails`,
+   `.test_clean_fixture_passes`)。main() テストは APPS_DIR / DECLARED_* /
+   sys.argv を mock patch して実 repo を汚さずに exit code 契約を固定する
+
+**実測**
+
+```
+$ python3 -m unittest discover -s ops/tests -t . → Ran 80 tests, OK (+3)
+$ python3 ops/check_credential_map.py
+ok: ... (Doppler keys 20 種 / k8s Secrets 18 種 / secretKeyRef 参照 15 組) rc=0
+$ test -f ops/check_credential_map.py && grep -q check_credential_map .github/workflows/ci.yml → 両方 OK
+$ python3 ops/validate.py → 0 error, 2 warning (heartbeat STALE / comments.json 読めない。
+  どちらも heart 領域・この sandbox checkout の環境ノイズで P-0071 とは無関係と判断)
+```
+
+**分かったこと / 発見**
+
+- 「verify 全項目 green」「実 repo で rc=0」は fail-open を全く検出しない。問題は
+  「異常を検知したときの出口」側にだけ起きるので、正常系しか通っていない限り永遠に
+  見えない。教訓: 検査器を作ったら、**異常経路の exit code を合成 fixture で固定する**
+  のが DoD 相当 (セッション 1 は violations 側の合成テストはあったが problems 側の
+  main() 出口テストが抜けていた)
+- 実 repo の走査結果 (20/18/15) は修正前後で不変。修正は異常経路のみに影響
+
+**次のセッションへの一言**
+
+機能面の実装と自己レビューは完了。レビュー指摘が出たらそれだけ直すこと。
+なお validate.py の heartbeat STALE warning は本プロジェクト外 (heart の領域)。
+
