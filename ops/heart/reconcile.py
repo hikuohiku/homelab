@@ -167,6 +167,14 @@ def decide(doc, facts, rules, now):
             _register_spec(doc, spec, rules, now)
             existing_ids.add(spec["id"])
 
+    # --- 既読化 (ack P-NNNN): 終端プロジェクトの墓標を要対応キューから下げる ---
+    # 状態は変えない (歴史は残す)。ダッシュボードが acknowledged を隠す
+    acks = set(facts.get("acks", []))
+    if acks:
+        for p in doc["projects"]:
+            if p["id"] in acks and p["state"] in TERMINAL_STATES:
+                p["acknowledged"] = True
+
     for p in doc["projects"]:
         state = p["state"]
         if state in TERMINAL_STATES:

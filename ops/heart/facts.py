@@ -141,6 +141,7 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
     分流する (P-0091)。
     """
     vetoes = []
+    acks = []
     stop_all = False
     resume_all = False
     review_needed = []

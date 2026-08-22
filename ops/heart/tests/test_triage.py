@@ -27,6 +27,11 @@ class TestTriage(unittest.TestCase):
         v = triage.classify("ダッシュボードの配色が見づらい", RULES)
         self.assertEqual(v["kind"], "review_needed")
 
+    def test_ack_with_project_id(self):
+        v = triage.classify("ack P-0012 ack P-0013 (済んだ話です)", RULES)
+        self.assertEqual(v["kind"], "ack")
+        self.assertEqual(v["projects"], ["P-0012", "P-0013"])
+
     def test_resume_keywords(self):
         for text in ("再開してください", "resume"):
             self.assertEqual(triage.classify(text, RULES)["kind"], "resume_all", text)

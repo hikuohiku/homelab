@@ -332,6 +332,19 @@ class TestVeto(unittest.TestCase):
         # 停止中に curriculum を回さない
         self.assertNotIn("spawn_curriculum", kinds(actions))
 
+    def test_ack_marks_terminal_project_acknowledged(self):
+        """ack は終端の墓標を既読化するだけ。状態は変えず、非終端には効かない。"""
+        d, actions = reconcile.decide(
+            doc(project(state="stalled", stalled_reason="spec_error"),
+                project(id="P-0002", branch="project/p-0002", state="active", job="j")),
+            facts(acks=["P-0001", "P-0002"], jobs={"j": {"active": True}}),
+            RULES, NOW,
+        )
+        self.assertTrue(d["projects"][0]["acknowledged"])
+        self.assertEqual(d["projects"][0]["state"], "stalled")
+        self.assertNotIn("acknowledged", d["projects"][1])
+        self.assertEqual(d["projects"][1]["state"], "active")
+
     def test_stop_engages_and_persists_across_beats(self):
         """「止めて」は受信ビート限りで消えない。全 stalled 化の次のビートは
         アイドルに見えるが、人間が再開と言うまで spawn を一切しない
