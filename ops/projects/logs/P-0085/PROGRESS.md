@@ -170,3 +170,30 @@ immich-cli イメージ前提は 3 点とも実機で確認:
 - ESO の Events には Doppler の生エラー文言が流れる(`describe` で見られる)。status 条件文
   (`could not get secret data from provider`)より情報量が多く、「キー名タイポ」か
   「未登録」かの切り分けに使える。
+
+
+## worker session5 (2026-08-22)
+
+### 結論: まだ blocked。変化なし — キー登録だけを待つ (5 セッション連続)
+
+- **ES 強制再同期を実施**(delete → git manifest 再適用、14:55Z): Ready=False。
+  Events の生エラーも session4 同様 `Doppler API Client Error: secret 'IMMICH_API_KEY'
+  not found` = **Doppler (homelab/prd) に未登録のまま**。session1 の依頼文は
+  4 セッション連続で未対応。verify #3 の未消化はこの 1 点のみ。
+- 引き継ぎの指示どおり CronJob 適用・テスト画像投入には着手せず(キー無し適用は
+  CreateContainerConfigError を積む — session1 の罠)。クラスタ残置物は変わらず:
+  ExternalSecret のみ(失敗状態で残置)、CronJob 未適用。
+- verify #1/#2 を再実行して green 維持を実測(manifest 存在 / 15 tests OK)。
+
+### 次セッションへの引き継ぎ
+
+- 手順は session2〜4 の引き継ぎのまま完全に有効: **まず ES 強制再同期(delete+reapply →
+  sleep 25 → Ready 確認 + describe で生エラー確認)**。True になったら session1 の
+  「e2e の Exact レシピ」に従う(curl Job 経由で assets_before/after を数える。
+  autopilot-writer SA は Secret get Forbidden のため secret 直読みは捨てる)。
+  False なら何もせず終えてよい。
+- 人間への依頼文は PROGRESS session1 記載のものをそのまま使う。
+
+### 発見
+
+- なし(手順は安定している。新規の罠・仮説なし)
