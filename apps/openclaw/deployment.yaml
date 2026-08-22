@@ -6,7 +6,10 @@ metadata:
   labels:
     app: openclaw
 spec:
-  replicas: 1
+  # 2026-08-22: TELEGRAM_BOT_TOKEN / TELEGRAM_ALLOWED_USER_ID が Doppler 未登録の間は
+  # 起動しない (CreateContainerConfigError で unhealthy に居座り soak の雑音になる)。
+  # 鍵の登録後に 1 へ戻す
+  replicas: 0
   # 状態 SQLite を単一 PVC 上に持つため、rolling 中の二重起動を避けて Recreate (syncthing 同型)
   strategy:
     type: Recreate
