@@ -1,0 +1,46 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: openclaw-config
+  namespace: autopilot
+data:
+  # OpenClaw の設定 (~/.openclaw/openclaw.json = /home/node/.openclaw/openclaw.json)。
+  # JSON5 (コメント可)。initContainer (deployment.yaml) が毎回起動時に PVC へコピーする。
+  # Gateway 自身もこのファイルを書く (startup-safe migration 等) ため、ConfigMap を直接
+  # mount せず init 経由で配置する。Git が常に正本: Pod 再起動で Git の内容に戻る。
+  #
+  # 注意 — OpenClaw は strict validation で未知キーがあると起動しない。ここに載せるキーは
+  # docs.openclaw.ai の設定例からのみ選んだ。実 Pod での初回起動検証がまだ無い (P-0090
+  # の器フェーズ)。起動失敗時は `openclaw doctor` のエラー文言をこのコメント直下に記すこと。
+  openclaw.json: |
+    {
+      gateway: {
+        mode: "local",
+        // lan = 0.0.0.0 bind。httpGet probe (pod IP 宛) が到達できるようにするため。
+        // Service / Ingress は作らないので cluster 外には露出しない。control plane は
+        // OPENCLAW_GATEWAY_TOKEN (env) で認証される
+        bind: "lan",
+        port: 18789,
+      },
+      channels: {
+        telegram: {
+          enabled: true,
+          // spec の絶対条件: allowlist 外の送信者は完全無視 (プロンプト注入面を閉じる)。
+          // pairing 承認フローも使わないので、allowFrom 外からの接触は応答も保存もされない
+          dmPolicy: "allowlist",
+          allowFrom: ["${TELEGRAM_ALLOWED_USER_ID}"],
+          // groups を設定しない = groupPolicy 既定値 allowlist で全 group を遮断 (DM 専用 bot)
+        },
+      },
+      agents: {
+        defaults: {
+          workspace: "/home/node/.openclaw/workspace",
+          model: {
+            // ops/models.json の全役と同じ opencode go 定額のモデル。OpenClaw は OpenCode
+            // を built-in provider として持つ (OPENCODE_API_KEY env + `opencode-go/*` refs)。
+            // models.json 側を変えたらここも揃えること (機械検査は未整備。inventory の note 参照)
+            primary: "opencode-go/ox-alpha-free",
+          },
+        },
+      },
+    }

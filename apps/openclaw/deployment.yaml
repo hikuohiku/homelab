@@ -1,0 +1,123 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openclaw
+  namespace: autopilot
+  labels:
+    app: openclaw
+spec:
+  replicas: 1
+  # 状態 SQLite を単一 PVC 上に持つため、rolling 中の二重起動を避けて Recreate (syncthing 同型)
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: openclaw
+  template:
+    metadata:
+      labels:
+        app: openclaw
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        - name: bootstrap-state
+          # メインと同じ digest pin イメージを root で流用する。busybox を新規に持ち込まずに済む
+          # (inventory の busybox GROUPS を広げない)。node:24-bookworm-slim ベースなので sh/cp/chown 有り
+          image: ghcr.io/openclaw/openclaw@sha256:6a31d44b2944e7adcd2b582bf6fb463111264ebca97a0201795b799135bd102c
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              mkdir -p /home/node/.openclaw/workspace
+              chown -R 1000:1000 /home/node/.openclaw
+              cp /config-src/openclaw.json /home/node/.openclaw/openclaw.json
+              chown 1000:1000 /home/node/.openclaw/openclaw.json
+              chmod 600 /home/node/.openclaw/openclaw.json
+          securityContext:
+            # local-path PVC の初期パーミッションは root のため、uid 1000 (node) へ chown する必要がある。
+            # vaultwarden の initContainer と同型の対応。CHOWN capability が必要なので drop ALL はしない
+            runAsUser: 0
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: state
+              mountPath: /home/node/.openclaw
+            - name: config-src
+              mountPath: /config-src
+              readOnly: true
+      containers:
+        - name: gateway
+          # ghcr.io/openclaw/openclaw:2026.7.1 の index (マルチアーキ) digest。
+          # 2026-08-22 に registry API 実測で取得 (docker-content-digest ヘッダを読む手順は
+          # ops/inventory.json の本アプリ note 参照)。docs 上 version tag は immutable
+          image: ghcr.io/openclaw/openclaw@sha256:6a31d44b2944e7adcd2b582bf6fb463111264ebca97a0201795b799135bd102c
+          terminationMessagePolicy: FallbackToLogsOnError
+          env:
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-credentials
+                  key: TELEGRAM_BOT_TOKEN
+            - name: TELEGRAM_ALLOWED_USER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-credentials
+                  key: TELEGRAM_ALLOWED_USER_ID
+            - name: OPENCLAW_GATEWAY_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-credentials
+                  key: OPENCLAW_GATEWAY_TOKEN
+            - name: OPENCODE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: openclaw-credentials
+                  key: OPENCODE_API_KEY
+            - name: TZ
+              value: Asia/Tokyo
+          ports:
+            - name: gateway
+              containerPort: 18789
+          volumeMounts:
+            - name: state
+              mountPath: /home/node/.openclaw
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            # memory の limits は付けない（substrate の規則: 実測の裏付けなしに付けない。
+            # 超過が回復不能な OOMKill になる。CPU limits は throttle で回復するため設定する）
+            limits:
+              cpu: "1"
+          # 公式イメージの HEALTHCHECK と同じエンドポイント群 (docs.openclaw.ai/install/docker)。
+          # auth 不要の probe 用 path。readiness は startupz — channel 障害で healthy な
+          # Gateway ごと外れるのを避ける docs 推奨の構成
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: gateway
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /startupz
+              port: gateway
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          securityContext:
+            # 公式イメージは node (uid/gid 1000) 非 root 前提。initContainer が state を
+            # 1000:1000 に chown 済み
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: openclaw-state
+        - name: config-src
+          configMap:
+            name: openclaw-config

@@ -79,6 +79,12 @@ DECLARED_DOPPLER_KEYS = frozenset(
         "CLAUDE_CODE_OAUTH_TOKEN",
         "DISCORD_WEBHOOK_URL",
         "OPENCODE_API_KEY",
+        # OpenClaw (P-0090, apps/openclaw)。TELEGRAM_BOT_TOKEN / TELEGRAM_ALLOWED_USER_ID /
+        # OPENCLAW_GATEWAY_TOKEN は 2026-08-22 時点で Doppler 未登録 (apps/openclaw/
+        # external-secret.yaml のコメント参照。登録されるまで ExternalSecret は Sync 失敗で待機)
+        "OPENCLAW_GATEWAY_TOKEN",
+        "TELEGRAM_ALLOWED_USER_ID",
+        "TELEGRAM_BOT_TOKEN",
         # autopilot 周辺の個別トークン
         "GITHUB_HEALTH_REPORTER_TOKEN",  # ops-health-reporter
         # restic + Backblaze B2 の共通 credential 複合 (immich/syncthing/vaultwarden/coder)
@@ -117,6 +123,7 @@ DECLARED_SECRET_TARGETS = frozenset(
         "immich-postgres-credentials",
         "immich-restic-backup-credentials",
         "immich-restic-credentials",
+        "openclaw-credentials",
         "operator-oauth",
         "ops-dashboard-github-token",
         "syncthing-restic-backup-credentials",

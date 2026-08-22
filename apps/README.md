@@ -75,6 +75,7 @@ coder                Synced        Healthy
 dex                  Synced        Healthy
 external-secrets     Synced        Healthy
 immich               Synced        Healthy
+openclaw             Synced        Healthy
 ops-dashboard        Synced        Healthy
 ops-health-reporter  Synced        Healthy
 syncthing            Synced        Healthy
@@ -131,7 +132,8 @@ apps/
 ├── ops-health-reporter/
 ├── autopilot/
 ├── ops-dashboard/
-└── syncthing/
+├── syncthing/
+└── openclaw/
 ```
 
 各アプリは以下の構造:
