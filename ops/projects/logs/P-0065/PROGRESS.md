@@ -342,3 +342,29 @@ spec 側の欠陥という結論に、6セッション連続で到達してい�
   等への差し替え）だが、worker にはその実行権限もチャネルも無い（ops/backlog.json 等の帳簿は
   heart の領分、CLAUDE.md の指示）。
   （ops/backlog.json 等の帳簿は heart の領分、CLAUDE.md の指示）。
+
+### 2026-08-22 セッション9
+
+**やったこと**: 実装変更なし。session8 の「これ以上 worker セッションを消費すべきではない」
+という結論を鵜呑みにせず、最小限の独立再確認のみ実施（新規の一手は探索せず、既に session8
+までで「repo 側だけで直せる案は出尽くした」と判断されているため）。
+
+1. `git status --short` → クリーン（session8 と同じコミット `290dc020`）。
+2. `grep -n 'livenessProbe' -A 12 apps/autopilot/heart-deployment.yaml` → exec probe
+   定義済み（`initialDelaySeconds: 300` / `periodSeconds: 30` / `timeoutSeconds: 15`、
+   変更なし）。
+3. `python3 -m unittest discover -s ops/heart/tests -t .` → 153 テスト全て `OK`（変更なし）。
+4. `python3 -m pytest --version` → `No module named pytest`。`which pip pip3 pytest` →
+   全て rc=1 で不在（session6〜8 と同じ）。
+
+**分かったこと（結論、変化なし）**: 9セッション連続で同一結論。実装は安定・完成済み。
+第二 verify コマンド (`python3 -m pytest ...`) はこのサンドボックス環境に pytest/pip が
+存在しない限り実行不能で、これは repo 側のどんな変更でも解決できない spec 側の欠陥。
+
+**次のセッションへの一言**:
+- session8 までの判断を維持: **このプロジェクトはこれ以上 worker セッションを消費すべき
+  ではない。** repo 側で試せる一手（pip/venv/shim/vendor/ci.yml 変更）は session4〜8 で
+  出尽くし、いずれも却下済み。次回起動時も同じ最小確認（grep / unittest discover /
+  pytest 不在確認）だけ行い、wrapper 実測 JSON の第二項目が green にならない限り実装には
+  触らないこと。唯一の建設的な一手は curriculum/reviewer への verify 文字列修正提案
+  （worker には実行権限もチャネルも無い、ops 帳簿は heart の領分）で変わらず。
