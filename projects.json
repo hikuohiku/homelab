@@ -2388,11 +2388,31 @@
       ],
       "review_requested_at": "2026-08-22T18:56:35Z",
       "review_retries": 0
+    },
+    {
+      "id": "P-0107",
+      "title": "OpenClaw の決定論パススルーを完成させる — Telegram の全受信を ops-feedback へ生保存 (P-0090 の続き)",
+      "state": "proposed",
+      "branch": "project/p-0107",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "grep -rq 'ops-feedback' apps/openclaw/",
+        "python3 -m unittest ops.tests.test_openclaw_bridge"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2000000
+      },
+      "created": "2026-08-22",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-22T17:22:29Z",
-  "last_activity_at": "2026-08-22T18:56:35Z",
+  "last_activity_at": "2026-08-22T18:57:46Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
