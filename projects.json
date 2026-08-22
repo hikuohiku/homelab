@@ -1828,11 +1828,50 @@
       "spawn_count": 1,
       "job": "runner-p-0085-a1",
       "drift_count": 0
+    },
+    {
+      "id": "P-0088",
+      "title": "Mission Control に autopilot の構成図ページを足す",
+      "state": "proposed",
+      "branch": "project/p-0088",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "test -f apps/ops-dashboard/app/src/app/architecture/page.tsx",
+        "grep -q 'architecture' apps/ops-dashboard/app/src/app/page.tsx"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 800000
+      },
+      "created": "2026-08-22",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0089",
+      "title": "Mission Control にページアイコン (favicon) を足す",
+      "state": "proposed",
+      "branch": "project/p-0089",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "test -f apps/ops-dashboard/app/src/app/icon.svg"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 800000
+      },
+      "created": "2026-08-22",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-22T12:15:40Z",
-  "last_activity_at": "2026-08-22T13:03:48Z",
+  "last_activity_at": "2026-08-22T14:44:57Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
