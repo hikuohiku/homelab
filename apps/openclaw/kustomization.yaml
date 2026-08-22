@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# OpenClaw (P-0090) — Telegram bot gateway。公式イメージを digest pin で使うだけ
+# (fork・独自ビルドはしない)。namespace は既存の autopilot を使うため namespace.yaml は無い
+resources:
+  - pvc.yaml
+  - config.yaml
+  - external-secret.yaml
+  - deployment.yaml

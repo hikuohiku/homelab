@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: openclaw-state
+  namespace: autopilot
+  annotations:
+    # データ消失防止: ArgoCD prune / app 削除時も PVC を残す (syncthing と同型)
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      # Gateway の状態 SQLite + workspace + ログ用。bot の会話状態のみで実データ
+      # (メディア等) を持たないため小さくてよい。local-path は実ディスクを予約しない
+      # (docs/node01-storage.md) ので、実使用量は pvc-usage-reporter 系と同様に監視する
+      storage: 2Gi

@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: openclaw
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/hikuohiku/homelab.git
+    targetRevision: HEAD
+    path: apps/openclaw
+  destination:
+    server: https://kubernetes.default.svc
+    # Telegram bot gateway。autopilot の heart / dashboard と同じ namespace で稼働
+    # (spec 決定 (5)。namespace 自体は apps/autopilot/namespace.yaml が管理)
+    namespace: autopilot
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
