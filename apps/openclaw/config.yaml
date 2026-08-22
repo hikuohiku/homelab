@@ -38,11 +38,23 @@ data:
       models: {
         mode: "merge",
         providers: {
-          "zen": {
-            baseUrl: "https://opencode.ai/zen/v1",
+          // go プランの実エンドポイント (opencode CLI のキャッシュから実測 2026-08-23)。
+          // zen (/zen/v1) は別財布のクレジット課金だが、こちらはプラン内。
+          // ox-alpha-free は無料期間中 (〜8/27 頃) — 終了後は同カタログの
+          // gpt-5.6-luna / kimi-k3 等に差し替える
+          "go": {
+            baseUrl: "https://opencode.ai/zen/go/v1",
             apiKey: "${OPENCODE_API_KEY}",
             api: "openai-completions",
             models: [
+              {
+                id: "ox-alpha-free",
+                name: "Ox Alpha (free)",
+                reasoning: true,
+                input: ["text"],
+                contextWindow: 1000000,
+                maxTokens: 131072,
+              },
               {
                 id: "gpt-5.6-luna",
                 name: "GPT 5.6 Luna",
@@ -66,7 +78,7 @@ data:
             // 2026-08-23 実測: opencode-go/ は Unknown model で失敗した)
             // zen カタログ実測 (2026-08-23, /zen/v1/models 64 件): ox-alpha は存在しない
             // (opencode CLI 専用)。口の用途は軽いので glm-5.2 (プラン内課金) を使う
-            primary: "zen/gpt-5.6-luna",
+            primary: "go/ox-alpha-free",
           },
         },
       },
