@@ -111,6 +111,53 @@ ops/tests discover 183 件 OK。ruff F821 はこの環境に ruff/pip 無くて�
   全体を見る (初回起動行「cursor 初期化」→ その後新着のみ)。gateway 応答の成否と無関係に
   spool から保存されるのが決定論パススルーの証明 (merge 後観察でも同じでよい)
 
+### worker #3 (2026-08-22) — review 指摘の技術的本体 (統合経路が一度も走っていない) に統合テストで対処。実メッセージ実測 (DoD 本体) は引き続き cluster 待ち
+
+**やったこと**:
+
+- **統合テスト 7 件を `ops/tests/test_openclaw_bridge.py` に追加** (`EndToEndRunOnceTest`)。
+  review 指摘の「sqlite 読み取り → JSON 変換 → Contents API PUT の統合経路が unit テスト
+  以外で一度も走っていない」に対し、**本物の `run_once()` を実物 SQLite × 実 HTTP で通した**:
+  - 実 SQLite: journal_mode=WAL で spool DB を作り、gateway 相当の writer 接続を
+    **開きっぱなし** (checkpoint 未実施 = -wal に未反映分が残る状態) で維持。
+    bridge 側は mode=ro で読む — 本番 pod 内の競合条件を再現
+  - 実 HTTP: localhost の ThreadingHTTPServer で git ref 取得/作成 + contents PUT を模し、
+    urllib 経由の実リクエストを食わせる (モック関数ではない)
+  - 固定した振る舞い: 初回 tick は履歴を既読化して保存しない / 新着が inbox 形式
+    ({id, source:"telegram", received, body}, kind 無し, body 加工無し) で 1 ファイル保存 /
+    再実行は二重保存しない / allowlist 外は GitHub にリクエストすら飛ばない /
+    PUT 失敗時は cursor 不動 + HEAD_ATTEMPTS 加算 + 次 tick 再試行 /
+    422 衝突時に id 振り直しで成功 / state DB 無しは例外で死なず待機
+  - テスト内で pod ログと同じ `saved ops-feedback:...` 行も stdout アサート
+    (`logs -c feedback-bridge | grep saved` で見るものと同型)
+- **WAL 読み取りの前提を実測で確認**: writer 接続が開いたまま WAL に commit された行は
+  mode=ro の reader から読める (Python 3.14 sqlite3 / このサンドボックスで実測)。
+  「sqlite 読み取りは gateway の書き込みと競合しない設計のはず」(worker #1 記録) の
+  「はず」が取れた。ただし本番 PVC 上での確認は merge 後観察に譲る
+- verify 再実測すべて green: grep #1 rc=0 / unittest 36 件 OK (既存 29 + 追加 7) /
+  ops/tests discover 143 件 rc=0 / validate.py rc=0 / `kubectl kustomize apps/openclaw`
+  rc=0 (revision "9", bridge-script ConfigMap 解決)。deployment.yaml は無傷
+
+**できなかったこと (変わらず — 次のセッションはここから)**:
+
+- **DoD 本体の「実メッセージ 1 通で ops-feedback にファイルが現れることの実測」は未実施。**
+  この worker サンドボックスも worker #2 と同型で cluster 資格が無いことを再実測した
+  (KUBECONFIG 未設定 / ~/.kube 無し / SA token 未マウント → API server 10.43.0.1:443 は
+  401 / tailscale・direnv・doppler・just バイナリ無し)。worker #2 の残した手順
+  (preview → pod Ready [2 コンテナ] → allowlist 内ユーザーが送信 → saved ログ +
+  ops-feedback ブランチの <id>.json を証跡取得 → PROGRESS 追記 → preview-reset) を
+  cluster アクセスのあるセッションがそのまま実行すること。統合テストはこの DoD の
+  **代替ではない** (Telegram 本物・本物 GitHub・本物 cluster が絡む最後の 1 マイル)
+
+**分かったこと / 次への引き継ぎ**:
+
+- `/tmp/opencode` は autopilot uid から書けない (root 所有 755)。一時ディレクトリは
+  `mktemp` (worker prompt の指示どおり) か Python 内では `tempfile.mkdtemp()` 既定 (/tmp 直下)
+- unittest のサマリ (Ran N tests / OK) は stderr、print デバッグやテスト内出力は stdout なので
+  `2>&1 | tail` すると順序が崩れてサマリが見えなくなる。`2>file >/dev/null` で分離するのが確実
+- 統合テストは 1 ケース約 0.6s (HTTP サーバ起動込み) で 7 件 +α。discover 全体は 6s 弱。
+  CI への負荷は無視できる規模
+
 ## 発見 (curriculum へ)
 
 - **ops/runner/tests/test_quota_flow.py の flaky テスト**:

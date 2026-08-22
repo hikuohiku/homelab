@@ -11,11 +11,24 @@ bridge.py は sidecar コンテナ内で ConfigMap から直接起動される�
 - 生テキスト保存 (trim 等の加工をしない)
 - allowlist は fail-closed (env 未設定・非数値なら誰も許可しない)
 - kind: task-request は付けない (spec 明記の禁じ手)
+- run_once() 1 tick の統合経路 (実 SQLite WAL 読み取り → JSON 変換 → 実 HTTP の
+  Contents API PUT) も localhost の偽 API サーバで実際に走らせる。ただしこれは
+  DoD「実メッセージ 1 通の実測」の代替ではない (cluster + 人間の送信が必要)
 """
 
+import base64
+import contextlib
 import importlib.util
+import io
 import json
+import os
+import re
+import shutil
+import sqlite3
+import tempfile
+import threading
 import unittest
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
@@ -220,6 +233,260 @@ class QueueNameContractTest(unittest.TestCase):
 
     def test_state_db_points_into_pvc_state_dir(self):
         self.assertEqual(bridge.STATE_DB, "/home/node/.openclaw/state/openclaw.sqlite")
+
+
+# --- 統合テスト: run_once() を実 SQLite (WAL) × 実 HTTP で通す ---
+#
+# review 指摘 (P-0107): 「sqlite 読み取り → JSON 変換 → Contents API PUT という統合経路は
+# unit テスト以外で一度も走っていない」対策。gateway が開いたままの writer 接続
+# (journal_mode=WAL, checkpoint 未実施 = -wal に未反映分が残る状態) への mode=ro 読み取りと、
+# localhost の偽 GitHub API への実 HTTP リクエストで、本物の run_once() を動かす。
+# 実 Telegram メッセージによる DoD 実測 (cluster + allowlist 内ユーザーの送信) の代替では
+# ない。統合経路が壊れていないことの機械的保証と、CI での回帰検知が目的。
+
+
+class _FakeGitHubHandler(BaseHTTPRequestHandler):
+    """bridge.py が使う範囲 (git ref 取得/作成 + contents PUT) だけ模す。
+
+    state 辞書を server に持たせ、テストから保存結果と受付リクエストを検査する。
+    """
+
+    def log_message(self, *args):  # テスト出力を汚さない
+        pass
+
+    def _send(self, code, payload):
+        body = json.dumps(payload).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        st = self.server.state
+        match = re.fullmatch(r"/repos/[^/]+/[^/]+/git/ref/heads/(.+)", self.path)
+        if match:
+            branch = match.group(1)
+            if branch == st["base_branch"] or branch in st["branches"]:
+                return self._send(200, {"object": {"sha": st["shas"][branch]}})
+            return self._send(404, {"message": "Not Found"})
+        return self._send(404, {"message": "Not Found"})
+
+    def do_POST(self):
+        st = self.server.state
+        payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if self.path == f"/repos/{st['repo']}/git/refs":
+            branch = payload["ref"].removeprefix("refs/heads/")
+            st["branches"][branch] = payload["sha"]
+            st["requests"].append({"method": "POST", "path": self.path, **payload})
+            return self._send(201, {"ref": payload["ref"]})
+        return self._send(404, {"message": "Not Found"})
+
+    def do_PUT(self):
+        st = self.server.state
+        match = re.fullmatch(rf"/repos/{re.escape(st['repo'])}/contents/(.+)", self.path)
+        if not match:
+            return self._send(404, {"message": "Not Found"})
+        payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        st["requests"].append({"method": "PUT", "path": match.group(1), **payload})
+        if st["fail_puts"] > 0:
+            st["fail_puts"] -= 1
+            return self._send(500, {"message": "boom"})
+        path = match.group(1)
+        if path in st["files"]:
+            # 実 API 同型: 同名ファイル既存は 422 (put_note の id 振り直し経路)
+            return self._send(422, {"message": "already exists"})
+        st["files"][path] = base64.b64decode(payload["content"]).decode()
+        return self._send(201, {"commit": {"sha": f"fake-{len(st['files'])}"}})
+
+
+class EndToEndRunOnceTest(unittest.TestCase):
+    ALLOWED_USER_ID = "42"
+
+    def setUp(self):
+        tmp = tempfile.mkdtemp(prefix="openclaw-bridge-e2e-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        self.db_path = os.path.join(tmp, "openclaw.sqlite")
+        self.cursor_path = os.path.join(tmp, "bridge-cursor.json")
+
+        # gateway 側の writer 接続 (開きっぱなし = WAL checkpoint されない状態を再現)
+        self.writer = sqlite3.connect(self.db_path)
+        self.addCleanup(self.writer.close)
+        self.writer.execute("PRAGMA journal_mode=WAL")
+        self.writer.execute(
+            "CREATE TABLE channel_ingress_events ("
+            "event_id TEXT PRIMARY KEY, queue_name TEXT NOT NULL, status TEXT NOT NULL, "
+            "payload_json TEXT NOT NULL)"
+        )
+        mode = self.writer.execute("PRAGMA journal_mode").fetchone()[0]
+        self.assertEqual(mode, "wal", "テスト前提: spool DB は WAL で作る")
+
+        state = {
+            "repo": bridge.REPO,
+            "base_branch": "main",
+            "branches": {},
+            "shas": {},
+            "files": {},
+            "requests": [],
+            "fail_puts": 0,
+        }
+        for name in ("main", bridge.BASE_BRANCH):
+            state["shas"][name] = f"sha-{name}"
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), _FakeGitHubHandler)
+        self.server.state = state
+        thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        thread.start()
+        self.addCleanup(self._stop_server)
+        self.state = state
+
+        # bridge の IO 先を実物から localhost / 一時ディレクトリへ向ける。
+        # テストモジュールで共有する module global のため、必ず元に戻す
+        self._originals = {n: getattr(bridge, n) for n in ("API", "STATE_DB")}
+        self.addCleanup(self._restore_globals)
+        bridge.API = f"http://127.0.0.1:{self.server.server_port}"
+        bridge.STATE_DB = self.db_path
+
+    def _stop_server(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+    def _restore_globals(self):
+        for name, value in self._originals.items():
+            setattr(bridge, name, value)
+        bridge.BRANCH_READY = False
+        bridge.HEAD_ATTEMPTS.clear()
+        bridge._LAST_LOG_MESSAGE = None
+
+    def spool(self, event_id, update_id, received_at_ms, message, status="pending"):
+        """gateway が update を spool した直後の状態を作る (commit 済み、接続は開いたまま)。"""
+        self.writer.execute(
+            "INSERT INTO channel_ingress_events VALUES (?, ?, ?, ?)",
+            (
+                f"{event_id:016d}",
+                bridge.QUEUE_NAME,
+                status,
+                json.dumps(make_payload(update_id, received_at_ms, message)),
+            ),
+        )
+        self.writer.commit()
+
+    def saved_paths(self):
+        return sorted(self.state["files"])
+
+    def inbox_path(self, note_id):
+        return f"{bridge.INBOX_DIR}/{note_id}.json"
+
+    def test_first_run_marks_history_read_without_saving(self):
+        self.spool(1, 1, 1755888000000, dm_message(42, "過去ログ。初回起動では保存しない"))
+        with contextlib.redirect_stdout(io.StringIO()):
+            advanced = bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        self.assertTrue(advanced)
+        self.assertEqual(self.saved_paths(), [])
+        cursor = json.load(open(self.cursor_path))
+        self.assertEqual(cursor["last_update_id"], 1)
+
+    def test_new_message_flows_to_inbox_file_over_real_http(self):
+        received_ms = 1787392800000
+        raw_body = "veto P-0107\n\n全停止してる。応答なし  \n"
+        with contextlib.redirect_stdout(io.StringIO()):
+            bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        self.spool(2, 2, received_ms, dm_message(42, raw_body))
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            advanced = bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        self.assertTrue(advanced)
+
+        paths = self.saved_paths()
+        self.assertEqual(len(paths), 1, paths)
+        note = json.loads(self.state["files"][paths[0]])
+        self.assertEqual(set(note.keys()), {"id", "source", "received", "body"})
+        self.assertNotIn("kind", note)
+        self.assertEqual(note["source"], "telegram")
+        self.assertEqual(note["received"], bridge.format_received(received_ms))
+        self.assertEqual(note["body"], raw_body)  # trim 等の加工無し (絶対条件)
+        self.assertEqual(paths[0], self.inbox_path(note["id"]))
+        self.assertRegex(paths[0], rf"^{bridge.INBOX_DIR}/{bridge.id_stamp(received_ms)}-[0-9a-f]{{6}}\.json$")
+
+        puts = [r for r in self.state["requests"] if r["method"] == "PUT"]
+        self.assertEqual(len(puts), 1)
+        self.assertEqual(puts[0]["branch"], bridge.BRANCH)
+        self.assertEqual(puts[0]["message"], f"feedback {note['id']} (telegram)")
+
+        # pod ログで grep する行と同じもの (`logs -c feedback-bridge | grep saved`)
+        self.assertIn(f"saved {bridge.BRANCH}:{paths[0]} (update 2, {len(raw_body)} chars)", stdout.getvalue())
+        cursor = json.load(open(self.cursor_path))
+        self.assertEqual(cursor["last_update_id"], 2)
+
+    def test_rerun_after_save_is_noop(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        self.spool(3, 3, 1755888000000, dm_message(42, "一回だけ"))
+        with contextlib.redirect_stdout(io.StringIO()):
+            bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        with contextlib.redirect_stdout(io.StringIO()):
+            advanced = bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        self.assertFalse(advanced)
+        self.assertEqual(len(self.saved_paths()), 1)
+
+    def test_disallowed_sender_never_reaches_github(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        self.spool(4, 4, 1755888000000, dm_message(999, "allowlist 外の人間"))
+        with contextlib.redirect_stdout(io.StringIO()):
+            advanced = bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        self.assertFalse(advanced)
+        self.assertEqual(self.saved_paths(), [])
+        self.assertFalse([r for r in self.state["requests"] if r["method"] == "PUT"])
+
+    def test_put_failure_keeps_cursor_and_next_tick_retries(self):
+        with contextlib.redirect_stdout(io.StringIO()):
+            bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        before = open(self.cursor_path).read()
+        self.spool(5, 5, 1755888000000, dm_message(42, "一時障害"))
+        self.state["fail_puts"] = 1
+        with contextlib.redirect_stdout(io.StringIO()):
+            advanced = bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        self.assertFalse(advanced)
+        self.assertEqual(open(self.cursor_path).read(), before)  # cursor は進まない
+        self.assertEqual(bridge.HEAD_ATTEMPTS.get(5), 1)
+        self.state["fail_puts"] = 0
+        with contextlib.redirect_stdout(io.StringIO()):
+            advanced = bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        self.assertTrue(advanced)
+        self.assertEqual(len(self.saved_paths()), 1)
+        self.assertNotIn(5, bridge.HEAD_ATTEMPTS)
+
+    def test_422_collision_regenerates_id_and_succeeds(self):
+        received_ms = 1755888000000
+        stamp = bridge.id_stamp(received_ms)
+        first_hex, second_hex = "abcdef", "123456"
+        seq = iter([int(first_hex, 16), int(second_hex, 16)])
+        original_getrandbits = bridge.random.getrandbits
+        bridge.random.getrandbits = lambda n: next(seq)
+        self.addCleanup(setattr, bridge.random, "getrandbits", original_getrandbits)
+
+        with contextlib.redirect_stdout(io.StringIO()):
+            bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        # 先着で同名ファイルがある状態 (hex 衝突)。実 API なら 422 が返る
+        self.state["files"][self.inbox_path(f"{stamp}-{first_hex}")] = "先着"
+        self.spool(6, 6, received_ms, dm_message(42, "衝突テスト"))
+        with contextlib.redirect_stdout(io.StringIO()):
+            advanced = bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        self.assertTrue(advanced)
+        puts = [r for r in self.state["requests"] if r["method"] == "PUT"]
+        self.assertEqual([r["path"] for r in puts], [self.inbox_path(f"{stamp}-{first_hex}"),
+                                                     self.inbox_path(f"{stamp}-{second_hex}")])
+        self.assertEqual(json.loads(self.state["files"][self.inbox_path(f"{stamp}-{second_hex}")])["body"],
+                         "衝突テスト")
+        self.assertEqual(len(self.saved_paths()), 2)  # 先着 + 振り直し後
+
+    def test_missing_state_db_waits_without_error(self):
+        bridge.STATE_DB = os.path.join(os.path.dirname(self.db_path), "not-yet.sqlite")
+        stdout = io.StringIO()
+        with contextlib.redirect_stdout(stdout):
+            advanced = bridge.run_once("t", self.ALLOWED_USER_ID, self.cursor_path)
+        self.assertFalse(advanced)
+        self.assertIn("state DB 未準備", stdout.getvalue())
 
 
 if __name__ == "__main__":
