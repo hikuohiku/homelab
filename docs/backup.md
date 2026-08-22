@@ -396,6 +396,22 @@ chown した**後**は root でも「所有者ではない」ため `utimensat` 
 登録後、`ops-health-report`（`pod_issues`）で `vaultwarden-restic-backup` CronJob の Job が
 Failed になっていないことを確認できれば実際に動作したとみなせる（T-0097）。
 
+## RTO 台帳（P-0080）
+
+「開始から生き返りまでの壁時計 (RTO)」を対象ごとに記録する台帳。全 backup 対象を隔離環境へ
+同時復元し計測する drill (`ops/drills/restore_drill.py`) が測定した値を、実施のたびにこの表へ
+行として足していく。
+
+- **RTO の定義**: drill namespace への PVC 作成要求の時刻から、アプリ相当の最低限の liveness
+  判定が合格した時刻までの wall clock。image pull や PVC provision の待ち時間も含む誇張なしの数字。
+- **注意**: 上の「復元試験（T-0071）」等に記録された「復元にかかった時間」（immich 16 秒 等）は
+  **restic restore コマンドの所要**であって RTO ではない。起動確認まで含まないため混同しないこと。
+
+初回計測は未実施（P-0080 の drill 本番 run 待ち）。実測後に下の表へ行を足す。
+
+| 対象 | 実施日 | rto_seconds | 備考 (規模・特記) |
+|---|---|---|---|
+
 ## backup 専用 credential への分離 (T-0106, 2026-08-06)
 
 issue #56（2026-08-05 16:02:29）の指摘: 実際に `restic forget --prune` が B2 上のオブジェクトを
