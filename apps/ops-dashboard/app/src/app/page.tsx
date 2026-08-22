@@ -113,11 +113,12 @@ function TranscriptViewer({ agent }: { agent?: AgentSnapshot }) {
   const [following, setFollowing] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
+  const agentId = agent?.id;
   useEffect(() => {
     setEvents([]);
     setFollowing(true);
-    if (!agent) return;
-    const source = new EventSource(`/api/agents/${encodeURIComponent(agent.id)}/events`);
+    if (!agentId) return;
+    const source = new EventSource(`/api/agents/${encodeURIComponent(agentId)}/events`);
     const onReset = () => setEvents([]);
     const onTranscript = (message: MessageEvent<string>) => {
       const incoming = JSON.parse(message.data) as TranscriptEvent;
@@ -135,7 +136,10 @@ function TranscriptViewer({ agent }: { agent?: AgentSnapshot }) {
     source.addEventListener("stream-error", onStreamError);
     source.onerror = () => setStatus("再接続中");
     return () => source.close();
-  }, [agent]);
+    // agent オブジェクトは 10 秒ごとの snapshot ポーリングで毎回作り直される。
+    // 参照で依存すると同じエージェントでも 10 秒ごとに SSE 張り直し + イベント
+    // 全消去 + スクロールリセットになる (2026-08-22 利用者報告)。id で依存する
+  }, [agentId]);
 
   useEffect(() => {
     if (following && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -161,10 +165,8 @@ function TranscriptViewer({ agent }: { agent?: AgentSnapshot }) {
         <span className="stream-status"><i />{status}</span>
       </header>
       <div className="scope__screen" ref={scrollRef} onScroll={onScroll}>
-        <div className="scope__scan" aria-hidden="true" />
         {events.length === 0 ? (
           <div className="scope__empty">
-            <span className="radar-mark" aria-hidden="true" />
             <strong>{agent ? "transcript 信号を待っています" : "走行中の Job はありません"}</strong>
             <span>{agent ? "ファイルが作られると自動で表示します" : "次の起動時にここへ会話が流れます"}</span>
           </div>

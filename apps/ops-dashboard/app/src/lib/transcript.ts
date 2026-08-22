@@ -1,5 +1,6 @@
 import { open, readdir, stat } from "node:fs/promises";
 import path from "node:path";
+import { watch } from "node:fs";
 import { StringDecoder } from "node:string_decoder";
 import { mergeTranscriptEvent } from "./transcript-client";
 import type { AgentRole, TokenUsage, TranscriptEvent } from "./types";
@@ -277,9 +278,19 @@ export async function streamTranscript(
         await handle.close();
       }
     }
+    // push 型 tail: transcripts ディレクトリを fs.watch (inotify) し、書き込みが
+    // あった瞬間に起きる。watch が張れない (ディレクトリ未作成等) 場合や取りこぼし
+    // の保険として 5 秒のタイムアウトを併用する (2026-08-22、固定 1 秒ポーリングから変更)
     await new Promise<void>((resolve) => {
-      const timer = setTimeout(resolve, 1000);
-      signal.addEventListener("abort", () => { clearTimeout(timer); resolve(); }, { once: true });
+      const directory = path.join(DATA_DIR, "transcripts", transcriptMode(parsed.role));
+      let watcher: ReturnType<typeof watch> | undefined;
+      const done = () => { try { watcher?.close(); } catch { /* noop */ } clearTimeout(timer); resolve(); };
+      const timer = setTimeout(done, 5000);
+      try {
+        watcher = watch(/* turbopackIgnore: true */ directory, done);
+        watcher.on("error", () => { /* タイムアウトに任せる */ });
+      } catch { /* ディレクトリ未作成: タイムアウトで再試行 */ }
+      signal.addEventListener("abort", done, { once: true });
     });
   }
 }
