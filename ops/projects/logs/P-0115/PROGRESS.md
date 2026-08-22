@@ -2750,3 +2750,44 @@ PROGRESS.md から再開すること。
    判断ではないので、「有料化/cap 引上げ OK」「無料枠継続」の明示が出るまで実行しない
 2. **それより前の起動** → preflight も何もせず終えてよい (Class B transaction を溶かす
    だけ)。#56 の新規コメント確認だけはする (since 上記 baseline)
+
+## 2026-08-22 session #78 (worker)
+
+### やったこと
+
+1. **preflight を実行していない** (判断基準どおり): 開始が 21:59 UTC で、リセット公算
+   (08-23 00:00 UTC) まで約 2 時間。実行の情報価値ゼロ
+2. **#56 の返信を確認した**。今回はまず `gh api` を試して **command not found (worker 環境に
+   gh CLI は無い)** となったため、認証なし curl の全件取得 (page 1+2、ともに HTTP 200、
+   計 175 件) の末尾で裏取りした。結果 1 件 = baseline 分
+   [5382593790](https://github.com/hikuohiku/homelab/issues/56#issuecomment-5382593790)
+   (ack P-0107, 21:05:04Z) が最新のまま、**新規 0 件**。B2 cap / 本命 run の判断への言及は 0 件
+3. コード・帳簿以外のファイルは触っていない。テスト 65 件 green を再確認
+   (`python3 -m unittest ops.tests.test_restore_drill` → OK, 0.75s)。
+   verify #3 の現状も再確認: `ops/projects/logs/P-0080/report.json` は存在しない
+   (#60 記録の罠どおり、成功 run 時に script が P-0080 パスへ新規作成するのが正)、
+   失敗記録 (rto=null × 5 対象) は `ops/projects/logs/P-0115/report.json` にある。
+   failing は正当で、書き換えない
+
+### 分かったこと
+
+- 人間の直近活動は最後のコメント 21:05 UTC が最新で、本セッション開始 (21:59 UTC) 時点で
+  54 分経過。空き時間としては #60 以降最長を更新したが、活動停止と断定するには不十分。
+  「保留」仮説 (#60 記録) のまま。B2 判断への言及は #60 以降 19 回連続で 0 件
+- **`gh` CLI は worker 環境に存在しない** (#78 実測)。#56 の確認は認証なし curl で足りる
+  (repo は公開、HTTP 200)。以後のセッションは curl 直接でよい
+- curl の `-o` 先は mktemp を使用 (#30 再踏み分を回避、#31〜#77 と同じ)
+- PROGRESS.md への追記は shell の heredoc append (`cat >>`) で実施 (#72〜#77 と同じ構造的回避)。
+  追記後 `grep -n "^## "` で節順を確認
+
+### 次セッションへの引き継ぎ (これしか読まないので必読)
+
+**時刻依存の判断基準は session #4〜#77 分から変更なし。**
+
+1. **2026-08-23 00:05 UTC 過ぎ (JST 09:05 過ぎ) の起動** → `python3 ops/drills/restore_drill.py
+   --preflight-only` を 1 回だけ実行し、rc と時刻 (UTC) をタイムライン節に必ず追記。
+   rc=0 ならまず #56 の返信を再確認 (**baseline: `since=2026-08-22T21:05:04Z`**。
+   gh は無いので curl で。page ページング必須)。ただし本命 run は B2 判断の明示待ちのまま —
+   ack コメントは判断ではないので、「有料化/cap 引上げ OK」「無料枠継続」の明示が出るまで実行しない
+2. **それより前の起動** → preflight も何もせず終えてよい (Class B transaction を溶かす
+   だけ)。#56 の新規コメント確認だけはする (since 上記 baseline)
