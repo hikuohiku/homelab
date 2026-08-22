@@ -153,9 +153,11 @@ manifest (ExternalSecret / CronJob / ArgoCD Application) に不備はない。�
 1. Backblaze Web Console にサインイン (アカウント `1f359277c1ce`)
 2. **Caps & Alerts** ページを開く
 3. download bandwidth / Class C transaction の cap を確認し、引き上げるか上限解除する
-4. 検収方法: `kubectl delete job -n coder coder-restic-backup-29790370` 後に
-   `kubectl create job --from=cronjob/coder-restic-backup -n coder p0111-verify` で手動 1 回走行し、
-   Completed を確認 (または翌朝 17:45–18:40Z の定刻 run を待つ)
+4. 検収方法: `kubectl create job --from=cronjob/coder-restic-backup -n coder p0111-verify` で
+   手動 1 回走行し Completed を確認 (または翌 17:45–18:40Z の定刻 run を待つ)。
+   **失敗 Job の削除は health 復帰に不要** — 08-10 の Failed Job (`coder-restic-backup-29773090`)
+   が残ったまま 08-12〜08-21 は全員 Healthy だった (実測)。appTree が health を引き上げるのは
+   新鮮な失敗のみ。
 
 needs-human 依頼文言 (案):
 
@@ -168,6 +170,29 @@ needs-human 依頼文言 (案):
 08-11 の前例では cap 回復後に成功 run が失敗 Job を追い出し、Healthy へ戻った。
 cap が日次リセット型なら翌 08-23 夜の成功で自然復帰する。ただし**消費者が特定されていない以上、
 再発は防げない** (次節)。
+
+### 2026-08-22 夜の追試 (セッション 3, 20:22Z 実測)
+
+- 当日分の backup Job 3 本 (immich `29790345` / coder `29790370` / vaultwarden `29790400`) は
+  いずれも同一シグネチャ (`b2_download_file_by_name: 403` → Fatal) で Failed。セッション 2 の
+  診断は不変。
+- **retention の Complete は偽陽性だった。** 同夜の `coder-restic-retention-29790430` の実ログは
+  `repository not initialized yet, skipping` のみ — スクリプトが `restic snapshots` の失敗 (= 403)
+  を「リポジトリ未初期化」と解釈して skip したもの。つまり cap 超過日は retention も静かに走って
+  おらず、**当日の cap 消費者ではない**。過去 2 回の土曜 (08-08 `29770270` / 08-15 `29780350`)
+  は実際に prune を実行していた (ログ実測)。cap 超過日に backup と retention が同時に
+  静かに停止する = データ保護が無通知で止まる構造は、「発見」のエラー可視化案件を補強する。
+- ArgoCD の Degraded 化時刻 (coder 18:40:31Z / immich 18:42:55Z) は Job の Failed 条件確定
+  (開始 +97〜152 分後) より 1 時間以上早く、各 Job 開始後 30〜60 分 — すなわち最初の子 Pod が
+  Error になった時点と一致する。appTree モードは子リソースの Pod 失敗を即時に health 反映する
+  (§6 の「Job 失敗の伝播」はより正しくは「Pod 失敗の伝播」)。
+- CronJob schedule の解釈: Git 上は JST 表記 (`45 2` / `10 3` / `40 3 * * *`)、spec.timeZone 未指定
+  のため kube-controller-manager の TZ=Asia/Tokyo 解釈 → UTC 換算は immich 17:45Z /
+  coder 18:10Z / vaultwarden 18:40Z。
+- **判定規則 (次セッション以降)**: 08-23 **19:30Z 以降**に latest.json + job 一覧で当日分の
+  定刻 run を確認。(1) coder/immich/vaultwarden が Healthy → 自然復帰ルート成立、verify #2 green。
+  (2) 失敗している → cap は日次リセット型ではないか、日中に消費者が再飽和させている。
+  **needs-human 化を最優先**で進めること (依頼文言は上記「修繕経路」節)。
 
 ## オープンな疑問 (本プロジェクトのスコープ外 — curriculum へ)
 
