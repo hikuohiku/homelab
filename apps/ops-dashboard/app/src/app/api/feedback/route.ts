@@ -72,9 +72,13 @@ export async function POST(request: Request): Promise<Response> {
     );
   }
   let body = "";
+  let kind: string | undefined;
   try {
-    const payload = (await request.json()) as { body?: unknown };
+    const payload = (await request.json()) as { body?: unknown; kind?: unknown };
     body = typeof payload.body === "string" ? payload.body.trim() : "";
+    // kind は heart の tasks.KIND_TASK_REQUEST と揃える。許可リスト外は無視して
+    // ただの書き置き扱い (勝手な種別を発明させない)
+    kind = payload.kind === "task-request" ? "task-request" : undefined;
   } catch {
     return Response.json({ error: "JSON body {body: string} が必要です" }, { status: 400 });
   }
@@ -90,6 +94,7 @@ export async function POST(request: Request): Promise<Response> {
         id: newNoteId(),
         source: "ops-dashboard",
         received: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
+        ...(kind ? { kind } : {}),
         body,
       };
       const path = `${INBOX_DIR}/${note.id}.json`;
