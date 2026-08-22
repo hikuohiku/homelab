@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import FeedbackForm from "@/components/FeedbackForm";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="ja">
-      <body>{children}</body>
+      <body>
+        {children}
+        <FeedbackForm />
+      </body>
     </html>
   );
 }
