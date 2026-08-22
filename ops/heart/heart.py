@@ -140,6 +140,8 @@ class Heart:
                         spawn.create(
                             self.k8s_client(), self.cfg, "curriculum",
                             attempt=int(time.time()) // 60 % 1000000,
+                            # 空きスロット分だけ採択してよい (judge プロンプトに渡る)
+                            extra_env={"ADOPT_LIMIT": a.get("adopt_limit", 2)},
                         )
                 elif kind == "spawn_critic":
                     if shadow:
