@@ -193,3 +193,42 @@ heart-deployment.yaml の livenessProbe) を再検証し、pytest verify が red
   curriculum/reviewer へ「verify 文字列を `python3 -m unittest discover -s
   ops/heart/tests -t . -v 2>&1 | grep -i liveness` 等に差し替えるべき」と伝えること、
   それだけ（heart/ops の帳簿は触らない、CLAUDE.md の指示どおり）。
+
+### 2026-08-22 セッション5
+
+**やったこと**: 実装変更なし。session2/3/4 の結論を鵜呑みにせず、このセッション自身で
+再現・独立検証してから何もしない判断をした。
+
+1. `grep -n 'livenessProbe' -A 15 apps/autopilot/heart-deployment.yaml` →
+   `heart-deployment.yaml:67-80` に exec probe が定義済みであることを直接確認（変更なし）。
+2. `python3 -m unittest discover -s ops/heart/tests -t . -v 2>&1 | grep -i liveness` →
+   `test_liveness.py` の 9 テスト（`TestCheck` 5件 + `TestIsStale` 3件 + `TestMaxAgeSeconds`
+   1件）が全て `ok`。判定ロジックのユニットテストは実在し green（変更なし）。
+3. `python3 -m pytest --version` / `python3 -m pip --version` → 両方
+   `No module named ...`。このセッションのサンドボックスでも session2/3/4 と同じ欠落を再現。
+4. **session4 の「wrapper は runner.py 経由でホスト上に直接 `bash -c <verify cmd>` を
+   投げているだけで、pip/venv/install の類の準備ステップは無い」という主張を、
+   自分でも `ops/runner/runner.py:516-531` (`run_verify`) を読んで独立に再確認した**。
+   `subprocess.run(["bash", "-c", cmd], cwd=self.repo_dir, ...)` のみで、環境構築は
+   一切挟まっていない。session4 の結論を追検証で裏付け、新しい反証は出なかった。
+
+**分かったこと（結論、session2/3/4 から変化なし）**:
+- 実装（`apps/autopilot/heart-deployment.yaml` の livenessProbe、`ops/heart/liveness.py`、
+  `ops/heart/tests/test_liveness.py`）は完成しており、このセッションでも再確認した限り
+  一切劣化・退行していない。
+- 第二 verify コマンド (`python3 -m pytest ...`) が green にならないのは実装の不備ではなく、
+  このリポジトリの検証環境（このサンドボックス、CI、wrapper のホスト実行環境の全て）に
+  pytest が存在せず、かつ repo 側の変更ではそれを持ち込む正当な手段が無いという、
+  4セッション連続で独立に確認された spec 側の欠陥。
+
+**次のセッションへの一言**:
+- **このプロジェクトでこれ以上のセッションを消費する前に、まず wrapper 実測 JSON を見ること。**
+  両方 green なら（wrapper 側の環境が変わっていれば）完了、pytest 側だけ赤いままなら
+  session2〜5 の4回・複数の角度（依存関係 grep、PEP 668、runner.py 読解、独立再現）で
+  同じ結論に達しているので、**5回目以降も pip install / venv 構築 / shim を試さないこと**。
+  それらは全て「このセッション限りの見せかけの green」にしかならず、次セッションでは
+  フレッシュ環境に戻るため意味が無い（理由は session2/4 の記載を参照）。
+  唯一残っている建設的な一手は curriculum/reviewer に verify 文字列の修正
+  （例: `python3 -m unittest discover -s ops/heart/tests -t . -v 2>&1 | grep -i liveness`）
+  を提案することだが、worker はそれを直接実行する権限もチャネルも持たない
+  （ops/backlog.json 等の帳簿は heart の領分、CLAUDE.md の指示）。
