@@ -2005,3 +2005,69 @@ docs/backup.md T-0067「B2 の無料枠 (10GB) に収まり月額ゼロ」= **�
    (台帳節追加)。残る verify 未達は report.json (= 本番 run) のみで、これは B2 cap 回復と
    #56 の人間判断の両方待ちで、それ以前に着手できるものはない。#56 の返信だけ確認して、
    何か書かれていればそれに従う
+
+## checkpoint (予算上限) — 2026-08-22 session #59 (最終セッション)
+
+予算ソフト上限に達したため本セッションで停止。実装はしていない (状態の書き残しのみ)。
+開始時に未コミット変更は無かった (`git status` clean、HEAD=39569412 = session #58 記録)
+ので救出も破棄も不要だった。以下は stalled 判断をする人間と再開時の worker 向けの現在地。
+
+### 受入チェックリストの消化状況
+
+| verify | 状態 |
+|--------|------|
+| 1. `test -f ops/drills/restore_drill.py` | **達成** (916 行、phase 0 preflight / probe 込み) |
+| 2. `python3 -m unittest ops.tests.test_restore_drill` | **達成** (65 tests green — 最終確認 20:25 UTC) |
+| 3. report.json (targets>=5、各 rto_seconds 非 null) | **未達 — ただし意図的かつ正当な failing** |
+
+verify #3 の現状: 本番 run は 2026-08-22T14:32 UTC に 1 回だけ実行され、B2 無料枠の
+download cap (Class B) 超過で 6 unit 全滅 → `rto_seconds: null` × 5 対象。失敗記録は
+実ログ付きで report.json として commit 済みで、架空の数値での書き換えは PROJECT.md 方針
+(失敗を成功と偽装しない) が禁止しているためこのままで正しい。
+DoD の残項目「docs/backup.md への RTO 台帳の節」は session #46 が追加済み
+(L399「RTO 台帳（P-0080）」、初回計測待ちの空表)。
+
+### 停止位置と次に取るべき一手
+
+**停止位置: 外部要因 2 本の完全な待ち。repo 内で着手可能な作業は残っていない**
+(session #46 で消化済み)。
+
+1. B2 download cap 超過: 復元対象合計 ~4.2 GiB > 無料枠日次目安 ~1GB。
+   リセット公算は毎日 00:00 UTC (公式ヘルプ由来、**実測ゼロ**)。14:32–17:00 UTC は
+   連続超過を実測
+2. 人間の判断待ち: 「cap 引上げ+支払い方法登録 / 無料枠継続の受入れ / その他の指示」を
+   [#56 コメント](https://github.com/hikuohiku/homelab/issues/56#issuecomment-5381640246)
+   (17:19 UTC 投稿) で依頼中。返信は 20:26 UTC 時点で **0 件**
+   (`since=2026-08-22T17:45:07Z` の read-only GET で本セッション最終確認)
+
+再開された worker の最初の手順 (起動時刻で分岐 — session #4 以降ずっと有効だった基準):
+
+1. **まず #56 の返信を見る** (page2 直接取得などページング必須 — `per_page=10` だと
+   先頭しか見えないのは #49 の実測):
+   - 有料化/cap 引上げ OK → `python3 ops/drills/restore_drill.py --preflight-only`
+     で rc=0 を確認してから本命 run (`python3 ops/drills/restore_drill.py`)。
+     成功すれば report.json が上書き生成され verify #3 が初めて通る
+   - 無料枠継続 → docs/backup.md L399 の台帳に「RTO 下限 = B2 日次枠の回復待ち」を
+     記載して締め処理 (成功 run は出せないまま終わるのが正)
+2. **2026-08-23 00:05 UTC 過ぎ (JST 09:05 過ぎ) の起動で返信がまだなら**:
+   `--preflight-only` を 1 回だけ実行し、rc と時刻 (UTC) を上のタイムライン節に必ず追記
+   (00:00 UTC リセット説の実測裏取りになる)。rc=2 なら何もせず終えてよい
+3. **それより前の起動** → preflight も何もせず終えてよい (Class B transaction を
+   溶かすだけ)
+
+### 残った不確実性
+
+1. cap リセット時刻「毎日 00:00 UTC」は公式ヘルプ由来で**実測が 1 回もない** —
+   00:05 UTC 過ぎの preflight 観測の積み重ねが唯一の逆算手段 (タイムライン節に追記すること)
+2. 無料枠の日次容量の正確な値: cap は $ 単位の日次上限のため egress 単価換算で変動しうる
+   (「~1GB/day」は目安)。全体同時 ~4.2 GiB が 1 日に収まらない旨はほぼ確実だが、
+   分割・複数日跨ぎ復元の可否は未検証
+3. 人間の沈黙の意味: P-0085 への veto (17:11 UTC) が依頼投稿 (17:19 UTC) の直前であり、
+   人間が #56 を見ていたことは確定だが、「未読」か「保留」かはこちらでは判定不能
+   (#51/#52 の記録どおり)
+4. 成功パスの実測がゼロ: RTO の壁時計の数字自体が初回成功 run まで完全に unknown
+   (Job 所要時間・liveness 合格率・report.json の成功系フォーマットも未実走)
+
+stalled 判断をする人間へ: コード・テスト・台帳節・失敗 run の記録・判断依頼コメントは
+すべて commit 済み。継続の価値は実質「B2 の課金判断 1 つ」と「それ以降の RTO 実測 1 回」に
+集約されており、判断が出るまで worker 側にやれることはない。
