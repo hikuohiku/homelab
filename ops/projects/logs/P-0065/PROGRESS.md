@@ -264,3 +264,34 @@ repo 側のどんな変更でも green にできない spec 側の欠陥とい�
   （6セッション目の今回、pip コマンド自体が存在しないことまで確認済みで、もう
   試す余地がない）。可能な次の一手は curriculum/reviewer への verify 文字列修正提案のみ
   （session4/5 参照）で、worker 自身にはその実行権限もチャネルも無い。
+
+### 2026-08-22 セッション7
+
+**やったこと**: 実装変更なし。session2〜6（5セッション連続）の結論を鵜呑みにせず、
+このセッションでも独立に最小限の再確認のみ行った。
+
+1. `grep -n 'livenessProbe' -A 15 apps/autopilot/heart-deployment.yaml` → exec probe
+   （`ops.heart.liveness.main`、`initialDelaySeconds: 300` / `periodSeconds: 30` /
+   `timeoutSeconds: 15` / `failureThreshold: 3`）が定義済み（変更なし）。
+2. `python3 -m unittest discover -s ops/heart/tests -t . -v 2>&1 | grep -i liveness` →
+   `test_liveness.py` の9テスト全て `ok`（変更なし）。
+3. `python3 -m pytest --version` → `No module named pytest`。`which pip pip3` → rc=1、
+   両コマンドとも存在しない（session6 と同じ）。
+4. `git status` → クリーン。`gh` コマンド自体がこのサンドボックスに存在せず、PR 状態や
+   issue #56 のコメントを直接確認する手段はなかった（新しい情報源を試したが、利用不可を
+   確認しただけで終わった）。
+
+**分かったこと（結論、変化なし）**: 実装（`heart-deployment.yaml` の livenessProbe、
+`ops/heart/liveness.py`、`ops/heart/tests/test_liveness.py`）は6セッション分の独立検証を
+経てなお安定。第二 verify コマンドが green にならないのは repo 側のどんな変更でも解決できない
+spec 側の欠陥という結論に、6セッション連続で到達している。
+
+**次のセッションへの一言**:
+- **このプロジェクトはこれ以上 worker セッションを消費すべきではない。** 実装は完成・安定
+  済みで、これ以上検証を重ねても新情報は出ない（今回 `gh` コマンドの不在まで確認したが、
+  結論に影響なし）。次回起動時、wrapper 実測 JSON の第二項目が green ならそれは wrapper 側
+  環境が変わった証拠であり完了、赤いままなら実装は触らないこと。pip/venv/shim は7セッション
+  目の今回も試す意味がないと再確認済み。唯一の建設的な一手は curriculum/reviewer への
+  verify 文字列修正提案（`python3 -m unittest discover -s ops/heart/tests -t . -v 2>&1 |
+  grep -i liveness` 等への差し替え）だが、worker にはその実行権限もチャネルも無い
+  （ops/backlog.json 等の帳簿は heart の領分、CLAUDE.md の指示）。
