@@ -1,0 +1,9 @@
+# P-0101 実測フィクスチャ: ネットワーク断 — プロキシホスト名が解決できない
+# observed_at: 2026-08-22T18:16-18:20Z / engine: opencode CLI v1.18.21 (--format json)
+# model: opencode-go/ox-alpha-free / cwd: mktemp 作業ディレクトリ
+# how: HTTPS_PROXY=http://nonexistent-host-p0101.invalid:8080 で起動
+# rc: 1
+# expect_failure_kind: network
+--- stdout ---
+{"type":"error","timestamp":1787423164307,"sessionID":"ses_fd548016effeYJeSh9pBt8mU8z","error":{"name":"APIError","data":{"message":"Cannot connect to API: Unable to connect. Is the computer able to access the url?","isRetryable":true,"metadata":{"url":"https://opencode.ai/zen/go/v1/chat/completions"}}}}
+--- stderr ---

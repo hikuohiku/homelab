@@ -1,0 +1,9 @@
+# P-0101 実測フィクスチャ: ネットワーク断 — 接続拒否
+# observed_at: 2026-08-22T18:16-18:20Z / engine: opencode CLI v1.18.21 (--format json)
+# model: opencode-go/ox-alpha-free / cwd: mktemp 作業ディレクトリ
+# how: HTTPS_PROXY/HTTP_PROXY=http://127.0.0.1:9 (listen 無しポート) で起動
+# rc: 1
+# expect_failure_kind: network
+--- stdout ---
+{"type":"error","timestamp":1787422721508,"sessionID":"ses_fd54ec184ffex4h6qkN0qXbSu7","error":{"name":"APIError","data":{"message":"Cannot connect to API: Unable to connect. Is the computer able to access the url?","isRetryable":true,"metadata":{"url":"https://opencode.ai/zen/go/v1/chat/completions"}}}}
+--- stderr ---

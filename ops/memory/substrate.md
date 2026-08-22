@@ -102,6 +102,32 @@ autopilot namespace の Pod (heart / runner / reviewer / …) が動く環境の
   (heart 側の `REVIEW_TIMEOUT_HOURS` × `REVIEW_MAX_RETRIES` の再試行に任せる) —
   設計 (2026-08-09), P-0026 レビュー指摘 [2][3]
 
+### opencode CLI の死因出力 (2026-08-22 移行当日の実測)
+
+> この項も P-0101 の worker が追記した (spec の DoD が名指しで要求する例外。README
+> 「書き手は consolidation の PR のみ」の破れは P-0015 / P-0026 に次ぐ 4 例目)。
+> 実測原本は `ops/tests/fixtures/engine_stderr/`、分類への配線テストは
+> `ops/tests/test_failure_patterns.py`。opencode CLI v1.18.21、model
+> opencode-go/ox-alpha-free。
+
+- 死因は **stderr に出ない**。成功・失敗とも stderr は常に空 (0 バイト実測) で、
+  失敗時は stdout に `type=error` の JSON イベントが流れる。「P-0026 時代の
+  stderr_tail」の実体は `consume_stream_event()` が拾う `error.data.message` に変わった
+- 鍵が**誤っている**: `APIError` / `Invalid API key.` / statusCode 401 → auth に分類可能
+- 鍵が**無い** (env 未設定 = spawn.py の secret 消滅に相当): `UnknownError` /
+  `Unexpected server error. Check server logs for details.` → **auth に分類できない**
+- ネットワーク断 (接続拒否も DNS 失敗も同一文言):
+  `APIError` / `Cannot connect to API: Unable to connect. Is the computer able to access
+  the url?` → network に分類可能 (`cannot connect to api` を P-0101 で追加)
+- HTTP 429 (レート制限): **`UnknownError` に潰され上限情報は完全消失** → usage_limit に
+  分類できない。openai-compatible / anthropic 両 SDK 経路・両レスポンス形式 (OpenAI 形 /
+  Anthropic 形) で再現した。鍵未設定と同一出力になるため、unknown 以外への分類は不可能
+- **opencode の本物の上限メッセージはまだ観測できていない** (ローカルモックによる CLI
+  出力形の実測まで。zen API が実際に何を返すかは未観測)。上限で死んだ回の result.json
+  `stderr_tail` を証拠に表とテストへ追記すること。**2026-08-22 時点では「上限死が
+  unknown に落ちる」経路が実在し**、3 連続 error 判定から stalled 化する条件が残る
+  (26 セッション空費の再演条件。reset 時刻抽出 `parse_usage_limit_reset()` も claude 形専用のまま)
+
 ## 観測経路 (壊すと自分の異常を誰も検知できなくなる)
 
 - heartbeat 行 `[autopilot] <ts> iteration #N start|end exit=<rc> elapsed=<n>s` の産出元は

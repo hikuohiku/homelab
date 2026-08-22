@@ -1,0 +1,9 @@
+# P-0101 実測フィクスチャ: レート制限 (HTTP 429) — CLI 出力形の実測
+# observed_at: 2026-08-22T18:16-18:20Z / engine: opencode CLI v1.18.21 (--format json)
+# model: opencode-go/ox-alpha-free / cwd: mktemp 作業ディレクトリ
+# how: ローカルモックサーバ (127.0.0.1:8931, OpenAI 互換 /v1/chat/completions が HTTP 429 + rate_limit_error を返す) を provider baseURL に指定して起動。本物の zen API の 429 出力形は未観測 — CLI が upstream 429 を UnknownError に潰すことの実測であり、文言パターンの根拠ではない
+# rc: 1
+# expect_failure_kind: unknown
+--- stdout ---
+{"type":"error","timestamp":1787422767914,"sessionID":"ses_fd54d0c41ffeyFsYbyAp1PnBz6","error":{"name":"UnknownError","data":{"message":"Unexpected server error. Check server logs for details.","ref":"err_27dbc9cd"}}}
+--- stderr ---
