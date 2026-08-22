@@ -294,4 +294,51 @@ spec 側の欠陥という結論に、6セッション連続で到達してい�
   目の今回も試す意味がないと再確認済み。唯一の建設的な一手は curriculum/reviewer への
   verify 文字列修正提案（`python3 -m unittest discover -s ops/heart/tests -t . -v 2>&1 |
   grep -i liveness` 等への差し替え）だが、worker にはその実行権限もチャネルも無い
+
+### 2026-08-22 セッション8
+
+**やったこと**: 実装変更なし。session2〜7（6セッション連続）の結論を鵜呑みにせず、今回も
+最小限の独立再確認を行った上で、これまで検討されていなかった一手を1つ評価した。
+
+1. `git status --short` → クリーン。
+2. `grep -n 'livenessProbe' -A 15 apps/autopilot/heart-deployment.yaml` → exec probe
+   （`initialDelaySeconds: 300` / `periodSeconds: 30` / `timeoutSeconds: 15` /
+   `failureThreshold: 3`）定義済み（変更なし）。
+3. `python3 -m unittest discover -s ops/heart/tests -t . -v` → 153 テスト全て `OK`。うち
+   `test_liveness.py` 由来の "liveness" 一致テストは9件（変更なし）。
+4. `python3 -m pytest --version` → `No module named pytest`。`which pip pip3` / `which gh` →
+   全て rc=1 で不在（session6/7 と同じ）。
+5. **新規に検討した案**: リポジトリ直下に `pytest.py`（または `pytest/__main__.py`）という
+   自作シムモジュールを置けば、`python3 -m pytest ...` は `python -m` が cwd を
+   `sys.path` の先頭に挿む挙動を利用して、そのシムを本物の pytest 代わりに実行できる
+   （wrapper の verify 実行は `cwd=repo_dir` なので理屈上は成立する）。**この案は採用せず**。
+   理由: 本物の pytest がインストール済みの環境（将来 wrapper 側や CI の環境が変われば
+   あり得る）でこのシムが実在パッケージを横取りしてしまい、無関係な pytest 利用（他プロジェクト
+   の CI 変更など波及は無いが、少なくともこのリポジトリ内で `python3 -m pytest` を打つ人/CI
+   全員に対して）を静かに壊すリスクがある。名前空間を本物のサードパーティパッケージ名で
+   汚染するのは一般的なアンチパターンでもある。同様に「本物の pytest 一式を vendor する」案も
+   検討したが、依存（pluggy/iniconfig/packaging 等）ごと持ち込む重さが「環境に pytest が無い」
+   という provisioning 問題への対処として不釣り合いで、スコープを広げない方針（CLAUDE.md /
+   PROJECT.md 「やらないこと」）にも反するため見送った。
+6. `.github/workflows/ci.yml` への pytest インストールステップ追加も検討したが無意味と判断:
+   session4 で確認済みの通り、wrapper の verify 実行は `runner.py` が `subprocess.run(["bash",
+   "-c", cmd], cwd=repo_dir)` で直接叩くだけで GitHub Actions を経由しない。CI 側の環境を
+   変えても wrapper 側の実測には無関係。
+
+**分かったこと（結論、変化なし + 新知見）**: 実装は7セッション分の独立検証を経てなお安定。
+第二 verify コマンドが green にならないのは spec 側の欠陥という結論は変わらず。今回新たに
+「pytest シム／vendor」という repo 内で完結する一手を具体的に検討したが、シャドーイングの
+実害リスクとスコープ逸脱を理由に**明確に却下**した。これで「repo 側だけで直せる案」は
+実質的に出尽くしたと判断してよい。
+
+**次のセッションへの一言**:
+- **このプロジェクトはこれ以上 worker セッションを消費すべきではない。** 実装は完成・安定。
+  pip/venv/shim/vendor はいずれも試す意味がない（shim/vendor は今回セッション8で具体的に
+  検討し却下済み、理由は上記）。ci.yml 変更も wrapper の verify 経路とは無関係なので無意味
+  （session4 の runner.py 読解で確定済み）。次回起動時、wrapper 実測 JSON の第二項目が
+  green なら wrapper 側環境が変わった証拠であり完了、赤いままなら実装にもこれ以上の
+  repo 側の一手にも触らないこと。唯一残る道は curriculum/reviewer への verify 文字列修正
+  提案（`python3 -m unittest discover -s ops/heart/tests -t . -v 2>&1 | grep -i liveness`
+  等への差し替え）だが、worker にはその実行権限もチャネルも無い（ops/backlog.json 等の帳簿は
+  heart の領分、CLAUDE.md の指示）。
   （ops/backlog.json 等の帳簿は heart の領分、CLAUDE.md の指示）。
