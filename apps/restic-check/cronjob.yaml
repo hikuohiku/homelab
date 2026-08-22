@@ -147,9 +147,12 @@ spec:
                 - name: script
                   mountPath: /scripts
                   readOnly: true
+                # readOnly にしない: job_main.py が staging の生フィールドを
+                # レコード契約 JSON に組み立てて結果ディレクトリへ書くため。
+                # readOnly マウントだと初回の実ファイル実行で EROFS ですぐ死に、
+                # 判定どころか通知まで飛ばない (2026-08-23 実測の事故)
                 - name: results
                   mountPath: /work/results
-                  readOnly: true
                 - name: tmp
                   mountPath: /tmp
           volumes:
