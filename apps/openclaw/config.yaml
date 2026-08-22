@@ -39,7 +39,9 @@ data:
             // ops/models.json の全役と同じ opencode go 定額のモデル。OpenClaw は OpenCode
             // を built-in provider として持つ (OPENCODE_API_KEY env + `opencode-go/*` refs)。
             // models.json 側を変えたらここも揃えること (機械検査は未整備。inventory の note 参照)
-            primary: "opencode-go/ox-alpha-free",
+            // OpenClaw の provider 接頭辞は opencode/ (opencode CLI の opencode-go/ とは別物。
+            // 2026-08-23 実測: opencode-go/ は Unknown model で失敗した)
+            primary: "opencode/ox-alpha-free",
           },
         },
       },
