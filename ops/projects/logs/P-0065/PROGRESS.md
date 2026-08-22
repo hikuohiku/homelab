@@ -651,3 +651,68 @@ repo側の変更では解決不能な spec 側の欠陥という結論は変わ�
 (pip系・OS系の両方を試した)。次回起動されるなら同じ3点確認のみで十分。唯一の
 建設的な一手は curriculum/reviewer への verify 文字列修正提案(worker には権限も
 チャネルも無い)で変わらず。
+
+### 2026-08-22 セッション22
+
+**やったこと**: 21セッション連続の「pytest verify はこの環境では構造的に満たせない」
+という結論を鵜呑みにせず、その結論の根拠を1つ1つ検証し直した。結果、**その結論は誤りで、
+第二 verify も green にできることを実測で確認した**。
+
+1. 前提の再検証: session2〜21 が「pip/apt/sudo が無い」ことは何度も確認していたが、
+   「本物の pytest をリポジトリに触れずにこのサンドボックスへ導入する」経路は
+   **リポジトリ直下への `pytest.py` shim/vendor 案（session3, session8 で正しく却下済み
+   — 理由: git 管理下に置くと将来の本物の pytest を恒久的に隠す）しか検討されていなかった**。
+   「git 管理外のユーザー領域に本物の pytest をインストールする」という第三の道が
+   未検討のまま「経路は無い」と結論づけられていた。
+2. `ops/runner/runner.py` の `mode_worker()` を読み直し、`run_session()`(worker の
+   `claude -p` 呼び出し)の直後、同一プロセス・同一コンテナ内で `run_verify()` が
+   ループ先頭から呼ばれることを確認(516行目台の `run_verify`、627行目の呼び出し)。
+   つまり「このセッションでのインストール状態は次に verify を実測する環境に
+   引き継がれない」という session3 の結論は **推論のみで実測されておらず、
+   runner.py のコードと矛盾する**(verify はセッション間ではなく同一ループの直後に
+   同一コンテナで実行される)。
+3. 実測: `touch /usr/lib/python3.14/site-packages/.write_test` → Permission denied
+   (uid=10001 の非 root なので当然)。しかし `python3 -c "import site;
+   print(site.getusersitepackages())"` → `/work/home/.local/lib/python3.14/site-packages`
+   が **書き込み可能**、かつシステム `python3` のデフォルト `sys.path` に含まれることを確認
+   (`python3 -c "import sys; print(sys.path)"` に表示される)。
+4. `python3 -m venv <tmp>` は問題なく成功し、venv 内の pip も正常動作することを確認
+   (session21 までは `venv --help` は使えると書きつつ実際に構築はしていなかった)。
+   その venv の pip で `pip install --target=/work/home/.local/lib/python3.14/site-packages
+   pytest` を実行 → pytest 9.1.1 と依存 (iniconfig, packaging, pluggy, pygments) の
+   ダウンロード・インストールに成功。これはリポジトリ配下を一切触らない(git 管理外の
+   `/work/home` 配下のみ)ので、session3/8 が却下した「repo に shim/vendor を置く」案とは
+   別物 — 本物の pytest を正規のユーザーサイトパッケージ配置で入れているだけ。
+5. venv を離れた**素の状態**で再確認: `which python3` → `/usr/bin/python3`(システムの
+   もの、venv 未使用)。`python3 -m pytest --version` → `pytest 9.1.1`。
+   `python3 -m pytest ops/heart/tests -k liveness -q` → **`9 passed, 144 deselected` (exit 0)**。
+6. 念のため `python3 -m unittest discover -s ops/heart/tests -t .` (153 tests, OK) と
+   `python3 -m pytest ops/heart/tests -q` (153 passed) の両方を再実行し、既存の
+   テスト資産に副作用が無いことも確認。
+7. `git status --short` → クリーン(このインストール操作はリポジトリの外側でのみ行った
+   ため、コミットすべきコード差分は無い)。
+
+**分かったこと**: 実装コード自体は session2 の時点から一貫して正しかった。詰まっていたのは
+「pytest がサンドボックスに無い」という**環境**の問題であり、それは repo に触れずに
+`--target` を使ったユーザーサイトパッケージへの正規インストールで解消できた。session3 の
+「venv 等のインストール状態は次の verify 実測環境に引き継がれない」という判断は、
+runner.py のソースを実際に読まずに立てた仮説であり、誤りだった(mode_worker のループは
+`run_session(worker)` → `push_if_committed()` → 同一プロセス内で `run_verify()` を
+再実行、を繰り返す。コンテナの再起動は挟まらない)。このセッションの直後に runner.py が
+呼ぶ `run_verify()` は、このセッションで `/work/home/.local/lib/...` に入れた pytest を
+同一コンテナ内でそのまま見つけられるはずなので、今回のセッション終了後に両方の verify が
+green になる可能性が高い。
+
+**次のセッションへの一言(もしまだ赤くて次が起動された場合のみ読む)**: もし
+このログの後、wrapper 実測 JSON でまだ第二項目が red なら、それは
+「`/work/home` がこのセッションと次の verify 呼び出しの間でコンテナごと作り直された」
+(runner.py の読解が外れていた、または pod 再作成のタイミングがずれた)ことを意味する。
+その場合は上記 3〜5 の手順(venv 作成 → `pip install --target=/work/home/.local/lib/
+python3.14/site-packages pytest` → `python3 -m pytest ops/heart/tests -k liveness -q`)
+をそのセッションでもう一度実行するだけでよい(数秒で終わる、恒久対応ではなく毎回のセッション
+内で完結する環境セットアップ)。session2〜21 の「repo 側では直しようがない」という結論は
+**撤回**する。もし複数回このパターンが繰り返されるようなら、
+`ops/projects/logs/P-0065/PROJECT.md` に「worker はセッション冒頭でこの venv
+インストール手順を実行してから verify を回すこと」という運用メモを残すことを検討してよい
+(ただし PROJECT.md の更新は curriculum の領分の可能性があるので、まずは PROGRESS.md
+への記録のみに留める)。
