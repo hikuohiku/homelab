@@ -2150,7 +2150,42 @@
         "soft_cap": 1000000
       },
       "created": "2026-08-22",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-22T18:03:38Z",
+        "verify": [
+          {
+            "cmd": "python3 -c \"import glob; assert len(glob.glob('ops/tests/fixtures/engine_stderr/*.txt'))>=4\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import glob; assert len(glob.glob('ops/tests/fixtures/engine_stderr/*.txt'))>=4\n                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n"
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_failure_patterns",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_failure_patterns (unittest.loader._FailedTest.test_failure_patterns)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_failure_patterns\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_failure_patterns'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "grep -q 'opencode' ops/memory/substrate.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0102",
@@ -2173,7 +2208,42 @@
         "soft_cap": 1200000
       },
       "created": "2026-08-22",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-22T18:03:38Z",
+        "verify": [
+          {
+            "cmd": "grep -rq 'restic-check' apps/ --include='*.yaml'",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: unrecognized option: include=*.yaml\nBusyBox v1.37.0 (2026-01-10 15:38:28 UTC) multi-call binary.\n\nUsage: grep [-HhnlLoqvsrRiwFE] [-m N] [-A|B|C N] { PATTERN | -e PATTERN... | -f FILE... } [FILE]...\n\nSearch for PATTERN in FILEs (or stdin)\n\n\t-H\tAdd 'filename:' prefix\n\t-h\tDo not add 'filename:' prefix\n\t-n\tAdd 'line_no:' prefix\n\t-l\tShow only names of files that match\n\t-L\tShow only names of files that don't match\n\t-c\tShow only count of matching lines\n\t-o\tShow only the matching part of line\n\t-q\tQuiet. Return 0 if PATTERN is found, 1 otherwise\n\t-v\tSelect non-matching lines\n\t-s\tSuppress open and read errors\n\t-r\tRecurse\n\t-R\tRecurse and dereference symlinks\n\t-i\tIgnore case\n\t-w\tMatch whole words only\n\t-x\tMatch whole lines only\n\t-F\tPATTERN is a literal (not regexp)\n\t-E\tPATTERN is an extended regexp\n\t-m N\tMatch up to N times per file\n\t-A N\tPrint N lines of trailing context\n\t-B N\tPrint N lines of leading context\n\t-C N\tSame as '-A N -B N'\n\t-e PTRN\tPattern to match\n\t-f FILE\tRead pattern from file\n"
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_restic_check_runner",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_restic_check_runner (unittest.loader._FailedTest.test_restic_check_runner)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_restic_check_runner\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_restic_check_runner'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "python3 -c \"import json; d=json.load(open('ops/projects/logs/P-0102/check_evidence.json')); assert len(d)>=5 and all(x['exit_code']==0 for x in d)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json; d=json.load(open('ops/projects/logs/P-0102/check_evidence.json')); assert len(d)>=5 and all(x['exit_code']==0 for x in d)\n                             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'ops/projects/logs/P-0102/check_evidence.json'\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0103",
@@ -2194,7 +2264,42 @@
         "soft_cap": 800000
       },
       "created": "2026-08-22",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-22T18:03:38Z",
+        "verify": [
+          {
+            "cmd": "test -x ops/tools/check_pve_tls.sh",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'tailscale cert' docs/pveproxy-tls.md && grep -q 'certificates/custom' docs/pveproxy-tls.md",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: docs/pveproxy-tls.md: No such file or directory\n"
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_pve_tls_docs",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_pve_tls_docs (unittest.loader._FailedTest.test_pve_tls_docs)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_pve_tls_docs\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_pve_tls_docs'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0105",
@@ -2215,7 +2320,42 @@
         "soft_cap": 1200000
       },
       "created": "2026-08-22",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-22T18:03:38Z",
+        "verify": [
+          {
+            "cmd": "python3 ops/tools/sops_dependency_map.py > /dev/null && test -f ops/sops-dependency-map.json",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-q8duzr3t/repo/ops/tools/sops_dependency_map.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_sops_dependency_map",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_sops_dependency_map (unittest.loader._FailedTest.test_sops_dependency_map)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_sops_dependency_map\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_sops_dependency_map'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "grep -q '## 復元手順' docs/sops-recovery.md",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: docs/sops-recovery.md: No such file or directory\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
