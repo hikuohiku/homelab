@@ -58,11 +58,17 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
   border: 0; border-left: 1px solid rgba(36, 65, 74, .55); background: transparent;
   padding: 0 19px; cursor: pointer; color: var(--muted); position: relative; font-size: 12px;
 }
-.masthead nav button:last-child { border-right: 1px solid rgba(36, 65, 74, .55); }
+.masthead nav > :last-child { border-right: 1px solid rgba(36, 65, 74, .55); }
 .masthead nav button span { font: 10px var(--mono); display: block; margin-bottom: 4px; }
 .masthead nav button em { font: 700 10px var(--mono); font-style: normal; background: var(--danger); color: var(--night); padding: 2px 5px; margin-left: 5px; }
 .masthead nav button.active { color: var(--ink); background: rgba(69, 214, 197, .07); }
 .masthead nav button.active::after { content: ""; height: 2px; background: var(--signal); position: absolute; inset: auto 15px 0; }
+.masthead nav .nav-page {
+  border-left: 1px solid rgba(36, 65, 74, .55);
+  padding: 0 19px; display: flex; flex-direction: column; justify-content: center; align-items: center;
+  font-size: 12px; color: var(--signal); text-decoration: none;
+}
+.masthead nav .nav-page span { font: 10px var(--mono); display: block; margin-bottom: 4px; }
 .heart-chip { justify-self: end; align-self: center; display: flex; align-items: center; gap: 10px; }
 .heart-chip > i { width: 9px; height: 9px; border-radius: 50%; background: var(--signal); box-shadow: 0 0 15px var(--signal); }
 .heart-chip small, .heart-chip strong { display: block; text-align: right; }
@@ -200,6 +206,7 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
   .masthead { grid-template-columns: 1fr auto; padding: 0 18px; }
   .masthead nav { grid-row: 2; grid-column: 1 / -1; order: 3; height: 50px; margin: 0 -18px; border-top: 1px solid var(--line); }
   .masthead nav button { flex: 1; padding: 0 8px; }
+  .masthead nav .nav-page { flex: 0 0 auto; padding: 0 14px; }
   .heart-chip { grid-column: 2; }
   .status-line { padding: 0 18px; }
   .live-view { padding: 16px 18px 24px; min-height: calc(100vh - 158px); }
@@ -212,6 +219,7 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
   .identity strong { font-size: 14px; }.identity small { font-size: 8px; }.identity__mark { width: 32px; height: 32px; }
   .heart-chip small { display: none; }.heart-chip strong { font-size: 10px; }
   .masthead nav button { font-size: 10px; }.masthead nav button span { display: inline; margin-right: 5px; }
+  .masthead nav .nav-page { padding: 0 8px; font-size: 10px; }.masthead nav .nav-page span { display: inline; margin-right: 5px; }
   .status-line { gap: 14px; }.status-line span + span::before { margin-right: 14px; }
   .status-line span:nth-child(4) { display: none; }
   .live-view { padding: 12px; gap: 12px; }
@@ -259,3 +267,44 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
 .feedback__foot button:disabled { opacity: 0.4; cursor: default; }
 .feedback__ok { color: var(--signal); font-size: 0.8rem; }
 .feedback__err { color: var(--danger); font-size: 0.8rem; }
+
+/* --- 構成図ページ (/architecture) --- */
+.arch { max-width: 1080px; margin: 0 auto; padding: 26px 28px 70px; display: grid; gap: 44px; }
+.arch__back {
+  display: inline-block; border: 1px solid var(--line); color: var(--muted);
+  padding: 7px 12px; font: 11px var(--mono); text-decoration: none;
+}
+.arch__back:hover { color: var(--signal); border-color: var(--signal); }
+.arch__eyebrow { font: 9px var(--mono); color: var(--signal); letter-spacing: .12em; margin: 22px 0 0; }
+.arch h1 { font: 800 clamp(30px, 5vw, 50px)/1.05 var(--display); letter-spacing: .03em; margin: 10px 0 14px; }
+.arch__lede { color: var(--muted); max-width: 66ch; font-size: 13px; line-height: 1.9; margin: 0; }
+.arch-block { display: grid; gap: 12px; }
+.arch-block__head { display: flex; align-items: baseline; gap: 13px; }
+.arch-block__num { font: 10px var(--mono); color: var(--signal); letter-spacing: .1em; }
+.arch-block h2 { font: 800 clamp(21px, 3vw, 30px)/1 var(--display); letter-spacing: .03em; margin: 0; }
+.arch-block > p { margin: 0; color: var(--muted); max-width: 72ch; font-size: 12px; line-height: 1.85; }
+.arch-figure {
+  margin: 0; border: 1px solid var(--line);
+  background: linear-gradient(110deg, rgba(69, 214, 197, .045), transparent 55%), var(--deck);
+  padding: 18px 14px; overflow-x: auto;
+}
+.arch-svg { display: block; min-width: 720px; width: 100%; height: auto; font-family: var(--body); }
+.arch-node { fill: #0c2029; stroke: var(--line); stroke-width: 1; }
+.arch-node--accent { stroke: var(--signal); }
+.arch-node--amber { stroke: var(--amber); }
+.arch-node--blue { stroke: var(--blue); }
+.arch-title { fill: var(--ink); font-size: 15px; font-weight: 700; }
+.arch-sub { fill: var(--muted); font-size: 10.5px; }
+.arch-num { fill: var(--signal); font-family: var(--mono); font-size: 10px; font-weight: 700; letter-spacing: .08em; }
+.arch-lane-label { fill: var(--ink); font-size: 12.5px; font-weight: 700; }
+.arch-note-text { fill: var(--muted); font-size: 11px; }
+.arch-divider { stroke: var(--line); stroke-width: 1; }
+.arch-edge--signal, .arch-edge--muted, .arch-edge--blue, .arch-edge--amber { fill: none; stroke-width: 1.4; }
+.arch-edge--signal { stroke: var(--signal); }.arch-head--signal { fill: var(--signal); }
+.arch-edge--muted { stroke: var(--muted); }.arch-head--muted { fill: var(--muted); }
+.arch-edge--blue { stroke: var(--blue); }.arch-head--blue { fill: var(--blue); }
+.arch-edge--amber { stroke: var(--amber); }.arch-head--amber { fill: var(--amber); }
+
+@media (max-width: 640px) {
+  .arch { padding: 18px 14px 50px; gap: 34px; }
+}
