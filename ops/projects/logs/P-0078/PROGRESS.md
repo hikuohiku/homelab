@@ -881,3 +881,10 @@ spec JSON の verify 第2項目が unittest ベースに変わっていれば素
 何も追加せず ready_for_review を待つだけ。未反映なら session23 の venv 手順を実行してから
 PROGRESS 追記のみで commit (内容は本セッションと同一)。**#56 への再採択依頼は投稿済み、
 二重投稿禁止**。レビュー指摘が来ていたらそれだけを最優先で直すこと。
+
+### 継続の引き継ぎ v3 (2026-08-22, human-pilot)
+
+P-0076 の停滞原因は spec の verify 第 2 項目が pytest を要求していたこと (Job イメージに
+pytest が無く、レビュアーの wrapper 実測で常に red → 強制 fail)。worker の #56 への依頼
+どおり、この P-0078 では verify を `python3 -m unittest ops.heart.tests.test_liveness` に
+差し替えた。素の環境で green のはず。何も追加せず ready_for_review を待つだけでよい。
