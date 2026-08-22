@@ -50,7 +50,7 @@ class TestCollectFeedbackTaskRequest(unittest.TestCase):
     def test_task_request_is_diverted_not_review_needed(self):
         """kind: task-request の note は briefing (review_needed) に落とさず
         未処理キュー行きとして返す (P-0091)。"""
-        vetoes, stop_all, review_needed, resume_all, reqs, _ = collect_with_note(
+        vetoes, _acks, stop_all, review_needed, resume_all, reqs, _ = collect_with_note(
             note_raw(kind="task-request")
         )
         self.assertEqual(reqs, [{"source": NOTE, "body": "vaultwarden を最新化して"}])
@@ -59,7 +59,7 @@ class TestCollectFeedbackTaskRequest(unittest.TestCase):
 
     def test_plain_note_still_goes_to_review(self):
         """kind 無しの従来型書き置きは今までどおり review_needed。"""
-        _, _, review_needed, _, reqs, _ = collect_with_note(
+        _, _, _, review_needed, _, reqs, _ = collect_with_note(
             note_raw(body="ダッシュボードの配色が見づらい")
         )
         self.assertEqual(reqs, [])
@@ -68,7 +68,7 @@ class TestCollectFeedbackTaskRequest(unittest.TestCase):
 
     def test_other_kind_values_are_not_diverted(self):
         """未知の kind は分流せず通常経路 (将来の kind 追加を壊さない)。"""
-        _, _, review_needed, _, reqs, _ = collect_with_note(
+        _, _, _, review_needed, _, reqs, _ = collect_with_note(
             note_raw(kind="something-else")
         )
         self.assertEqual(reqs, [])
@@ -78,20 +78,20 @@ class TestCollectFeedbackTaskRequest(unittest.TestCase):
         """停止系キーワードは task-request より先 (P-0090 の決定論パススルー)。
         「止めて」を依頼文に混ぜられても全停止は潰されない。"""
         raw = note_raw(kind="task-request", body="全部やめて、それと掃除して")
-        vetoes, stop_all, review_needed, resume_all, reqs, _ = collect_with_note(raw)
+        vetoes, _acks, stop_all, review_needed, resume_all, reqs, _ = collect_with_note(raw)
         self.assertTrue(stop_all)
         self.assertEqual(reqs, [])
         self.assertEqual(review_needed, [])
 
     def test_veto_keyword_in_task_request_wins(self):
         raw = note_raw(kind="task-request", body="veto P-0012。あと日報を作って")
-        vetoes, stop_all, _, _, reqs, _ = collect_with_note(raw)
+        vetoes, _acks, stop_all, _, _, reqs, _ = collect_with_note(raw)
         self.assertEqual(vetoes, ["P-0012"])
         self.assertEqual(reqs, [])
 
     def test_malformed_json_is_treated_as_free_text(self):
         """JSON として壊れた note は生テキスト扱い (従来どおり)。"""
-        _, _, review_needed, _, reqs, _ = collect_with_note("ただのテキスト")
+        _, _, _, review_needed, _, reqs, _ = collect_with_note("ただのテキスト")
         self.assertEqual(reqs, [])
         self.assertEqual(len(review_needed), 1)
 

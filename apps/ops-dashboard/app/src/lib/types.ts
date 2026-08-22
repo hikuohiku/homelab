@@ -53,6 +53,7 @@ export interface Project {
   veto_deadline?: string;
   irreversible?: boolean;
   stalled_reason?: string;
+  acknowledged?: boolean;
   review_cycles?: number;
   merging_since?: string;
   prs?: number[];

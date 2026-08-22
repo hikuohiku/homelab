@@ -347,13 +347,13 @@ class Heart:
         except Exception as e:
             log(f"PR collection failed: {e}")
             open_prs, merged_prs = {}, {}
-        vetoes, stop_all, review_needed, resume_all, task_requests, cursors = (
+        vetoes, acks, stop_all, review_needed, resume_all, task_requests, cursors = (
             facts.collect_feedback(
                 self.gh, self.repo_dir, cursors, self.cfg.rules,
                 self.cfg.feedback_issue, self.cfg.feedback_branch,
             )
         )
-        if vetoes or stop_all or review_needed or resume_all or task_requests:
+        if vetoes or acks or stop_all or review_needed or resume_all or task_requests:
             # kill switch の受信は必ず可視化する (該当プロジェクトが無く action が
             # 生まれない場合でも、veto 疎通試験の結果を外から確認できるように)
             log(
@@ -383,6 +383,7 @@ class Heart:
             "health_green": unhealthy_apps == [],
             "health_fresh": health_fresh,
             "vetoes": vetoes,
+            "acks": acks,
             "acks": acks,
             "stop_all": stop_all,
             "resume_all": resume_all,
