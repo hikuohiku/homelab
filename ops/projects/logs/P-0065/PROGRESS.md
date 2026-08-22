@@ -428,3 +428,41 @@ CI 側の有無確認を促す書き方になっている（= spec 作成者も�
   wrapper 実測 JSON の第二項目が green にならない限り実装には触らないこと。唯一の建設的な
   一手は curriculum/reviewer への verify 文字列修正提案（worker には実行権限もチャネルも
   無い、ops 帳簿は heart の領分）で変わらず。
+
+### 2026-08-22 セッション12
+
+**やったこと**: 実装変更なし。session11 までの結論を鵜呑みにせず最小限の独立再確認のみ
+実施。加えて session3 で洗われた「ネットワーク到達性」の経路を、今回は `find / -iname
+"pytest*"`（ディスク上のどこにも pytest 実体が無いことの直接確認）と
+`urllib.request.urlopen('https://pypi.org')`（200、到達可能）の両方で再現し、
+apt/apt-get/dpkg/conda/uv の不在も確認した。これらはいずれも session3 で既に
+「pip 自体が無く PEP 668 で保護、venv は wrapper 実行環境に引き継がれない」という理由で
+却下済みの経路であり、新しい突破口は無いと判断して深追いしなかった。
+
+1. `git status --short` → クリーン（session11 と同じコミット `6ec2495c`）。
+2. `grep -n 'livenessProbe' -A 15 apps/autopilot/heart-deployment.yaml` → exec probe定義済み
+   （`initialDelaySeconds: 300` / `periodSeconds: 30` / `timeoutSeconds: 15` /
+   `failureThreshold: 3`、変更なし）。
+3. `python3 -m unittest discover -s ops/heart/tests -t .` → 153 テスト全て `OK`（変更なし）。
+4. `python3 -m pytest --version` → `No module named pytest`。
+   `which pip pip3 pytest gh apt apt-get dpkg conda uv` → 全て不在（session6〜11 と同じ
+   pip/pip3/pytest/gh に加え、パッケージマネージャ系も新規に確認したが全滅）。
+
+**分かったこと（結論、変化なし）**: 12セッション連続で同一結論。実装は安定・完成済み。
+session4 が `ops/runner/runner.py` のソースを直接読んで「wrapper は CI を介さずホスト上で
+`bash -c <verify cmd>` を素で実行しており、pip/venv/install の準備ステップは一切無い」ことを
+確定させており、これが結論を決定的にしている。第二 verify コマンドが green にならないのは
+repo側の変更では解決不能な spec 側の欠陥という結論は変わらず。
+
+**次のセッションへの一言**:
+- session8〜11 の判断を維持: **このプロジェクトはこれ以上 worker セッションを消費すべき
+  ではない。** repo 側で試せる一手（pip/venv/shim/vendor/ci.yml/ensurepip/パッケージ
+  マネージャ探索）は session2〜3・8・12 で出尽くし、いずれも却下済み。
+  session8〜11 が4回連続で同じ「これ以上消費すべきでない」という進言を残したにもかかわらず
+  session12 が起動された（wrapper/curriculum 側がこの進言を読んでいない、または
+  読んでも定期実行を止める権限がそちら側にも無い可能性がある）。次回起動時も同じ最小確認
+  （grep / unittest discover / pytest 不在確認）だけ行い、wrapper 実測 JSON の第二項目が
+  green にならない限り実装には触らないこと。新しい環境探索（find / which の対象を広げる等）
+  は今回でほぼ手詰まりを確認したので、次回以降は繰り返さなくてよい。唯一の建設的な一手は
+  curriculum/reviewer への verify 文字列修正提案（worker には実行権限もチャネルも無い、
+  ops 帳簿は heart の領分）で変わらず。
