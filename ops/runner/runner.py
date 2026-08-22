@@ -791,7 +791,10 @@ class Runner:
         judge_out = Path("/work/adopted.json")
         extra = {"PROPOSALS_PATH": str(gen_out), "ADOPTED_PATH": str(judge_out),
                  # 採択上限 = パイプラインの空き (heart が spawn 時に注入)
-                 "ADOPT_LIMIT": os.environ.get("ADOPT_LIMIT", "2")}
+                 "ADOPT_LIMIT": os.environ.get("ADOPT_LIMIT", "2"),
+                 # 人間の未処理タスク依頼 (JSON 配列。heart が spawn 時に注入、
+                 # P-0091)。無ければ空配列で置換が常に成立する
+                 "TASK_REQUESTS": os.environ.get("TASK_REQUESTS", "[]")}
         outcome = self.run_session(
             self.prompt_text("curriculum-generate", extra), "cur-gen"
         )

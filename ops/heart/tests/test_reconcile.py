@@ -878,6 +878,53 @@ class TestCurriculum(unittest.TestCase):
         )
         self.assertTrue(d["last_curriculum_dry"])
 
+    def test_human_request_adoption_marks_requests_processed(self):
+        """採択された依頼由来の案 (request_id 持ち) があれば、その依頼を処理済みに
+        する action を出す (P-0091)。実行は heart.execute()。"""
+        spec = {"id": "P-0009", "title": "t", "verify": ["false"],
+                "request_id": "bbb", "proposed_by": "human-request"}
+        d, actions = reconcile.decide(
+            doc(), facts(curriculum={"state": "curriculum_done", "pr": 7,
+                                     "pr_merged": True, "adopted_specs": [spec]}),
+            RULES, NOW,
+        )
+        marks = [a for a in actions if a["type"] == "mark_task_requests_done"]
+        self.assertEqual(len(marks), 1)
+        self.assertEqual(marks[0]["ids"], ["bbb"])
+        self.assertIn("consume_curriculum", kinds(actions))
+
+    def test_mark_ids_are_unique_and_sorted(self):
+        specs = [{"id": "P-0002", "verify": [], "request_id": "bbb"},
+                 {"id": "P-0003", "verify": [], "request_id": "aaa"},
+                 {"id": "P-0004", "verify": [], "request_id": "bbb"}]
+        _, actions = reconcile.decide(
+            doc(), facts(curriculum={"state": "curriculum_done", "pr": 7,
+                                     "pr_merged": True, "adopted_specs": specs}),
+            RULES, NOW,
+        )
+        marks = [a for a in actions if a["type"] == "mark_task_requests_done"]
+        self.assertEqual(marks[0]["ids"], ["aaa", "bbb"])
+
+    def test_plain_adoption_emits_no_task_request_action(self):
+        """通常の案 (request_id 無し) の採択では依頼キューに触れない。"""
+        spec = {"id": "P-0009", "title": "t", "verify": ["false"]}
+        _, actions = reconcile.decide(
+            doc(), facts(curriculum={"state": "curriculum_done", "pr": 7,
+                                     "pr_merged": True, "adopted_specs": [spec]}),
+            RULES, NOW,
+        )
+        self.assertNotIn("mark_task_requests_done", kinds(actions))
+
+    def test_rejected_curriculum_leaves_requests_pending(self):
+        """棄却・破棄された案の依頼は pending のまま (まだ叶えられていないので
+        再挑戦してよい)。処理済み化は merge 実測のビートだけで行う。"""
+        _, actions = reconcile.decide(
+            doc(), facts(curriculum={"state": "curriculum_done", "pr": 7,
+                                     "pr_open": False, "pr_merged": False}),
+            RULES, NOW,
+        )
+        self.assertNotIn("mark_task_requests_done", kinds(actions))
+
     def test_active_below_cap_still_spawns_curriculum(self):
         """空きスロットがあれば走行中でも立案する (2026-08-22「がっつり並列」改定)。
         adopt_limit には空き数が載る。"""
