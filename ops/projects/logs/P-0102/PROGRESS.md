@@ -136,3 +136,65 @@ PROJECT.md「設計方針」を読むこと。
 
 - なし (credential map の fail-closed が新規 ExternalSecret を正しく拾ったのは
   機能が意図どおり働いているという好例であり、論点ではない)
+
+## session4 (worker) — 中間報告
+
+やろうとしたこと: **受入 #3 の evidence 収取** (受入 #1 は BusyBox grep 問題で heart 判断待ち、
+#2 は session2 で green 済み)。session3 メモの preview 経路を実行した。
+
+経過:
+
+- `kubectl apply -k apps/restic-check` で preview 配備 (application.yaml は kustomization
+  に含まれないので ArgoCD 側は無関係のまま)。ExternalSecret 2 本とも SecretSynced を確認。
+- 手動 Job `restic-check-evidence` を起こしたところ、vaultwarden の check が
+  `Stat(<config/>) … b2_download_file_by_name: 403` で延々リトライ。
+
+**重大な発見 — 本プロジェクトの前提が崩れている (人間の対応が必要)**:
+
+- クラスタ側を確認すると **昨夜の定期 backup が全滅している**: immich/coder は Failed
+  (各 99m/74m リトライ後 fatal)、vaultwarden/syncthing は同エラーのリトライで Running 継続。
+  エラーは手動 Job と完全に同一 (`create key in repository ... failed: Stat: 403`)。
+- retention 4 本も「repository not initialized yet, skipping」で**実は初期化プローブが
+  失敗してスキップされていただけ** (Complete 表示は当てにならない)。
+- 診断 Pod から B2 API を直接叩いて切り分け:
+  1. `b2_authorize_account` は成功し、append-only 鍵の capability は
+     `writeFiles,listFiles,readFiles,listBuckets` + namePrefix null で docs/backup.md L459
+     どおり**鍵は正常**
+  2. `GET {downloadUrl}/file/{bucket}/config` (restic の Stat と同じ経路) が
+     **HTTP 403 `download_cap_exceeded`** — 「download bandwidth or transaction (Class B)
+     cap exceeded. See the Caps & Alerts page to increase your cap.」
+- つまり **B2 アカウントのダウンロード上限に達してアカウント全体でダウンロード拒否中**
+  (アップロードは別枠なので書き込みだけ生きている)。解除は B2 コンソールの Caps & Alerts
+  で上限を上げるしかなく、リポジトリ側では直せない。原因の仮説としては最近の大容量
+  ダウンロード (P-0080 の RTO 計測?) が上限を消費した可能性もあるが未検証 — heart が
+  コンソールで使用量を確認すること
+- **この状態は P-0102 の why (backup 静的失敗の検知) が現実に起きた瞬間**。昨夜分から
+  backup が取れておらず、既存の監視では誰も気づけなかった。本機能の初回実行がそれを検出した
+- 影響: **受入 #3 は人間が上限を引き上げるまで green 化不可能**。check_evidence.json は
+  わざと書かない (非ゼロのレコードを書くのは受入の虚偽充足になるため)。失敗 Run の
+  EVIDENCE_JSON は別名で事故記録として保存する (下記)
+
+運用上の罠 (次セッション以降):
+
+- **`kubectl create job --from=cronjob/X` で作った Job にはこのクラスタでは CronJob への
+  ownerReference が付く**。元の CronJob を削除すると GC が手動 Job も即削除する
+  (実際 1 回目の手動 Job をこれで消した)。手動 Job を使う間は CronJob を残すこと。
+  週次スケジュールとの二重発火を避けるなら `suspend=true` に patch する (今回そうした。
+  05:30 JST 発火予定だったため)。診断終了後は namespace ごと消すので suspend の戻しは不要
+- 手動 Job 実行中でも webhook は生きているので、この失敗 Run 完了時に Discord へ
+  incident 通知が 1 通飛ぶ (**設計どおりの初めての実通知**)。重複防止のため週次 CronJob は
+  suspend 済み
+
+次セッションへの要点:
+
+- 前提: 人間が B2 の download cap を引き上げ済みであること (issue #56 / PR 説明で確認)。
+  未解除なら何もできない — この項目は読み飛ばすこと
+- `kubectl apply -k apps/restic-check` → ExternalSecret Sync 待ち →
+  `kubectl create job --from=cronjob/restic-check restic-check-evidence -n restic-check`
+  → 全 5 リポジトリ rc=0 で完走 (約 1〜2h。B2 からの実読み) → evaluate ログの
+  `EVIDENCE_JSON ` 行を `ops/projects/logs/P-0102/check_evidence.json` に保存 →
+  受入 #3 の python verify が green になることを実測 → **namespace ごと削除して片付け**
+  (merge 後の ArgoCD 導入時に未管理リソースが衝突するのを防ぐ)
+- check が lock を取って hide マーカーで外せるか (append-only 鍵での完走証明) は今回の
+  失敗 Run では途中までしか検証できていない。lock 作成までは成功していた (403 はその後の
+  config 読み取り)。cap 解除後の Run で改めて確認すること
