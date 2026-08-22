@@ -716,3 +716,41 @@ python3.14/site-packages pytest` → `python3 -m pytest ops/heart/tests -k liven
 インストール手順を実行してから verify を回すこと」という運用メモを残すことを検討してよい
 (ただし PROJECT.md の更新は curriculum の領分の可能性があるので、まずは PROGRESS.md
 への記録のみに留める)。
+
+### 2026-08-22 セッション23
+
+**やったこと**: session22 の予測どおり `/work/home` ごとコンテナが作り直されていた
+(`ls /work/home/.local/lib/` → No such file or directory、`python3 -m pytest` →
+No module named pytest) ので、同ログに書かれた手順をこのセッション冒頭で再実行した。
+
+1. `site.getusersitepackages()` → `/work/home/.local/lib/python3.14/site-packages`
+   (session22 と同一。HOME=/work/home は不変)。
+2. `mktemp -d` で venv を作成 → venv の pip で
+   `pip install --target=<上記パス> pytest` → 成功 (pytest 9.1.1)。リポジトリ配下は
+   一切触っていない (インストール先は git 管理外の /work/home 配下のみ)。
+3. verify 実測: `grep -q 'livenessProbe' apps/heart-deployment.yaml 相当` → OK
+   (`apps/autopilot/heart-deployment.yaml:67`)。
+   `python3 -m pytest ops/heart/tests -k liveness -q` → **9 passed, 144 deselected**。
+4. 副作用確認: `pytest ops/heart/tests -q` → 153 passed。
+   `unittest discover -s ops/heart/tests -t .` → OK。既存テスト資産に影響なし。
+5. `git status --short` → クリーン。コード差分は無い (実装は session2 時点から不変)。
+
+**分かったこと**: session22 の読解どおり、verify 失敗の原因は「セッション終了〜次の
+run_verify() の間」ではなく「**コンテナ自体がセッション間で作り直される**」ことだった
+(今回も session22 のインストールは消失していた)。つまり runner.py の同一ループ内
+run_verify() は正しく同一環境で動く一方、**worker セッションをまたぐと /work/home は
+必ず初期化される**。→ 「pytest を user site-packages へ入れる」のは恒久対応ではなく
+**worker が起動されるたびにやり直す環境セットアップ**として運用するしかない。
+
+**次のセッションへの一言**: 起動されたらまず wrapper 実測 JSON を見よ。第二項目が red なら
+(ほぼ確実に red のはず — コンテナが作り直されているため)、**実装を疑わないこと**
+(session2 から一貫して green 相当)。やることは1つだけ:
+```
+TARGET="$(python3 -c 'import site; print(site.getusersitepackages())')"
+mkdir -p "$TARGET" && VENV="$(mktemp -d)" && python3 -m venv "$VENV" && \
+"$VENV/bin/pip" install --quiet --target="$TARGET" pytest && rm -rf "$VENV"
+```
+その後 `python3 -m pytest ops/heart/tests -k liveness -q` で green を確認し、
+PROGRESS.md への追記だけして commit せよ (本セッションと同じ内容になるので、
+「session23 の手順を再実行した」と一行書くだけでよい)。これが複数回続くなら、
+PROJECT.md への運用メモ追加を curriculum へ依頼する以外に worker 側の打ち手は無い。
