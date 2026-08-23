@@ -96,6 +96,45 @@ def budget_alert_due(alert, prev, today):
     return not (prev.get("status") == alert.get("status") and prev.get("date") == today)
 
 
+def dashboard_smoke_alert(doc):
+    """latest.json から Mission Control 描画スモークの警報すべき状態を抽出する (P-0193)。
+
+    report が作る dashboard_smoke.status のうち fail / stale のときだけ
+    {status, reason, failed_checks} を返す。それ以外 (ok/no_data、latest.json 無し・
+    壊れ・dashboard_smoke キー無し) は None。no_data (産出側未稼働・記録破損) を
+    鳴らさないのは budget_alert() が unconfigured/no_data を沈黙させるのと同じ判断 —
+    鳴らせる状態になったときにだけ既存経路に乗る。
+
+    fail のうち tool_error を伴うものはスモーク本体自体の故障だが、人間に見せる
+    べきことには変わりが無いので区別せず乗せる (reason に区別が載っている)。
+
+    観測のみを行い判断しない (モジュール冒頭の原則)。鳴らすかどうかの繰り返し
+    抑制は budget_alert_due() が担う (status/date の一般判定なので流用する)。
+    """
+    if not isinstance(doc, dict):
+        return None
+    ds = doc.get("dashboard_smoke")
+    if not isinstance(ds, dict):
+        return None
+    status = ds.get("status")
+    if status not in ("fail", "stale"):
+        return None
+    checks = ds.get("failed_checks")
+    failed = [
+        str(c["name"])
+        for c in checks
+        if isinstance(c, dict) and c.get("name")
+    ] if isinstance(checks, list) else []
+    reason = ds.get("reason")
+    return {
+        "status": status,
+        # reporter が reason を必ず文字列で書く契約だが、壊れていたら
+        # str() で捏造せず None (文面だけの欠落で警報は倒さない)
+        "reason": reason if isinstance(reason, str) and reason else None,
+        "failed_checks": failed,
+    }
+
+
 def collect_jobs(k8s, namespace):
     """heart が生んだ Job の実状態。{job_name: {"active":bool,"failed":bool,"succeeded":bool}}"""
     out = {}

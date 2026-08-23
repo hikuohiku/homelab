@@ -227,6 +227,12 @@ GROUPS = [
             ("apps/autopilot-core/deployment.yaml", lambda: extract_image_tag(
                 "apps/autopilot-core/deployment.yaml", "ghcr.io/hikuohiku/homelab-autopilot@"
             )),
+            # Mission Control 描画スモークの CronJob (P-0193)。chromium を持つのは
+            # autopilot イメージだけなのでこれも同じ digest。ここが取り残されると
+            # 「smoke だけ古い chromium / 判定ロジック」で検眼装置だけ挙動がずれる
+            ("apps/ops-dashboard/dashboard-smoke-cronjob.yaml", lambda: extract_image_tag(
+                "apps/ops-dashboard/dashboard-smoke-cronjob.yaml", "ghcr.io/hikuohiku/homelab-autopilot@"
+            )),
         ],
     },
     {

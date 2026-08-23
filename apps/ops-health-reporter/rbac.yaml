@@ -26,7 +26,9 @@ rules:
     # B2 download cap の帳簿。pvc-usage-report への追加キーではなく専用名にした
     # (既存 pvc-usage-reporter が PUT で data 全体を置換するため、report.py の
     # DOWNLOAD_BUDGET_NAMESPACES コメント参照)。resourceNames の追加分だけ権限が増える
-    resourceNames: ["pvc-usage-report", "download-budget"]
+    # dashboard-smoke (P-0193) は autopilot ns の描画スモーク CronJob が書く
+    # Mission Control 描画断言の記録 (report.py 参照)
+    resourceNames: ["pvc-usage-report", "download-budget", "dashboard-smoke"]
     verbs: ["get"]
   - apiGroups: ["apps"]
     resources: ["deployments"]

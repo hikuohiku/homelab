@@ -265,6 +265,170 @@ def collect_download_budget():
     return download_budget.build_report(entries)
 
 
+# Mission Control 描画スモーク (P-0193) の集約対象。産出側は autopilot namespace の
+# CronJob dashboard-smoke が、headless chromium での実際の描画断言結果を専用
+# ConfigMap `dashboard-smoke` の report.json キーへ書く契約 (download-budget と同じ
+# 「産出側が専用 ConfigMap に書き、reporter が読む」分離。pvc-usage-report への追加
+# キーにしない理由も同じ: 既存 writer の PUT が data 全体置換のため)。ConfigMap 自体は
+# manifest に事前作成しない (ArgoCD 管理外にして selfHeal との競合を避ける。
+# pvc-usage-reporter と同じ形) — reporter RBAC 側はこの名前の get を resourceNames に
+# 追加済み (rbac.yaml 参照)
+DASHBOARD_SMOKE_NAMESPACE = "autopilot"
+# 日次 CronJob の 1 回分より長く沈黙していたら「装置が回っていない」(stale)。
+# 24h + 2h マージン。1 日落ちでも鳴る側に倒す: この装置の守備範囲は「静かに壊れて
+# 人間の目を裏切る画面」であり、装置自身が静かに壊れるのは本末転倒という理由
+DASHBOARD_SMOKE_STALE_AFTER_S = 26 * 3600
+
+
+def _dashboard_smoke_summary(payload, now):
+    """ConfigMap の report.json (dashboard_smoke.run_smoke() の result dict) を
+    latest.json / history jsonl に載せる要約へ変える。
+
+    生 checks は載せず失敗した検査だけを出す (history jsonl の 1 行膨張止め。
+    collect_download_budget が生 runs を載せないのと同じ)。screenshot フィールドは
+    Pod 内一時ディレクトリの path を含むため載せない (PNG 実体の履歴蓄積は
+    PROJECT.md の「やらないこと」)。
+
+    ランナー (dashboard-smoke-cronjob.yaml) はスモーク本体が JSON を書けなかったとき
+    (rc=2, 装置の故障) ok=False・failed_checks 空・tool_error/tool_error_rc 付きの
+    代役レコードを書く。この形には「描画断言が不合格」の文面を当てはめない —
+    ページの嘘と装置の故障の区別が消えるため。reason を tool_error 由来に分岐し、
+    切り詰めた tool_error / tool_error_rc を要約に載せる。
+
+    形が契約通りでない場合 (ok が真偽値でない等) は ValueError — 呼び出し側が
+    no_data エントリへ落とす。壊れた記録を黙って ok=False 扱いにすると
+    「ページの嘘」と「帳簿の壊れ」が区別できなくなるため。
+    """
+    ok = payload.get("ok")
+    if not isinstance(ok, bool):
+        raise ValueError("report.json の ok が真偽値でない")
+    generated_at = payload.get("generated_at")
+    if not isinstance(generated_at, str):
+        raise ValueError("report.json に generated_at 文字列が無い")
+    try:
+        generated = datetime.datetime.strptime(
+            generated_at, "%Y-%m-%dT%H:%M:%SZ"
+        ).replace(tzinfo=datetime.timezone.utc)
+    except ValueError:
+        raise ValueError(
+            "report.json の generated_at を解釈できない: {!r}".format(generated_at)
+        )
+    age_seconds = int((now - generated).total_seconds())
+    checks = payload.get("checks")
+    if not isinstance(checks, list):
+        raise ValueError("report.json の checks がリストでない")
+    failed_checks = []
+    for check in checks:
+        if not isinstance(check, dict) or check.get("status") != "fail":
+            continue
+        failed_checks.append({
+            "name": check.get("name"),
+            # detail は人間向け文面。1 行 1 レポートの history jsonl を膨らませない
+            # ため切り詰める (collect_externalsecrets の message と同じ上限)
+            "detail": str(check.get("detail") or "")[:200],
+        })
+
+    # 鮮度を最優先で判定する: 古い記録が fail を指したままでも「いつの時点の
+    # 不合格か」は信頼できず、まず装置が沈黙していることを報せる
+    status = "stale" if age_seconds > DASHBOARD_SMOKE_STALE_AFTER_S else (
+        "ok" if ok else "fail"
+    )
+    tool_error = payload.get("tool_error")
+    tool_error = tool_error.strip()[:200] if isinstance(tool_error, str) and tool_error.strip() else None
+    tool_rc = payload.get("tool_error_rc")
+    if isinstance(tool_rc, bool) or not isinstance(tool_rc, int):
+        tool_rc = None
+    if status == "stale":
+        reason = "最終記録が {} 秒前 (> 上限 {} 秒) — CronJob dashboard-smoke が沈黙している疑い".format(
+            age_seconds, DASHBOARD_SMOKE_STALE_AFTER_S
+        )
+    elif status == "fail" and tool_error:
+        # rc=2 の代役レコード (装置の故障)。failed_checks は空なので
+        # 「描画断言が不合格」の文面は嘘になる
+        rc_note = " (rc={})".format(tool_rc) if tool_rc is not None else ""
+        reason = "スモーク本体が異常終了{} — 装置が回らなかった: {}".format(rc_note, tool_error)
+    elif status == "fail":
+        if failed_checks:
+            reason = "描画断言が不合格: " + ", ".join(c["name"] for c in failed_checks)
+        else:
+            reason = "描画断言が不合格 (失敗検査の内訳が記録されていない)"
+    else:
+        reason = "全 {} 検査合格 ({} 秒前の実測)".format(len(checks), age_seconds)
+    out = {
+        "status": status,
+        "reason": reason,
+        "ok": ok,
+        "generated_at": generated_at,
+        "age_seconds": age_seconds,
+        "url": payload.get("url") if isinstance(payload.get("url"), str) else None,
+        "http_status": (
+            payload.get("http_status")
+            if isinstance(payload.get("http_status"), int)
+            and not isinstance(payload.get("http_status"), bool)
+            else None
+        ),
+        "elapsed_s": (
+            payload.get("elapsed_s")
+            if isinstance(payload.get("elapsed_s"), (int, float))
+            and not isinstance(payload.get("elapsed_s"), bool)
+            else None
+        ),
+        "checks_total": len(checks),
+        "failed_checks": failed_checks,
+    }
+    # 装置故障の記録だけが持つフィールド。全レコードへの None 載せは
+    # history jsonl の 1 行を膨らませるため、あるときだけ載せる
+    if tool_error:
+        out["tool_error"] = tool_error
+    if tool_rc is not None:
+        out["tool_error_rc"] = tool_rc
+    return out
+
+
+def collect_dashboard_smoke():
+    """autopilot namespace の dashboard-smoke ConfigMap を読み、要約を返す (P-0193)。
+
+    Mission Control は readiness probe では見えない「描画したときだけ現れる嘘」
+    (JS エラー・白画面・矛盾シグナルの共存) を持つ。産出側 CronJob が毎日実際に
+    描画した断言結果を読むのがここ。status の意味:
+      ok       最新の描画断言が合格 — 記録のみで通知予算は消費しない
+      fail     断言が不合格 — ダッシュボードが嘘をついている。briefing/incident
+               に乗るべき状態
+      stale    記録が古い — 装置 (CronJob) 自身が沈黙している
+      no_data  ConfigMap・キーが無い/読めない — 産出側がまだ走っていないか壊れた
+
+    産出側未稼働・記録破損は例外にせず no_data で正直に出す (collect_pvc_usage と
+    同じ思想)。「失敗時のみ既存経路 (latest.json の異常フィールド → autopilot の
+    briefing) へ流す」抽出は heart 側の配線で、P-0128 が budget.status →
+    facts.budget_alert の 2 段階で行ったのと同じ順序。まず latest.json 上で
+    区別できることが先。
+    """
+    try:
+        data = k8s_get(
+            "/api/v1/namespaces/{}/configmaps/dashboard-smoke".format(
+                DASHBOARD_SMOKE_NAMESPACE
+            )
+        )
+        raw = data.get("data", {}).get("report.json")
+        if not raw:
+            raise KeyError(
+                "configmap dashboard-smoke に report.json キーが無い"
+                "(産出側がまだ稼働していない)"
+            )
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValueError("report.json が dict でない")
+        return _dashboard_smoke_summary(
+            payload, datetime.datetime.now(datetime.timezone.utc)
+        )
+    except Exception as e:  # noqa: BLE001 — 未稼働・破損で他の収集を止めない
+        return {
+            "status": "no_data",
+            "reason": "configmap dashboard-smoke を読めない",
+            "error": "{}: {}".format(type(e).__name__, e),
+        }
+
+
 # ExternalSecret の spec.refreshInterval は K8s duration 文字列 ("1h" / "30m") で
 # 来るため秒へ換算する (P-0175。数値の API バージョンも一応受ける)
 _DURATION_UNITS = {"s": 1, "m": 60, "h": 3600}
@@ -628,6 +792,7 @@ def main():
         "download_budget": collect(collect_download_budget),
         "externalsecrets": collect(collect_externalsecrets),
         "autopilot": collect(collect_autopilot_health),
+        "dashboard_smoke": collect(collect_dashboard_smoke),
         "notes": (
             "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 "
             "(pod_metrics/node_metrics)。PVC の実ディスク使用量は namespace ごとの pvc-usage-reporter "
@@ -659,6 +824,16 @@ def main():
             "status.refreshTime（最終成功同期）からの経過秒。「Ready=True のまま last_sync_age_seconds が "
             "refresh_interval_seconds を大きく超え続ける」場合は上流への同期が静かに滞留しているサイン。"
             "Secret 本体の値は取得・記録しない（RBAC も external-secrets.io/externalsecrets の get/list のみ）。"
+             " dashboard_smoke キーは Mission Control の headless 描画スモーク（P-0193）。autopilot namespace の "
+             "CronJob dashboard-smoke が毎日 headless chromium で実際に描画し、専用 ConfigMap dashboard-smoke の "
+             "report.json キーへ書いた断言結果を集約する。status は ok / fail（ページが嘘をついている: "
+             "矛盾シグナルの共存・白画面・描画未完了等。failed_checks に名前と detail を載せる）/ "
+             "stale（最終記録が 26h より古い = 装置自身が沈黙）/ no_data（産出側未稼働・記録破損）。"
+             "fail のうち tool_error を伴うものはスモーク本体自体が異常終了した記録（装置の故障。"
+             "ランナーが代役レコードを書いた）で、ページの嘘とは区別できる。"
+             "成功日は記録のみで通知予算を消費しない。readiness probe は HTTP 200 しか見ないため、"
+             "この検査だけが「実際に描画したときだけ見える破綻」を拾う。スクリーンショット実体は保存せず "
+             "記録しない。"
         ),
     }
 

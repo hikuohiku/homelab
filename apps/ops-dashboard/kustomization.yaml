@@ -10,3 +10,22 @@ resources:
   - deployment.yaml
   - service.yaml
   - ingress.yaml
+  # Mission Control 描画スモークの常設ジョブ (P-0193)
+  - dashboard-smoke-cronjob.yaml
+
+configMapGenerator:
+  # 描画スモーク本体。canonical は ops/tools/dashboard_smoke.py (判定ロジックの
+  # unittest がそこを import する) で、同ディレクトリ外を参照する相対パスは
+  # kustomize の load 制限で使えないため同一内容のコピーを置いてある。
+  # drift は ops/check_dashboard_smoke_script_sync.py (CI) が検出する —
+  # 直すときは必ず両方を同じ PR で直すこと
+  - name: dashboard-smoke-tool
+    namespace: autopilot
+    files:
+      - dashboard_smoke.py
+
+generatorOptions:
+  # 名前にハッシュを付けない (autopilot / ops-health-reporter と同じ)。ハッシュが
+  # 付くとスクリプト更新のたびに ConfigMap 名が変わり、CI の manifest-diff が
+  # 「オブジェクトが消えた」と毎回判定して allow-delete の明記を要求する
+  disableNameSuffixHash: true
