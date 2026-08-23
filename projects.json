@@ -3907,7 +3907,7 @@
     {
       "id": "P-0182",
       "title": "budget_exhausted は終端ではなく休憩にする — checkpoint のある停滞を heart が自分で再予告する継続レーンを作り、手動継続の三重奏 (P-0114/115/116) を二度と起きなくさせる",
-      "state": "active",
+      "state": "stalled",
       "branch": "project/p-0182",
       "irreversible": false,
       "capabilities": [],
@@ -3972,7 +3972,8 @@
       "veto_deadline": "2026-08-23T09:41:09Z",
       "spawn_count": 1,
       "job": "runner-p-0182-a1",
-      "drift_count": 0
+      "drift_count": 0,
+      "stalled_reason": "budget_exhausted"
     },
     {
       "id": "P-0185",
@@ -4477,7 +4478,7 @@
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-23T14:06:47Z",
-  "last_activity_at": "2026-08-23T14:52:38Z",
+  "last_activity_at": "2026-08-23T14:57:16Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": true,
   "stop_engaged": false
