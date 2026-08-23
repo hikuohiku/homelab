@@ -323,3 +323,39 @@ validate.py OK (0 error, warning 11 件は既知の backlog refs)
 「直近 48 時間で告げる日はありません。」になるが**壊れではない** (セッション 6 実証済み)。
 publish→dashboard の横断 E2E はセッション 8 実測済み — 再実施の価値は薄く、
 merge 待ちの監視が本線
+
+## worker セッション 9 (2026-08-23) — 監視セッション。ops-state beat 48・main 不動を確認。コード変更なし
+
+### やったこと
+
+レビュー指摘は無し。受入 5 項目を自前実測: 4/5 green、verify(3) のみ red
+(実 fetch で origin/ops-state 先端 beat 48 `8b91760b0` を確認し reminders.json /
+briefing/reminders.txt とも無し = 未 merge の裏付け)。**main はセッション 4 以後ずっと不動**
+(origin/main = 31a806191、#564 merge で止まったまま) のため衝突監査は省略。
+
+セッション 7〜8 の方針に従い、リハーサル / 横断 E2E / Node 側テストの再実施は**意図的にスキップ**
+(価値薄と実測済み)。本セッションの新規情報は監視データのみ:
+
+1. **heart 稼働継続の間接証拠が更新**: ops-state はセッション 8 実測の beat 42 から
+   beat 48 へ進行。merge 後 green 化の前提 (heart が生きている) は崩れていない
+2. **ドリフト防止の再計測**: unittest 28 本 OK、validate.py OK (0 error, warning 11 件は既知)、
+   HEAD == origin/project/p-0231 (wrapper push 済み・ローカル未コミット無し)
+3. **台帳の次 due を確認**: 3 件の仮置きのうち次に窓に入るのは 9/1 防災の日 (year recurrence)。
+   8/30 以降の merge なら live 断片は非空になる。8/26〜8/29 の merge なら空文面 (既知の正常系)
+
+### 分かったこと・罠
+
+- **`gh` CLI はこの環境にインストールされていない** (`gh: command not found`)。
+  PR の状態確認は worker からは不可能 — 次セッションも試さないこと。
+  merge 待ちの判定は `git branch -r --contains HEAD` と verify(3) の red/green で代用する
+- 空窓の正確な範囲: ゴミ収集 8/24 (none) の 48h 窓は 8/26 いっぱいで終了、
+  防災の日 9/1 (year) の窓開始は 8/30。つまり **8/27〜8/29 merge なら初回ビートが空文面**、
+  それ以外の日程なら最初から 1 行以上載る
+
+### 次のセッションへの一言
+
+結論不変: コード完成・変更不要。verify(3) は merge → heart 初回ビート (~120s) で green。
+レビュー指摘があればその解消が最優先。merge 後 red 継続時はセッション 3 末尾の
+(a)(b)(c) で切り分け。リハーサル系の再実施は不要 (セッション 2〜8 で網羅済み)、
+Node 側テストの無劣化もセッション 7 実測済み。**やることは merge 待ちの監視だけ**:
+verify(3) が green になったら受入全項目 green を記録して完了報告に進む
