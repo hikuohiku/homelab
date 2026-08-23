@@ -1,0 +1,86 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: openclaw-morning-brief
+  namespace: autopilot
+spec:
+  # 毎朝 08:00 JST。node01 の time.timeZone が JST のため schedule はローカル時刻評価
+  # (既存 CronJob 同様 spec.timeZone は書かない)。対象日は「実行時点の JST 昨日」なので
+  # 完全に終わった 1 日だけを扱う。immich backup (毎日 1 回) の直後・ops-health-reporter
+  # (30 分周期) の更新も吸収できる時刻
+  schedule: "0 8 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 120
+      template:
+        spec:
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: brief
+              image: python:3.14-alpine
+              terminationMessagePolicy: FallbackToLogsOnError
+              command: ["python", "/scripts/morning_brief.py"]
+              env:
+                # 送信先は bot との 1:1 チャット (= TELEGRAM_ALLOWED_USER_ID を chat_id に使う)。
+                # 受信系 API は一切触らない (spec「送信専用」。受信は bridge P-0107 の領分)
+                - name: TELEGRAM_BOT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: openclaw-credentials
+                      key: TELEGRAM_BOT_TOKEN
+                - name: TELEGRAM_ALLOWED_USER_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: openclaw-credentials
+                      key: TELEGRAM_ALLOWED_USER_ID
+                - name: AUTOPILOT_GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: openclaw-credentials
+                      key: AUTOPILOT_GITHUB_TOKEN
+                - name: GITHUB_REPO
+                  value: hikuohiku/homelab
+                - name: REPORT_BRANCH
+                  value: ops-health-report
+                - name: BASE_BRANCH
+                  value: main
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              # このジョブが実際に使うメモリは JSON を組み立てて HTTP でやり取りする程度で
+              # 数十MB規模に収まる見込み。256Mi は実測ではなく「暴走しても他 Pod を巻き込まない」
+              # 目的の緩い上限（CHARTER §4「縛る変更には実測か裏付けが要る」。値の根拠は
+              # ops-health-reporter/cronjob.yaml と同一の判断）
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: script
+              configMap:
+                name: openclaw-morning-brief-script
+            - name: tmp
+              emptyDir: {}
