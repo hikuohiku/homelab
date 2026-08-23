@@ -608,7 +608,56 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   unknown 待ちの注意だけ残す: mergeable_state が unknown なら数秒〜十数秒待って再取得、
   dirty 確定時のみ update-branch → ci 再 green を待つ
 
+### セッション 16 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま**、blocking 4 件で不変
+  (P-0092 / P-0116 / P-0161 / P-0163。checked=61。セッション 15・wrapper 実測と同一内訳)。
+  固定指示どおり実演習は見送り。コード変更は無し
+- 本セッションの実イベント: **台帳が 2 セッション連続で完全凍結** (15→16)。
+  `git show origin/ops-state:projects.json` の内訳は delivered 26 / vetoed 2 /
+  stalled 28 / announced 1 / active 4 / in_review 0 とセッション 15 と完全同一、
+  メンバーシップ照合でも announced=P-0092 / active=P-0116+P-0161+P-0163 (+自己) と一致。
+  完全凍結の連続観測により「凍結は珍しい一回性イベント」でなく平時の定常状態たりうることが
+  分かった。なお ops-state ブランチは進行していた (fetch で af68a7017→e76d32ab6)
+- 小ネタ (弁に無関係): **project/p-0163 ブランチが動いた** (fetch で c225da0ae→15a1ff6bd)
+  が、台帳上 P-0163 は active のまま不変。blocking プロジェクト自身のブランチ進行 =
+  作業は進んでいる = 状態遷移が近い、という読みも台帳実測なしには成立しない (「ブランチ
+  進行 ≠ 台帳遷移」の第 3 例。ops-state 全体 / 自プロジェクトに続き blocking 他プロジェクト)
+- main は不動 (cc1c86626)。PR #524 は mergeable_state=clean 初手継続
+  (head=5d24c8932 不変、unknown 待ち無し)、ci + GitGuardian success
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 4), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 281 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git fetch origin && git rev-parse origin/main          # cc1c86626 (不動)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- 当日の手順はセッション 3 固定のまま不変 (--run 背景起動 → 全 zero 確認 → PATCH ready
+  解除 → PUT merge)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。「0 か否か」だけを見る原則は維持。台帳は 2 連続凍結中だが
+  凍結の継続を「開く日が遠い」と読む根拠は無い (14→15→16 の遷移ゼロは停滞滞留の別表現)。
+  unknown 待ちの注意だけ残す: mergeable_state が unknown なら数秒〜十数秒待って再取得、
+  dirty 確定時のみ update-branch → ci 再 green を待つ
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 16, ライフサイクル観測の続き) **完全凍結が 2 セッション連続** (15→16)。
+  スナップショット比較の 3 パターンのうち「完全凍結」が連続出現し、凍結は例外的イベントで
+  なく定常状態になりうる。判定原則 (announced+active==0 の実測一択) は不変。
+  併せて **blocking プロジェクト自身のブランチ進行が台帳遷移を伴わない例**を初観測
+  (project/p-0163 が c225da0ae→15a1ff6bd に進んだのに P-0163 は active のまま)。
+  「他プロジェクトのブランチが動いている= soon 弁が開く」推論への反例追加 —
+  「ブランチ進行 ≠ 台帳遷移」は ops-state 全体進行 (セッション 15) / 自プロジェクト /
+  blocking 他プロジェクトの 3 系統すべてで成立
+
+- (セッション 15, ライフサイクル観測の続き) **総計・メンバーシップ双方が完全不変の
 
 - (セッション 15, ライフサイクル観測の続き) **総計・メンバーシップ双方が完全不変の
   セッション間を初観測** (14→15)。12→13 は「総計不変・中身入れ替わり」、13→14 は
