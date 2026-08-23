@@ -75,3 +75,93 @@
 
 verify #3 (integrity CronJob を 4 namespace 分) が次。上の設計メモ 1〜5 がすべて。
 その次 (#4) は report.py への畳み込み + rbac resourceNames。
+
+## セッション 2 (2026-08-23)
+
+### やったこと — verify #3 (integrity CronJob を 4 namespace / 5 repo 分)
+
+- `apps/{vaultwarden,immich,coder,syncthing}/restic-integrity-cronjob.yaml` 新設。
+  各ファイル: script ConfigMap (`restic_integrity.py` 正本コピー + `run_integrity.py`
+  ドライバ) + records ConfigMap (事前作成・空) + SA/Role/RoleBinding
+  (`restic-integrity`, configmaps get/update のみ resourceNames 制約) + CronJob。
+  coder は 1 ファイルに 2 CronJob (postgres / workspace-homes) で script CM・SA・
+  Role は共有。kustomization 4 件に配線済み
+- ドライバの流れ: plan() → `restic snapshots` 失敗なら未初期化扱いで skip (retention
+  既存型。記録は書かない) → `restic check --read-data-subset=$SUBSET` 1 回で metadata+
+  部分読み → **非ゼロは握り潰さず SystemExit** (ArgoCD Degraded → briefing/incident 経路)
+  → 成功時のみ記録 {date, slot, subset, cycle, packs_read} を merge/trim して
+  coverage_from_records() と一緒に `<repo>-integrity-records` CM の report.json へ PUT
+- **設計メモ 1 からの変更 (理由付き)**: 「python initContainer が KEY=VALUE を書き、
+  restic 本体コンテナが読む」方式ではなく、**restic バイナリを initContainer で emptyDir
+  に退避させ (静的リンク Go バイナリなのでイメージをまたげる)、python 本体コンテナから
+  subprocess で呼ぶ** 方式にした。busybox wget は K8s API の PUT を送れないため restic
+  コンテナ側に記録書き込みを持たせられない (= レポート畳み込みの産出側が作れない)。バイナリ
+  退避なら plan→check→記録が 1 プロセスフローに収まり、失敗時の意味論も素直になる。
+  契約 (N/T 形式・正本同梱・drift 検査・成功時のみ記録) はすべて維持
+- スケジュール確定 (JST 評価。分散表は各 yaml ヘッダにも記載):
+  vaultwarden 毎月 2 日 14:20 / immich 6 日 13:40 / coder-postgres 10 日 15:10 /
+  ws-homes 14 日 13:30 / syncthing 18 日 14:50。「第 n 曜日」表現は使わず固定日
+  (k8s cron の DOM+DOW 併用は OR 意味論で nth-weekday を書けないため)。
+  午後帯 = UTC 04-06 時台で 00:00 UTC リセット直後の予算を使い、日次 backup 帯
+  (02:45-03:55) とも retention 帯 (日曜 03:45-04:50) とも時刻帯が離れる
+- LEDGER_RULES に 5 エントリ登録 (根拠コメント付き): vaultwarden 35651584 /
+  immich 153092096 / coder-postgres 138412032 / coder-workspace-homes 1396703232 /
+  syncthing 34603008 bytes。式は「index/config 読み 32 MiB + 総量 ÷ 3」で総量は
+  docs/backup.md の実測 (T-0066 pvc_usage / T-0117 手動 Job / T-0071 復元) から。
+  download_ledger.py ブロック自体は触っていないので sync check は通過し続けている
+- `ops/check_restic_integrity_script_sync.py` 新設 + ci.yml に登録:
+  run_integrity.py は 4 ファイル同一、restic_integrity.py は 4 ファイル同一**かつ
+  正本 ops/tools/restic_integrity.py とも一致** (二重管理の drift 検査)
+- `ops/tests/test_restic_integrity_manifest.py` 新設 14 テスト: schedule 分散方針
+  (月次固定日・13-15 時台・5 本で日重複なし) / env↔Role resourceNames↔事前作成 CM の
+  3 箇所一致 / LEDGER_RULES 登録値 / kustomization 配線 / 埋め込みドライバ純関数
+  (AST 抽出。非 dict 混入でも落ちないことを含む)
+- 自己実測: verify #1 OK / verify #2 OK (30 tests) / verify #3 = 'read-data-subset'
+  を含む apps/**.yaml が **8 ファイル** (python 全文走査で実測。サンドボックス BusyBox
+  grep は相変わらず --include 非対応なので CI GNU grep 前提で 8 ≥ 4 で green) /
+  verify #4 は未着手 (rc=1 のまま)。全体回帰 `unittest discover -s ops/tests -t .`
+  = **333 tests OK** (319 + 14)。consistency checks 全部 + validate.py も green
+  (validate の warning 11 件は既存分)
+
+### 設計の確定事項 (#4 の reporter はこの契約を読むこと)
+
+- records ConfigMap 名: `<repo>-integrity-records` (vaultwarden-integrity-records /
+  immich-… / syncthing-… / coder-postgres-… / coder-workspace-homes-…)。
+  report.json キー 1 個に payload 全体
+- payload 形: `{generated_at, namespace, repo, records: [{date, slot, subset, cycle,
+  packs_read}], coverage: <coverage_from_records() の戻り値そのもの>, last_check}`。
+  reporter 側は records を集めて `coverage_from_records(repo, records, today)` を
+  自前で呼んでもよいし、coverage をそのまま載せてもよい
+- rbac.yaml (ops-health-reporter) へ追加すべき resourceNames: 上記 5 名
+- 失敗時は Job 非ゼロ終了 → ArgoCD appTree health → briefing/incident (既存経路。
+  DoD(2) ここで充足済み。reporter 側の追加対応は不要のはずだが、applications 収集の
+  health 反映は既存どおり)
+
+### 分かったこと / 罠
+
+- check_download_ledger_script_sync.extract_block_scalar は戻り値の**先頭にキー行自身の
+  残り (空行)** を含む。ledger 同士の比較では打ち消されるので今まで顕在化しなかったが、
+  正本ファイルとの比較では dedent 後に lstrip("\\n") が必要
+- k8s cron は DOM と DOW を両方制限すると OR になる (POSIX 意味論)。「毎月第 n 曜日」
+  は書けない → 固定日 + 時刻帯での分離にした
+- python:3.14-alpine を root で動かす前提なので restic の cache ($HOME/.cache) は
+  container layer に書かれ、emptyDir は読み取り専用マウントで足りる
+- サンドボックスに ruff/pip/kustomize/helm は無い。F821 は CI 専用項目として残る
+  (新規 py ファイルは ast.parse で構文確認済み)。kustomization の resources 存在
+  検査は python で代替実施
+
+### 発見 (spec 外。curriculum が拾うもの)
+
+- coder-workspace-homes の推定読み ≈1300 MiB/回 は retention 1 回分の推定 (512MiB-1GiB)
+  を上回る全 integrity 中の最大所。docs/backup.md の「B2 無料枠 10GB」記述と cap 実値が
+  人間コンソールで判明した際、LEDGER_RULES 差し替え + 必要なら PROJECT.md の調整方向
+  (T 増やし & 頻度上げ) の検討材料になる。integrity 自体はストレージを消費しない
+- schedules が JST 評価であることの根拠 (node01 time.timeZone) は各所コメントで言及
+  されているが spec.timeZone 明示ゼロの状態が続いている。クラスタ移行等で崩れる可能性
+
+### 次のセッションへの一言
+
+verify #4: ops-health-reporter report.py への畳み込み + ops-health-reporter/rbac.yaml の
+resourceNames 追加 (名前は上の契約)。collect_integrity() 相当を collect_download_budget()
+流儀 (産出側/集約側分割、import 副作用のある report.py 本体は unit test から直接ロード
+しない) で。これで verify 4 点が全部 green になるはず。

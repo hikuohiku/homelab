@@ -20,6 +20,10 @@
 #     と index 再読み。削除量依存で大きく揺れる。2026-08-22 の cap 超過日は土曜夜に
 #     全リポジトリの retention が一斉稼働した日であり、この桁がアカウント合計で
 #     cap を超え得ることと辻褄が合う
+#   - syncthing-restic-integrity (P-0187) 1 回 ≈ 33 MiB: restic check
+#     --read-data-subset の index/config 読み (backup 1 回と同桁の 32 MiB) +
+#     データスライス。T-0140 未着手で同期フォルダは空、identity/config のみで
+#     スライスは 1 MiB 弱。月次で毎月 18 日に 1 回のみ
 #
 # 既知の限界: 失敗した Job の部分的な消費 (index 読みの後で落ちた等) は数えない。
 # pods/log を読めば精度は上げられるが T-0110 で閉じた経路を広げないため、
@@ -358,7 +362,7 @@ spec:
               command: ["python", "/scripts/download_ledger.py"]
               env:
                 - name: LEDGER_RULES
-                  value: "syncthing-restic-backup:33554432,syncthing-restic-retention:536870912"
+                  value: "syncthing-restic-backup:33554432,syncthing-restic-retention:536870912,syncthing-restic-integrity:34603008"
                 - name: PYTHONDONTWRITEBYTECODE
                   value: "1"
               # PVC も他 namespace も触らないため特権は不要。root にもならない

@@ -1,0 +1,736 @@
+# vaultwarden データ (SQLite + attachments + rsa鍵 + config.json) を restic リポジトリ `vaultwarden` から
+# 月次で読み返す integrity 検査 (P-0187)。
+#
+# バックアップの「守り」(鮮度 P-0157 / 復元速度 P-0080+114+115 / 改変不能性 P-0168) が
+# 厚くなっても、保存済みデータを読み返して壊れていないか確認した者はいなかった。B2 は
+# bit rot を黙って返しうる一般オブジェクトストアであり、freshness 計測は snapshot 記録の
+# 更新しか見ないため、破損は取り出す当日まで黙る (#49 型「失敗すら起こらない劣化」)。
+# 本 CronJob は月次で `restic check --read-data-subset=N/T` を走らせ、metadata 全検査 +
+# pack 集合の 1/(T=3) を実読みする。パーセント形式ではなく N/T 形式なのは、N/T が pack ID
+# ハッシュによる決定論的な分割の第 N スライスを読む (回転になる) のに対し、パーセント形式は
+# 実行ごとのランダム抽出だから。N は正本 ops/tools/restic_integrity.py (下に同梱コピー。
+# drift 検査は ops/check_restic_integrity_script_sync.py が CI で行う) が
+# (repo, UTC 日付) から決定論的に導き、同じ日の再実行・リトライは同じスライスになる。
+# 月次 × T=3 で全データを約 3 ヶ月で一周する。
+#
+# 失敗時は Job が非ゼロ終了し、既存 backup と同じく ArgoCD appTree health →
+# briefing/incident の経路に乗る (新しい警報機構は作らない)。
+# 成功時のみ実行記録 {date, slot, subset} と累積カバー率を
+# `vaultwarden-integrity-records` ConfigMap へ書く。
+# Job 履歴は successfulJobsHistoryLimit で消えるためこの ConfigMap が唯一の長期記憶
+# (download-budget と同じ発想)。集約側は ops-health-reporter。
+#
+# スケジュールの根拠 (B2 download cap への配慮):
+# - CronJob schedule は spec.timeZone 未指定のため node01 の JST で評価される
+#   (node01 time.timeZone = Asia/Tokyo。spec.timeZone 明示は既存全 CronJob ゼロ)
+# - 既存帯の実測: 日次 backup は JST 02:45-03:55、retention は全 5 本が日曜朝
+#   JST 03:45-04:50 に集中 (2026-08-22 の cap 超過日の形)。integrity は既存帯と
+#   重ならない午後 (JST 13-15時台 = UTC 04-06時台) に置く。00:00 UTC リセット直後の
+#   予算を使い、次のリセットまで 17 時間以上ある
+# - apps 間で実行日を分散し、integrity どうしが同一日にならないようにする:
+#     vaultwarden            毎月  2 日 14:20 JST
+#     immich                 毎月  6 日 13:40 JST
+#     coder-postgres         毎月 10 日 15:10 JST
+#     coder-workspace-homes  毎月 14 日 13:30 JST
+#     syncthing              毎月 18 日 14:50 JST
+#   (月次なので、日曜朝の retention 群と同じ UTC 日に重なるのは最悪でも月に一度。
+#    上記の時刻はいずれも retention 帯 JST 03:45-04:50 とは時刻帯が離れている)
+# - 推定読み量 (vaultwarden-restic-integrity への登録値 35651584 bytes):
+#   repo 内データの実測 約4.6 MiB (docs/backup.md T-0066 pvc_usage /
+#   T-0071 復元試験) → スライスは 2 MiB 程度で index/config 読みが支配項
+#   内訳は index/config 読み 32 MiB (backup 1 回と同桁) + データスライス (総量 ÷ 3)。
+#   B2 コンソールでのキャリブレーション (管理コンソール作業 = 人間専有) の結果は
+#   LEDGER_RULES の数値差し替えだけで反映できる
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: restic-integrity-script
+  namespace: vaultwarden
+data:
+  # 正本 ops/tools/restic_integrity.py の埋め込みコピー。drift は CI の
+  # ops/check_restic_integrity_script_sync.py が検出する (download_ledger.py 流儀)
+  restic_integrity.py: |
+    """全 restic リポジトリの実データ回転読み (--read-data-subset) の選択ロジック (P-0187)。
+
+    バックアップの「守り」は鮮度 (P-0157)・復元速度 (P-0080/114/115)・改変不能性 (P-0168) と
+    順に厚くなったが、保存済みデータを読み返して壊れていないか確認した者はいなかった。
+    B2 は 11 ナインを保証しない一般オブジェクトストアであり、bit rot は取り出す当日まで黙る。
+    このモジュールは「今月どのスライスを読むか」と「これまでいくら読んだか」を決める純関数群
+    だけを持ち、クラスタにも B2 にも触れない。実行側 (各 ns の integrity CronJob) と集計側
+    (ops-health-reporter) の両方がここに依存する正本であり、クラスタへの埋め込みコピーとの
+    同期は別途検査する (check_download_ledger_script_sync.py 流儀)。
+
+    契約 (ops/tests/test_restic_integrity.py で固定):
+
+    - 決定論的 & 再実行可能: スライス番号は (repo id, UTC 日付) だけの関数。同じ日の再実行は
+      同じスライスを読むため、失敗リトライが二重カウントや読み漏らしの原因にならない
+    - 約 3 ヶ月で一周: 既定サイクル T=3・月次実行。restic の N/T 形式
+      (`check --read-data-subset=N/T`) は pack 集合を ID ハッシュで T 分割した第 N グループを
+      決定論的に読む。パーセント形式は実行ごとのランダム抽出であり「回転」にならないので使わない
+    - カバー率は嘘をつかない: 実行記録 ({date, slot}) の集計で算出し、記録の日付から
+      slot_for_date() が導く期待値と一致しない記録は採用しない。CronJob の Job 履歴は
+      successfulJobsHistoryLimit で消えるため、長期記憶は産出側が成功時に書き込む ConfigMap 側が
+      唯一の拠りになる (download-budget と同じ発想)
+
+    対象リポジトリは initializer の実測 (2026-08-23、apps/ 配下全 CronJob の RESTIC_REPOSITORY)
+    による 5 本。spec 列挙の「autopilot-core 相当」に対応する restic リポジトリは実在しない
+    (apps/autopilot-core/ には PVC があるが restic backup が無い)。
+
+    B2 download cap はアカウント単位・毎日 00:00 UTC リセット (P-0111 root_cause.md 確定分)。
+    1 回の実行が読むのは総データ量の約 1/T。retention 群が日曜朝に集中している実測があるため、
+    integrity CronJob のスケジュール (実行日・時刻) はこれを避けて分散すること — このモジュールは
+    「いつ動くか」を持たず、「その日に何を読むか」だけを答える。
+    """
+
+    import argparse
+    import datetime
+    import hashlib
+
+    # 「全データを約 3 ヶ月で一周」の T。月次実行とセット。repo ごとのデータ総量は repo 内 docs
+    # には無いため読み量 (= 総量 ÷ T) の見積もりは manifest コメント側に根拠ごと書く。
+    # 1 スライスが大きすぎると判明した場合は T を増やして実行頻度を上げる (合計カバー期間
+    # ≈ 3 ヶ月を維持するのが spec の精神に沿う調整方向)。
+    DEFAULT_CYCLE_MONTHS = 3
+
+    # restic リポジトリの実在一覧 (RESTIC_REPOSITORY = b2:<bucket>:<名前> の <名前>)。
+    # initializer が 2026-08-23 に apps/ 配下の全 CronJob から実測した値。
+    REPOSITORIES = (
+        "coder-postgres",
+        "coder-workspace-homes",
+        "immich",
+        "syncthing",
+        "vaultwarden",
+    )
+
+
+    def parse_date(value):
+        """YYYY-MM-DD 文字列 / datetime.date / datetime.datetime を datetime.date へ。
+
+        文字列は strptime で厳格に検査する (2026-02-30 など暦に無い日は ValueError)。
+        datetime は .date() へ潰す — タイムゾーン付きオブジェクトを渡された場合の
+        「どこの日付か」は呼び出し側の責務で、ここでは UTC 日付を渡されることを期待する
+        (スロット選択のキーは UTC 日付。cap のリセットも 00:00 UTC なので UTC が唯一の
+        自然な区切り)。それ以外の型は TypeError。
+        """
+        if isinstance(value, datetime.datetime):
+            return value.date()
+        if isinstance(value, datetime.date):
+            return value
+        if isinstance(value, str):
+            return datetime.datetime.strptime(value, "%Y-%m-%d").date()
+        raise TypeError(
+            "date は YYYY-MM-DD 文字列か date を受け付ける: {!r}".format(value))
+
+
+    def month_sequence(date):
+        """暦月を 1 ずつ増える整数へ (year*12 + month - 1)。年跨ぎの回転計算の基礎。
+
+        date(2026, 12, x) と date(2027, 1, x) の差がちょうど 1 になることが大事。
+        """
+        d = parse_date(date)
+        return d.year * 12 + d.month - 1
+
+
+    def _validate_cycle(cycle):
+        # bool は int の派生なので明示的に弾く (download_budget.coerce_bytes と同じ倒し方)
+        if isinstance(cycle, bool) or not isinstance(cycle, int) or cycle < 1:
+            raise ValueError("cycle は 1 以上の整数: {!r}".format(cycle))
+        return cycle
+
+
+    def _validate_repo_id(repo_id):
+        if not isinstance(repo_id, str) or not repo_id:
+            raise ValueError("repo_id は空でない文字列: {!r}".format(repo_id))
+        return repo_id
+
+
+    def repo_offset(repo_id, cycle=DEFAULT_CYCLE_MONTHS):
+        """repo 固有の回転開始位相 (0..cycle-1)。
+
+        組込の hash() は str randomization で起動ごとに変わるため sha256 を使う。
+        先頭 8 バイト (big endian) で十分 — 衝突しても「複数 repo の位相が揃う」だけで、
+        各 repo が周期ごとに全スライスを巡る性質は壊れない。
+        """
+        _validate_repo_id(repo_id)
+        _validate_cycle(cycle)
+        digest = hashlib.sha256(repo_id.encode("utf-8")).digest()
+        return int.from_bytes(digest[:8], "big") % cycle
+
+
+    def slot_for_date(repo_id, date, cycle=DEFAULT_CYCLE_MONTHS):
+        """(repo, UTC 日付) → 今月読むスライス番号 N (1..cycle)。
+
+        同じ日なら何度呼んでも同じ値 (再実行可能)。同じ月の中であれば日付によらず
+        同じ値なので、スケジュールのずれや当月内のリトライでスライスが変わらない。
+        """
+        _validate_repo_id(repo_id)
+        _validate_cycle(cycle)
+        sequence = month_sequence(date)
+        return (sequence + repo_offset(repo_id, cycle)) % cycle + 1
+
+
+    def subset_arg(slot, cycle=DEFAULT_CYCLE_MONTHS):
+        """restic へ渡す N/T 形式の引数値 ("2/3" など)。
+
+        restic は `check --read-data-subset=N/T` の N/T を pack ID ハッシュによる決定論的な
+        T 分割の第 N グループとして解釈する。範囲外の slot は静かに通さない。
+        """
+        _validate_cycle(cycle)
+        if isinstance(slot, bool) or not isinstance(slot, int) or not 1 <= slot <= cycle:
+            raise ValueError("slot は 1..cycle の整数: {!r} (cycle={})".format(slot, cycle))
+        return "{}/{}".format(slot, cycle)
+
+
+    def plan(repo_id, date=None, cycle=DEFAULT_CYCLE_MONTHS):
+        """実行側 (integrity CronJob) へ渡す今月の計画。
+
+        返り値は KEY=VALUE 出力と結果 ConfigMap 書き込みの両方で使う形。
+        date を省略した場合は今日 (UTC)。実行側はこれを保存せず都度呼ぶ —
+        計画は入力だけの関数なので状態を持たず、再実行で同じ答えになる。
+        """
+        _validate_repo_id(repo_id)
+        _validate_cycle(cycle)
+        if date is None:
+            date = datetime.datetime.now(datetime.timezone.utc).date()
+        d = parse_date(date)
+        slot = slot_for_date(repo_id, d, cycle)
+        return {
+            "repo": repo_id,
+            "date": d.isoformat(),
+            "cycle": cycle,
+            "offset": repo_offset(repo_id, cycle),
+            "slot": slot,
+            "subset": subset_arg(slot, cycle),
+        }
+
+
+    def coverage_from_records(repo_id, records, today=None, cycle=DEFAULT_CYCLE_MONTHS):
+        """実行記録 ({date: "YYYY-MM-DD", slot: N}) から直近 cycle か月の累積カバー率を算出する。
+
+        records は「成功した実行が書いた記録」のリスト (新しい順でも古い順でもよい)。
+        長期記憶は ConfigMap 側なので、ここでは与えられた記録だけを信じて集計する。
+        ただし盲信はしない:
+
+        - 未来日付は clock skew の疑いがあるため採用しない (heartbeat judge() と同じ倒し方)
+        - 直近 cycle か月 (today の属する月を含む) の外の記録は窓の外として数えない
+          (窓内で一周した分だけが「現在のカバー率」の意味)
+        - 記録の日付から slot_for_date() が導く期待値と slot が一致しない記録は
+          inconsistent として採用しない — 記録の書き間違い・改ざんでカバー率が盛れない
+        - 壊れた記録 (dict 以外・壊れた日付・bool/int 以外の slot) は例外を出さず skipped に
+          数える (report.py collect() と同じ思想: 1 レコードの壊れで全体を止めない)
+
+        同一月の再実行は同じスライスになるため重複記録は自然に潰れる (set 集計)。
+        """
+        _validate_repo_id(repo_id)
+        _validate_cycle(cycle)
+        if today is None:
+            today = datetime.datetime.now(datetime.timezone.utc).date()
+        else:
+            today = parse_date(today)
+        last_sequence = month_sequence(today)
+        first_sequence = last_sequence - (cycle - 1)
+
+        seen = set()
+        skipped = {"malformed": 0, "future": 0, "out_of_window": 0, "inconsistent": 0}
+        total = 0
+        for record in records or []:
+            total += 1
+            if not isinstance(record, dict):
+                skipped["malformed"] += 1
+                continue
+            try:
+                d = parse_date(record.get("date"))
+            except (TypeError, ValueError):
+                skipped["malformed"] += 1
+                continue
+            slot = record.get("slot")
+            if d is None or isinstance(slot, bool) or not isinstance(slot, int):
+                skipped["malformed"] += 1
+                continue
+            if d > today:
+                skipped["future"] += 1
+                continue
+            sequence = month_sequence(d)
+            if sequence < first_sequence or sequence > last_sequence:
+                skipped["out_of_window"] += 1
+                continue
+            if slot != slot_for_date(repo_id, d, cycle):
+                skipped["inconsistent"] += 1
+                continue
+            seen.add(slot)
+
+        missing = [n for n in range(1, cycle + 1) if n not in seen]
+        fraction = len(seen) / cycle
+        return {
+            "repo": repo_id,
+            "cycle": cycle,
+            "window_first_month": _format_month(first_sequence),
+            "window_last_month": _format_month(last_sequence),
+            "slices_seen": sorted(seen),
+            "missing_slices": missing,
+            "coverage_fraction": fraction,
+            "coverage_percent": round(fraction * 100, 1),
+            "records_total": total,
+            "skipped": skipped,
+        }
+
+
+    def _format_month(sequence):
+        year, month0 = divmod(sequence, 12)
+        return "{:04d}-{:02d}".format(year, month0 + 1)
+
+
+    def main(argv=None):
+        """CLI。integrity CronJob の initContainer から SUBSET=... 行を機械消費する想定。
+
+        restic/restic イメージには python が無いため、実行側は python イメージの
+        initContainer でこの CLI を叩いて共有 emptyDir に書かせる (vaultwarden の
+        sqlite-snapshot initContainer と同じ構図)。
+        """
+        parser = argparse.ArgumentParser(
+            prog="restic_integrity",
+            description="restic --read-data-subset の回転スライスを選ぶ (P-0187)")
+        sub = parser.add_subparsers(dest="command", required=True)
+        p_plan = sub.add_parser("plan", help="指定 repo の今月のスライスを選んで表示する")
+        p_plan.add_argument("--repo", required=True, help="リポジトリ名 (例: vaultwarden)")
+        p_plan.add_argument("--date", default=None, help="YYYY-MM-DD (UTC)。既定は今日")
+        p_plan.add_argument("--cycle", type=int, default=DEFAULT_CYCLE_MONTHS)
+        args = parser.parse_args(argv)
+
+        result = plan(args.repo, date=args.date, cycle=args.cycle)
+        for key in ("repo", "date", "cycle", "offset", "slot", "subset"):
+            print("{}={}".format(key.upper(), result[key]))
+        return 0
+
+
+    if __name__ == "__main__":
+        raise SystemExit(main())
+  # 実行ドライバ。上の restic_integrity を import して使う
+  run_integrity.py: |
+    """restic 回転読み integrity 検査の実行ドライバ (P-0187)。
+
+    各 ns の restic-integrity CronJob の本体コンテナ (python:3.14-alpine) で動く。
+    restic/restic イメージには python が無く、逆に python イメージに restic は無い。
+    restic は静的リンクの Go バイナリなので、initContainer が emptyDir へ退避させた
+    バイナリを subprocess で呼ぶ (kubectl を initContainer で持ち出すのと同じ定石)。
+    K8s API への書き込みを busybox wget で行う道は無い (wget は PUT を送れない)。
+
+    流れ:
+      1. 正本 ops/tools/restic_integrity.py (同一内容を同梱、drift は
+         ops/check_restic_integrity_script_sync.py が CI で検査) の plan() で
+         今月のスライスを決める。(repo, UTC 日付) だけの決定論的関数なので、
+         同じ日の再実行・リトライは同じスライスになる
+      2. `restic snapshots` が失敗したら未初期化扱いで skip する。retention CronJob
+         と同じ既存型 (credential 違いやネットワーク障害も未初期化と同じ扱いになる
+         既存のトレードオフを引き継ぐ)。記録は書かない
+      3. `restic check --read-data-subset=N/T` を走らせる (metadata 全検査 + pack
+         集合の 1 スライスを実読み)。非ゼロ終了は握り潰さず Job ごと落とす —
+         ArgoCD appTree health → briefing/incident の既存経路に乗る
+      4. 成功時のみ実行記録 {date, slot, subset} を専用 ConfigMap へ書き、直近
+         cycle か月の累積カバー率を coverage_from_records() で出して一緒に載せる。
+         Job 履歴は successfulJobsHistoryLimit で消えるため、この ConfigMap が唯一の
+         長期記憶 (download-budget と同じ発想)。壊れた既存帳簿は新規分だけで再出発
+
+    標準ライブラリのみで動く。上の純関数群は YAML 埋め込みから AST 抽出して
+    ops/tests/test_restic_integrity_manifest.py が固定する (import 副作用を持つ
+    実行部と分かれているのは test_download_ledger_script.py 流儀)。
+    """
+
+    import datetime
+    import json
+    import os
+    import re
+    import ssl
+    import subprocess
+    import sys
+    import urllib.error
+    import urllib.request
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import restic_integrity
+
+    # 帳簿の肥大化止め。月次 cycle=3 なら窓に必要な記録は 3 件。運用変更や収集断で
+    # 耐えるよう広めの上限。古いものは merge のあとに落とす
+    MAX_RECORDS = 120
+
+    SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+    K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
+    K8S_PORT = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+    K8S_BASE = "https://{}:{}".format(K8S_HOST, K8S_PORT)
+
+
+    def parse_packs_read(output):
+        """restic check の出力から読んだ pack 数を拾う。見つからなければ None。
+
+        出力の文言は restic の版やモードで揺れるため正規表現は広め (数字 + pack)。
+        複数ヒット時は最後 (サマリ側) を採る。取れなくても失敗にしない — 記録の
+        必須要素は date/slot であり、pack 数は付随情報 (集計は date/slot だけ
+        で行われる)
+        """
+        if not isinstance(output, str):
+            return None
+        matches = re.findall(r"(\d+)\s+packs?\b", output)
+        if not matches:
+            return None
+        return int(matches[-1])
+
+
+    def build_record(plan_result, packs_read):
+        """plan() の結果を実行記録 1 件へ。coverage_from_records() が読む必須キーは
+        date と slot。他はトレーサビリティ用の付随情報"""
+        return {
+            "date": plan_result["date"],
+            "slot": plan_result["slot"],
+            "subset": plan_result["subset"],
+            "cycle": plan_result["cycle"],
+            "packs_read": packs_read,
+        }
+
+
+    def parse_existing_payload(raw):
+        """ConfigMap の report.json 文字列を payload dict へ。壊れていたら空から再出発。"""
+        if not isinstance(raw, str):
+            return {}
+        try:
+            payload = json.loads(raw)
+        except ValueError:
+            return {}
+        if not isinstance(payload, dict):
+            return {}
+        return payload
+
+
+    def extract_records(payload):
+        """payload から records を取り出す。非 dict の混入物はここで捨てる —
+        残すと sort や集計で毎回同じ場所に当たって帳簿更新が永久停止する
+        (download_ledger.merge_runs で実証済みの時限爆弾パターン)。"""
+        records = payload.get("records")
+        if not isinstance(records, list):
+            return []
+        return [r for r in records if isinstance(r, dict)]
+
+
+    def merge_records(existing, record):
+        """同一 date の記録は今回分で上書きし、date 順に並べ替える。
+
+        同じ日の再実行は同じ slot を読むことが契約なので、上書きで二重計上しない
+        (冪等)。date 無し・文字列以外の date を持つ既存記録は捨てる
+        (coverage_from_records 側でも malformed 扱いになるため結果は同じ)
+        """
+        by_date = {
+            r["date"]: r
+            for r in existing
+            if isinstance(r, dict) and isinstance(r.get("date"), str) and r["date"]
+        }
+        by_date[record["date"]] = record
+        return [by_date[d] for d in sorted(by_date)]
+
+
+    def trim_records(records, limit=None):
+        """上限超過を古い方から落とす (ConfigMap の肥大化止め)。"""
+        limit = MAX_RECORDS if limit is None else limit
+        return records[-limit:]
+
+
+    def build_payload(namespace, repo_id, records, coverage, generated_at):
+        """ConfigMap report.json の全体形。records/coverage を ops-health-reporter
+        (#4 で collect 実装予定) が読む。last_check は人間が一目見る用の利便。"""
+        last = records[-1] if records else None
+        return {
+            "generated_at": generated_at,
+            "namespace": namespace,
+            "repo": repo_id,
+            "records": records,
+            "coverage": coverage,
+            "last_check": last,
+        }
+
+
+    # --- ここより下はクラスタ内でのみ意味を持つ実行部 (SA token 読みなど) ---
+
+
+    def read_sa_file(name):
+        with open(os.path.join(SA_DIR, name)) as f:
+            return f.read().strip()
+
+
+    def k8s_request(method, path, body=None):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(
+            K8S_BASE + path,
+            data=data,
+            method=method,
+            headers={
+                "Authorization": "Bearer " + read_sa_file("token"),
+                "Content-Type": "application/json",
+            },
+        )
+        ctx = ssl.create_default_context(cafile=os.path.join(SA_DIR, "ca.crt"))
+        try:
+            with urllib.request.urlopen(req, context=ctx, timeout=30) as resp:
+                raw = resp.read()
+                return resp.status, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            return e.code, (json.loads(raw) if raw else None)
+
+
+    def get_records_configmap(namespace, name):
+        path = "/api/v1/namespaces/{}/configmaps/{}".format(namespace, name)
+        status, obj = k8s_request("GET", path)
+        if status != 200:
+            # 対象 ConfigMap は manifest で事前作成済み。404 は誰かが消したときで、
+            # create 権限は無いので目立って落ちる (意図どおり。download-budget と同じ)
+            raise RuntimeError(
+                "records ConfigMap の取得に失敗: {} {} (manifest で事前作成済みか?)".format(
+                    status, obj
+                )
+            )
+        return obj
+
+
+    def put_records_configmap(namespace, name, resource_version, data):
+        body = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {
+                "name": name,
+                "namespace": namespace,
+                "resourceVersion": resource_version,
+            },
+            "data": data,
+        }
+        status, resp = k8s_request(
+            "PUT", "/api/v1/namespaces/{}/configmaps/{}".format(namespace, name), body
+        )
+        if status != 200:
+            raise RuntimeError("records ConfigMap の更新に失敗: {} {}".format(status, resp))
+
+
+    def run_restic(restic_bin, args):
+        return subprocess.run([restic_bin] + args, capture_output=True, text=True)
+
+
+    def main():
+        repo = os.environ["INTEGRITY_REPO"]
+        cm_name = os.environ["INTEGRITY_RECORDS_CONFIGMAP"]
+        cycle = int(
+            os.environ.get("INTEGRITY_CYCLE", str(restic_integrity.DEFAULT_CYCLE_MONTHS))
+        )
+        restic_bin = os.environ.get("RESTIC_BIN", "/share/restic")
+
+        plan_result = restic_integrity.plan(repo, cycle=cycle)
+        print(
+            "integrity plan: repo={} date={} slot={} subset={} cycle={}".format(
+                plan_result["repo"], plan_result["date"], plan_result["slot"],
+                plan_result["subset"], plan_result["cycle"],
+            )
+        )
+
+        # retention と同じ既存型: snapshots 失敗 = 未初期化扱いで skip
+        snap = run_restic(restic_bin, ["snapshots"])
+        if snap.returncode != 0:
+            print("repository not initialized yet, skipping (rc={})".format(snap.returncode))
+            return
+
+        check = run_restic(
+            restic_bin, ["check", "--read-data-subset=" + plan_result["subset"]]
+        )
+        sys.stdout.write(check.stdout)
+        sys.stderr.write(check.stderr)
+        if check.returncode != 0:
+            raise SystemExit(
+                "restic check failed: rc={} subset={}".format(
+                    check.returncode, plan_result["subset"]
+                )
+            )
+
+        now = datetime.datetime.now(datetime.timezone.utc)
+        generated_at = now.strftime("%Y-%m-%dT%H:%M:%SZ")
+        record = build_record(plan_result, parse_packs_read(check.stdout + check.stderr))
+        namespace = read_sa_file("namespace")
+
+        existing = get_records_configmap(namespace, cm_name)
+        payload = parse_existing_payload(existing.get("data", {}).get("report.json"))
+        records = trim_records(merge_records(extract_records(payload), record))
+        coverage = restic_integrity.coverage_from_records(
+            repo, records, today=plan_result["date"], cycle=cycle
+        )
+        put_records_configmap(
+            namespace,
+            cm_name,
+            existing["metadata"]["resourceVersion"],
+            {"report.json": json.dumps(
+                build_payload(namespace, repo, records, coverage, generated_at),
+                ensure_ascii=False)},
+        )
+        print(
+            "integrity ok: subset={} packs_read={} coverage={}% seen={} missing={}".format(
+                plan_result["subset"], record["packs_read"], coverage["coverage_percent"],
+                coverage["slices_seen"], coverage["missing_slices"],
+            )
+        )
+
+
+    if __name__ == "__main__":
+        main()
+---
+# 成功記録の産出先。中身は restic-integrity だけが書く (update に resourceNames 制約。
+# create は許さず、消されたら 403 で目立って落ちる — download-budget と同じ方針)。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vaultwarden-integrity-records
+  namespace: vaultwarden
+data: {}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: restic-integrity
+  namespace: vaultwarden
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: restic-integrity
+  namespace: vaultwarden
+rules:
+  # 成功記録の ConfigMap への get/update のみ。create を許さず対象は manifest で
+  # 事前作成する (download-ledger と同じ方針。消されたら 403 で目立って落ちる)。
+  # resourceNames の外は一切触れない
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["vaultwarden-integrity-records"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: restic-integrity
+  namespace: vaultwarden
+subjects:
+  - kind: ServiceAccount
+    name: restic-integrity
+    namespace: vaultwarden
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: restic-integrity
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: vaultwarden-restic-integrity
+  namespace: vaultwarden
+spec:
+  # 毎月 2 日 14:20 JST (= 05:20 UTC)。上の分散表参照
+  schedule: "20 14 2 * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          # 成功記録の ConfigMap update のため SA token が必要。既存 backup/retention
+          # CronJob は automountServiceAccountToken: false だが、こちらは API 書き込みが
+          # 仕事の一部なので例外 (権限は上の Role で対象 ConfigMap の get/update だけ)
+          serviceAccountName: restic-integrity
+          restartPolicy: Never
+          initContainers:
+            - name: stage-restic
+              image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
+              # restic イメージに python は無く、python イメージに restic は無い。
+              # restic は静的リンクの Go バイナリなので emptyDir へ退避させて本体
+              # コンテナから呼ぶ (kubectl を initContainer で持ち出すのと同じ定石)
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  cp "$(command -v restic)" /share/restic
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 300m
+                  memory: 128Mi
+              volumeMounts:
+                - name: share
+                  mountPath: /share
+          containers:
+            - name: integrity
+              image: python:3.14-alpine
+              terminationMessagePolicy: FallbackToLogsOnError
+              command: ["python", "/scripts/run_integrity.py"]
+              env:
+                - name: INTEGRITY_REPO
+                  value: vaultwarden
+                # 正本の DEFAULT_CYCLE_MONTHS と同じ値だが、ここでは明示する
+                # (モジュール側の既定値変更が意図せず効かないように)
+                - name: INTEGRITY_CYCLE
+                  value: "3"
+                - name: INTEGRITY_RECORDS_CONFIGMAP
+                  value: vaultwarden-integrity-records
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+                # credential は既存 backup 用 append-only 鍵 Secret (check は読み取り
+                # のみなので削除権限を持たないこの鍵で足りる。PROJECT.md 設計方針)
+                - name: RESTIC_B2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: vaultwarden-restic-backup-credentials
+                      key: RESTIC_B2_BUCKET
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):vaultwarden"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: vaultwarden-restic-backup-credentials
+                      key: RESTIC_PASSWORD
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: vaultwarden-restic-backup-credentials
+                      key: B2_ACCOUNT_ID
+                - name: B2_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: vaultwarden-restic-backup-credentials
+                      key: B2_ACCOUNT_KEY
+              # B2 からの読み取りのみで PVC には触れないため capability は不要
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              # memory limits は付けない (restic 子プロセスを含む実使用量の実測が無い。
+              # 既存 restic backup CronJob 群と同型)
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: share
+                  mountPath: /share
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: restic-integrity-script
+            - name: share
+              emptyDir: {}

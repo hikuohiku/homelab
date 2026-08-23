@@ -20,6 +20,17 @@
 #     と index 再読み。削除量依存で大きく揺れる。2026-08-22 の cap 超過日は土曜夜に
 #     全リポジトリの retention が一斉稼働した日であり、この桁がアカウント合計で
 #     cap を超え得ることと辻褄が合う
+#   - coder-postgres-restic-integrity (P-0187) 1 回 ≈ 132 MiB: restic check
+#     --read-data-subset の index/config 読み (backup 1 回と同桁の 32 MiB) +
+#     データスライス。PVC 実測が「小さい（immich と同程度以下）」(docs/backup.md
+#     T-0066) のため immich 同等の 300 MiB を上限近似し ÷ 3 = 100 MiB。
+#     月次で毎月 10 日に 1 回のみ
+#   - coder-workspace-homes-restic-integrity (P-0187) 1 回 ≈ 1332 MiB: 同上の
+#     index/config 読み + データスライス。workspace 2 件のデータ実測
+#     general 2.973 GiB + test 925 MiB ≈ 約3.9 GiB (docs/backup.md T-0117 手動 Job
+#     実測) ÷ 3 ≈ 1300 MiB。全 integrity 中最大だが retention 1 回分の推定
+#     (512MiB-1GiB) と同桁であり、既存の週次 retention が日常的に通っている規模。
+#     実行日も他 app と分散済み。月次で毎月 14 日に 1 回のみ
 #
 # 既知の限界: 失敗した Job の部分的な消費 (index 読みの後で落ちた等) は数えない。
 # pods/log を読めば精度は上げられるが T-0110 で閉じた経路を広げないため、
@@ -358,7 +369,7 @@ spec:
               command: ["python", "/scripts/download_ledger.py"]
               env:
                 - name: LEDGER_RULES
-                  value: "coder-restic-backup:33554432,coder-restic-retention:536870912,coder-workspace-home-backup:33554432,coder-workspace-home-backup-retention:536870912"
+                  value: "coder-restic-backup:33554432,coder-restic-retention:536870912,coder-workspace-home-backup:33554432,coder-workspace-home-backup-retention:536870912,coder-postgres-restic-integrity:138412032,coder-workspace-homes-restic-integrity:1396703232"
                 - name: PYTHONDONTWRITEBYTECODE
                   value: "1"
               # PVC も他 namespace も触らないため特権は不要。root にもならない
