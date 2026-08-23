@@ -138,3 +138,61 @@ verify 3 項目とも green のはず (wrapper 実測を優先)。次はレビ�
 (戻り先は常に「今日の新規インストール」)。(3) 手順 A の tar パス `/var/lib/syncthing` は依然要確認
 (人間が preflight grep で確かめる形に逃がした)。罠はセッション 1 引き継ぎ: `/tmp/opencode` 書けない、
 ruff 無し (py_compile/sh -n 代用)、一時ファイルは mktemp。
+
+## セッション 3 — 2026-08-23: レビュー指摘の解消 — exercise cleanup の実機必敗バグを修正
+
+### やったこと
+
+レビュー指摘 (exercise の後始末が実機で必ず失敗し最終ゲートが永久に合格しない) の解消:
+
+1. **再現テストを先に追加** (`StFolderMkdirApi`): RecordingApi を継承し、`POST /rest/db/scan`
+   受信時に `local_dir/.stfolder` を mkdir する fake (本物は初回 scan で .stfolder を掘る。
+   素の fake はファイルシステムに触れないためこのバグを捉えられなかった)。
+   現行コードで回すと 2 テストとも exercise-cleanup=unknown で red — 指摘どおり再現
+2. **修正**: run_exercise 内 cleanup() の `marker.unlink() + local_dir.rmdir()` を
+   `shutil.rmtree(local_dir)` に置換 (stdlib、制約違反なし)。detail 文言も
+   「ダミーディレクトリを削除 (.stfolder 含む)」に変更。red → green を確認
+3. **テスト 2 本追加** (37→39):
+   - happy path で .stfolder 掘られても全体合格・ディレクトリ跡形なく消える
+     (`stfolder_created` フラグの assert で「再現条件が成立していた」ことを保証 — 空振り防止)
+   - rescan タイムアウト (exit 1) の経路でも .stfolder ごと消えて cleanup は PASS
+4. **docs/syncthing-migration.md 更新 2 箇所**: 手順 C の合格条件に「.stfolder も含めて丸ごと消す」を追記。
+   読み方表の exercise-* 行は「cleanup UNKNOWN → GUI から手動削除」という誤誘導を修正 —
+   フォルダ登録の DELETE 自体は成功しているので、「folder 削除に失敗」という detail のときだけ
+   GUI からの手動削除、「ダミーディレクトリ削除に失敗」なら残骸確認のみ、という切替に書き換えた
+
+### verify 自己実測
+
+```
+$ test -f ops/tools/syncthing_acceptance.py                                          # rc=0
+$ python3 -m unittest ops.tests.test_syncthing_acceptance     # Ran 39 tests ... OK
+$ test -f docs/syncthing-migration.md && grep -q 'LXC 101' docs/syncthing-migration.md  # rc=0
+$ python3 -m unittest discover -s ops/tests -t .              # Ran 281 tests ... OK (CI 相当)
+```
+
+### 分かったこと / 実測
+
+1. 指摘の再現手順どおり、scan 受信時に .stfolder を掘る fake で run_exercise を回すと
+   全項目 pass に対し exercise-cleanup のみ unknown ([Errno 39] Directory not empty)、
+   exit code=1。rmtree 化で解消
+2. cleanup の UNKNOWN 判定は「folder 登録の DELETE 失敗」と「ローカルディレクトリ削除の
+   失敗」を 1 項目に集約している。今回の修正で後者はほぼ起きなくなる (残るのは権限異常のみ)
+   ので、今後 cleanup が UNKNOWN なら DELETE 側の失敗が第一疑い。docs の対処表にも反映済み
+3. rmtree は marker.unlink() の役割も吸収する (.stfolder 以外に何が増えても消える)。
+   一方「local_dir が最初から無い」ケースは FileNotFoundError → 従来同様 UNKNOWN 扱い
+   (挙動を変えないようにした)
+
+### 発見 (スコープ外)
+
+- なし (指摘範囲のみ修正)。台本 YAML の実機空回し未実施は前セッションからの持ち越しで
+  変わらず — レビューで次に突かれるとすればここ
+
+### 次のセッションへの一言
+
+レビュー指摘 1 点は解消済み (red→green 実測、39 テスト)。verify 3 項目は green のはず
+(wrapper 実測を優先)。未確定の持ち越し: (1) 台本 YAML (migrate Pod / acceptance Job) の
+実機空回しがまだ — 合成環境での往復試験と構文検査 (sh -n, PyYAML safe_load) のみ。
+(2) 手順 A の tar パス `/var/lib/syncthing` は要確認のまま (人間の preflight grep に逃がしている)。
+罠: `/tmp/opencode` は書けない (Permission denied)、ruff 無し (py_compile 代用)、
+一時ファイルは mktemp。RecordingApi を継承した fake を作るときは request() の
+オーバーライドで super() を必ず呼ぶこと (calls 記録が途切れる)。
