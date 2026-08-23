@@ -4264,7 +4264,7 @@
     {
       "id": "P-0193",
       "title": "人間が見る画面は、壊れたことを画面が報告しない — headless chromium で Mission Control を毎日実際に描画させ、タイルの嘘 (矛盾シグナル・白画面・古さ) を器が先に見つける常設検眼にする",
-      "state": "merging",
+      "state": "soaking",
       "branch": "project/p-0193",
       "irreversible": false,
       "capabilities": [],
@@ -4336,7 +4336,16 @@
       "review_requested_at": "2026-08-23T14:40:51Z",
       "review_retries": 0,
       "review_cycles": 2,
-      "merging_since": "2026-08-23T14:42:00Z"
+      "merging_since": "2026-08-23T14:42:00Z",
+      "soak": {
+        "until": "2026-08-23T15:14:24Z",
+        "baseline_unhealthy": [
+          "coder",
+          "immich",
+          "syncthing",
+          "vaultwarden"
+        ]
+      }
     },
     {
       "id": "P-0196",
