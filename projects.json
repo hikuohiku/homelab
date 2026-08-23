@@ -3548,11 +3548,55 @@
       "spawn_count": 1,
       "job": "runner-p-0161-a1",
       "drift_count": 0
+    },
+    {
+      "id": "P-0163",
+      "title": "母艦に残った最後のデータの引っ越し台本を完成させる — syncthing 移行の受け入れ検証を器が持ち、人間の残作業を 1 コマンドまで削る",
+      "state": "proposed",
+      "branch": "project/p-0163",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "test -f ops/tools/syncthing_acceptance.py",
+        "python3 -m unittest ops.tests.test_syncthing_acceptance",
+        "test -f docs/syncthing-migration.md && grep -q 'LXC 101' docs/syncthing-migration.md"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0164",
+      "title": "癒し手が死んでいる間、デプロイ経路はどうなるか — ArgoCD を意図的に止めて Git 先行状態の傷を実測し、復帰時の追いつき時間を秒で出す",
+      "state": "proposed",
+      "branch": "project/p-0164",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "test -f ops/projects/logs/P-0164/report.json && python3 -c \"import json;d=json.load(open('ops/projects/logs/P-0164/report.json'));assert 'catchup_seconds' in d\"",
+        "python3 -m unittest ops.tests.test_deploy_continuity",
+        "python3 ops/tools/deploy_continuity.py --dry-run"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T05:43:46Z",
-  "last_activity_at": "2026-08-23T06:11:40Z",
+  "last_curriculum_at": "2026-08-23T06:12:51Z",
+  "last_activity_at": "2026-08-23T06:12:51Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
