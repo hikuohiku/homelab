@@ -2,6 +2,54 @@
 
 ## セッション記録
 
+### worker #5 (2026-08-23) — 返信なしの 5 セッション目。「依頼以降の全コメント走査」を初めて実行し P-0143 依頼のみを再確認。別経路 (ブランチ / PR / main) も不動で、待ち以外なし
+
+**やったこと**:
+
+- **依頼コメント 5384140771 以降のコメントを全ページ走査して返信を探す** (セッション4 引き継ぎ
+  の判定方法を初適用): `?per_page=100&page=1..2` で取得できたのは **179 件**、依頼以降は
+  **1 件のみ = P-0143 worker の収集依頼自己投稿 (5384240492)** で変化なし。本プロジェクトへの
+  返信はゼロ。返信判定材料 (投稿者 hikuohiku + 04:09:12Z 以降 + 表 / keyExpiryDisabled / expires)
+  に合致するコメントは無しを実測
+- 依頼コメント本体も再確認: **残置・未編集** (`created_at == updated_at` 実測、
+  fetch_devices.py 手順と curl フォールバックの両方が本文に残存) → CHARTER §6 の確認事項 OK
+- 別経路の再実測: `git ls-remote` で `project/p-0144` は 47151167 (= 本セッション checkout と同一 =
+  外部からは不動)、main は分岐点 (8c5cbd7d) のまま。open PR は #512 (P-0118) のみ。
+  実測データが PR / ブランチ / main 経由で届いていないことを確認
+- サンドボックス credential 不在を 5 セッション目として再実測: env の TAILSCALE_* は 0 件、
+  tailscale / doppler / direnv / sops / just バイナリ無し、checkout に `.envrc` 無し。
+  自力実測の道は引き続き閉じている
+- unit test 12 件を再実測 → **全 green** (`python3 -m unittest test_fetch_devices` は
+  ops/projects/logs/P-0144/ をカレントにする必要あり。ルートからだと import error になるだけなので
+  失敗と誤認しないこと)。受入 verify を自分でも再実行: #1 rc=1 / #2 rc=0 / #3 rc=2 — **変化なし**
+
+**verify 現状 (自分で実測)**: #1 failing (FileNotFoundError、実データ待ち) / **#2 GREEN (rc=0)** /
+#3 failing (同上)。変化なし。
+
+**分かったこと / 罠**:
+
+- GitHub API の comment JSON には `edited_at` キーが常在しない (未編集だと欠ける)。
+  「編集されたか」の判定は `created_at == updated_at` で行うのが安全 (本セッションで KeyError 実測)
+- 待ち状態の経過観察に必要な作業は本セッションで 10 分足らず。「依頼以降の走査」方式なら
+  最終コメント比較より安全かつ同程度に安価なので、次セッション以降もこれでよい
+
+**次への引き継ぎ (次のセッションのあなたはここから)**:
+
+1. やることはセッション4 引き継ぎのまま変更なし:
+   ① 依頼コメント 5384140771 以降の全コメント走査 (`?per_page=100&page=1..N`、空バッチで break) →
+   返信があれば mktemp 保存 → `--from-md` / `--from-json` (+ `--fetched-at` あれば) → 復元 →
+   verify#1/#3 実行。② 復元後は devices.md の印を目視確認し、node01 名義デバイスの有無で
+   docs/tailscale-recovery.md ケース3を確定させる。③ 返っていなければ「依頼残置確認 +
+   credential 不在再実測 + unit test 再実行 + PROGRESS 記録」で十分 (scope 拡大しない)
+2. 復元時の注意 (セッション3 実測の繰り越し): コメント本文は fence 有無どちらでも
+   `--from-md` にそのまま渡せる。devices.json への出力先指定を忘れないこと
+   (`-o ops/projects/logs/P-0144/devices.json`)
+
+**発見 (スコープ外。curriculum が拾う用)**:
+
+- (新規なし。セッション1〜4 の繰り越し: headless worker に MCP 未接続 /
+  tailnet 監視の常設化は別論点 / #56 が横断依頼窓口化しつつあり返信判定の差分照合機構が欲しい)
+
 ### worker #4 (2026-08-23) — 返信なしの 4 セッション目。依頼コメント以降に増えたのは P-0143 の依頼のみ = 「#56 の末尾に他プロジェクトの依頼が積まれる」状態を初実測。待ち以外にやることは無しを全経路で確認
 
 **やったこと**:
