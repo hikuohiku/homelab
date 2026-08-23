@@ -5206,11 +5206,55 @@
         "broken": []
       },
       "stalled_reason": "adopt_gate_some_pass"
+    },
+    {
+      "id": "P-0242",
+      "title": "producer だけで止まっている神経を consumer で閉じる — JetStream に流れ始めた人間の声を受け取る最後の区間を、設計 Phase 1 どおり今日配線する",
+      "state": "proposed",
+      "branch": "project/p-0242",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "python3 -m unittest ops.tests.test_event_consumer",
+        "python3 ops/tools/event_probe.py --subject events.raw.telegram.dm --text '止めて (合成疎通テスト)' --expect-note-within-seconds 120 --report /tmp/opencode/event-probe.json && python3 -c \"import json; d=json.load(open('/tmp/opencode/event-probe.json')); assert d['note_arrived'] and d['latency_seconds'] < 120\"",
+        "python3 -c \"import json,subprocess; out=subprocess.run(['git','show','origin/ops-feedback:notes.json'],capture_output=True,text=True); import sys; sys.exit(0 if 'event_probe' in json.dumps(json.loads(out.stdout)) else 1)\""
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2500000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0243",
+      "title": "採択されたのに届いていない錠前を今日鋳造する — private-data Job プロファイルを NetworkPolicy で本番 namespace に敷き、偽メールの持ち出しが実際に拒否されることを in-cluster で証明して段階 3 台帳の第 1 基準を pass に変える",
+      "state": "proposed",
+      "branch": "project/p-0243",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": true,
+      "verify": [
+        "test -f ops/profiles/private-data/networkpolicy.yaml",
+        "python3 ops/profiles/private-data/exfil_drill.py --report /tmp/opencode/exfil-drill.json && python3 -c \"import json; d=json.load(open('/tmp/opencode/exfil-drill.json')); assert d['labeled_blocked'] is True and d['unlabeled_allowed'] is True\"",
+        "python3 -c \"import json; d=json.load(open('ops/stage3/readiness.json')); c=[x for x in d['criteria'] if 'trifecta' in str(x.get('id',''))+str(x.get('name',''))]; assert c and c[0].get('pass') is True, 'criterion 1 still false'\""
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T21:19:10Z",
-  "last_activity_at": "2026-08-23T21:46:25Z",
+  "last_curriculum_at": "2026-08-23T21:47:38Z",
+  "last_activity_at": "2026-08-23T21:47:38Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
