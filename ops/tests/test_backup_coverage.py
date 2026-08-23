@@ -48,6 +48,12 @@ EXEMPT_PVCS = {
         "immich 内蔵の日次 DB ダンプが immich-library PVC 配下に出力され、そちらが "
         "immich-restic-backup の対象。DB 本体を別途取る必要が無い (docs/backup.md に明記)"
     ),
+    ("nats", "nats-jetstream"): (
+        "JetStream の store。未消費イベント (人間の書き置き・health の遷移) しか入らず、"
+        "消費済みのものは archive として ops-feedback ブランチに残る。消えて失われるのは "
+        "「まだ誰も読んでいない数分〜数十分ぶんのイベント」だけで、失うと困る実データは"
+        "持たない。イベントを一次資料として使う運用に変えた時点で backup を足すこと"
+    ),
     ("autopilot-core", "autopilot-core-state"): (
         "常駐コアの opencode セッション storage。消えて失われるのは会話の文脈だけで、"
         "所有者の発言の原本は ops-feedback ブランチに残る。コアは新しいセッションを"
