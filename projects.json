@@ -3228,7 +3228,7 @@
     {
       "id": "P-0145",
       "title": "#49 の前科がある場所から凍結を解かす — vaultwarden / coder の追従滞留を 1 回の sweep で解消し、inventory に最終確認日を刻む (P-0108 の改題)",
-      "state": "merging",
+      "state": "soaking",
       "branch": "project/p-0145",
       "irreversible": false,
       "capabilities": [],
@@ -3289,7 +3289,16 @@
       ],
       "review_requested_at": "2026-08-23T05:01:50Z",
       "review_retries": 0,
-      "merging_since": "2026-08-23T05:07:54Z"
+      "merging_since": "2026-08-23T05:07:54Z",
+      "soak": {
+        "until": "2026-08-23T05:40:19Z",
+        "baseline_unhealthy": [
+          "coder",
+          "immich",
+          "syncthing",
+          "vaultwarden"
+        ]
+      }
     },
     {
       "id": "P-0147",
