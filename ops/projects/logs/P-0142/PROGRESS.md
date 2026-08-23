@@ -600,3 +600,55 @@ verify 再実測 + 上記確認 + 最小ログ追記で終えてよい。
 本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
 リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
 docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
+
+
+### 2026-08-23 セッション18 — セッション17 手順どおりの兆候確認 (main 零新着・動いたブランチ 5 本すべて無関係。p-0143/p-0144 が動いた。issue #56 は増減ゼロ)
+
+**やったこと**: spec DoD の追加実装は無し。セッション5〜17 と同じく verify 再実測 +
+外部シグナル確認だけをした。
+
+1. **verify 再実測**: #1 rc=1 / #2 rc=0 / #3 rc=2。セッション3 以降ずっと同一
+   (#1/#3 は verdict=keep ゆえ意図通り failing、#2 green)
+2. **観測環境の再実測** (18 回目の独立実測、結果同じ): `env` の proxmox/pve/tailscale 系無し
+   (rc=1) / `tailscale` `pvesh` `qm` `gh` CLI すべて absent (rc=1)
+3. **origin/main の新着確認**: `git fetch --prune` 後、`8c5cbd7d..origin/main` の commit は
+   **ゼロ**。動いたブランチ 5 本を各々実測 (判定はすべて diff 本文側で grep -c):
+   - `ops-state` (aa1eacee..897f7985): audit.jsonl / heartbeat.json / metrics.jsonl /
+     outbox.jsonl / projects.json のみ。両判定 **0** → 無関係
+   - `project/p-0115` (67782a92..31bb94bb): 自ログ PROGRESS.md のみ。両判定 **0**
+     → 無関係
+   - `project/p-0116` (8a4edbcf..87fd3410): 自ログ PROGRESS.md のみ。両判定 **0**
+     → 無関係
+   - `project/p-0143` (7e22fdf1..e5211068): 自ログ PROGRESS.md + docs/coder-idle-policy.md
+     新規。追加行の backup/バックアップ/PBS/112 言及 **0** を実測 → 無関係
+   - `project/p-0144` (1bc86ae7..d4c68d3b): 自ログ PROGRESS.md + docs/tailscale-recovery.md
+     新規 + fetch_devices.py/test_fetch_devices.py (#56 の自依頼を自ブランチで回答する形)。
+     追加行の backup/バックアップ/PBS/112 言及 **0** を実測 → 無関係。
+     なお p-0139 (a86d5bae) / ops-health-report (1fc66b50) は不動を実測。
+     新ブランチの追加は無し
+4. **issue #56 を GitHub REST API で実測**: page ごとに個別 json.loads で集計した結果
+   **合計 178 件・unique id 178・max id 5384140771 = セッション17 基準から増減ゼロ**。
+   新着が無いため本文精読は発生せず。条件 A/B の実施報告は未着のまま
+
+→ verdict は `keep` のまま、inventory への反映対象なし。docs/pbs-retirement.md は書かない。
+
+**次のセッションへの一言**: やり方はセッション5〜18 と同一。main 比較基準は引き続き
+`8c5cbd7d..origin/main` (今回は零新着)。動いたブランチは「docs/・terraform/・P-0142 logs への
+diff 本文パス」と「PBS/`qm shutdown 112` 言及」の 2 点を diff 本文側で grep -c すればよく、
+中身の精読は不要。docs/ 配下に新規ファイルがあっても backup/PBS 関連語の追加行 grep が
+ゼロなら無関係と判定してよい (p-0143/p-0144 で実証済み)。今回のブランチ基準:
+ops-state 897f7985 / p-0115 31bb94bb / p-0116 87fd3410 / p-0143 e5211068 /
+p-0144 d4c68d3b / p-0139 a86d5bae (不動) / ops-health-report 1fc66b50 (不動)。
+**罠** (実測済み、繰り返さないこと): (a) log メッセージ内の「112」「P-0142」
+「#56」は誤マッチするので本文側判定。(b) `grep | head` の rc は当てにならない。(c) issue #56
+のコメント確認は webfetch 不可 — REST API を使い page ごとに個別 `json.loads` する (連結
+パースは壊れる。id も数えると改変検出に強い)。(d) `/tmp/opencode` は書き込み不可 — 一時
+ファイルは必ず `mktemp -d` で作ったディレクトリに置くこと。(e) **issue #56 は他プロジェクト
+worker の依頼コメントで増えることがある** (セッション17 実測)。コメント総数の増減だけで
+発火判断せず、新着分の本文を必ず精読して「条件 A/B の実施報告 or docs/backup.md 更新 or
+inventory 反映依頼」かを判定すること (今回の基準: issue #56 178 件 / 最終
+2026-08-23T04:09:12Z / 最終 id 5384140771)。
+verify 再実測 + 上記確認 + 最小ログ追記で終えてよい。
+本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
+リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
+docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
