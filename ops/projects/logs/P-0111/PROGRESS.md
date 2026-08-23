@@ -31,8 +31,9 @@ append-only 鍵でも full-permission 鍵でも同一 403 = **アカウントレ
 - ExternalSecret / Doppler 鍵は完全正常。3 ns の該当 6 本すべて SecretSynced、
   authorize 200、capabilities は manifest 記載どおり (`readFiles` あり、deleteFiles なし)、
   namePrefix null、期限 null。「鍵が登録されれば自然解消」は最初から原因を外していた。
-- **「16 日間 Degraded」は誤観測だった。** history jsonl 実測: Degraded は 08-10 夜と
-  08-22 夜のみ。08-11〜08-21 は 10 日間終日 Healthy (vaultwarden 含む)。
+- **「16 日間 Degraded」は誤観測だった。** history jsonl 実測: Degraded は 08-10 夜〜
+  翌 08-11 夕方 (17:45Z の成功 run で解消) と 08-22 夜のみ。08-12〜08-21 は終日 Healthy
+  (vaultwarden 含む)。(この行はレビュー指摘により 2026-08-23 に訂正)
   vaultwarden だけ Healthy に見えたのは CronJob スケジュール差 (17:45/18:10/18:40Z) ×
   report 収集タイミングの鏡像で、19:38Z には vaultwarden も Degraded 化。
 - 失敗ログの `Fatal: create key in repository ... failed` は restic リポジトリの
@@ -164,3 +165,42 @@ watch Pod と手動 Job 3 本を削除 (削除後も Healthy 維持を確認) �
 (root_cause.md 存在 / latest.json @2026-08-23T00:30:05Z で coder=immich=Healthy)。
 残作業なし。クラスタ後始末も済み (p0111-* は存在しない)、apps/ には一切触れていない。
 あとは wrapper の再実測とレビューのみ。
+
+
+### セッション 6 (2026-08-23 00:42–00:55Z) — worker (レビュー差戻し解消 — health 履歴の記述を 08-11 の実測に合わせる)
+
+**状況**: verify 全 green・検収済みからのレビュー差戻し。substrate.md 新注記の
+「health 履歴では 2026-08-10 夜と 08-22 夜にだけ Degraded、08-11〜08-21 は終日 Healthy」が
+08-11 の実データと食い違うことが指摘された (08-11 は 48 レポート中 38 が Degraded 含み、
+17:45Z の backup 成功まで回復しない)。root_cause.md の表 08-11 行と PROGRESS.md
+セッション 2 の同系記述も誤り。
+
+**やったこと**: ops-health-report ブランチの history jsonl を 08-08〜08-22 全日分つなぎで
+再実測 (組成集計) → 指摘どおり 3 ファイルを文言のみ訂正:
+substrate.md 注記 (「08-10 夜〜翌 08-11 夕方 (17:45Z の成功 run で解消) と 08-22 夜のみ、
+08-12〜08-21 は終日 Healthy」へ) / root_cause.md 表 08-11 行 (組成を DDD×36, DHD×1,
+HHD×1, HHH×10 に。「前日失败」の誤字も修正) / PROGRESS.md セッション 2 (訂正マーカー付き)。
+verify 再実行・クラスタ操作は指摘により不要 — verify #1 (`test -s`) のみローカル再確認 green。
+
+**分かったこと**:
+
+- **08-11 の回復は 17:45Z を起点に約 1 時間かけて順次起きていた**: DDD×36 → DHD×1
+  (immich だけ回復) → HHD×1 (+coder) → HHH×10。CronJob 定刻差 (17:45/18:10/18:40Z) の
+  鏡像で、「17:45Z の成功で一斉解消」でも「翌日以降」でもない。30 分間隔収集 × 単発遷移行
+  (DHD/HHD 各 1) の読み取りが確定材料。
+- **履歴 jsonl は ops-health-report ブランチにしかない** (作業ブランチには存在しない)。
+  参照は `git fetch origin ops-health-report` + `git show origin/ops-health-report:<path>`
+  (shallow clone の refspec 罠は従来どおり明示 refspec で回避)。
+- 残存する類似記述を全部確認した: root_cause.md の「08-12〜08-21 全員 Healthy」(L113/L138/L159)、
+  「cap 超過日は 08-10 と 08-22 のみ」(L271)、失敗 Job 残骸の削除不要根拠 (L233) は
+  いずれも再実測と整合しており訂正不要だった。
+
+**発見 (スコープ外・curriculum 拾い出し用)**:
+
+- 08-17 だけレポート数が 47 (他の日と 08-08〜09 は 48)。reporter 収集が 1 回分欠けた模様。
+  root_cause.md の表はこの行を「各48」と書いたまま (指摘範囲外なので触れていない)。
+  健全性判定への影響はないが、「レポート数 == 48」を暗黙前提にする解析を書くなら要注意。
+
+**次のセッションへの一言**: レビュー指摘 3 点 (substrate.md / root_cause.md 表 / PROGRESS
+セッション 2) はすべて解消済み。変更は文言のみで、verify #2 の再実行はレビュアーが不要と
+明示しているため未実施 (wrapper の再実測に任せる)。他に直すべきものなし。

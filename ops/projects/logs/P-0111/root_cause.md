@@ -109,7 +109,7 @@ ops-health-report ブランチ `ops/health/history/*.jsonl` の実測 (H=Healthy
 |---|---|---|---|
 | 08-08, 08-09 | 各48 | 全て HHH | 鍵登録前後ですでに Healthy |
 | 08-10 | 48 | HHH×38, DDH×2, DDD×8 | 夕方の backup 失敗で夜だけ Degraded |
-| 08-11 | 48 | DDD×36, ×2, DHH×1, HHH×10 | 日中は前日失败 Job が残存、17:45Z の成功で回復 |
+| 08-11 | 48 | DDD×36, DHD×1, HHD×1, HHH×10 | 日中は前日の失敗 Job が残存、17:45Z の成功 run で回復 (3 本の CronJob 時刻差で約 1 時間かけて順次解消) |
 | 08-12〜08-21 | 各48 | 全て HHH | **10 日間連続で全員 Healthy** |
 | 08-22 | 途中まで | HHH→DDH→DDD | 当日 17:45–19:08Z の失敗で再 Degraded |
 
