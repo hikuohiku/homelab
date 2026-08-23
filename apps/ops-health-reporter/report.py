@@ -21,6 +21,7 @@ import urllib.request
 # cluster 外 (CI・検査スクリプト) が importlib でロードしたときの解決用フォールバック
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import download_budget
+import recovery_probe
 
 SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
 K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
@@ -429,6 +430,55 @@ def collect_dashboard_smoke():
         }
 
 
+# recovery-canary の毎晩の復旧計測 (P-0258) の集約。産出側は namespace
+# recovery-canary の CronJob recovery-canary-probe が、毎晩 canary Deployment
+# (pause 1 本、本体アプリと完全分離) を削除し selfHeal 復帰までの壁時計秒を測って
+# 専用 ConfigMap `recovery-probe` の report.json キーへ書く契約 (download-budget /
+# dashboard-smoke と同じ「産出側が専用 ConfigMap に書き、reporter が読む」分離。
+# ConfigMap 自体は manifest に事前作成しない — dashboard-smoke と同じ selfHeal
+# 競合回避)。パース/要約の純関数は recovery_probe.py (download_budget.py 流儀の
+# 単一ファイルモジュール)
+def collect_recovery_probe():
+    """recovery-canary namespace の recovery-probe ConfigMap を読み、要約を返す。
+
+    毎晩 1 点ずつ積む「ArgoCD が何秒で生き返らせるか」の常時計器。status の意味:
+      ok       最新の夜間実行が復旧を計測できた。last_recovery_seconds (int) を
+               載せる唯一の status
+      fail     産出側が失敗記録を残した (上限時間内に復旧しない等)。秒数は載せず
+               詰まった段階 phase を見せる
+      stale    最終記録が 26h より古い = 装置自身が沈黙
+      no_data  ConfigMap・キーが無い/読めない/記録破損 — 産出側未稼働か壊れた
+
+    未稼働・記録破損は例外にせず no_data で正直に出す (collect_dashboard_smoke と
+    同じ思想)。まず latest.json 上で区別できることが先で、fail/stale の通知への
+    接続は heart 側の別論点 (PROJECT.md「やらないこと」)。
+    """
+    try:
+        data = k8s_get(
+            "/api/v1/namespaces/{}/configmaps/recovery-probe".format(
+                recovery_probe.RECOVERY_PROBE_NAMESPACE
+            )
+        )
+        raw = data.get("data", {}).get("report.json")
+        if not raw:
+            raise KeyError(
+                "configmap recovery-probe に report.json キーが無い"
+                "(産出側がまだ稼働していない)"
+            )
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValueError("report.json が dict でない")
+        return recovery_probe.build_summary(
+            payload, datetime.datetime.now(datetime.timezone.utc)
+        )
+    except Exception as e:  # noqa: BLE001 — 未稼働・破損で他の収集を止めない
+        return {
+            "status": "no_data",
+            "reason": "configmap recovery-probe を読めない",
+            "error": "{}: {}".format(type(e).__name__, e),
+        }
+
+
 # ExternalSecret の spec.refreshInterval は K8s duration 文字列 ("1h" / "30m") で
 # 来るため秒へ換算する (P-0175。数値の API バージョンも一応受ける)
 _DURATION_UNITS = {"s": 1, "m": 60, "h": 3600}
@@ -793,6 +843,7 @@ def main():
         "externalsecrets": collect(collect_externalsecrets),
         "autopilot": collect(collect_autopilot_health),
         "dashboard_smoke": collect(collect_dashboard_smoke),
+        "recovery_probe": collect(collect_recovery_probe),
         "notes": (
             "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 "
             "(pod_metrics/node_metrics)。PVC の実ディスク使用量は namespace ごとの pvc-usage-reporter "
@@ -834,6 +885,19 @@ def main():
              "成功日は記録のみで通知予算を消費しない。readiness probe は HTTP 200 しか見ないため、"
              "この検査だけが「実際に描画したときだけ見える破綻」を拾う。スクリーンショット実体は保存せず "
              "記録しない。"
+             " recovery_probe キーは毎晩の復旧実測 (P-0258)。namespace recovery-canary の "
+             "CronJob recovery-canary-probe が毎晩 03:43 JST 頃に canary Deployment "
+             "(pause コンテナ 1 本。専用 namespace へ完全分離され、本体アプリには影響経路がない) を削除し、"
+             "ArgoCD の自動修復 (selfHeal) で再作成されて Ready に戻るまでの壁時計秒を測って "
+             "専用 ConfigMap recovery-probe へ書く。status は ok / fail (上限 1200 秒以内に復旧せず。"
+             "詰まった段階 phase を載せる) / stale (最終記録が 26h より古い = 装置沈黙) / "
+             "no_data (未稼働・記録破損)。last_recovery_seconds は ok レコードのみに載る int。"
+             "値には ArgoCD 既定の reconciliation 間隔 (~3 分) が乗るが、それ自体が「ループの速さ」なので正しい値 "
+             "(測定器の側を変えない)。"
+             "重要: 毎晩 03:43〜03:47 JST 前後、ArgoCD Application recovery-canary は "
+             "OutOfSync / Progressing / Degraded になる短い窓があるがこれは仕様 (canary を意図的に壊す計測) で、"
+             "異常ではない。applications 全体の Synced/Healthy チェックはこの窓を誤報しないこと。"
+             "fail/stale の通知への接続はまず記録を積んでから次の論点とする。"
         ),
     }
 

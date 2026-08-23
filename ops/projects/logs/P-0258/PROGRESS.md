@@ -132,3 +132,96 @@ test_download_budget.py (importlib 直ロード) か test_report_dashboard_smoke
 + reporter run (:00/:30) で初めて green になるので、実装側の完成宣言は verify 2 まで。
 初回実行で落ちたら pod ログと recovery-probe ConfigMap の error/phase で切り分けること
 (RBAC 漏れなら phase=delete の HTTP 403 に出る)
+
+### セッション 2 (2026-08-23)
+
+**verify 2 を green 化した** (reporter 側 3 点セット + テスト新設)。verify 1 は
+再実測で継続 green、既存テストへの影響ゼロ。
+
+やったこと:
+
+1. **`apps/ops-health-reporter/recovery_probe.py` 新設** — 計測記録のパース/要約の
+   純関数モジュール (download_budget.py 流儀。import 副作用なし、cluster 外から
+   importlib 直ロード可):
+   - `build_summary(payload, now)` → status ok / fail / stale へ判定
+     (no_data は report.py 側 collect が例外を拾って付ける)
+   - `parse_utc` (産出側 iso() 書式のみ厳格受付) / `coerce_seconds`
+     (0 以上の int のみ。bool は int 派生なので明示的に弾く)
+   - 定数: `RECOVERY_PROBE_NAMESPACE = "recovery-canary"` /
+     `STALE_AFTER_S = 26 * 3600` (dashboard-smoke と同じ考え方) / `ERROR_LIMIT = 200`
+2. **report.py**: `import recovery_probe` 追加 +
+   `collect_recovery_probe()` (`/api/v1/namespaces/recovery-canary/configmaps/recovery-probe`
+   を読み build_summary へ。collect_dashboard_smoke と同型) +
+   main() report dict へ `"recovery_probe": collect(collect_recovery_probe)` +
+   notes 文言 (recovery_probe キーの説明 + **「毎晩 03:43〜03:47 JST の
+   OutOfSync/Progressing/Degraded は仕様であり誤報しないこと」の注記を含む**。
+   発見節の懸念はここで解消済み)
+3. **rbac.yaml**: configmaps get の resourceNames に `recovery-probe` 追加 (render 実測:
+   `['pvc-usage-report', 'download-budget', 'dashboard-smoke', 'recovery-probe']`)
+4. **kustomization.yaml**: configMapGenerator files に recovery_probe.py 追加
+   (render 実測: script ConfigMap の keys = download_budget.py / recovery_probe.py / report.py)
+5. **`ops/tests/test_recovery_probe_parse.py` 新設** — 27 テスト。
+   純関数は importlib 直ロード (test_download_budget 流儀)、
+   report.py の collect は AST 抽出 + k8s_get 差し替え
+   (test_report_dashboard_smoke 流儀)。両方の契約を固定
+
+このセッションで固定した集約側の契約細部 (前セッションの契約節を具体化):
+
+- **秒数を載せるのは status=ok のときだけ**。fail には産出側が誤って
+  last_recovery_seconds を持たせても絶対に載せない (捏造ガード。テスト済み)。
+  stale も載せない — 昨晩の数字を今日の状態のように見せないため
+- ok レコードでも seconds が bool / 非整数 / 負値 / 欠損なら ValueError → no_data
+  (「帳簿の壊れ」と「装置の故障」の区別を保つ。_dashboard_smoke_summary と同じ思想)
+- 鮮度最優先: age > STALE_AFTER_S でのみ stale (ちょうど境界は鳴らさず)。
+  stale beats fail (古い失敗記録より沈黙を先に報せる)
+- fail は phase (文字列のみ通す。空/非文字列はキー省略+reason が unknown) と
+  error (200 字切り詰め) を載せる。RBAC 漏れの切り分け (phase=delete + HTTP 403 文面)
+  が latest.json まで届く
+- 要約には tool/project/schema/namespace/deployment 等の定数フィールドを載せ直さない
+  (history jsonl の 1 行膨張止め)
+
+## 分かったこと / 実測 (セッション 2)
+
+- **test_report_dashboard_smoke.py の collect 系 stale テストは潜在フラワ**:
+  fixture の generated_at を NOW 定数 (2026-08-23 03:00 UTC) 基準で作るのに、
+  collect_dashboard_smoke 内部では実壁時計の datetime.now() で鮮度判定している。
+  偶一致 (実行時刻が NOW 近傍) で通っているだけで、暦が進むか朝早く走ると落ちる。
+  **自分のテストでは collect 経路のクロックを凍結して回避した**: AST 抽出の名前空間の
+  `"datetime"` を SimpleNamespace shim に差し替える (freeze_clock 参照)。
+  この発見自体は仕様外なので curriculum 拾い候補
+- shim 差し替えの罠: `datetime.datetime.now(datetime.timezone.utc)` の引数式
+  `datetime.timezone.utc` はグローバル名 `datetime` (shim の外側) から解決されるため、
+  外側にも `.timezone` を生やさないと AttributeError になる (実測 2 回躓いた)
+- **ローカル環境に `kustomize` バイナリが無い**ので `ops/check_manifest_deletions.py`
+  は worker 環境で検証不可 (FileNotFoundError。main checkout でも同一エラー =
+  既存の環境制限)。`kubectl kustomize` なら同等 render の検証ができる
+- CI 相当を全て実測: ops/tests 467 本 (440+27) / ops/heart/tests / ops/runner/tests
+  全部 OK。check_version_sync / check_health_reporter_target / check_doc_commands も
+  通過。check_app_list_sync の drift は前セッション実測の 6 件から増減なし
+
+## verify 自己実測 (セッション 2)
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 再実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse -v` | **green (27 tests OK)** |
+| 3 | `git show origin/ops-health-report:ops/health/latest.json ...` | red (merge 後の初回夜間 run 待ち。実装側ではこれ以上動かせない) |
+
+追加実施: py_compile (report.py / recovery_probe.py) / root render 17 docs YAML parse /
+reporter 単体 render で RBAC・script keys 実物確認 (上記 3./4.) / 全テストスイート green
+
+## 次のセッションへの一言
+
+**実装は完了。残る red は verify 3 のみ**で、merge 後に ArgoCD が apps を sync し
+(1) 初回夜間 run (03:43 JST, CronJob recovery-canary-probe) が recovery-probe
+ConfigMap を書き (2) 次の reporter run (:00/:30 JST) がそれを読んで
+latest.json の recovery_probe.last_recovery_seconds が int になるのを待つだけ。
+人手での確認手順: `kubectl -n recovery-canary get cronjob,pods` → Job ログ →
+`kubectl -n recovery-canary get cm recovery-probe -o jsonpath='{.data.report\.json}'`。
+初回 run で ok=false になったら ConfigMap の phase/error で切り分け
+(phase=delete + 403 なら reporter RBAC ではなく canary 自身の Role 問題。
+wait-recreate なら ArgoCD が recovery-canary Application を sync できていない疑い —
+Application の syncStatus を先に見ること)。stale 判定の実効確認は「26h 以上
+run が無い」状態を作らないとできないので不要。テストを足すときは
+collect 経路のクロック凍結 (freeze_clock) を踏襲すること —
+test_report_dashboard_smoke.py 型の壁時計依存テストは潜在フラワ (上記実測参照)。
