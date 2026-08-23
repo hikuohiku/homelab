@@ -4692,7 +4692,42 @@
         "soft_cap": 2500000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 3
+      "adopt_gate_attempts": 3,
+      "adopt_gate": {
+        "at": "2026-08-23T16:18:31Z",
+        "verify": [
+          {
+            "cmd": "python3 ops/b2/budget.py --check",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-4l00tayu/repo/ops/b2/budget.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "grep -q 'b2/budget.py' .github/workflows/ci.yml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -c \"import sys; sys.exit(0 if __import__('pathlib').Path('docs/backup.md').read_text().count('download cap') >= 2 else 1)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
