@@ -18,6 +18,13 @@
   依頼コメント: [#56 (issuecomment-5384629207)](https://github.com/hikuohiku/homelab/issues/56#issuecomment-5384629207)
   投稿 2026-08-23T06:30:10Z、再読取得で着地確認済み
 
+- worker セッション 3 (2026-08-23): **Secret 未適用を再確定したのみ。待ち継続**。
+  プローブ (実測 6) を実行: delete --ignore-not-found → NP → jobs apply → model Pod 監視
+  → `FailedMount: secret "p0161-mail-fixture" not found` x8 over 108s で未適用と機械確定。
+  issue #56 コメントを API 再読取得し、依頼 (id=5384629207) が**依然最終コメントで
+  返信無し**を確認 → 重複依頼はせず静かに撤収 (`kubectl delete -f` job.yaml →
+  networkpolicy.yaml、残骸 grep 0)。verify 1・2 も本セッションで green 再実測。
+
 ## 実測で分かったこと
 
 1. **NetworkPolicy は Pod 単位で、同一 Pod 内のコンテナを区別できない。** spec dod の
@@ -52,11 +59,18 @@
    (Permission denied)。一時ファイルは mktemp (既存規約どおり)
 9. 罠: writer SA だと `kubectl get all` が rc/hpa の Forbidden で全体エラーに見える。
    リソース型を明示して (`get jobs,pods,pvc,netpol`) 確認すること
+10. issue #56 のコメント一覧を API で取るときは `?per_page=100&page=2` まで要る
+    (全 ~180 件。page 1 だけだと古い順の先頭 100 件しか見えず「返信が来ていない」と
+    誤読しかねない)。`gh` CLI はこのサンドボックスに無い (憲章 §5.2 実測どおり) ので
+    `curl -H "Authorization: Bearer $AUTOPILOT_GITHUB_TOKEN"` の GET で読む
+11. 罠 (セッション 3 で再踏み): `/tmp/opencode` 直書きは Permission denied。
+    curl -o /tmp/opencode/... も同様に落ちる。**mktemp 一択**
 
 ## 次のセッションへ
 
-- **まず issue #56 とクラスタを確認する**: 人間への依頼は投稿済み (経過参照)。返信が
-  無くても、Secret が apply 済みかもしれないのでプローブする (実測 6 の方法):
+- **まず issue #56 とクラスタを確認する**: 人間への依頼は投稿済み (経過参照)。
+  セッション 3 時点 (2026-08-23 午後) で返信無し・Secret 未適用を再確定済み。
+  返信が無くても、Secret が apply 済みかもしれないのでプローブする (実測 6 の方法):
   1. `kubectl delete -f ops/profiles/private-data/job.yaml --ignore-not-found` (PVC 再作成
      強制。罠は下記)
   2. NP → jobs を apply、model Pod を ~2 分監視 (`kubectl describe pod … | tail`)
