@@ -291,3 +291,93 @@ worker セッションごとに追記する。書式は自由だが、証跡 (�
    (日付は自動で正しく入る。手で書き直さなくてよくなった)
 3. triage 後 review_needed のみ昇格・停止系は「要確認」別掲の挙動は不変
    (セッション 1 記載どおり)
+
+## checkpoint (予算上限)
+
+**このプロジェクトはここで stalled。以後の worker はこの節から読むこと。**
+コードは完成しており、残作業は「Job を 1 回走らせる」と「返答を seed に起こす」の 2 つだけ。
+実装を追加する必要はない (あるとしたら、それは別案に分離するべき論点 — 下記「残った不確実性」参照)。
+
+### 受入チェックリスト現在地 (2026-08-23 本セッション再実測)
+
+| # | 項目 | 状態 | 根拠 |
+|---|------|------|------|
+| v1 | ask-evidence.json 存在 | **red** | ファイル未存在。Job が一度も走っていないため (origin 実測: ブランチに evidence も pending も無し) |
+| v2 | message_id / sent_at | **red** | v1 と同根 |
+| v3 | seeds.md「人間の要望」節 | **red** | 未反映。送信→返信待ち→seed 化の順でしか進めない |
+| v4 | `python3 -m unittest ops.tests.test_wish_seeds` | **green** | OK / 21 tests 自己実測 |
+
+併せて再実測: test_wish_seeds_job 22 OK / ops/tests 全体 332 OK /
+validate.py 0 error (warning 11 既存分)。**コード側は verify を満たす状態で完成している。
+red の 3 つはすべて「まだ送っていない・まだ返事を処理していない」だけ。**
+
+### 止まっている場所と次の一手 (具体手順)
+
+**ボトルネック: 送信 Job の初回実行。** セッション 2〜5 の worker サンドボックスは
+TELEGRAM_BOT_TOKEN 無し・SA token 未 mount でクラスタ操作不能だった (3 セッション連続実測)。
+送信は人間または cluster アクセスのある環境で、以下の確定済み 3 ステップを実行する
+(根拠は justfile 実装 + 全 manifest 照合済み = セッション 3・4):
+
+```bash
+just preview apps project/p-0192        # 子 Application を認識させる
+just preview wish-seeds project/p-0192  # 子をブランチへ向ける → 自動 sync で Job が走る
+# 完後 (ArgoCD UI か kubectl get job -n autopilot wish-seeds-ask で Pod 完了を目視):
+just preview-reset wish-seeds && just preview-reset apps
+```
+
+- 手順 1〜2 の間、子 wish-seeds が degraded/error 表示になるのは正常 (一時的・害なし)
+- 送信は 1 回きり (予算規則)。二重送信歯止め 3 層済みなので、merge 後に Job が
+  再作成されても証跡を見て skip する
+
+**その直後の次 worker の作業順:**
+
+1. `git fetch && git ls-tree origin/project/p-0192 -- ops/projects/logs/P-0192/`
+   - `ask-evidence.json` が乗っている → `git merge origin/project/p-0192` して v1・v2 green 化
+     (**注意**: wrapper はローカル working tree を測るので、fetch+merge しない限り
+     「Job は走ったのに red」のまま。これは測定罠であって失敗ではない)
+   - `ask-pending.json` だけ乗って evidence 無し → Job 失敗の可能性 (rc=1 設計)。
+     人間に `kubectl logs -n autopilot job/wish-seeds-ask` の確認を依頼すること
+     (pending がある状態では歯止めが働き再送されないので、黙って放置すると永遠に止まる)
+2. 返信待ち → seed 化。**セッション 5 の更新版レシピを使うこと**
+   (inbox 全部を直接 render_seeds_section に渡さない。送信前 note「こんちわ」等を誤昇格する):
+   ```python
+   import json
+   from ops.tools import wish_seeds as ws
+   ev = json.load(open("ops/projects/logs/P-0192/ask-evidence.json"))
+   # notes は origin/ops-feedback の inbox (読み取り専用) から received 順に読む
+   replies = ws.replies_after(notes, ev["sent_at"])
+   print(ws.render_seeds_section(replies, rules=ws.load_rules(), sent_at=ev["sent_at"]))
+   ```
+   出力を `ops/projects/seeds.md` の H6 近くへ新節「人間の要望 (2026-08 募集より)」として貼る。
+   返信ゼロでも `render_seeds_section([], ...)` の沈黙記録で v3 完成 (沈黙も観測)。
+   日付は sent_at から自動で入るようになった (手書き換え不要)
+3. v4 は常に green を維持。変更したら unittest 再実測 (`ops.tests` 全体も)
+
+### 未コミット変更の扱い
+
+本セッション開始時、working tree はクリーンだった (`git status` 実測、
+origin/project/p-0192 = HEAD `4f75a4b63`)。**commit も破棄も不要だった。**
+
+### 残った不確実性
+
+1. **3 ステップ preview は未実行のまま**。manifest・justfile 意味論の全照合までは終えたが、
+   クラスタ実測したセッションはない。初回実行時は必ず Pod 起動を目視すること
+2. **返信が来るかは不明**。来なくても DoD は完成する (沈黙記録)。ただし沈黙判定の
+   基準線は inbox note 数 (セッション 5 時点で 5 件、募集前の無関係挨拶含む) なので、
+   判定時に再実測すること
+3. **triage 誤爆リスクは未解決** (セッション 1 発見): 短い返事「全部やめて」等が heart の
+   停止系判定に拾われうる。本モジュール側は要確認別掲で被害の二重化を防いだが、
+   heart 側の誤停止自体は本プロジェクトのスコープ外。curriculum に渡すべき論点
+4. **ランナー環境は時期により異なる**: P-0175 頃は worker がクラスタ実測できていた。
+   次セッションも冒頭 30 秒で env 再実測し、「不可能」を固定観念にしないこと
+5. **origin/main が進んだ** (merge-base `98202cea5` → origin/main 先頭 `3e522cfef`、
+   PR #542/#543 コア観測)。validate.py は当面通る (ローカル main ref が古いため) が、
+   merge が必要になったら **rebase ではなく `git merge origin/main`**
+   (wrapper の push が非 force のため。セッション 2 の教訓)
+
+### 継続価値の判断材料 (人間へ)
+
+投資済み: 送信ツール + GitOps Job + 歯止め 3 層 + テスト 43 本、すべて green で完成。
+残りは上記 3 ステップの実行 (数分) と返信待ちのみ。「聞く口」を作り切った状態で止まっており、
+中止すれば投資は無駄になるが、継続コストはほぼゼロ (返信待ちと 1 行 seed 化だけ)。
+VISION 段階 2 の「人間が欲しいものを聞く」を最初に実行するプロジェクトでもある。
