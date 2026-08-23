@@ -440,6 +440,18 @@ func runAdapter() {
 	c := newClient(cfg)
 	ctx := context.Background()
 
+	// バスへの publish。設定が無ければ nil で、その場合は GitHub 側だけに書く
+	bus, err := connectBus()
+	if err != nil {
+		log.Fatalf("NATS に繋げません: %v", err)
+	}
+	defer bus.close()
+	if bus != nil {
+		log.Printf("NATS に接続 (subject=%s)", bus.subject)
+	} else {
+		log.Print("NATS 未設定のため GitHub 側にのみ保存する")
+	}
+
 	var offset int64
 	attempts := map[int64]int{}
 
@@ -475,6 +487,21 @@ func runAdapter() {
 			}
 
 			log.Printf("saved %s/%s.json (update %d, %d chars)", cfg.inboxDir, note.ID, u.UpdateID, len(body))
+
+			// GitHub に載った後で publish する。順序が逆だと、publish 済みなのに
+			// 保存に失敗して heart 側にだけ届かない状態を作りうる。
+			// publish の失敗では update を止めない (バスの不調で受信を止めない)
+			if bus != nil {
+				if err := bus.publish(busEvent{
+					ID: note.ID, Source: note.Source, Received: note.Received,
+					Body: note.Body, UpdateID: u.UpdateID,
+				}); err != nil {
+					log.Printf("update %d: publish 失敗 (GitHub 側には保存済みなので続行): %v", u.UpdateID, err)
+				} else {
+					log.Printf("published %s (update %d)", bus.subject, u.UpdateID)
+				}
+			}
+
 			delete(attempts, u.UpdateID)
 			offset = u.UpdateID + 1
 			if u.Message.Chat != nil {

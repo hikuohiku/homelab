@@ -51,6 +51,15 @@ spec:
             # 空文字にすると ack を送らない。
             - name: TELEGRAM_ACK_TEXT
               value: "受け取りました。内容は次の点検サイクルで読まれます。"
+            # イベント経路 (設計 D16)。ここが未設定なら GitHub 側にだけ書く
+            # (移行中の切り戻し構成でも adapter が動くようにしてある)
+            - name: NATS_URL
+              value: nats://nats.autopilot.svc:4222
+            - name: NATS_NKEY_SEED
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-adapter-credentials
+                  key: NATS_PRODUCER_NKEY_SEED
             - name: TZ
               value: Asia/Tokyo
           resources:

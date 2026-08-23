@@ -483,6 +483,30 @@
       "observability_impact": "壊れると人間の書き置き (停止・veto を含む) が heart とコアに届かなくなる。GitHub 経由の archive には残るので消失はしないが、緊急停止の到達性が落ちる"
     },
     {
+      "id": "nats-box",
+      "kind": "image",
+      "name": "natsio/nats-box (EVENTS ストリームの bootstrap Job)",
+      "current": "sha256:e86b9681f330ab1aa45744dd5cb367d44205b28fac2519a2f74ca0255803161a",
+      "file": "apps/nats/bootstrap-job.yaml",
+      "match": "natsio/nats-box@sha256:",
+      "upstream": "github:nats-io/natscli",
+      "policy": "manual",
+      "note": "2026-08-23 新設。nats CLI が入っているだけの箱で常駐しない。ArgoCD の PostSync フックで EVENTS ストリームの存在を保証する。タグは 0.19.7-nonroot の index digest",
+      "observability_impact": "壊れるとストリームが作られず、publish が no responders で失敗する。既存ストリームがあれば影響しない"
+    },
+    {
+      "id": "nats-go-client",
+      "kind": "gomod",
+      "name": "github.com/nats-io/nats.go (telegram-adapter のイベント publish)",
+      "current": "v1.53.1",
+      "file": "apps/telegram-adapter/app/go.mod",
+      "match": "github.com/nats-io/nats.go v",
+      "upstream": "github:nats-io/nats.go",
+      "policy": "manual",
+      "note": "2026-08-23 新設 (設計 D16)。この repo で最初の Go 外部依存。所有者の承認済み (『綺麗に使えるなら外部依存あっていい』)。nkeys は nats.go の同族なので個別に追わず、nats.go の更新に追従させる。更新時は go.sum も同じ PR で更新すること",
+      "observability_impact": "壊れると Telegram 受信のバスへの publish が止まる。GitHub 側への保存は独立して続くので、heart への経路は影響を受けない"
+    },
+    {
       "id": "telegram-adapter-builder-image",
       "kind": "image",
       "name": "golang:1.25-alpine (telegram-adapter のビルド段)",

@@ -1,0 +1,95 @@
+# EVENTS ストリームを用意する。
+#
+# ストリームは「誰か 1 人の consumer のもの」ではなくインフラなので、consumer の
+# 実装に埋めずここで宣言的に作る。そうしないと producer と consumer の投入順序で
+# 「publish 先が無くて消える」窓ができる。
+#
+# ArgoCD の PostSync フックとして、同期のたびに走る。既にあれば何もしない
+# (nats stream info で存在を確かめてから add する) ので、何度動いても安全。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: nats-bootstrap
+  namespace: autopilot
+  annotations:
+    argocd.argoproj.io/hook: PostSync
+    # 前回の Job を消してから作る。名前固定の Job は再実行できないため
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 3600
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bootstrap
+          # natsio/nats-box:0.19.7-nonroot の index digest (2026-08-23 実測)。
+          # nats CLI が入っているだけの箱で、常駐はしない
+          image: natsio/nats-box@sha256:e86b9681f330ab1aa45744dd5cb367d44205b28fac2519a2f74ca0255803161a
+          terminationMessagePolicy: FallbackToLogsOnError
+          env:
+            - name: NATS_SEED
+              valueFrom:
+                secretKeyRef:
+                  name: nats-credentials
+                  key: NATS_CONSUMER_NKEY_SEED
+          command: ["sh", "-c"]
+          args:
+            - |
+              set -eu
+              # seed は tmpfs にだけ置く。nats CLI が --nkey にファイルを要求するため
+              umask 077
+              printf '%s' "$NATS_SEED" > /tmp/nkey.seed
+
+              SERVER=nats://nats.autopilot.svc:4222
+              # server の起動を待つ (PostSync は Deployment の Ready を待たないことがある)
+              i=0
+              until nats --server "$SERVER" --nkey /tmp/nkey.seed server check connection >/dev/null 2>&1; do
+                i=$((i + 1))
+                if [ "$i" -ge 30 ]; then
+                  echo "::error::NATS に繋がらないまま 60 秒経過した"
+                  exit 1
+                fi
+                sleep 2
+              done
+
+              if nats --server "$SERVER" --nkey /tmp/nkey.seed stream info EVENTS >/dev/null 2>&1; then
+                echo "EVENTS ストリームは既にある。何もしない"
+              else
+                echo "EVENTS ストリームを作る"
+                # max-age 7 日: 監査は ops-feedback の archive 側が持つので、
+                # ここは「consumer が復帰するまでの猶予」だけを見ればよい
+                nats --server "$SERVER" --nkey /tmp/nkey.seed stream add EVENTS \
+                  --subjects 'events.>' \
+                  --storage file \
+                  --retention limits \
+                  --max-age 168h \
+                  --dupe-window 2m \
+                  --replicas 1 \
+                  --defaults
+              fi
+              nats --server "$SERVER" --nkey /tmp/nkey.seed stream info EVENTS
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: tmp
+          emptyDir:
+            medium: Memory

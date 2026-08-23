@@ -20,7 +20,7 @@ COPY autopilot-core/app/go.mod ./core/
 COPY autopilot-core/app/*.go ./core/
 RUN cd core && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/core-driver .
 
-COPY telegram-adapter/app/go.mod ./adapter/
+COPY telegram-adapter/app/go.mod telegram-adapter/app/go.sum ./adapter/
 COPY telegram-adapter/app/*.go ./adapter/
 RUN cd adapter && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/telegram-adapter .
 
