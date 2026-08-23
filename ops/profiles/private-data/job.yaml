@@ -1,0 +1,299 @@
+# P-0161: 私的データを扱う model Pod と、外へ話す publisher Pod を物理的に別 Pod に割る
+# Job テンプレート (lethal trifecta 分離プロファイル)。
+#
+# ## なぜ 2 コンテナ同一 Pod ではなく 2 Pod か
+#
+#   - Kubernetes の NetworkPolicy は **Pod 単位**で適用され、同一 Pod 内のコンテナを
+#     区別できない。ゆえに「model コンテナだけ egress deny-all・同 Pod の publisher
+#     コンテナは git push」という構成は原理的に作れない (push を許す時点で model も
+#     外に出られる = deny-all が嘘になる)
+#   - emptyDir は同じ Pod 内にしか存在できないため、Pod 間の受け渡しには使えない。
+#     代わりに**使い捨て PVC** (下の p0161-handoff) で受け渡し、「publisher は
+#     自分の emptyDir (/publish) 上に組んだ成果物だけを push する」規約は維持する
+#
+# ## trifecta の断ち方 (詳細は README.md)
+#
+#   要素 1 私的データへのアクセス → Secret p0161-mail-fixture を mount するのは
+#          model Pod だけ。readOnly mount。publisher 側 YAML に secret 名は登場しない
+#   要素 2 信頼できない内容     → fixture 本文は model 内で消費され、出力へは
+#          差出人・件名などのメタ情報のみが流れる。本文を shell 変数や eval に通さない
+#   要素 3 外部への送信経路     → model Pod は networkpolicy.yaml (egress: [] =
+#          DNS 含む完全拒否) 配下 + env ゼロ。push 用 token は publisher Pod だけが受ける
+#
+# ## 実行方法 (demo run)
+#
+#     kubectl apply -f ops/profiles/private-data/secret-fixture.yaml   # writer SA では不可。管理者 kubeconfig の CLI で (rbac.yaml「secrets と RBAC は含めない」)
+#     kubectl apply -f ops/profiles/private-data/networkpolicy.yaml
+#     kubectl apply -f ops/profiles/private-data/job.yaml
+#     kubectl wait --for=condition=complete --timeout=15m \
+#       job/p0161-private-data-model job/p0161-private-data-publisher -n autopilot
+#     kubectl logs -n autopilot -l job-name=p0161-private-data-publisher --tail=-1
+#
+# 成果物は ops-feedback ブランチの ops/feedback/demo/P-0161/ に着地する。
+#
+# ## 撤収
+#
+#     kubectl delete -f ops/profiles/private-data/job.yaml
+#     kubectl delete -f ops/profiles/private-data/networkpolicy.yaml
+#     kubectl delete secret p0161-mail-fixture -n autopilot
+#
+# PVC (p0161-handoff) は job.yaml に含まれるので一緒に消える。apps/ 配下ではないため
+# ArgoCD はこれらを一切知らない (常設リソースにしない — PROJECT.md「やらないこと」)。
+#
+# ## 再実行時の注意
+#
+#   - PVC を消さずに再実行すると、前回 run の sentinel (DONE) を publisher が観測して
+#     古い成果物を push しうる。model コンテナ冒頭の掃除 (rm -rf /handoff/*) は
+#     「掃除より先に待ち側が sentinel を見る」窓までは塞げない (P-0035 と同じ教訓)。
+#     **apply の前に PVC を必ず消して作り直すこと**
+#   - model Job の .spec.template は immutable。中身を変えて再実行するときは
+#     delete してから apply し直す (同名再適用には
+#     argocd.argoproj.io/sync-options: Force=true,Replace=true が必要という substrate
+#     の制約も同じ根っこ)
+---
+# 受け渡し用の使い捨て PVC。local-path は容量を予約しないため小さい size 要求で足りる
+# (実使用量の監視は CLAUDE.md の注意どおり別途)。撤収時に Job と一緒に消される
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: p0161-handoff
+  namespace: autopilot
+  labels:
+    app.kubernetes.io/part-of: p0161-private-data-profile
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 64Mi
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: p0161-private-data-model
+  namespace: autopilot
+  labels:
+    app.kubernetes.io/part-of: p0161-private-data-profile
+spec:
+  backoffLimit: 0            # 失敗を隠さない。1 回だけ走らせて赤なら赤のまま見せる
+  activeDeadlineSeconds: 600 # 暴走の時限。hang した probe でもこの秒数で打ち切る
+  template:
+    metadata:
+      # このラベルが networkpolicy.yaml の podSelector と一致すること —
+      # 一致が崩れると egress 拒否が効かなくなる。test_private_data_profile が機械検査
+      labels:
+        app: p0161-private-data-model
+    spec:
+      automountServiceAccountToken: false  # API 鍵ゼロと同じ理由: 認証情報を一切持たせない
+      restartPolicy: Never
+      containers:
+        - name: model-session
+          # モデルセッションの代役 (デモ用)。本番ではモデルセッションランタイムに
+          # 差し替える。autopilot イメージを選んだ理由: node01 に pull 済み・digest pin
+          # で再現性あり・curl が入っていて egress probe を確実に実行できる
+          # (busybox wget の SSL 対応はビルド依存で未実証の挙動に依らない)
+          image: ghcr.io/hikuohiku/homelab-autopilot@sha256:93a898cf0a1ec7a0363e9e2824f39670db2e3a8ca76674e755438ce8273c7bcb
+          imagePullPolicy: IfNotPresent
+          # ★ env / envFrom は書かない。API 鍵を一切受け取らないことを
+          #   ops/tests/test_private_data_profile.py が機械検査する
+          command:
+            - bash
+            - -euo
+            - pipefail
+            - -c
+            - |
+              echo "=== p0161 model-session start $(date -u +%FT%TZ) ==="
+              HANDOFF=/handoff
+              PRIVATE=/private-data
+
+              # 何よりも先に前回 run の残骸を掃除する (P-0035 型教訓)。
+              # ここより前で仕事をしてはいけない
+              rm -rf "$HANDOFF"/*
+
+              echo "--- private data inventory ---"
+              ls -la "$PRIVATE"
+
+              # 加工 (モデルセッションの代役): メタ情報のみの要約を作る。
+              # 本文は出力に入れない — 信頼できない内容を出力に混ぜない規約のデモ
+              {
+                echo "# P-0161 demo digest"
+                echo ""
+                echo "- generated_at: $(date -u +%FT%TZ)"
+                echo "- source: synthetic mail fixture (Secret p0161-mail-fixture)"
+                echo "- messages: $(find "$PRIVATE" -type f | wc -l)"
+                echo ""
+                for f in "$PRIVATE"/*.eml; do
+                  echo "## $(basename "$f")"
+                  grep -m1 '^From:' "$f" || echo "From: (missing header)"
+                  grep -m1 '^Subject:' "$f" || echo "Subject: (missing header)"
+                  echo ""
+                done
+              } > "$HANDOFF/digest.md"
+
+              # 外向き接続プローブ。deny-all が効いていない = 実験失敗なので、
+              # 黙って成功させず Job を赤くして人間に見せる
+              #   - https://… 2 本: DNS 解決も含めた経路の拒否を実測 (rc=6 は DNS 断、
+              #     rc=7 は接続拒否、rc=28 はタイムアウト)
+              #   - 1.1.1.1:443: DNS を介さない TCP 直接接続の拒否を実測 (/dev/tcp)。
+              #     timeout が無い環境では SYN drop のカーネル再送 (~2 分) 待ちになり、
+              #     最悪 Job deadline が切る — それでも DENIED としては記録されないので
+              #     probe_ok 判定には影響しない
+              touch "$HANDOFF/egress_probe.txt"
+              probe_ok=0
+              for url in https://api.github.com/ https://example.com/; do
+                if curl --silent --show-error --output /dev/null --max-time 10 "$url"; then
+                  echo "ALLOWED $url at $(date -u +%FT%TZ)" >> "$HANDOFF/egress_probe.txt"
+                  probe_ok=1
+                else
+                  echo "DENIED rc=$? url=$url at $(date -u +%FT%TZ)" >> "$HANDOFF/egress_probe.txt"
+                fi
+              done
+              if timeout 10 bash -c 'exec 3<>/dev/tcp/1.1.1.1/443' 2>/dev/null; then
+                echo "ALLOWED tcp://1.1.1.1:443 at $(date -u +%FT%TZ)" >> "$HANDOFF/egress_probe.txt"
+                probe_ok=1
+              else
+                echo "DENIED rc=$? url=tcp://1.1.1.1:443 at $(date -u +%FT%TZ)" >> "$HANDOFF/egress_probe.txt"
+              fi
+
+              if [ "$probe_ok" -ne 0 ]; then
+                echo "FATAL: egress is reachable — deny-all is NOT enforced"
+                cat "$HANDOFF/egress_probe.txt"
+                exit 1
+              fi
+
+              # 完了合図。publisher はこの sentinel を見てから動く
+              date -u +%FT%TZ > "$HANDOFF/DONE"
+              echo "=== model-session done ==="
+              cat "$HANDOFF/digest.md"
+          securityContext:
+            # readOnly mount の上書き防止は volumeMount 側で担保済みだが、
+            # private-data への意図しない書き込みを落とす二重の壁として root は許す
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: private-data
+              mountPath: /private-data
+              readOnly: true    # ★ trifecta 要素 1 の壁そのもの。機械検査対象
+            - name: handoff
+              mountPath: /handoff
+      volumes:
+        # 私的データ (合成 fixture)。Secret 経由 read-only mount — dod (1)
+        - name: private-data
+          secret:
+            secretName: p0161-mail-fixture
+        - name: handoff
+          persistentVolumeClaim:
+            claimName: p0161-handoff
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: p0161-private-data-publisher
+  namespace: autopilot
+  labels:
+    app.kubernetes.io/part-of: p0161-private-data-profile
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: 900  # wait-for-model (最大 550s) + clone/push の余裕
+  template:
+    metadata:
+      labels:
+        app: p0161-private-data-publisher
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      initContainers:
+        - name: wait-for-model
+          image: ghcr.io/hikuohiku/homelab-autopilot@sha256:93a898cf0a1ec7a0363e9e2824f39670db2e3a8ca76674e755438ce8273c7bcb
+          imagePullPolicy: IfNotPresent
+          command:
+            - bash
+            - -euo
+            - pipefail
+            - -c
+            - |
+              echo "waiting for model sentinel..."
+              for i in $(seq 1 110); do
+                if [ -f /handoff/DONE ]; then
+                  echo "model done at $(date -u +%FT%TZ)"
+                  exit 0
+                fi
+                sleep 5
+              done
+              echo "FATAL: model did not finish within 550s" >&2
+              exit 1
+          volumeMounts:
+            - name: handoff
+              mountPath: /handoff
+              readOnly: true    # 待ち側が handoff を書き換える経路を作らない
+      containers:
+        - name: publisher
+          image: ghcr.io/hikuohiku/homelab-autopilot@sha256:93a898cf0a1ec7a0363e9e2824f39670db2e3a8ca76674e755438ce8273c7bcb
+          imagePullPolicy: IfNotPresent
+          # ★ この Pod が持つ唯一の credential。push 用の最小限であり、
+          #   私的データへの参照はどこにも無い (機械検査対象)
+          env:
+            - name: AUTOPILOT_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: autopilot-credentials   # apps/autopilot/external-secret.yaml が管理 (Doppler 同期済み)
+                  key: AUTOPILOT_GITHUB_TOKEN
+          command:
+            - bash
+            - -euo
+            - pipefail
+            - -c
+            - |
+              echo "=== p0161 publisher start $(date -u +%FT%TZ) ==="
+
+              # mkdir が git config --global より先であること: $HOME/.gitconfig を書くのに
+              # 親ディレクトリが要る (spawn.py レビュー指摘 [15] と同じ罠)
+              mkdir -p "$HOME"
+
+              # credential helper は spawn.py と同型。token を URL に埋めない —
+              # エラーメッセージ経路での漏えい面を作らない。(-x トレースも使わない)
+              git config --global credential.'https://github.com'.helper \
+                '!f() { printf "username=x-access-token\npassword=%s\n" "${AUTOPILOT_GITHUB_TOKEN}"; }; f'
+
+              # push 入力は emptyDir (/publish) 上に組んだものだけ。
+              # handoff PVC は読み取り専用であり成果物の置き場所ではない
+              install -m 0644 /handoff/digest.md /publish/digest.md
+              install -m 0644 /handoff/egress_probe.txt /publish/egress_probe.txt
+              echo "--- egress probe result ---"
+              cat /publish/egress_probe.txt
+
+              DEST=/publish/work
+              # shallow clone は single-branch を含む (substrate.md)。ただし push 先が
+              # 同一ブランチ (ops-feedback) なので fetch refspec 1 本で足りる。
+              # 既存ファイル (ops/feedback/inbox/ 等) には触れない — 追加のみ
+              git clone --quiet --depth=1 --branch ops-feedback \
+                https://github.com/hikuohiku/homelab.git "$DEST"
+              cd "$DEST"
+              mkdir -p ops/feedback/demo/P-0161
+              install -m 0644 /publish/digest.md ops/feedback/demo/P-0161/digest.md
+              install -m 0644 /publish/egress_probe.txt ops/feedback/demo/P-0161/egress_probe.txt
+              git add ops/feedback/demo/P-0161
+              export GIT_AUTHOR_NAME="autopilot-publisher"
+              export GIT_AUTHOR_EMAIL="autopilot@users.noreply.github.com"
+              export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME"
+              export GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+              git commit --quiet -m "P-0161 demo: 分離 Job プロファイルの実証成果物 ($(date -u +%FT%TZ) run)"
+              git push --quiet origin HEAD:ops-feedback
+              echo "published_branch=ops-feedback"
+              echo "published_commit=$(git rev-parse HEAD)"
+          securityContext:
+            allowPrivilegeEscalation: false
+          volumeMounts:
+            - name: handoff
+              mountPath: /handoff
+              readOnly: true    # ★ publisher が私的データ側 volume に書き込む経路を作らない
+            - name: publish
+              mountPath: /publish
+      volumes:
+        # 注意: この Pod には Secret 型 volume が 1 つも無い (env の secretKeyRef 以外、
+        # 私的データへの参照は YAML 全体のどこにも登場しない — 機械検査対象)
+        - name: handoff
+          persistentVolumeClaim:
+            claimName: p0161-handoff
+        - name: publish
+          emptyDir: {}

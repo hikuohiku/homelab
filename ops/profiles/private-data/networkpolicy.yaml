@@ -1,0 +1,29 @@
+# P-0161: model Pod (p0161-private-data-model) の egress を完全拒否する NetworkPolicy。
+#
+# trifecta 要素 3「外部への送信経路」を断つ壁。egress: [] は空配列 = この Pod から
+# 出ていく接続は DNS (UDP/TCP 53) を含めて一切許可しない、という意味。
+# model コンテナが読むのは Secret mount (/private-data) とローカルファイルだけであり、
+# 名前解決すら不要な構成にしてある。
+#
+# 注意:
+#   - policyTypes は Egress のみ。Ingress を締めないのは既存の NetworkPolicy との
+#     相互作用の検討範囲を増やさないため (apps/ 配下には本件以前の NetworkPolicy は
+#     1 枚も無い — initializer 実測)
+#   - podSelector のラベルは job.yaml の model Job template.labels と一致すること。
+#     一致が崩れると拒否が効かなくなる (機械検査: test_private_data_profile)
+#   - k3s (内蔵 netpol controller) で実際に効くかは前提にしない。
+#     job.yaml model コンテナの egress probe がその実測を担う
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: p0161-model-deny-egress
+  namespace: autopilot
+  labels:
+    app.kubernetes.io/part-of: p0161-private-data-profile
+spec:
+  podSelector:
+    matchLabels:
+      app: p0161-private-data-model
+  policyTypes:
+    - Egress
+  egress: []    # 空 = 全拒否。publisher Pod (app=p0161-private-data-publisher) は対象外で push ができる
