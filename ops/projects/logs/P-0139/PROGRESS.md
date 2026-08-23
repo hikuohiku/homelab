@@ -589,3 +589,56 @@ webhook URL は autopilot-writer SA には読めない (RBAC 実測 Forbidden) �
    **#4** (message_id 人間視認 or 判定除外) / on-sync-failed 式の生きた発火検証を
    追加注入で実施するか否か (spec の注入 1 回は消化済みのため要人間裁定)
 3. fired.json / drill fixture は触らない
+
+### セッション 13 (2026-08-23) — 待機状態の全項目再実測 7 回目。merge 未・競合なし・controller エラー新規ゼロ、version-watcher 出現を確認。merge と裁定待ちのまま変化なし
+
+**やったこと**:
+
+1. **merge 状況**: 未 merge (`fetch --prune` 後に `git branch -r --contains` が
+   a08db5a9 で origin/project/p-0139 のみ)。main tip = 8c5cbd7d 変化なし
+2. **verify 再実測**: #1 green / #3 = fixture 14 tests OK / #2 の red は既知の
+   `--enable-helm` ゲートのみ (エラー文も前回と同一) / #4 の red は message_id null のみ
+   (delivered: True は生きている)。red の理由が前セッションから一つも変質していない
+3. **helm PATH render を本セッションでも再実証** ($HOME/bin/helm v3.18.4 生存を再利用):
+   rc=0 / 27,222 行 / stderr 空 / **argocd-notifications-cm** ちょうど 7 キー /
+   trigger.on-sync-failed 内に `?.` と `destination.namespace != 'autopilot'` を確認
+   (on-degraded 側のフィルタも確認) / ES 2 本 (dex + discord-webhook) を render /
+   argocd-notifications-secret 出ず
+4. **クラスタの merge 前状態が正しいことを再実測**: argocd-notifications-cm data =
+   ['context'] のみ / externalsecret は dex 分のみ SecretSynced=True / drill 残骸
+   (App・ns) とも NotFound
+5. **controller エラー増加ゼロを実測**: pod 名を label で引き直し、`--since-time=
+   2026-08-23T03:46:02Z` で error 0 行 (当該範囲 3,339 行)。pod restarts=19 /
+   startedAt=2026-08-03T14:21:14Z で本セッションでの再起動は無し
+6. **App 状態観測**: coder / immich / syncthing / vaultwarden の 4 App が
+   OutOfSync/Healthy のまま (セッション 9 以降据え置き)。Degraded では無く通知対象外。
+   **App 全体数が 14 → 15 本に増えており version-watcher が新規出現**
+7. **競合状況**: 全リモートブランチの apps/argocd diff を merge-base 比較で一覧化
+   (セッション 12 の教訓を適用)。自ブランチ (133 行 = 本プロジェクトの変更自体) 以外は
+   全ブランチ 0 行 → 競合余地は引き続きゼロ
+
+**分かったこと**:
+
+- **version-watcher App が出現していた (15 本目)**。destination.namespace =
+  version-watcher (autopilot ではない) なので merge 後は通知対象に入る — これは
+  期待どおりの動作で対応不要だが、初期時点 (PROJECT.md 実測 14 本) からの増分として記録。
+  Degraded では無いため本セッションでの発火は無し
+- 測定上の注意: 過去セッションの「総ログ行数 N」は **`--since-time` 付きコマンドの行数**
+  だった (セッション 11: 2,897 / 12: 3,091 / 本セッション 13: 3,339 と経過時間に整合)。
+  本セッションで since-time 無しで測ったら 50,018 行になり一見急増に見えたが、
+  pod 再起動無し・since-time 付きでは error 0 で異常なし。**次セッションからも since-time 付き
+  の値だけを比較すること** (無しの値と混ぜると誤検知になる)
+- verify #4 を手元で確認する際、assert を print に置き換えた「似たワンライナー」を
+  誤って rc=0 にしてしまった (直後に exact 版でやり直して red を確認済み)。
+  **verify は文字列そのまま実行**が原則
+
+**次のセッションへの一言 (= やることリスト)**:
+
+1. merge 済みか最初に確認 (`git branch -r --contains a08db5a9`)。merge 済みならクラスタ反映を実測:
+   **argocd-notifications-cm** data が 7 キーちょうど (on-sync-failed は `?.` 付き) /
+   externalsecret argocd-notifications-discord-webhook が SecretSynced /
+   controller error 新規ゼロ (since-time 付きで測る) / 全 App Healthy 戻り確認
+2. 未 merge ならやることは無い。裁定事項は不変 3 点: **#2** (sandbox 恒久 red) /
+   **#4** (message_id 人間視認 or 判定除外) / on-sync-failed 式の生きた発火検証を
+   追加注入で実施するか否か (spec の注入 1 回は消化済みのため要人間裁定)
+3. fired.json / drill fixture は触らない
