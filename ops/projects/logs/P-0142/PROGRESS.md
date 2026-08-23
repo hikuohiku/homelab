@@ -553,3 +553,50 @@ verify 再実測 + 上記確認 + 最小ログ追記で終えてよい。
 リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
 docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
 
+
+### 2026-08-23 セッション17 — セッション16 手順どおりの兆候確認 (main 零新着・動いたブランチ 4 本すべて無関係。p-0139 が初めて動いた。issue #56 は +1 だが中身は P-0144 の依頼で条件 A/B 報告に非ず)
+
+**やったこと**: spec DoD の追加実装は無し。セッション5〜16 と同じく verify 再実測 +
+外部シグナル確認だけをした。
+
+1. **verify 再実測**: #1 rc=1 / #2 rc=0 / #3 rc=2。セッション3 以降ずっと同一
+   (#1/#3 は verdict=keep ゆえ意図通り failing、#2 green)
+2. **観測環境の再実測** (17 回目の独立実測、結果同じ): `env` の proxmox/pve/tailscale 系無し
+   (rc=1) / `tailscale` `pvesh` `qm` `gh` CLI すべて absent (rc=1)
+3. **origin/main の新着確認**: `git fetch --prune` 後、`8c5cbd7d..origin/main` の commit は
+   **ゼロ**。動いたブランチ 4 本を各々実測 (判定はすべて diff 本文側で grep -c):
+   - `ops-state` (4192c226..aa1eacee): briefing-queue.jsonl / cursors.json /
+     heartbeat.json / metrics.jsonl のみ。両判定 **0** → 無関係
+   - `project/p-0115` (c8ed3830..67782a92): 自ログ PROGRESS.md のみ。両判定 **0**
+     → 無関係
+   - `project/p-0116` (9ddf8460..8a4edbcf): 自ログ PROGRESS.md のみ。両判定 **0**
+     → 無関係
+   - `project/p-0139` (1a193e89..a86d5bae): 自ログ PROGRESS.md のみ (**長期間不動だったのが
+     初めて動いた**)。両判定 **0** → 無関係。
+     なお p-0143 (7e22fdf1) / p-0144 (1bc86ae7) / ops-health-report (1fc66b50) は不動を実測。
+     新ブランチの追加は無し
+4. **issue #56 を GitHub REST API で実測**: page ごとに個別 json.loads で集計した結果
+   **合計 178 件 = セッション16 基準から +1**。新着は id 5384140771 /
+   2026-08-23T04:09:12Z。**本文を精読した結果、P-0144 の worker が投稿した「dev マシンで
+   fetch_devices.py を実行して devices 表を貼ってほしい」という依頼コメントであり、
+   条件 A/B の実施報告ではなかった** (既知の T-0116 由来旧コメント以外で qm shutdown/
+   条件 A を含むものは無し)。条件 A/B の実施報告は未着のまま
+
+→ verdict は `keep` のまま、inventory への反映対象なし。docs/pbs-retirement.md は書かない。
+
+**次のセッションへの一言**: やり方はセッション5〜17 と同一。main 比較基準は引き続き
+`8c5cbd7d..origin/main` (今回は零新着)。動いたブランチは「docs/・terraform/・P-0142 logs への
+diff 本文パス」と「PBS/`qm shutdown 112` 言及」の 2 点を diff 本文側で grep -c すればよく、
+中身の精読は不要。**罠** (実測済み、繰り返さないこと): (a) log メッセージ内の「112」「P-0142」
+「#56」は誤マッチするので本文側判定。(b) `grep | head` の rc は当てにならない。(c) issue #56
+のコメント確認は webfetch 不可 — REST API を使い page ごとに個別 `json.loads` する (連結
+パースは壊れる。id も数えると改変検出に強い)。(d) `/tmp/opencode` は書き込み不可 — 一時
+ファイルは必ず `mktemp -d` で作ったディレクトリに置くこと。(e) **issue #56 は他プロジェクト
+worker の依頼コメントで増えることがある** (セッション17 実測: P-0144 の fetch_devices.py
+依頼が +1)。コメント総数の増減だけで発火判断せず、**新着分の本文を必ず精読して**
+「条件 A/B の実施報告 or docs/backup.md 更新 or inventory 反映依頼」かを判定すること
+(今回の基準: issue #56 178 件 / 最終 2026-08-23T04:09:12Z / 最終 id 5384140771)。
+verify 再実測 + 上記確認 + 最小ログ追記で終えてよい。
+本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
+リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
+docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
