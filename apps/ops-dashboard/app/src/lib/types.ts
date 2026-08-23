@@ -86,4 +86,6 @@ export interface Snapshot {
   todayCostUsd: number;
   todaySessions: number;
   warnings: string[];
+  // P-0231: 暦の描画済み断片。未取得 (heart 未公開) は undefined
+  reminders?: string;
 }

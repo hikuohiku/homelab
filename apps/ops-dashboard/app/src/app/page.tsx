@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentRole, AgentSnapshot, Project, Snapshot, TranscriptEvent } from "@/lib/types";
 import { mergeTranscriptEvent } from "@/lib/transcript-client";
+import { toRemindersView } from "@/lib/reminders";
 import ProjectActions, { type ProjectAction } from "@/components/ProjectActions";
 
 type View = "live" | "projects" | "attention";
@@ -332,6 +333,24 @@ function AttentionQueue({ snapshot, now }: { snapshot: Snapshot; now: number }) 
   );
 }
 
+function CalendarSection({ raw }: { raw?: string }) {
+  // P-0231: 「忘れると困る日」の常設節。データが空でも節は消さない
+  // (dod: 常設表示)。文面は heart が作った完成品をそのまま載せるだけ
+  const view = toRemindersView(raw);
+  return (
+    <section className="calendar-note" aria-labelledby="calendar-title">
+      <div className="section-heading">
+        <div><span>LIFE CALENDAR</span><h2 id="calendar-title">次の予定</h2></div>
+        <p>誕生日や支払日など、忘れると生活が困る日。エージェントの台帳から 48 時間分。</p>
+      </div>
+      {view.empty
+        ? <p className="calendar-note__empty">暦はまだ届いていません。</p>
+        : <pre className="calendar-note__body">{view.body}</pre>}
+      <p className="calendar-note__seed">暦の種を募集: 載せたい日は issue #56 に教えてください。台帳に植えて毎年告げます。</p>
+    </section>
+  );
+}
+
 export default function Home() {
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [loadError, setLoadError] = useState("");
@@ -390,6 +409,9 @@ export default function Home() {
 
       {loadError && <div className="global-warning">状態を更新できません: {loadError}</div>}
       {snapshot?.warnings.map((warning) => <div className="global-warning" key={warning}>{warning}</div>)}
+
+      {/* 次の予定 (P-0231)。タブによらず常設 */}
+      <CalendarSection raw={snapshot?.reminders} />
 
       {!snapshot ? <div className="loading"><span />管制信号を同期中</div> : (
         <>

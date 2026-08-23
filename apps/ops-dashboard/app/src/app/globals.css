@@ -211,6 +211,30 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
 .irreversible-flag { position: absolute; right: 15px; bottom: 5px; color: var(--danger); font-size: 10px; }
 .queue-empty { border: 1px dashed var(--line); border-radius: 10px; min-height: 200px; display: grid; place-items: center; color: var(--muted); }
 
+/* 次の予定 (P-0231)。タブによらず常設の節 */
+.calendar-note { padding: 0 28px 42px; max-width: 1200px; margin: 0 auto; width: 100%; }
+.calendar-note__body {
+  margin: 0;
+  white-space: pre-line;
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.9;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 16px 20px;
+}
+.calendar-note__empty {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 16px 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.calendar-note__seed { margin: 12px 2px 0; color: var(--muted); font-size: 11px; }
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 980px) {
@@ -223,6 +247,7 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
   .live-view { padding: 16px 18px 24px; min-height: calc(100vh - 150px); }
   .scope { height: calc(100vh - 320px); min-height: 480px; }
   .board, .attention { padding: 26px 18px 45px; }
+  .calendar-note { padding: 0 18px 34px; }
 }
 
 @media (max-width: 640px) {

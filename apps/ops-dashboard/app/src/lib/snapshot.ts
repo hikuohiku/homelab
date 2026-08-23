@@ -76,6 +76,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     todayCostUsd: Number(breaker.cost_usd ?? 0),
     todaySessions: Number(breaker.sessions ?? 0),
     warnings,
+    reminders: state.remindersText || undefined,
   };
 }
 
