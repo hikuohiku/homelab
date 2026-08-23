@@ -32,6 +32,16 @@
    が唯一のブロッカー — worker 側にできることは無い状態。次セッションも「まずプローブ」
    から (下記参照)。
 
+- worker セッション 5 (2026-08-23): **Secret 未適用を再確定 (4 回目のプローブ)。
+   待ち継続**。クラスタ残骸なしを確認してからプローブ実行 → model Pod が ContainerCreating
+   滞留 (~110s 監視)、`FailedMount: secret "p0161-mail-fixture" not found` を観測
+   (kubelet の backoff で再試行間隔が伸びており 2 分窓での出現回数は x1 — 「出ない」
+   のではなく「間が空く」ので判定はイベントの有無で行うこと)。issue #56 再読では
+   依然返信無し → 重複依頼せず静かに撤収 (`kubectl delete -f` job.yaml → NP、
+   残骸 grep 0)。verify 1・2 green 再実測。**時間経過の注意: 依頼投稿 (06:30Z) から
+   プローブ 4 回目まで ~20 分しか経っていない** — 人間の応答が無いのは当然の速さであり、
+   次セッション以降も焦って重複依頼・迂回 (ConfigMap 代用等) をしないこと。
+
 ## 実測で分かったこと
 
 1. **NetworkPolicy は Pod 単位で、同一 Pod 内のコンテナを区別できない。** spec dod の
@@ -58,7 +68,10 @@
    NP → jobs を apply すると、Secret 未存在なら model Pod が ~15 秒で
    `FailedMount: secret "p0161-mail-fixture" not found` を出して ContainerCreating 滞留
    (x8 over ~2 分を観測。CreateContainerConfigError へ遷移しないこともあり、イベント
-   見るのが確実)。存在すればそのまま走り出す。次セッションの存在確認はこのプローブ 1 本でよい
+   見るのが確実)。存在すればそのまま走り出す。次セッションの存在確認はこのプローブ 1 本でよい。
+   注意: kubelet の mount 再試行は指数 backoff のため**監視窓が 2 分でも FailedMount が
+   1 回しか出ないことがある** (セッション 5 実測)。「x 回出た」でなく「1 回でも出たか /
+   Pod が Running に遷移したか」で判定する
 7. demo run の apply/撤収経路は実走りで検証済み: NP → PVC → 2 Jobs の create がすべて可、
    `kubectl delete -f` (job.yaml → networkpolicy.yaml) で綺麗に消える (残骸 grep 0)。
    残る未実測は「Secret 存在時の Pod 一式の挙動」(egress deny 効果・push・sentinel) のみ
@@ -76,7 +89,9 @@
 ## 次のセッションへ
 
 - **まず issue #56 とクラスタを確認する**: 人間への依頼は投稿済み (経過参照)。
-   セッション 4 時点 (2026-08-23 午後) で返信無し・Secret 未適用を再確定済み。
+   セッション 5 時点 (2026-08-23 ~06:55Z) で返信無し・Secret 未適用を 4 回目の
+   プローブで再確定済み。**依頼投稿からまだ数時間しか経っていない可能性が高い —
+   返信が無いのは異常ではない。** 重複依頼・迂回はしない。
    返信が無くても、Secret が apply 済みかもしれないのでプローブする (実測 6 の方法):
   1. `kubectl delete -f ops/profiles/private-data/job.yaml --ignore-not-found` (PVC 再作成
      強制。罠は下記)
