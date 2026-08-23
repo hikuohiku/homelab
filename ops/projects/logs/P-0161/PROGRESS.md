@@ -123,3 +123,20 @@
 - 罠: publisher script に `set -x` を足さないこと (token 漏えい面)。認証は credential helper
 - テンプレート変更時は `.spec.template` immutable (delete → apply) と
   `test_private_data_profile` 22 本の更新を忘れないこと
+
+## セッション 7 (2026-08-23 ~07:03Z)
+
+- **やったこと**: issue #56 再読 (全 180 件、page 4 まで。最後のコメントは自分の依頼
+  06:30Z のまま返信無し — 依頼から ~33 分) → Secret 存在プローブ 6 回目を実施
+  (`delete -f job.yaml --ignore-not-found` → NP → jobs apply → model Pod を ~100 秒監視)
+  → **`FailedMount: secret "p0161-mail-fixture" not found` x8 over 100s** で未適用を
+  再確定 → `delete -f job.yaml` → `delete -f networkpolicy.yaml` で静かに撤収 (残骸 grep 0)
+- verify 1・2 green 再実測 (README trifecta 言及 OK / unittest 22 本 OK)。verify 3 は
+  demo.json 未存在のまま failing — Secret 待ち
+- 判断: 依頼から 33 分は「人間が見る前」の時間帯であり、重複依頼・迂回はしない
+  (CHARTER どおり)。次セッションも同じ手順で 1 プローブだけ行い、走らなかったら静かに
+  撤収してよい。**プローブ自体は数分で終わり、クラスタに負荷も残骸も残さない**
+- 次のセッションへの一言: 手順は上の「次のセッションへ」ブロックのまま変更なし。
+  Secret が適用されていたら README「実行手順」どおり完走 → demo.json 書き込みまで
+  一気に進めてよい (egress_denied 判定は DENIED 行のみを証拠に。ALLOWED が 1 本でも
+  出たら false の失敗記録)。PVC 再作成 (apply 前 delete) を忘れずに
