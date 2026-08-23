@@ -1,0 +1,40 @@
+# P-0175 Doppler 遮断演習で実際に kubectl apply / delete した NetworkPolicy の記録。
+# 一時オブジェクト (P-0111 cap-watch.pod.yaml 流儀): Git 管理アプリではなく、
+# 演習中のみクラスタに存在させ、終了後に削除する。このファイルは証跡としての保存であり、
+# ArgoCD には管理されない。
+#
+# 設計: ESO 本体 Pod (deployment external-secrets の selector
+# app.kubernetes.io/instance=external-secrets + app.kubernetes.io/name=external-secrets。
+# cert-controller / webhook は name ラベルが異なるため選択されない) の egress を
+# クラスタ内 (pod CIDR 10.42.0.0/24 と service CIDR 10.43.0.0/16) だけ許し、
+# それ以外 = 公開 internet 行き (api.doppler.com) を全部拒否する。
+# IP 固定拒否 (api.doppler.com を解いて ipBlock 拒否) ではなく許可リスト方式にしたのは、
+# 拒否側は「許可リストに無いもの全て」なので演習窓内の上流 IP 変動・CDN 側差し替えに脆くないため。
+# ESO のクラスタ外への唯一の依存は Doppler であることを適用前に確認済み
+# (K8s API は service ClusterIP、DNS は kube-dns ClusterIP 経由で、両方とも CIDR 内)。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: p0175-doppler-outage-drill
+  namespace: external-secrets
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/instance: external-secrets
+      app.kubernetes.io/name: external-secrets
+  policyTypes:
+    - Egress
+  egress:
+    - to:
+        - ipBlock:
+            cidr: 10.42.0.0/24 # pod CIDR (node .spec.podCIDR 実測値)。port 制限を付けない。
+            # kube-router の実装では Service ClusterIP 行きのパケットは DNAT 後の
+            # 宛先 (endpoint の pod IP) で評価されるため、ここには kube-dns の
+            # endpoint (:53) も流れ込む。port を絞ると DNS まで死ぬ (第2版の缺陷)
+    - to:
+        - ipBlock:
+            cidr: 192.168.0.129/32 # node IP。k3s apiserver の endpoint (kube-apiserver は
+            # node 上で動く)。ClusterIP 10.43.0.1 の ipBlock 許可は post-DNAT 評価では無意味
+      ports:
+        - protocol: TCP
+          port: 6443 # k3s apiserver の実ポート (endpoint slices 実測)
