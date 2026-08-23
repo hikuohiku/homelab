@@ -152,6 +152,16 @@ spec:
             # 健全性レポートは 30 分周期の CronJob が書くので速く見ても意味が無い
             - name: CORE_HEALTH_SECONDS
               value: "120"
+            # イベント経路 (設計 D16) からの入力。GitHub の inbox と両読みで、
+            # 同じ書き置きは cursor (/data/cursor.json) で 1 回に落とす。
+            # この 2 つを消せば GitHub 側だけの構成に切り戻る
+            - name: NATS_URL
+              value: nats://nats.autopilot.svc:4222
+            - name: NATS_NKEY_SEED
+              valueFrom:
+                secretKeyRef:
+                  name: autopilot-core-credentials
+                  key: NATS_CONSUMER_NKEY_SEED
             - name: TZ
               value: Asia/Tokyo
           volumeMounts:

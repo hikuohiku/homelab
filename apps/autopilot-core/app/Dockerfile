@@ -16,7 +16,7 @@
 FROM golang@sha256:1ae0735f00daffa3aaf1363a5184c0d2dc55c78e3db4ec70241cdac97bf84b59 AS build
 WORKDIR /src
 
-COPY autopilot-core/app/go.mod ./core/
+COPY autopilot-core/app/go.mod autopilot-core/app/go.sum ./core/
 COPY autopilot-core/app/*.go ./core/
 RUN cd core && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/core-driver .
 

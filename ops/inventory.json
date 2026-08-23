@@ -507,6 +507,18 @@
       "observability_impact": "壊れると Telegram 受信のバスへの publish が止まる。GitHub 側への保存は独立して続くので、heart への経路は影響を受けない"
     },
     {
+      "id": "nats-go-client-core",
+      "kind": "gomod",
+      "name": "github.com/nats-io/nats.go (core-driver のイベント consume)",
+      "current": "v1.53.1",
+      "file": "apps/autopilot-core/app/go.mod",
+      "match": "github.com/nats-io/nats.go v",
+      "upstream": "github:nats-io/nats.go",
+      "policy": "manual",
+      "note": "2026-08-23 新設 (設計 D16)。telegram-adapter の nats-go-client と同じ版に揃えること (publish 側と consume 側で版がずれる理由が無い)。更新時は go.sum も同じ PR で更新する",
+      "observability_impact": "壊れるとバス経路からの入力が止まる。GitHub の inbox ポーリングは独立して続くので、書き置きがコアに届かなくなるわけではない"
+    },
+    {
       "id": "telegram-adapter-builder-image",
       "kind": "image",
       "name": "golang:1.25-alpine (telegram-adapter のビルド段)",
