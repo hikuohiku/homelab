@@ -41,10 +41,10 @@ spec:
         #
         # 以下 3 箇所 (init 2 つと driver) の core イメージ digest は必ず同じ値にする。
         # ops/check_version_sync.py の "autopilot-core image digest" が一致を検査する。
-        # afa0a67ea22016a1198612e7ba852fe66c5c5647 (PR #558 = 反応速度と計測) の
+        # 13e48bfe343046c91736f41c02a400d2b770d25b (PR #565 = adapter が NATS へ publish) の
         # OCI index digest を registry API の docker-content-digest で実測したもの
         - name: install-mcp-bin
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:83b4bbc2925b4bb9054cca0672bdb68c87f8d8da8721bc2e711eacb5e8cae389
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:f13f3be19bcffa55fe8469bcceb92bb7a7ee564ac7730025334b2b6eb1a8fb25
           command: ["sh", "-c", "cp /usr/local/bin/telegram-adapter /usr/local/bin/core-driver /mcp/"]
           volumeMounts:
             - name: mcp-bin
@@ -55,7 +55,7 @@ spec:
               drop: ["ALL"]
         # ConfigMap は read-only mount なので、opencode が書ける場所へ配置し直す
         - name: bootstrap-workdir
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:83b4bbc2925b4bb9054cca0672bdb68c87f8d8da8721bc2e711eacb5e8cae389
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:f13f3be19bcffa55fe8469bcceb92bb7a7ee564ac7730025334b2b6eb1a8fb25
           command: ["sh", "-c", "cp /config/opencode.json /config/AGENTS.md /work/"]
           volumeMounts:
             - name: config
@@ -129,7 +129,7 @@ spec:
 
         # --- イベントを渡す係 ---
         - name: driver
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:83b4bbc2925b4bb9054cca0672bdb68c87f8d8da8721bc2e711eacb5e8cae389
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:f13f3be19bcffa55fe8469bcceb92bb7a7ee564ac7730025334b2b6eb1a8fb25
           terminationMessagePolicy: FallbackToLogsOnError
           env:
             - name: AUTOPILOT_GITHUB_TOKEN

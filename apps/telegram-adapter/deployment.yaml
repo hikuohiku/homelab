@@ -24,10 +24,10 @@ spec:
           type: RuntimeDefault
       containers:
         - name: adapter
-          # 93d1c431bde60ee372c85d380e694191e6d4730f (PR #525 の merge commit) の
+          # 13e48bfe343046c91736f41c02a400d2b770d25b (PR #565 の merge commit) の
           # OCI index digest。registry API の docker-content-digest ヘッダで実測。
           # apps/telegram-adapter/app/** を変えたら同じ手順で digest を取り直すこと
-          image: ghcr.io/hikuohiku/homelab-telegram-adapter@sha256:c6340363d8ed81c0fd38f6876781e0fa6dc162748f09e7840e3991631d96a329
+          image: ghcr.io/hikuohiku/homelab-telegram-adapter@sha256:85c093b803c9886339a4d1d3ea20d170c19718581b1a69a7fb44b7c79cbd1ef6
           terminationMessagePolicy: FallbackToLogsOnError
           env:
             - name: TELEGRAM_BOT_TOKEN
