@@ -27,6 +27,12 @@ heart (Deployment, ここ)            runner Job (ops/runner/runner.py)
   どちらも人間レビュー必須パス (ruleset) に含める
 - **状態は ops-state ブランチ** (単一書き手 = heart)。main の CI 外だが、push 前に
   statefiles.validate_projects() が守る
+- **書き置きは 2 経路から読む**。issue #56 / ops-feedback ブランチ (GitHub) に加えて、
+  同居する Go サイドカー (`apps/autopilot/bus-sidecar`) が NATS から
+  `/data/feedback-bus/inbox/<id>.json` に落としたぶんも読む。所有者の「止めて」を
+  外部 SaaS の可用性から切り離すため (設計 D16/D27)。両経路の既読は同じ鍵
+  (`ops/feedback/inbox/<id>.json`) で cursors に載るので、同じ書き置きは 1 回しか
+  処理されない
 
 ## モード
 

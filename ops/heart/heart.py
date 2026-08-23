@@ -357,6 +357,7 @@ class Heart:
             facts.collect_feedback(
                 self.gh, self.repo_dir, cursors, self.cfg.rules,
                 self.cfg.feedback_issue, self.cfg.feedback_branch,
+                self.cfg.feedback_bus_dir,
             )
         )
         if vetoes or acks or approves or stop_all or review_needed or resume_all or task_requests:

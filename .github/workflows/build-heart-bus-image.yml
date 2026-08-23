@@ -1,0 +1,88 @@
+name: Build heart-bus-sidecar image
+
+# heart Pod に同居して NATS のイベントをファイルに落とすサイドカー (設計 D16 の段階 3)。
+#
+# autopilot-core のイメージに相乗りさせず独立させたのは、heart を core の都合で
+# 再起動させないため。core-driver / telegram-adapter を直すたびに digest が動く。
+#
+# Initial release is intentionally two-stage: merge the application first, measure the
+# published SHA tag's OCI index digest, then pin that digest in
+# apps/autopilot/heart-deployment.yaml (same as build-telegram-adapter-image.yml).
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/autopilot/bus-sidecar/**"
+      - ".github/workflows/build-heart-bus-image.yml"
+  pull_request:
+    paths:
+      - "apps/autopilot/bus-sidecar/**"
+      - ".github/workflows/build-heart-bus-image.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/homelab-heart-bus
+
+jobs:
+  test:
+    name: go test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: apps/autopilot/bus-sidecar/go.mod
+          cache-dependency-path: apps/autopilot/bus-sidecar/go.mod
+
+      - name: gofmt
+        working-directory: apps/autopilot/bus-sidecar
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt が必要です: $unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        working-directory: apps/autopilot/bus-sidecar
+        run: go vet ./...
+
+      - name: go test
+        working-directory: apps/autopilot/bus-sidecar
+        run: go test ./...
+
+  build:
+    name: build and push
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (and push on main)
+        uses: docker/build-push-action@v6
+        with:
+          context: apps/autopilot/bus-sidecar
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Show image reference
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "::notice title=heart-bus-sidecar image::${{ env.IMAGE }}:${{ github.sha }}"

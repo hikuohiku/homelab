@@ -5,6 +5,8 @@ collect_feedback() は gh と git に依存するので、両方を差し替え�
 """
 
 import json
+import shutil
+import tempfile
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -22,6 +24,9 @@ CURSORS = {
 }
 
 NOTE = "ops/feedback/inbox/note-1.json"
+
+# 「引数を渡さなかった」と「None を渡した」を区別するための番人
+_DEFAULT = object()
 
 
 class FakeGh:
@@ -94,6 +99,109 @@ class TestCollectFeedbackTaskRequest(unittest.TestCase):
         _, _, _, review_needed, _, reqs, _, _ = collect_with_note("ただのテキスト")
         self.assertEqual(reqs, [])
         self.assertEqual(len(review_needed), 1)
+
+
+class TestCollectFeedbackFromBus(unittest.TestCase):
+    """イベントバス経由の書き置き (移行の段階 3)。
+
+    所有者の「止めて」が GitHub の可用性に依存しないよう、同じ Pod のサイドカーが
+    NATS から落としたファイルも読む。ここが守るのは 3 つ:
+      - バスから届いた停止指示が同じ決定論で stop_all になる
+      - 同じ id が両経路から来ても 1 回しか処理されない
+      - バスが死んでいても (ディレクトリが無くても) 既存経路が動く
+    """
+
+    def setUp(self):
+        self.bus = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.bus, True)
+
+    def write_bus_note(self, note_id, body, kind=None):
+        doc = {"id": note_id, "source": "telegram", "body": body}
+        if kind is not None:
+            doc["kind"] = kind
+        (self.bus / f"{note_id}.json").write_text(json.dumps(doc, ensure_ascii=False))
+
+    def collect(self, branch_files=(), branch_raw=None, cursors=None, bus_dir=_DEFAULT):
+        with (
+            mock.patch.object(facts, "_list_feedback_files", return_value=list(branch_files)),
+            mock.patch.object(facts.gitutil, "show", return_value=branch_raw),
+        ):
+            return facts.collect_feedback(
+                FakeGh(), "/repo", dict(cursors or CURSORS), RULES, 56, "ops-feedback",
+                self.bus if bus_dir is _DEFAULT else bus_dir,
+            )
+
+    def test_stop_from_bus_stops_everything(self):
+        """バス経由の「止めて」が GitHub を一切経由せずに stop_all になる。
+        この 1 本が、緊急停止を第三者の可用性から切り離した証拠。"""
+        self.write_bus_note("note-9", "止めて")
+        _, _, stop_all, review_needed, _, _, _, cursors = self.collect()
+        self.assertTrue(stop_all)
+        self.assertEqual(review_needed, [])
+        # 既読の鍵は GitHub 経路と同じ形 (ここがずれると重複排除が効かない)
+        self.assertIn("ops/feedback/inbox/note-9.json", cursors["seen_feedback_files"])
+
+    def test_same_id_from_both_routes_is_handled_once(self):
+        """同じ書き置きがブランチ経由とバス経由の両方から来ても 1 回だけ。
+        2 回処理されると、同じ「止めて」で停止処理が二重に走る。"""
+        self.write_bus_note("note-1", "止めて")
+        _, _, stop_all, _, _, _, _, cursors = self.collect(
+            branch_files=[NOTE], branch_raw=json.dumps({"body": "止めて"}),
+        )
+        self.assertTrue(stop_all)
+        # 鍵が 1 つに畳まれていること (NOTE = ops/feedback/inbox/note-1.json)
+        self.assertEqual(cursors["seen_feedback_files"], [NOTE])
+
+    def test_already_seen_bus_note_is_not_reprocessed(self):
+        """既読のバス note は毎ビート再分類しない (ファイルは掃除まで残る)。"""
+        self.write_bus_note("note-1", "止めて")
+        cursors = dict(CURSORS, seen_feedback_files=[NOTE])
+        _, _, stop_all, review_needed, _, _, _, _ = self.collect(cursors=cursors)
+        self.assertFalse(stop_all)
+        self.assertEqual(review_needed, [])
+
+    def test_task_request_kind_is_diverted_from_bus_too(self):
+        """kind の扱いは経路で変わらない (P-0091 の分流はバス経由でも効く)。"""
+        self.write_bus_note("note-2", "vaultwarden を最新化して", kind="task-request")
+        _, _, _, review_needed, _, reqs, _, _ = self.collect()
+        self.assertEqual(review_needed, [])
+        self.assertEqual(len(reqs), 1)
+        self.assertEqual(reqs[0]["source"], "ops/feedback/inbox/note-2.json")
+
+    def test_missing_bus_dir_does_not_break_existing_route(self):
+        """バスが死んでいて (書き出し先が存在しなくても) 既存経路は動く。
+        停止経路を運ぶ側が可用性を下げてはいけない。"""
+        _, _, stop_all, _, _, _, _, _ = self.collect(
+            branch_files=[NOTE], branch_raw=json.dumps({"body": "止めて"}),
+            bus_dir=self.bus / "存在しない",
+        )
+        self.assertTrue(stop_all)
+
+    def test_bus_dir_none_keeps_legacy_behaviour(self):
+        """bus_dir を渡さない呼び出し (既存コード) は今までどおり。"""
+        self.write_bus_note("note-3", "止めて")
+        _, _, stop_all, _, _, _, _, _ = self.collect(bus_dir=None)
+        self.assertFalse(stop_all)
+
+    def test_partial_file_is_not_read(self):
+        """サイドカーの一時ファイル (. 始まり) と非 .json は読まない。
+        書きかけの JSON を拾うと本文が欠けたまま分類される。"""
+        (self.bus / ".tmp-note-4.json").write_text('{"body": "止め')
+        (self.bus / "note-5.txt").write_text("止めて")
+        _, _, stop_all, review_needed, _, _, _, cursors = self.collect()
+        self.assertFalse(stop_all)
+        self.assertEqual(review_needed, [])
+        self.assertEqual(cursors["seen_feedback_files"], [])
+
+    def test_first_boot_marks_bus_notes_as_read(self):
+        """初回起動 (cursor 未初期化) は手元に残っているバス note を triage しない。
+        過去の「止めて」が今の停止として効いてしまうため (レビュー指摘 [7] と同じ理由)。"""
+        self.write_bus_note("note-6", "止めて")
+        _, _, stop_all, _, _, _, _, cursors = self.collect(
+            cursors={"initialized": False},
+        )
+        self.assertFalse(stop_all)
+        self.assertEqual(cursors["seen_feedback_files"], ["ops/feedback/inbox/note-6.json"])
 
 
 if __name__ == "__main__":

@@ -213,7 +213,12 @@ command_id による処理済み台帳（台帳を永続化してから ack）/ 
 - **D27. heart も Go へ寄せる（方針・未着手）**: producer / consumer が Go に揃うため、
   Python の heart だけが NATS を素で話せない。所有者の意向は Go への統一。ただし
   heart は 218 テストを持つ決定論の要なので、**バス導入とは別立てで段階的に**行う。
-  それまでは heart の入力経路を変えない（archive された ops-feedback を読み続ける）。
+  **2026-08-23 追記**: Go 書き換えを待たずに heart の入力経路をバスへ広げた。
+  heart Pod に Go のサイドカー（`apps/autopilot/bus-sidecar`）を同居させ、
+  `events.raw.>` を共有ボリューム上の `<id>.json` に落とし、heart は
+  ローカルファイルとして読む（`ops/heart/facts.py` の `collect_feedback`）。
+  reconcile の判断ロジックは触っていない。所有者の緊急停止を GitHub の可用性から
+  切り離すことを、全面改修より先に済ませるための順序。GitHub 経路は両読みのまま残す。
 - **D17. 常駐基盤は `opencode serve`**: HTTP + SSE のサーバーで、セッション永続・
   fork・compact・実行中のモデル切替を公式に持つ。Claude Agent SDK は使わない。
 - **D18. 権限は SSE の permission イベントで自前判定**: `--auto` に丸投げせず、
