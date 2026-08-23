@@ -184,6 +184,26 @@ def extract_nix_helmchart_version(path: str, chart_name: str) -> str:
     return v.group(1)
 
 
+def extract_json_role_model(path: str, role: str) -> str:
+    """models.json の roles.<role> を拾う (json は使わず正規表現で読む。
+    このファイルは標準ライブラリのみ方針なので json は使ってよいが、
+    他の抽出関数と同じ『テキストとして読む』流儀に揃える)。"""
+    text = read(path)
+    m = re.search(rf'"{re.escape(role)}"\s*:\s*"([^"]+)"', text)
+    if not m:
+        raise ValueError(f"{path}: roles.{role} が見つからない")
+    return m.group(1)
+
+
+def extract_env_value(path: str, name: str) -> str:
+    """k8s manifest の `- name: <NAME>` の直後にある `value:` を拾う。"""
+    text = read(path)
+    m = re.search(rf"- name: {re.escape(name)}\s*\n\s*value:\s*(\S+)", text)
+    if not m:
+        raise ValueError(f"{path}: env {name} の value: が見つからない")
+    return m.group(1)
+
+
 # 各エントリの "targets" は 2 件以上の (path, 抽出関数) のリスト。全 target のバージョンが
 # 一致することを検証する（2 件限定の PAIRS ではなく N 件のグループとして扱う。
 # ops/inventory.json の各 target の "mirrors" と 1:1 で対応させる — T-0051）。
@@ -232,6 +252,17 @@ GROUPS = [
             # 「smoke だけ古い chromium / 判定ロジック」で検眼装置だけ挙動がずれる
             ("apps/ops-dashboard/dashboard-smoke-cronjob.yaml", lambda: extract_image_tag(
                 "apps/ops-dashboard/dashboard-smoke-cronjob.yaml", "ghcr.io/hikuohiku/homelab-autopilot@"
+            )),
+        ],
+    },
+    {
+        # コアのモデルは models.json が単一情報源だが、Deployment は実行時に
+        # models.json を読まない (env で渡す)。手で揃える運用は必ず腐るので機械で縛る
+        "name": "常駐コアのモデル (models.json roles.core と Deployment の CORE_MODEL)",
+        "targets": [
+            ("ops/models.json", lambda: extract_json_role_model("ops/models.json", "core")),
+            ("apps/autopilot-core/deployment.yaml", lambda: extract_env_value(
+                "apps/autopilot-core/deployment.yaml", "CORE_MODEL"
             )),
         ],
     },

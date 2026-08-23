@@ -27,14 +27,30 @@ health は既存の GitHub トークンで `ops-health-report` ブランチを�
 取得に失敗したときは `isError` で返す。握り潰すと、コアが「取れなかった」を
 「異常なし」と取り違えるため。
 
+## コアが起きる理由
+
 ```
-telegram-adapter / ダッシュボード → ops-feedback の inbox
-  → driver が新着を検出 → POST /session/{id}/prompt_async
-  → コアが telegram_reply (MCP) で所有者へ直接返す
+(1) 人間の書き置き
+    telegram-adapter / ダッシュボード → ops-feedback の inbox
+      → driver が新着を検出 → POST /session/{id}/prompt_async
+      → コアが telegram_reply で所有者へ直接返す
+
+(2) 健全性の変化 ← 人間に言われずに動く経路
+    ops-health-report の latest.json
+      → 不調なアプリの顔ぶれが変わったら driver が起こす
+      → コアが homelab_health で詳細を見て所有者に知らせる
 ```
 
-イベントバス（設計 D16）はまだ無い。inbox のポーリングで代用しており、バスを
-入れるときは driver の入力側だけを差し替えられるようにしてある。
+(2) は VISION の「指示を待たない」の最小実装。**同じ異常が続いている間は起こさない**
+（30 分ごとに同じ不満を言わせない）。初回起動時は現況を記録するだけで起こさない。
+レポートが読めないときは黙る — 読めないことは異常の不在ではないが、未生成の間ずっと
+鳴り続けるのも困るため。
+
+遅延の上限はレポートを書く CronJob の周期（30 分）で決まる。ここを詰めるには常駐
+watcher が要る（設計 D15）。
+
+イベントバス（設計 D16）はまだ無い。ポーリングで代用しており、バスを入れるときは
+driver の入力側だけを差し替えられるようにしてある。
 
 ## Pod の構成
 
@@ -64,8 +80,9 @@ autopilot イメージを流用しているのは opencode-ai が入っている
 
 ## モデル
 
-`CORE_MODEL`（`provider/model` 形式）で指定する。既定は `opencode-go/ox-alpha-free`
-で、`ops/models.json` の役と手で揃える運用（機械検査は未整備）。
+`CORE_MODEL`（`provider/model` 形式）で指定する。単一情報源は `ops/models.json` の
+`roles.core` で、**Deployment の env との一致は `ops/check_version_sync.py` が検査する**
+（手で揃える運用は腐るので機械で縛った）。差し替えるときは両方を同じ PR で変える。
 
 `ox-alpha-free` は無料期間の終了日が非公表で、Go の利用上限に達すると
 ブロックされる既知バグ（opencode#44173）もある。止まったらまずここを疑い、
