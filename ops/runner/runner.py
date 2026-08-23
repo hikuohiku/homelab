@@ -45,6 +45,12 @@ QUOTA_WAIT_MARGIN_SECONDS = 30
 STDERR_TAIL_CHARS = 2000
 STDERR_KEEP_LINES = 400
 
+# curriculum の 1 フェーズで見逃す連続異常終了の上限 (P-0227)。worker の
+# 「3 回連続 error で諦める」(mode_worker) と同じ数。opencode は自前のリトライ
+# (~6 回・指数退避, 2026-08-23 transcript 実測) を使い切った上で死ぬので、
+# その後の即時再試行は「器レベルの一時的故障」への最後の歯止めになる
+CURRICULUM_MAX_CONSECUTIVE_ERRORS = 3
+
 # 判定順が意味を持つ (429 系は文言が重なるので上限に寄せる):
 # usage_limit > auth > network > unknown
 #
@@ -310,6 +316,38 @@ def should_withhold_review(failure_kind, review_exists):
     結果なので、書かずに終えるのは「上限で死に、かつ verdict が無い」回だけ。
     """
     return failure_kind == "usage_limit" and not review_exists
+
+
+def curriculum_next_action(outcome, artifact_exists, failure_kind, consecutive_errors):
+    """curriculum の 1 フェーズ (generate/judge) 終了直後の次の一手 (純関数, P-0227)。
+
+    戻り値は 'done' | 'retry' | 'quota_wait' | 'give_up' の 4 値。
+    実測の死因 (ops/projects/logs/P-0227/failures.md, 2026-08-23) はプロバイダ側の
+    瞬間的な拒否窓 (probe HTTP 401) で、同じ鍵の隣接実行は成功している — それなのに
+    runner は 1 回死んだだけで Job 全体 (backoffLimit: 0) を落とし、judge フェーズの
+    死は生成済み proposals.json を道連れにしていた。発火条件をこの純関数に集約し、
+    ops/tests/test_curriculum_resilience.py で固定する。
+
+    - completed + 産物あり → done
+    - completed + 産物なし → give_up。セッションは成功を名乗ったのに契約の産物が
+      無い回は、もう一度走らせるのが高価なだけで当てがない (2026-08-22 実績:
+      「completed なのにファイル無し」は heart の次回 spawn で自然回復した)。
+      エンジン死ではないので連続カウンタにも載せない
+    - usage_limit → quota_wait。上限は器の外側の事実であり停滞ではない
+      (P-0026)。worker と同じく待って同じセッションから再開する —
+      curriculum にもこの配線が無く、上限死が即 error になるのが
+      PROJECT.md 前提 (a) の未適用箇所
+    - 上記以外の非 completed (auth / network / unknown / session_timeout /
+      inactive_killed) → consecutive_errors + 1 回目の失敗が上限に達するまで
+      retry。未知の死因でも「有界な再試行」は安全 (最悪でも 3 セッション分)
+    """
+    if outcome == "completed":
+        return "done" if artifact_exists else "give_up"
+    if failure_kind == "usage_limit":
+        return "quota_wait"
+    if consecutive_errors + 1 >= CURRICULUM_MAX_CONSECUTIVE_ERRORS:
+        return "give_up"
+    return "retry"
 
 
 def mask_secrets(text, env=None):
@@ -1010,6 +1048,41 @@ class Runner:
         return 0
 
     # --- curriculum (生成 → 判定の 2 段) ---
+    def run_curriculum_phase(self, prompt_name, tag, extra, artifact):
+        """生成/判定の 1 フェーズを、エンジンの瞬間死で Job 全体を殺さずに回す。
+
+        戻り値: None = 成功 / "waiting_quota" = 待機予算を使い切り
+        quota_wait_or_yield が waiting_quota を書き終えた (rc 0 で終えてよい) /
+        その他の文字列 = 最終 outcome (呼び出し側が既存の error 経路で書く)。
+
+        P-0227: 発火条件は curriculum_next_action (純関数) にあり、テストで
+        固定される。judge フェーズの再試行は同じ Pod 内で走るので /work の
+        proposals.json が生き続け、生成し直し (20〜30 万トークン) を避けられる。
+        沈黙は禁物 — heartbeat ログが唯一の外からの観測経路なので log() する
+        """
+        consecutive = 0
+        waited = 0
+        # 待機予算は worker と同じ財布。Job の生存時間より session_max_seconds
+        # が先に効く (initializer も同じ財布から待つ)
+        wait_budget = self.rules["runner"]["session_max_seconds"]
+        while True:
+            outcome = self.run_session(self.prompt_text(prompt_name, extra), tag)
+            kind = (self.last_session or {}).get("failure_kind")
+            action = curriculum_next_action(
+                outcome, artifact.exists(), kind, consecutive,
+            )
+            if action == "done":
+                return None
+            log(f"phase {tag}: outcome={outcome} kind={kind} -> {action}")
+            if action == "quota_wait":
+                waited, rc = self.quota_wait_or_yield(waited, wait_budget)
+                if rc is not None:
+                    return "waiting_quota"
+                continue
+            if action == "give_up":
+                return outcome
+            consecutive += 1
+
     def mode_curriculum(self):
         gen_out = Path("/work/proposals.json")
         judge_out = Path("/work/adopted.json")
@@ -1019,10 +1092,12 @@ class Runner:
                  # 人間の未処理タスク依頼 (JSON 配列。heart が spawn 時に注入、
                  # P-0091)。無ければ空配列で置換が常に成立する
                  "TASK_REQUESTS": os.environ.get("TASK_REQUESTS", "[]")}
-        outcome = self.run_session(
-            self.prompt_text("curriculum-generate", extra), "cur-gen"
+        outcome = self.run_curriculum_phase(
+            "curriculum-generate", "cur-gen", extra, gen_out
         )
-        if outcome != "completed" or not gen_out.exists():
+        if outcome is not None:
+            if outcome == "waiting_quota":
+                return 0
             # incident 通知の本文に出るのは error フィールドだけなので、死因を本文に含める
             self.write_result(
                 "error",
@@ -1038,10 +1113,12 @@ class Runner:
             judge_model = json.load(f)["roles"]["curriculum_judge"]
         self.model = judge_model
         extra["PROPOSALS_JSON"] = gen_out.read_text()[:20000]
-        outcome = self.run_session(
-            self.prompt_text("curriculum-judge", extra), "cur-judge"
+        outcome = self.run_curriculum_phase(
+            "curriculum-judge", "cur-judge", extra, judge_out
         )
-        if outcome != "completed" or not judge_out.exists():
+        if outcome is not None:
+            if outcome == "waiting_quota":
+                return 0
             self.write_result(
                 "error",
                 error=(
