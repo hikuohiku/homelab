@@ -154,6 +154,11 @@ command_id による処理済み台帳（台帳を永続化してから ack）/ 
   Telegram の `update_id` を全経路の共通冪等キーにする。
   実装上の未確認事項: OpenClaw をエージェント無効のまま起動でき、かつ受信が
   `channel_ingress_events` に入り続けるかは実機検証が要る（Pod 自体は稼働中）。
+- **D25a. 発話は `telegram_reply` MCP ツールで行う（D25 の実装形。実装済み）**:
+  コアが Bot API を直に組み立てるのではなく、`telegram-adapter mcp` が提供する
+  MCP stdio ツールを呼ぶ。**宛先は引数に取らず** allowlist の所有者に固定するため、
+  プロンプト注入で到達先を変えられない。受信と送信で allowlist の解釈がずれない
+  よう、受信アダプタと同じバイナリに同居させている。
 - **D25. コアの発話は Telegram Bot API を直接叩く**: OpenClaw ゲートウェイ経由に
   しない。理由: `autopilot` ns の Service は `ops-dashboard` のみで **OpenClaw には
   Service が無く**（`config.yaml` にも「Service / Ingress は作らない」と明記）、

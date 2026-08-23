@@ -64,7 +64,9 @@ type config struct {
 // 24h 残るので、壊れた 1 件で後続を永久に止めるより流れを守る。
 const maxAttempts = 3
 
-func loadConfig() (*config, error) {
+// loadConfig は環境変数から設定を読む。needGitHub は inbox へ書く adapter モードだけ
+// true にする (mcp モードは Telegram にしか触らないので GitHub トークンを要求しない)。
+func loadConfig(needGitHub bool) (*config, error) {
 	c := &config{
 		repo:        envOr("ADAPTER_REPO", "hikuohiku/homelab"),
 		branch:      envOr("ADAPTER_BRANCH", "ops-feedback"),
@@ -86,7 +88,7 @@ func loadConfig() (*config, error) {
 		return nil, errors.New("TELEGRAM_BOT_TOKEN が空です")
 	}
 	c.githubToken = strings.TrimSpace(os.Getenv("AUTOPILOT_GITHUB_TOKEN"))
-	if c.githubToken == "" {
+	if needGitHub && c.githubToken == "" {
 		return nil, errors.New("AUTOPILOT_GITHUB_TOKEN が空です")
 	}
 
@@ -406,11 +408,26 @@ func truncate(s string, n int) string {
 	return s[:n] + "…"
 }
 
+// main は 2 つのモードを持つ。
+//
+//	(引数なし) — adapter: 受信を ops-feedback の inbox へ流す常駐ループ
+//	mcp        — 返信ツール: MCP stdio サーバとして telegram_reply を提供する
+//
+// 同じバイナリに同居させるのは、Telegram の呼び出し方と allowlist の解釈を
+// 一箇所に保つため (受信と送信で判定がずれると事故になる)。
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		runMCP()
+		return
+	}
+	runAdapter()
+}
+
+func runAdapter() {
 	log.SetFlags(0)
 	log.SetPrefix("[telegram-adapter] ")
 
-	cfg, err := loadConfig()
+	cfg, err := loadConfig(true)
 	if err != nil {
 		log.Fatalf("起動できません: %v", err)
 	}
