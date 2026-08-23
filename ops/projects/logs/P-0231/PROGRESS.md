@@ -277,3 +277,49 @@ validate.py OK (0 error, warning 11 件は既知の backlog refs)
 (a)(b)(c) で切り分け。8/26 以後に merge された場合の live 断片は空判定文面になるが
 **壊れではない** (セッション 6 実証済み)。Python/Node 両テスト群の無劣化は
 セッション 7 時点で実測済み — 再実測の優先度は低く、merge 待ちの監視が本線
+
+## worker セッション 8 (2026-08-23) — publish→git→dashboard 読み取りの横断 E2E を初実施。ops-state 先端 beat 42 ベース・コード変更なし
+
+### やったこと
+
+レビュー指摘は無し。受入 5 項目を自前実測: 4/5 green、verify(3) のみ red
+(ops-state 先端 beat 42 `a8393eab6` 時点で briefing/reminders.txt 未公開 =
+ブランチ未 merge の裏付け)。**main はセッション 4 以後ずっと不動**
+(origin/main = 31a806191) なので衝突監査は省略。新規価値:
+
+**publish→git→dashboard 読み取りの横断 E2E を初実施**。これまで Python 側リハーサル
+(セッション 2〜7) と dashboard の Node 単体テスト (セッション 7) は別々に実測されていたが、
+鎖として繋いだ実測は無かった:
+
+1. ops-state 先端 beat 42 の worktree を展開し、`Heart.publish_reminders()` を
+   実台帳 × 実 UTC 時刻 (now = 20:49Z) で実行 → 断片 138 バイト
+   「今日 8/24 ゴミ収集 (仮置き): 実際の収集日に直す…」を作り add -A + commit。
+   **push 先はローカル bare リポジトリのみ** (本家 origin へは push しない。
+   単一書き手 = heart 原則の遵守)
+2. ローカル bare に main (= origin/main) と rehearsal commit の ops-state を載せ、
+   dashboard の `getOpsState()` を `HOMELAB_REPOSITORY=<ローカル bare>` で実行 →
+   `loadFromGit()` が全体健全にロード (projects 79 件・heartbeat beat 42・warning 無し)、
+   `remindersText` は publish 断片と完全一致、`toRemindersView` で empty=false。
+   reminders 取得は `.catch(() => "")` で失敗と空が同じ "" になるため、
+   projects.length>0 と heartbeat.at の assertion で「本当の取得成功」であることを担保した
+3. テスト再実測: unittest 28 本 OK、validate.py OK (0 error, warning 11 件は既知)
+
+### 分かったこと・罠
+
+- tsx でアドホックスクリプトを走らせる場合、package.json が CJS 扱いのため
+  **top-level await は不可** (`async function main()` + `.catch` に包む)。
+  `npm test` (tsx --test) 側は問題無し
+- `/tmp/opencode` は root 所有でリダイレクトも書けない (セッション 2 の罠の再確認)。
+  一時出力も `mktemp -d /tmp/x.XXXXXX` に置くこと
+- `git worktree add --detach` なら branch 済みチェックアウト (/work/repo の
+  project/p-0231) と共存できる。worktree の object store は本体と共有なので、
+  state 側で作った rehearsal commit も本体から push 可能
+
+### 次のセッションへの一言
+
+結論不変: コード完成・変更不要。verify(3) は merge → heart 初回ビート (~120s) で green。
+レビュー指摘があればその解消が最優先。merge 後 red 継続時はセッション 3 末尾の
+(a)(b)(c) で切り分け。8/26〜8/30 頃に merge された場合、live 断片は
+「直近 48 時間で告げる日はありません。」になるが**壊れではない** (セッション 6 実証済み)。
+publish→dashboard の横断 E2E はセッション 8 実測済み — 再実施の価値は薄く、
+merge 待ちの監視が本線
