@@ -266,7 +266,8 @@ kubectl -n syncthing logs job/syncthing-acceptance
 **合格条件**: ログの最後が exercise の `判定: 合格` で終わること (check → exercise の順に
 2 つの「判定: 合格」が出る。`set -eu` なので check が落ちた時点で exercise は回らない)。
 `exercise` 中は稼働中インスタンスにダミーフォルダ `acceptance-dummy` が一時登録されるが、
-終了時に必ず削除される (本番データには触れない)。
+終了時に必ず削除される (フォルダ登録後の初回 scan で syncthing が掘る `.stfolder` も
+含めて丸ごと消す。本番データには触れない)。
 
 ## 手順 D — 片付け
 
@@ -368,7 +369,7 @@ kubectl -n syncthing rollout status deploy/syncthing --timeout=300s
 | pvc-rw | 所有権問題 | 手順 B 再実行 (uid 1000 で検証しているため本番同等の判定) |
 | restic-coverage | 不明 = マニフェスト未指定 (Job 外で実行した場合のみ起こる) | `--restic-manifest` を渡す (Job 定義では渡済み) |
 | gui-health / tailnet-sync | 本体が起動しきっていない (rollout 未完了)、または GUI バインド修正漏れ | rollout status を確認。起動を繰り返すなら config.xml の `<gui><address>` を確認 |
-| exercise-* | フォルダ登録/rescan の不調。cleanup が UNKNOWN の場合は GUI から `acceptance-dummy` を手動削除 | ログの detail を見る。恒常的な問題ならロールバックを検討 |
+| exercise-* | フォルダ登録/rescan の不調。cleanup だけ UNKNOWN のときは detail の文言で切替 — 「folder 削除に失敗」なら GUI から `acceptance-dummy` を手動削除、「ダミーディレクトリ削除に失敗」なら残骸確認のみでよい (フォルダ登録自体は抜けている) | ログの detail を見る。恒常的な問題ならロールバックを検討 |
 
 ## 合格後
 

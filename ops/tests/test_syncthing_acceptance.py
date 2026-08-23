@@ -446,6 +446,28 @@ class NoSleep:
         self.total += s
 
 
+class StFolderMkdirApi(RecordingApi):
+    """POST /rest/db/scan を受けたら実物同様に .stfolder を掘る fake。
+
+    本物の syncthing はフォルダ登録後の初回 scan で folder path 直下に
+    .stfolder を作る (.stfolder が無いとフォルダが invalid 扱いになるため、
+    rescan 収束時点で確実に存在する)。素の RecordingApi はファイルシステムに
+    触れないためこの挙動を再現せず、cleanup が .stfolder 残置で落ちる
+    本番限定のバグを捉えられなかった (2026-08-23 レビューで合成環境実測)。
+    """
+
+    def __init__(self, local_dir, status_body=None):
+        super().__init__(status_body=status_body)
+        self.local_dir = Path(local_dir)
+        self.stfolder_created = False
+
+    def request(self, method, path, payload=None):
+        if method == "POST" and path.split("?")[0] == "/rest/db/scan":
+            (self.local_dir / ".stfolder").mkdir(parents=True, exist_ok=True)
+            self.stfolder_created = True
+        return super().request(method, path, payload)
+
+
 class TestRunExercise(unittest.TestCase):
     def run_exercise(self, api, tmp, **kw):
         kw.setdefault("max_polls", 5)
@@ -510,6 +532,41 @@ class TestRunExercise(unittest.TestCase):
             self.assertEqual(names["exercise-cleanup"]["status"], sa.UNKNOWN)
             self.assertEqual(sa.exercise_exit_code(results), 1)
             self.assertFalse((tmp / "acceptance-dummy").exists())
+
+    def test_scan_creates_stfolder_and_cleanup_still_passes(self):
+        # 実機では初回 scan で .stfolder が掘られる。それを再現しても
+        # 演習全体 (cleanup 含む) が合格し、ダミーディレクトリは
+        # .stfolder ごと跡形なく消えること。stfolder_created の assert で
+        # 「バグの再現条件が成立していた」ことを保証する (空振りテスト防止)
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            local_dir = tmp / "acceptance-dummy"
+            api = StFolderMkdirApi(local_dir,
+                                   {"state": "idle", "globalBytes": 64,
+                                    "invalid": ""})
+            results = self.run_exercise(api, tmp)
+            self.assertTrue(api.stfolder_created)
+            statuses = {r["name"]: r["status"] for r in results}
+            self.assertEqual(statuses["exercise-cleanup"], sa.PASS)
+            self.assertEqual(sa.exercise_exit_code(results), 0)
+            self.assertFalse(local_dir.exists())
+
+    def test_rescan_timeout_with_stfolder_still_cleans_up_completely(self):
+        # 収束失敗 (exit 1) の経路でも .stfolder 残置で cleanup が落ちないこと。
+        # 不合格時に手動削除の残骸を残さないのが目的
+        with tempfile.TemporaryDirectory() as td:
+            tmp = Path(td)
+            local_dir = tmp / "acceptance-dummy"
+            api = StFolderMkdirApi(local_dir,
+                                   {"state": "scanning", "globalBytes": 0,
+                                    "invalid": ""})
+            results = self.run_exercise(api, tmp)
+            names = self.by_name(results)
+            self.assertTrue(api.stfolder_created)
+            self.assertEqual(names["exercise-rescan"]["status"], sa.UNKNOWN)
+            self.assertEqual(names["exercise-cleanup"]["status"], sa.PASS)
+            self.assertEqual(sa.exercise_exit_code(results), 1)
+            self.assertFalse(local_dir.exists())
 
 
 class TestRenderAndExitCodes(unittest.TestCase):

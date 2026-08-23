@@ -70,6 +70,7 @@ import json
 import os
 import posixpath
 import re
+import shutil
 import socket
 import ssl
 import sys
@@ -621,9 +622,12 @@ def run_exercise(api, *, data_dir, self_device_id, expect_root=DEFAULT_ROOT,
         except SyncthingApiError as e:
             details.append(f"folder 削除に失敗 ({e}) — GUI から手動で削除すること")
         try:
-            marker.unlink()
-            local_dir.rmdir()
-            details.append("ダミーディレクトリを削除")
+            # rmdir ではなく丸ごと消す。実物の syncthing はフォルダ登録後の
+            # 初回 scan で folder path 直下に .stfolder を掘る (無いと invalid
+            # 扱いになるため収束時点で確実に存在する) ので、空だと仮定した
+            # 削除は実機で必ず ENOTEMPTY で落ちていた (2026-08-23 レビュー指摘)
+            shutil.rmtree(local_dir)
+            details.append("ダミーディレクトリを削除 (.stfolder 含む)")
         except OSError as e:
             details.append(f"ダミーディレクトリ削除に失敗 ({e})")
         ok = all("失敗" not in d for d in details)
