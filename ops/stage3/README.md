@@ -21,20 +21,35 @@ verdict は `blocked` / `ready_for_announce_draft` の 2 値しかない。「�
 
 ## 各基準と、その閾値の理由
 
-### 1. `trifecta-separation-drill` — lethal trifecta 分離の実証 (現在: pass=false)
+### 1. `trifecta-separation-drill` — lethal trifecta 分離の実証 (現在: pass=true)
 
-- **閾値**: 分離 Job プロファイル (`ops/profiles/private-data/`, P-0161) のテンプレート +
-  脅威モデル README + 合成データでの drill 実績 (`demo.json`: egress 拒否 / 成果物到達 /
-  後始末完了の 3 点が true)
+- **閾値**: 分離プロファイル (`ops/profiles/private-data/`) の Job テンプレート断片 +
+  脅威モデル README + 本番 namespace (autopilot) への NetworkPolicy 敷設
+  (`apps/autopilot/`, ArgoCD 管理・恒久痕跡) + 合成データでの drill 実績
+  (`demo.json`: labeled_blocked / unlabeled_allowed / dns_ok_labeled /
+  dns_ok_control / cleaned_up の全て true)
 - **なぜ**: VISION が段階 3 を「lethal trifecta 分離プロファイルが前提」と明言している以上、
   前提は推測ではなく実測でなければ審査材料にならない。「分離する設計がある」ではなく
   「実際に通った記録がある」。trifecta (私的データ × 信頼できない内容 × 外部送信経路) は
   同時に揃うと事故る — 3 要素の同時存在を断つ構成を、本番データでなく偽メールで 1 回でも
-  通した証拠が要る
-- **現在値**: P-0161 採択済み・成果未着。`ops/profiles/private-data/` 未存在 (2026-08-23 実測)。
-  証拠が無いので pass=false。evidence_path には不在の根拠となる採択記録
-  (`ops/projects/archive.jsonl`) を指してある — **existence 検査を通すためのダミーファイルは
-  作らない** (それは「自己申告を信用しない」の真逆)
+  通した証拠が要る。ここまでは元閾値 (P-0161 版) と不変
+- **閾値を書き直した理由** (台帳の直し方どおり、理由の書き換えはセット): 元閾値は
+  P-0161 構想の「model/publisher コンテナ分割」(egress_denied / published_to_branch /
+  cleaned_up) を想定していたが、P-0161 は成果未着のまま静止した。P-0243 が届けたのは
+  ネットワーク層での分離 (ラベル `private-data=true` の Pod に egress 既定拒否) で、
+  私的データを読むコードと外へ話す口が同一コンテナに同居しても外に出られない —
+  コンテナ分割より強い分離。さらに元閾値に無い対照群 (ラベル無し Pod の同一送信成功)
+  まで要求し、「拒否がポリシー由来」を反証込みで固定する。コンテナ分割は将来の改良として
+  ops/profiles/private-data/README.md に明記したまま
+- **現在値**: 実証済み。NetworkPolicy `private-data-egress-lock`
+  (ingress 全拒否 / egress は DNS のみ = fail-closed。追加の穴は P-0203 egress census
+  実測由来でのみ開ける)。exfil_drill.py による in-cluster 実測 (2026-08-23):
+  labeled Pod は DNS 解決成功の上で HTTPS を拒否、対照群は同一送信に 200 成功、
+  掃除完了を 404 確認。証拠は evidence_path (`demo.json`) に実ドリルの出力をそのまま保存
+- **verdict について**: 基準 1 が true になったことで機械規則により verdict は
+  `ready_for_announce_draft` に倒れる。これは「予告文の draft を作ってよい」だけで、
+  開放の実行も予告の送信もしない (冒頭の判定規則どおり)。送信と拒否権は issue #56 の
+  人間に委ねられ、draft 作成も次の curriculum が別プロジェクトとして扱う
 
 ### 2. `veto-channel-live` — 最新チャネルでの veto 到達性 (現在: pass=true)
 

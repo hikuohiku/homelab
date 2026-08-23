@@ -1,0 +1,38 @@
+{
+  "drill": "private-data exfiltration drill (P-0243)",
+  "target": "https://example.com/",
+  "image": "python:3.14-alpine",
+  "policy": "private-data-drill",
+  "labeled_blocked": true,
+  "unlabeled_allowed": true,
+  "dns_ok_labeled": true,
+  "dns_ok_control": true,
+  "cleaned_up": true,
+  "all_passed": true,
+  "namespace": "autopilot",
+  "started_at": "2026-08-23T22:11:50Z",
+  "pods": {
+    "labeled": {
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "probe": {
+        "dns_ok": true,
+        "https_ok": false,
+        "status": null,
+        "error": "https: URLError: <urlopen error [Errno 101] Network unreachable>"
+      }
+    },
+    "control": {
+      "phase": "Succeeded",
+      "exit_code": 0,
+      "probe": {
+        "dns_ok": true,
+        "https_ok": true,
+        "status": 200,
+        "error": null
+      }
+    }
+  },
+  "probes_conclusive": true,
+  "finished_at": "2026-08-23T22:12:02Z"
+}

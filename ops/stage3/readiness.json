@@ -1,18 +1,18 @@
 {
   "schema_version": 1,
   "project": "P-0185",
-  "scored_at": "2026-08-23T09:58:07Z",
+  "scored_at": "2026-08-23T22:13:06Z",
   "purpose": "段階 3 (生活ドメイン開放) の開放判断を「その日の気分」にしないため、既存の実測物だけを採点表に畳んだ台帳。閾値の理由は ops/stage3/README.md。新規インフラは作らない — 足りない観点は pass=false で名前を付けることが本業",
   "verdict_rule": "全 criteria の pass が true のときだけ ready_for_announce_draft。1 つでも false (または採点不能) なら blocked。verdict がどちらに倒れても、開放の実行・予告の送信はこの台帳では行わない — 予告 draft の作成は次の curriculum に、送信と拒否権 (#56) は人間に委ねる",
-  "verdict": "blocked",
+  "verdict": "ready_for_announce_draft",
   "criteria": [
     {
       "id": "trifecta-separation-drill",
-      "criterion": "lethal trifecta 分離プロファイルの実証 (drill) 証跡が存在する — 私的データを読む手と外へ話す口が物理的に別コンテナであることを合成データで通した記録がある",
-      "threshold": "ops/profiles/private-data/ 配下に Job テンプレートと脅威モデル README があり、合成データでの drill 実績 demo.json (egress_denied / published_to_branch / cleaned_up が全て true) が残っていること (P-0161 の成果物)",
-      "current_value": "未整備 — P-0161 は採択済み (archive.jsonl 採択記録, adopted=true) だが実装成果はまだ届いていない。ops/profiles/private-data/ 未存在 (2026-08-23 実測)。不在の根拠となる一次情報として採択記録を指す",
-      "evidence_path": "ops/projects/archive.jsonl",
-      "pass": false
+      "criterion": "lethal trifecta 分離の実証 (drill) 証跡が存在する — 私的データを読む Pod が NetworkPolicy の既定拒否 egress 下で外部送信に失敗し、対照群 (ラベル無し Pod) の同一送信が成功すること (= 拒否がポリシー由来) を合成データで通した記録がある",
+      "threshold": "ops/profiles/private-data/ 配下に Job テンプレート断片と脅威モデル README があり、本番 namespace (autopilot) 向け NetworkPolicy が apps/autopilot/ 経由で恒久敷設 (ArgoCD 管理) されていること。さらに in-cluster ドリルの実績 demo.json (labeled_blocked / unlabeled_allowed / dns_ok_labeled / dns_ok_control / cleaned_up が全て true — 対照群による反証込み) が残っていること (P-0243 の成果物。P-0161 版閾値からの変更理由は ops/stage3/README.md §1)",
+      "current_value": "整備済み・実測 — P-0243 により NetworkPolicy private-data-egress-lock を敷設 (ingress 全拒否 / egress は DNS のみ fail-closed、追加の穴は P-0203 census 実測由来でのみ)。exfil_drill.py の in-cluster 実測 (2026-08-23): labeled Pod は DNS 解決成功の上で HTTPS を拒否、対照群は同一送信に 200 成功、掃除完了を 404 確認。apps/ と ops/heart/ を含む変更のため人間レビュー必須 (auto-merge 対象外)",
+      "evidence_path": "ops/profiles/private-data/demo.json",
+      "pass": true
     },
     {
       "id": "veto-channel-live",
