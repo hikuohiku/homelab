@@ -56,5 +56,43 @@ idle-audit.json を作り commit する。exec/metrics の権限が無ければ 
 unknown 分類で正直に畳み、欠損内容を collection_notes に任せる。分類閾値 (50m/500m) が
 実データに対して妥当かは JSON の samples 見てから判断 (変えるなら env で上書きして
 根拠ごと記録)。verify#3 の docs/coder-idle-policy.md は実測表が必要なので #2 の後。
-autostop 対処案は main.tf L84-87 の `home_disk_size` ではなく Coder の workspace
+ autostop 対処案は main.tf L84-87 の `home_disk_size` ではなく Coder の workspace
 template パラメータ (time_to_stop 相当) の話として書くこと。実装自体は別プロジェクト。
+
+### 2026-08-23 セッション2 — verify#3 を green に (実測表は正直な空節)
+
+**やったこと**: `docs/coder-idle-policy.md` を新設し verify#3 を green 実測。
+(b) autostop 対処案+暫定推奨閾値、(c) 器の足場の除外条件は実装で書き切った。
+(a) 実測表は「未計測」と明記した空節にし、idle-audit.json からの転記手順と
+列定義 (schema v1 対応) だけを置いた — 数字の捏造はしない。verify#2 は本日も
+この環境に credential が無く rc=2 を再実測 (前セッションと同一環境)。唯一の
+failing 項目のまま。
+
+**分かったこと / 罠**:
+
+- **Coder の autostop の活動判定はセッションベース** (公式 docs, 2026-08-23 閲覧:
+  code-server/VS Code Remote・JetBrains・web terminal・`coder ssh`・Coder Tasks の
+  agent status)。`kubectl exec` も workspace 内の背景プロセスも活動と数えられない。
+  → スクリプトの CPU ベース分類と Coder の idle 判定は**両方向にズレる**
+  (SSH 張りっぱなしだと autostop が効かない / exec だけの無人ジョブは止まる)。
+  docs §3 の除外条件はここから導いた。
+- 正確な設定 CLI は `coder templates edit personal --default-ttl <duration>`
+  (UI 名 "Default autostop") + `--activity-bump` (既定 1h) + `--autostop-reminder`。
+  **"time_to_stop" という名のテンプレートパラメータは実在しない** (前セッション末尾の
+  「time_to_stop 相当」は不正確だった訂正)。default-ttl は既存稼働中 workspace に
+  遡及しない (公式注記)。強制定期再起動 (autostop requirement)・quiet hours・dormancy
+  は Premium 機能で OSS では使えない → 「セッション放置への強制停止」は作れない。
+- apps/coder/rbac.yaml の coder SA は coder ns 内 pods/pvc/deployments の全権限だが
+  **metrics.k8s.io も pods/exec も無い**。autopilot-reader (get/list only) も同様。
+  収集をどの identity で動かすかで top/exec の成否が決まる — 権限の実測は未着手。
+- 器の常駐系 (autopilot 本体・ops-dashboard) は coder workspace 外 (autopilot ns の
+  Deployment/CronJob) を確認した (apps/autopilot 配下に coder への言及なし)。
+  docs §3 の原則「常駐系を workspace に入れない」は現状と整合している。
+
+**次のセッションへの一言**: verify#2 が残り。credential のある環境 (kubeconfig or
+SA token) で `ops/tools/coder_idle_audit.sh -s 5 -i 10` → idle-audit.json を commit →
+docs/coder-idle-policy.md §1 の表へ転記して「草案」を外す、が完了の形。
+どの SA でも metrics/exec が通らなければ `--no-exec` + unknown 分類で正直に畳み、
+docs §1 の PVC 使用 GiB 列も「未計測 (権限)」と明記すること。分類閾値 50m/500m の
+妥当性判断は JSON の samples 見てから (変えるなら env 上書きで根拠ごと記録)。
+docs §2 の閾値 8h は暫定値なので、夜間アイドルの実パターンが出たら改訂検討。
