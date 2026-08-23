@@ -2035,3 +2035,50 @@ issue #56 の回答再確認 (**なし**, 総数 177・最新 2026-08-23T01:23:3
   実踩。API レスポンス約 750KB が repo ルートに残骸として残った)。ページごとの保存先は
   `TA`/`TB` のように独立した変数名にするか `${!i}` 間接展開を使い、commit 前に
   `git status --porcelain` で未追跡残骸を必ず確認すること
+
+## session46 (P-0116 worker, 2026-08-23)
+
+やったこと: 冒頭チェック (fetch → main 先行 **3 コミット** = PR #518 P-0141 の merge。
+差分は `ops/projects/logs/P-0141/`・`ops/rules.json`・`ops/runner/runner.py` (+tests) のみで
+本プロジェクト無関係 → **merge で解消** (7dfec9d1))・自分の remote 分岐移動 **なし**・
+issue #56 の回答再確認 (**なし**, 総数 177・最新 2026-08-23T01:23:30Z とも session39〜45 と
+完全一致 = 新規コメントゼロ。キーワード走査も既知の無関係コメントのみ)・open PR の確認
+(**1 件**: #512 P-0118 のみ。#518 P-0141 は main に取り込まれ、#515 P-0128 は open 一覧から
+消えた。いずれも本プロジェクト無関係)・受入全項目・validate.py・discover 全体の再実測。
+コード・manifest 側の変更は無し (session5→46 まで 42 回連続で同じ結論。session8 の
+「貼り付け用文案」「環境メモ」は引き続き有効)。
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option`) — red のまま
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** (apps/restic-check/ 配下)
+- #2: **28 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- `python3 -m unittest discover -s ops/tests`: **241 tests OK** ← **214 から変化** (今回の
+  merge で入った P-0141 の `test_unknown_death_probe.py` 分 +27。退行ではなく増加)
+- push 形態: **fast-forward push でよい** (remote tip は祖先。merge 後も変わらず)
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完全に完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら
+  文言判断に従うだけ。来ていなければ再実測して末尾への追記で足りる (session8 の文案・
+  環境メモもそのまま使える)
+- **discover の総数は merge で動く**: 214 は固定値ではない (session46 時点で 241)。
+  main を merge した直後に総数が違っても驚かず、rc=0 と OK を確認すること
+- **PROGRESS.md のエントリ順は時系列とは限らない**: session45 が session42 と session43 の
+  間に挿入されている (session45 worker の挿入位置ミス)。自分の新規エントリは**ファイル末尾に
+  追記**するのが正。読む時は「末尾 = 最新」を鵜呑みにせず git log と突き合わせること
+- **冒頭チェックは毎回**: fetch → main 先行 (`HEAD..origin/main`) + 自分の分岐移動
+  (`HEAD..origin/project/p-0116`) の両方。main 先行・diverge いずれも **merge 一択**
+  (rebase 不可 — session28)
+- **GitHub API 走査は AUTOPILOT_GITHUB_TOKEN 付きで**: unauthenticated は 403 rate limit。
+  paging 走査 (per_page=100)、urllib ループ内で直接 json.load すれば mktemp 変数連結問題自体が
+  発生しない (session45 実績。session46 も同方式)
+- **discover のサマリは grep で拾うこと**: stdout/stderr をそれぞれ mktemp ファイルに落とし
+  `grep -E '^(Ran|OK|FAILED)'` で拾うのが確実 (session36 実踩)
+- **mktemp は素の `mktemp` (TMPDIR 既定) 一択**: BusyBox mktemp は X が途中にある
+  テンプレを拒否し、`/tmp/opencode` 直指定は Permission denied の環境がある
+  (session40 実踩。詳細は session40 の要点参照)
+- **validate.py の集計はサマリ行を見る**: 出力末尾の `N error, M warning` 行が正
+  (session45 実踩予防)
