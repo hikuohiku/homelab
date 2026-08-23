@@ -76,6 +76,13 @@ jobs:
           python3 ops/check_doc_commands.py
           python3 ops/check_feedback.py
           python3 ops/check_credential_map.py
+          # 提案チェッカー (P-0210) の自己テスト: 正当な列を落とさず、
+          # 不正な列をちょうど rc=1 で落とすこと。if の中なら bash -e で落ちない
+          python3 ops/check_proposals.py ops/tests/fixtures/proposals/good.json
+          if python3 ops/check_proposals.py ops/tests/fixtures/proposals/bad.json; then
+            echo "::error::bad fixture が rc=0 で通過した。チェッカーが緩んでいる"
+            exit 1
+          fi
 
       # --- apps/ を触った PR だけ ---
 
