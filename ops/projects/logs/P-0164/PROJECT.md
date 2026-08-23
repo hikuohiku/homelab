@@ -35,8 +35,10 @@ verify は DoD の下限であって DoD そのものではない。DoD (2)(3) �
 
 - ArgoCD は apps/argocd を argo-cd Helm chart **9.1.6** (releaseName: `argocd`, namespace:
   `argocd`) で導入 (apps/argocd/kustomization.yaml)。fullnameOverride は無く、release 名と
-  chart 名の縮退一致でリソース名が `argocd-*` になるため、spec 表記どおりの Deployment 名は
-  `argocd-server` / `argocd-repo-server` / `argocd-application-controller`。
+  chart 名の縮退一致でリソース名が `argocd-*` になる。**訂正 (2026-08-23 worker 実測)**:
+  `argocd-server` / `argocd-repo-server` は Deployment だが、`argocd-application-controller`
+  は **StatefulSet** (初版で「3 つとも Deployment」と書いたのは誤り)。scale 操作の当て先は
+  deploy_continuity.py の TARGETS を正とすること
 - values.yaml は replicas を明示していない (server/controller/repoServer とも resources のみ)
   → Git 上の希望状態は各 1 replica。argocd Application は `selfHeal: true`
   (apps/argocd/application.yaml:23) なので、scale 0 への kubectl 直変更は controller 復帰後に
