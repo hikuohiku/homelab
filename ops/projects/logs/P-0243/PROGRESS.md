@@ -672,3 +672,53 @@
   test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
 - main が動いていれば追い越し (手順は今セッションの「罠注意」参照:
   merge-base diff で中身確認 → P-0243 が archive に入っていないか確認 → merge)
+
+## セッション 18 (2026-08-23 深夜) — 短絡チェックのみ + archive.jsonl 誤読の解消。main 不動・census 未着・コード変更ゼロ
+
+### やったこと
+
+- **セッション 13〜17 の短絡手順どおり 4 点チェック**:
+  V1 green / V2 red (既知 fail-fast rc=2、stderr は wrapper 実測と同一メッセージ。
+  main() 冒頭の書き込みプローブで中断・クラスタ接触前なので副作用ゼロ) /
+  V3 green / census 未着 (`git ls-tree -r origin/main | grep -c egress` = 0, rc=1)
+- **archive.jsonl 全文 grep で自分の id が hit して一時「archive されたか?」と疑ったが、
+  誤読だったと判明** (詳細は下記「罠注意」)。README を読んで意味論を確認:
+  archive.jsonl は採択・棄却を問わず全案を載せる追記専用の恒久台帳で、
+  実行状態はそこに無い。実状態は `origin/ops-state:projects.json` を見るべきで、
+  P-0243 は `state: active`・spawn_count=1 → **ループ前提は健在**
+  (なお ops-state ブランチは本セッション中も動いていたので確認時の fetch は必須)
+- demo.json 完全性チェックはセッション 17 形式 (7 bool キー +
+  `pods.labeled.probe.https_ok is False` / `pods.control.probe.https_ok is True`) で全パス
+- 本 PR の差分範囲を再確認 (14 ファイル・spawn.py の emptyDir mount 済み)。
+  コード変更は今セッションもゼロ
+
+### 分かったこと (次セッションへの罠注意)
+
+- **archive.jsonl に自分の id があっても死亡ではない**: 採択案も全部載る
+  (「curriculum が立てた全案の恒久記録」と README に明記)。セッション 17 の
+  「P-0243 自体は archive 行に含まれず」は誤記 — 実際は #578 の「curriculum: 6 案 (採択 2)」
+  (5cc83fcd4、セッション 7 取り込み済み) で入っていた。結論 (現役) は正しかったが
+  根拠が間違っていた。**生死確認の正手順は fetch 後
+  `git show origin/ops-state:projects.json` の当該 id の `state` を見ること**
+- `git rev-list HEAD..origin/main --count` はローカル ref 基準。fetch 前に数えても
+  古い数が出る (今回はたまたま同値だったが、ops-state は実際に動いていた)。
+  数える前に `git fetch origin` を先に打つ習慣に
+
+### 検証 (全部自分で実走済み)
+
+- spec verify V1 green / V3 green / V2 red (既知 fail-fast rc=2、クラスタ副作用ゼロ)
+- demo.json 完全性確認 (7 bool キー + pods.*.probe 対照を assert) /
+  census 未着確認 / fetch 後 main 新着 = 0 (#579 のまま) 確認 /
+  ops-state:projects.json の P-0243 state=active 確認
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4〜17 から不変** (archive.jsonl の誤読解消が差分): V2 は本 PR の
+  merge+sync 後の新 runner Pod で自動 green 化する (spawn.py の emptyDir mount 済み —
+  今セッション再確認)。Pod 内での再走・権限 hack は不要 (sudo 不在まで実証済み)。
+  やることは「PR merge を待つ」だけ。main 新着なければ短絡でよい
+- census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+  到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+- main 追い越しの手順はセッション 17 の「罠注意」参照 (merge-base diff で中身確認)
+- 生死が気になったら archive.jsonl ではなく ops-state:projects.json の `state` を見る
