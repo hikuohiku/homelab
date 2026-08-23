@@ -136,6 +136,60 @@ spec:
               mountPath: /data
             - name: tmp
               mountPath: /tmp
+
+        # --- バス経路の受け口 (設計 D16 の段階 3) ---
+        #
+        # 所有者の「止めて」が GitHub の可用性に依存している状態を解くための第 2 経路。
+        # NATS の events.raw.> を durable pull consumer で読み、共有 PVC の
+        # /data/feedback-bus/inbox/<id>.json に落とすだけ。判断は一切しない
+        # (triage は heart の純関数のまま)。heart は既存の issue #56 /
+        # ops-feedback ブランチと両読みし、同じ id は cursor が 1 回に落とす。
+        #
+        # このコンテナが死んでも heart は GitHub 経路で動き続ける。停止経路を運ぶ側が
+        # 可用性を下げてはいけないので、liveness/readiness は持たせない
+        - name: bus-sidecar
+          # TODO(digest): 初回のみタグ参照。main へ merge して
+          # build-heart-bus-image.yml が push したら、SHA タグの OCI index digest を
+          # registry API の docker-content-digest で実測して pin し直すこと
+          # (telegram-adapter / ops-dashboard と同じ二段階)
+          image: ghcr.io/hikuohiku/homelab-heart-bus:latest
+          terminationMessagePolicy: FallbackToLogsOnError
+          env:
+            - name: NATS_URL
+              value: nats://nats.autopilot.svc:4222
+            # この 2 つを消せば GitHub 経路だけの構成に切り戻る (未設定なら
+            # サイドカーは何もせず回り続ける)
+            - name: NATS_NKEY_SEED
+              valueFrom:
+                secretKeyRef:
+                  name: autopilot-credentials
+                  key: NATS_CONSUMER_NKEY_SEED
+            # core-driver とは別の durable。同じイベントを両者が独立に読む
+            - name: NATS_DURABLE
+              value: heart-feedback
+            # heart 側の既定 (ops/heart/config.py の HEART_FEEDBACK_BUS_DIR) と
+            # 同じ場所。ずれると「書いているのに読まれない」無言の故障になる
+            - name: BUS_SIDECAR_OUT_DIR
+              value: /data/feedback-bus/inbox
+            - name: TZ
+              value: Asia/Tokyo
+          volumeMounts:
+            - name: data
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            # memory の limits は付けない (substrate の規則: 実測の裏付けなしに
+            # 付けない。超過が回復不能な OOMKill になる)
+            limits:
+              cpu: 200m
+          securityContext:
+            allowPrivilegeEscalation: false
+            # 書く先は /data (共有 PVC) だけ
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
       volumes:
         - name: config
           configMap:
