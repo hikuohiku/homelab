@@ -1142,6 +1142,50 @@ $ python3 ops/validate.py                                # 0 error, 11 warning (
   塞ぎ手 5 件不変 (P-0092 announced / P-0175・P-0181・P-0182・P-0185 active)。
   main が動いたら validate.py の archive.jsonl error → origin/main を merge
 
+### セッション 29 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking が 5→4 件に減少**
+  (P-0092 announced / P-0175・P-0181・P-0182 active。checked=65、10:09Z 実測)。
+  固定指示どおり実演習は見送り。コード変更は無し
+- 本セッションの実イベント: **PR #530 の新入場 3 案から最初の出口が出た** —
+  **P-0185 が active→in_review** (beat113 decide, f12b56740 10:05:33Z)。台帳差分は
+  この 1 行のみ (64/65 不変、id+state 一括 diff。d2ce77036 beat106 時点との比較)。
+  内訳 delivered 27 / vetoed 2 / stalled 30 / announced 1 / active 4 (+自己) /
+  in_review 1。active→in_review 方向は観測窓内 3 例目 (P-0163 / P-0174 に続き)。
+  P-0185 レコードに理由系フィールドは無し (state のみの変化)
+- 凍結様態 (b)「projects.json の新 version 自体ゼロ」型は beat113 で明けた —
+  同ファイルを触る commit は beat94 (09:42:37Z, df707db34) を最後に皆無だったが
+  beat113 で再開。凍結明けの差分もセッション 17 型の**最小単位 (1 件)**で、
+  「凍結明け = 大規模入れ替わり」は 2 例目の反例
+- blocking 減少 (5→4) の出口は横滑り in_review — 「減少 = 弁前進」反例の追加。
+  in_review→active 復帰は過去 2 例あるため P-0185 が塞ぎ手に戻る可能性もある。
+  判定原則 (announced+active==0 の実測一択) は不変。残塞ぎ手は
+  P-0092 announced + P-0175/P-0181/P-0182 active の 4 件
+- **PR #524 材料耐久 8 例目**: GET /pulls/524 → open / draft=true /
+  mergeable_state=**clean** 初手 / head=5d24c8932 不変。head commit の check-runs で
+  ci success・GitGuardian success 再確認。main は 9b9470594 で不動・自ブランチ包含済み
+  につき validate 劣化なし・merge 不要
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 4), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 294 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git merge-base --is-ancestor origin/main HEAD          # 真 = main 不動・merge 不要
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932 不変
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順はセッション 3・4 の固定 + 当日健診: pod の
+  restartCount/lastState を custom-columns で pod 単位確認 + 4 アプリの常時同期
+  ループを頭に入れてから計測)、開いていなければ再実測だけして軽く閉じてよい。
+  塞ぎ手 4 件 (P-0092 announced / P-0175・P-0181・P-0182 active)。P-0185 は
+  in_review へ横滑りしたばかり — active 戻り (過去 2 例) なら blocking は 4 に戻るので
+  「4 件」に意味を持たせず 0 か否かだけを見ること。main が動いたら validate.py の
+  archive.jsonl error → origin/main を merge
+
 ## 発見 (スコープ外。curriculum が拾うもの)
 
 - (セッション 28, クラスタ側の環境ノイズ) **download-ledger CronJob 導入以降、
