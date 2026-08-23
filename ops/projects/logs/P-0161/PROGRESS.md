@@ -19,11 +19,18 @@
   投稿 2026-08-23T06:30:10Z、再読取得で着地確認済み
 
 - worker セッション 3 (2026-08-23): **Secret 未適用を再確定したのみ。待ち継続**。
-  プローブ (実測 6) を実行: delete --ignore-not-found → NP → jobs apply → model Pod 監視
-  → `FailedMount: secret "p0161-mail-fixture" not found` x8 over 108s で未適用と機械確定。
-  issue #56 コメントを API 再読取得し、依頼 (id=5384629207) が**依然最終コメントで
-  返信無し**を確認 → 重複依頼はせず静かに撤収 (`kubectl delete -f` job.yaml →
-  networkpolicy.yaml、残骸 grep 0)。verify 1・2 も本セッションで green 再実測。
+   プローブ (実測 6) を実行: delete --ignore-not-found → NP → jobs apply → model Pod 監視
+   → `FailedMount: secret "p0161-mail-fixture" not found` x8 over 108s で未適用と機械確定。
+   issue #56 コメントを API 再読取得し、依頼 (id=5384629207) が**依然最終コメントで
+   返信無し**を確認 → 重複依頼はせず静かに撤収 (`kubectl delete -f` job.yaml →
+   networkpolicy.yaml、残骸 grep 0)。verify 1・2 も本セッションで green 再実測。
+
+- worker セッション 4 (2026-08-23): **Secret 未適用を再確定 (FailedMount x9 over 2m9s)。
+   待ち継続**。issue #56 を page 2 まで API 再読 (全 180 件) し、依頼 (id=5384629207,
+   2026-08-23T06:30:10Z) が依然最終コメントで返信無しを確認 → 重複依頼せず静かに撤収、
+   残骸 grep 0。verify 1・2 green 再実測 (22 tests OK)。verify 3 は人間の Secret apply
+   が唯一のブロッカー — worker 側にできることは無い状態。次セッションも「まずプローブ」
+   から (下記参照)。
 
 ## 実測で分かったこと
 
@@ -69,8 +76,8 @@
 ## 次のセッションへ
 
 - **まず issue #56 とクラスタを確認する**: 人間への依頼は投稿済み (経過参照)。
-  セッション 3 時点 (2026-08-23 午後) で返信無し・Secret 未適用を再確定済み。
-  返信が無くても、Secret が apply 済みかもしれないのでプローブする (実測 6 の方法):
+   セッション 4 時点 (2026-08-23 午後) で返信無し・Secret 未適用を再確定済み。
+   返信が無くても、Secret が apply 済みかもしれないのでプローブする (実測 6 の方法):
   1. `kubectl delete -f ops/profiles/private-data/job.yaml --ignore-not-found` (PVC 再作成
      強制。罠は下記)
   2. NP → jobs を apply、model Pod を ~2 分監視 (`kubectl describe pod … | tail`)
