@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-23T11:00:07Z",
+  "generated_at": "2026-08-23T11:30:04Z",
   "applications": [
     {
       "name": "agent-rbac",
@@ -223,6 +223,13 @@
     },
     {
       "name": "curriculum-system-a791358-5znvv",
+      "namespace": "autopilot",
+      "phase": "Failed",
+      "restarts": 0,
+      "waiting_reasons": []
+    },
+    {
+      "name": "runner-p-0164-a1-cs5bh",
       "namespace": "autopilot",
       "phase": "Failed",
       "restarts": 0,
@@ -498,8 +505,8 @@
       "containers": [
         {
           "name": "application-controller",
-          "cpu": "2086124n",
-          "memory": "294852Ki"
+          "cpu": "2110427n",
+          "memory": "230348Ki"
         }
       ]
     },
@@ -509,8 +516,8 @@
       "containers": [
         {
           "name": "applicationset-controller",
-          "cpu": "461037n",
-          "memory": "26264Ki"
+          "cpu": "252117n",
+          "memory": "27800Ki"
         }
       ]
     },
@@ -520,8 +527,8 @@
       "containers": [
         {
           "name": "dex-server",
-          "cpu": "21371n",
-          "memory": "27656Ki"
+          "cpu": "43996n",
+          "memory": "29152Ki"
         }
       ]
     },
@@ -531,8 +538,8 @@
       "containers": [
         {
           "name": "notifications-controller",
-          "cpu": "93536n",
-          "memory": "25084Ki"
+          "cpu": "574681n",
+          "memory": "27700Ki"
         }
       ]
     },
@@ -542,8 +549,8 @@
       "containers": [
         {
           "name": "redis",
-          "cpu": "4929593n",
-          "memory": "24420Ki"
+          "cpu": "4612533n",
+          "memory": "25736Ki"
         }
       ]
     },
@@ -553,8 +560,8 @@
       "containers": [
         {
           "name": "repo-server",
-          "cpu": "827489n",
-          "memory": "59404Ki"
+          "cpu": "932258n",
+          "memory": "139760Ki"
         }
       ]
     },
@@ -564,8 +571,8 @@
       "containers": [
         {
           "name": "server",
-          "cpu": "330837n",
-          "memory": "28584Ki"
+          "cpu": "281462n",
+          "memory": "29600Ki"
         }
       ]
     },
@@ -575,8 +582,8 @@
       "containers": [
         {
           "name": "heart",
-          "cpu": "5326991n",
-          "memory": "53932Ki"
+          "cpu": "38406n",
+          "memory": "56824Ki"
         }
       ]
     },
@@ -586,30 +593,8 @@
       "containers": [
         {
           "name": "web",
-          "cpu": "27759317n",
-          "memory": "89628Ki"
-        }
-      ]
-    },
-    {
-      "namespace": "autopilot",
-      "name": "reviewer-p-0175-a1-xxl49",
-      "containers": [
-        {
-          "name": "reviewer",
-          "cpu": "1489515777n",
-          "memory": "566788Ki"
-        }
-      ]
-    },
-    {
-      "namespace": "autopilot",
-      "name": "runner-p-0164-a1-cs5bh",
-      "containers": [
-        {
-          "name": "runner",
-          "cpu": "19994366n",
-          "memory": "489180Ki"
+          "cpu": "22675111n",
+          "memory": "91856Ki"
         }
       ]
     },
@@ -619,8 +604,8 @@
       "containers": [
         {
           "name": "runner",
-          "cpu": "91692787n",
-          "memory": "448556Ki"
+          "cpu": "38586305n",
+          "memory": "446088Ki"
         }
       ]
     },
@@ -630,8 +615,8 @@
       "containers": [
         {
           "name": "adapter",
-          "cpu": "0",
-          "memory": "8840Ki"
+          "cpu": "67346n",
+          "memory": "8956Ki"
         }
       ]
     },
@@ -641,8 +626,8 @@
       "containers": [
         {
           "name": "dev",
-          "cpu": "78535352n",
-          "memory": "3037812Ki"
+          "cpu": "106015451n",
+          "memory": "3187684Ki"
         }
       ]
     },
@@ -652,8 +637,8 @@
       "containers": [
         {
           "name": "coder",
-          "cpu": "4929881n",
-          "memory": "87572Ki"
+          "cpu": "5293729n",
+          "memory": "98708Ki"
         }
       ]
     },
@@ -663,8 +648,8 @@
       "containers": [
         {
           "name": "postgres",
-          "cpu": "30962909n",
-          "memory": "65248Ki"
+          "cpu": "33366940n",
+          "memory": "63400Ki"
         }
       ]
     },
@@ -674,8 +659,8 @@
       "containers": [
         {
           "name": "dex",
-          "cpu": "210262n",
-          "memory": "14148Ki"
+          "cpu": "241358n",
+          "memory": "15036Ki"
         }
       ]
     },
@@ -685,8 +670,8 @@
       "containers": [
         {
           "name": "external-secrets",
-          "cpu": "1303693n",
-          "memory": "44040Ki"
+          "cpu": "1235297n",
+          "memory": "49240Ki"
         }
       ]
     },
@@ -696,8 +681,8 @@
       "containers": [
         {
           "name": "cert-controller",
-          "cpu": "687327n",
-          "memory": "54224Ki"
+          "cpu": "580218n",
+          "memory": "55012Ki"
         }
       ]
     },
@@ -707,8 +692,8 @@
       "containers": [
         {
           "name": "webhook",
-          "cpu": "234681n",
-          "memory": "29916Ki"
+          "cpu": "269632n",
+          "memory": "30092Ki"
         }
       ]
     },
@@ -718,8 +703,8 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "2252357n",
-          "memory": "249880Ki"
+          "cpu": "2261023n",
+          "memory": "249888Ki"
         }
       ]
     },
@@ -729,8 +714,8 @@
       "containers": [
         {
           "name": "postgres",
-          "cpu": "25578929n",
-          "memory": "31472Ki"
+          "cpu": "25794482n",
+          "memory": "29660Ki"
         }
       ]
     },
@@ -740,8 +725,8 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "2665109n",
-          "memory": "709852Ki"
+          "cpu": "3076479n",
+          "memory": "714432Ki"
         }
       ]
     },
@@ -751,8 +736,8 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "5802u",
-          "memory": "8108Ki"
+          "cpu": "4983097n",
+          "memory": "8100Ki"
         }
       ]
     },
@@ -762,8 +747,8 @@
       "containers": [
         {
           "name": "coredns",
-          "cpu": "2990569n",
-          "memory": "21488Ki"
+          "cpu": "2953862n",
+          "memory": "22864Ki"
         }
       ]
     },
@@ -773,8 +758,8 @@
       "containers": [
         {
           "name": "local-path-provisioner",
-          "cpu": "352128n",
-          "memory": "14476Ki"
+          "cpu": "51232n",
+          "memory": "15908Ki"
         }
       ]
     },
@@ -784,8 +769,8 @@
       "containers": [
         {
           "name": "metrics-server",
-          "cpu": "5165889n",
-          "memory": "30920Ki"
+          "cpu": "4270434n",
+          "memory": "36640Ki"
         }
       ]
     },
@@ -795,8 +780,8 @@
       "containers": [
         {
           "name": "syncthing",
-          "cpu": "398605n",
-          "memory": "25740Ki"
+          "cpu": "875339n",
+          "memory": "25928Ki"
         }
       ]
     },
@@ -806,8 +791,8 @@
       "containers": [
         {
           "name": "nameserver",
-          "cpu": "113050n",
-          "memory": "7644Ki"
+          "cpu": "104508n",
+          "memory": "7816Ki"
         }
       ]
     },
@@ -817,8 +802,8 @@
       "containers": [
         {
           "name": "operator",
-          "cpu": "561803n",
-          "memory": "43440Ki"
+          "cpu": "502109n",
+          "memory": "43932Ki"
         }
       ]
     },
@@ -828,8 +813,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2287766n",
-          "memory": "30112Ki"
+          "cpu": "2201072n",
+          "memory": "30156Ki"
         }
       ]
     },
@@ -839,8 +824,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "7030459n",
-          "memory": "50156Ki"
+          "cpu": "7050175n",
+          "memory": "50968Ki"
         }
       ]
     },
@@ -850,8 +835,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2749035n",
-          "memory": "31132Ki"
+          "cpu": "2284415n",
+          "memory": "31324Ki"
         }
       ]
     },
@@ -861,8 +846,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "3259341n",
-          "memory": "34396Ki"
+          "cpu": "2066379n",
+          "memory": "33776Ki"
         }
       ]
     },
@@ -872,8 +857,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "4410645n",
-          "memory": "45472Ki"
+          "cpu": "3770883n",
+          "memory": "46060Ki"
         }
       ]
     },
@@ -883,8 +868,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2299235n",
-          "memory": "30716Ki"
+          "cpu": "2313976n",
+          "memory": "30812Ki"
         }
       ]
     },
@@ -894,8 +879,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2635199n",
-          "memory": "29316Ki"
+          "cpu": "2111067n",
+          "memory": "29144Ki"
         }
       ]
     },
@@ -905,8 +890,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "3142738n",
-          "memory": "39480Ki"
+          "cpu": "3865919n",
+          "memory": "39820Ki"
         }
       ]
     },
@@ -916,8 +901,8 @@
       "containers": [
         {
           "name": "vaultwarden",
-          "cpu": "127009n",
-          "memory": "32360Ki"
+          "cpu": "175752n",
+          "memory": "35208Ki"
         }
       ]
     }
@@ -925,8 +910,8 @@
   "node_metrics": [
     {
       "name": "nixos",
-      "cpu": "2463063214n",
-      "memory": "8422864Ki"
+      "cpu": "1188886868n",
+      "memory": "7648292Ki"
     }
   ],
   "pvc_usage": [
@@ -1135,6 +1120,204 @@
       "reason": "閾値が未設定 (cap の実値は B2 コンソールにしか無い)。判明したら download_budget.py の DEFAULT_DAILY_CAP_BYTES か呼び出し側に設定すること"
     }
   },
+  "externalsecrets": {
+    "total": 21,
+    "secret_synced_errors": 1,
+    "errored": [
+      "syncthing: syncthing-photo-intake-credentials"
+    ],
+    "items": [
+      {
+        "name": "argocd-dex-client-secret",
+        "namespace": "argocd",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 838,
+        "message": null
+      },
+      {
+        "name": "autopilot-credentials",
+        "namespace": "autopilot",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 576,
+        "message": null
+      },
+      {
+        "name": "ops-dashboard-github-token",
+        "namespace": "autopilot",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 16,
+        "message": null
+      },
+      {
+        "name": "telegram-adapter-credentials",
+        "namespace": "autopilot",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 1800,
+        "last_sync_age_seconds": 845,
+        "message": null
+      },
+      {
+        "name": "coder-db-url",
+        "namespace": "coder",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 616,
+        "message": null
+      },
+      {
+        "name": "coder-postgres-credentials",
+        "namespace": "coder",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 610,
+        "message": null
+      },
+      {
+        "name": "coder-restic-backup-credentials",
+        "namespace": "coder",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 614,
+        "message": null
+      },
+      {
+        "name": "coder-restic-credentials",
+        "namespace": "coder",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 607,
+        "message": null
+      },
+      {
+        "name": "dex-google-oauth",
+        "namespace": "dex",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 3555,
+        "message": null
+      },
+      {
+        "name": "immich-postgres-credentials",
+        "namespace": "immich",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 573,
+        "message": null
+      },
+      {
+        "name": "immich-restic-backup-credentials",
+        "namespace": "immich",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 571,
+        "message": null
+      },
+      {
+        "name": "immich-restic-credentials",
+        "namespace": "immich",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 572,
+        "message": null
+      },
+      {
+        "name": "github-health-reporter-token",
+        "namespace": "ops-health-reporter",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 604,
+        "message": null
+      },
+      {
+        "name": "syncthing-photo-intake-credentials",
+        "namespace": "syncthing",
+        "ready": "False",
+        "sync_reason": "SecretSyncedError",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": null,
+        "message": "could not get secret data from provider"
+      },
+      {
+        "name": "syncthing-restic-backup-credentials",
+        "namespace": "syncthing",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 821,
+        "message": null
+      },
+      {
+        "name": "syncthing-restic-credentials",
+        "namespace": "syncthing",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 817,
+        "message": null
+      },
+      {
+        "name": "tailscale-oauth",
+        "namespace": "tailscale",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 577,
+        "message": null
+      },
+      {
+        "name": "vaultwarden-admin-token",
+        "namespace": "vaultwarden",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 613,
+        "message": null
+      },
+      {
+        "name": "vaultwarden-restic-backup-credentials",
+        "namespace": "vaultwarden",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 612,
+        "message": null
+      },
+      {
+        "name": "vaultwarden-restic-credentials",
+        "namespace": "vaultwarden",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 609,
+        "message": null
+      },
+      {
+        "name": "github-health-reporter-token",
+        "namespace": "version-watcher",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
+        "refresh_interval_seconds": 3600,
+        "last_sync_age_seconds": 504,
+        "message": null
+      }
+    ]
+  },
   "autopilot": {
     "deployment": {
       "replicas": 1,
@@ -1150,16 +1333,16 @@
     ],
     "heartbeat": {
       "last_start": {
-        "timestamp": "2026-08-23T11:00:05Z",
-        "iteration": 159
+        "timestamp": "2026-08-23T11:29:12Z",
+        "iteration": 185
       },
       "last_end": {
-        "timestamp": "2026-08-23T10:59:05Z",
-        "iteration": 158,
+        "timestamp": "2026-08-23T11:29:18Z",
+        "iteration": 185,
         "exit_code": 0,
-        "elapsed_seconds": 9
+        "elapsed_seconds": 5
       }
     }
   },
-  "notes": "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 (pod_metrics/node_metrics)。PVC の実ディスク使用量は namespace ごとの pvc-usage-reporter CronJob が ConfigMap に書いた値を pvc_usage として集約（immich/vaultwarden/coder のみ。Coder workspace ごとの動的 PVC は対象外、T-0078 参照）。RBAC は get/list/(configmaps のみ get) で、write 系の verb は含まない。このファイルは最新1点のみで上書きされる。ピーク値の傾向を見るには ops/health/history/YYYY-MM-DD.jsonl（1行1回分、このレポートと同じ内容）を辿ること（T-0083）。 nodes[].allocatable/capacity の ephemeral-storage は kubelet が一時ストレージ 監視用に計算する値であり、ルートファイルシステムの全体サイズとは別物（node01 の root ファイルシステムは実際には約252GiBあるが、この値は約48.9GiBしか出ない）。ディスク容量の 確認にこの値を使わないこと（T-0079, issue #56 2026-08-05 15:45:04 参照）。 autopilot キーは autopilot 自身の健全性で、対象は namespace autopilot の Deployment autopilot-heart（heart, ops/heart/heart.py）。旧ループの Deployment autopilot は退役済み（replicas 0）。heartbeat.last_end が無い/古い、または exit_code が非 0 なら前回のイテレーションが異常終了またはハング中の疑い（T-0110）。pods/log は autopilot namespace に閉じたRole でのみ許可し、心拍行だけを正規表現で抽出している。生ログはここに含まれない。 download_budget キーは B2 download cap の帳簿（P-0128）。restic バックアップのある namespace（immich/vaultwarden/coder/syncthing）の専用 ConfigMap download-budget の report.json キーに、download-ledger CronJob が書いた run 記録（{date, job, bytes}、UTC 日付）を集計し、直近7日の日次内訳・月次見積もり・cap 判定（ok/warn/exceed/unconfigured/no_data）を載せる。bytes は restic の転送統計からではなく操作種別ごとの 推定モデル（産出側 CronJob の LEDGER_RULES）による推定量。cap の実値は B2 コンソールにしか無いため既定は unconfigured（決め打ちしない）。産出側がまだ稼働していない namespace は error エントリになる。"
+  "notes": "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 (pod_metrics/node_metrics)。PVC の実ディスク使用量は namespace ごとの pvc-usage-reporter CronJob が ConfigMap に書いた値を pvc_usage として集約（immich/vaultwarden/coder のみ。Coder workspace ごとの動的 PVC は対象外、T-0078 参照）。RBAC は get/list/(configmaps のみ get) で、write 系の verb は含まない。このファイルは最新1点のみで上書きされる。ピーク値の傾向を見るには ops/health/history/YYYY-MM-DD.jsonl（1行1回分、このレポートと同じ内容）を辿ること（T-0083）。 nodes[].allocatable/capacity の ephemeral-storage は kubelet が一時ストレージ 監視用に計算する値であり、ルートファイルシステムの全体サイズとは別物（node01 の root ファイルシステムは実際には約252GiBあるが、この値は約48.9GiBしか出ない）。ディスク容量の 確認にこの値を使わないこと（T-0079, issue #56 2026-08-05 15:45:04 参照）。 autopilot キーは autopilot 自身の健全性で、対象は namespace autopilot の Deployment autopilot-heart（heart, ops/heart/heart.py）。旧ループの Deployment autopilot は退役済み（replicas 0）。heartbeat.last_end が無い/古い、または exit_code が非 0 なら前回のイテレーションが異常終了またはハング中の疑い（T-0110）。pods/log は autopilot namespace に閉じたRole でのみ許可し、心拍行だけを正規表現で抽出している。生ログはここに含まれない。 download_budget キーは B2 download cap の帳簿（P-0128）。restic バックアップのある namespace（immich/vaultwarden/coder/syncthing）の専用 ConfigMap download-budget の report.json キーに、download-ledger CronJob が書いた run 記録（{date, job, bytes}、UTC 日付）を集計し、直近7日の日次内訳・月次見積もり・cap 判定（ok/warn/exceed/unconfigured/no_data）を載せる。bytes は restic の転送統計からではなく操作種別ごとの 推定モデル（産出側 CronJob の LEDGER_RULES）による推定量。cap の実値は B2 コンソールにしか無いため既定は unconfigured（決め打ちしない）。産出側がまだ稼働していない namespace は error エントリになる。 externalsecrets キーは ExternalSecret 全件の状態（P-0175）。Doppler が唯一の上流で refreshInterval は概ね 1h のため、上流が死んでも refresh が巡るまで何も表面化しない。secret_synced_errors / errored は SecretSyncedError の件数と対象、items[].last_sync_age_seconds は status.refreshTime（最終成功同期）からの経過秒。「Ready=True のまま last_sync_age_seconds が refresh_interval_seconds を大きく超え続ける」場合は上流への同期が静かに滞留しているサイン。Secret 本体の値は取得・記録しない（RBAC も external-secrets.io/externalsecrets の get/list のみ）。"
 }
