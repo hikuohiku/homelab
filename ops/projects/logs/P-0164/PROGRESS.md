@@ -306,6 +306,36 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
   上記の再実測だけして軽く閉じてよい。blocking が減っている (6→5) ので、開く日は近いかも
 
+### セッション 7 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま**だが blocking が **5→4 件に減少**
+  (P-0092 / P-0116 / P-0157 / P-0161。**P-0174 が抜けた**。checked=61)。減少傾向継続
+  (6→5→4) のも 0 ではないので、固定指示どおり実演習は見送り。コード変更は無し
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 4), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 281 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git rev-parse origin/main                              # c5d6df255 (不動)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- **弁が開かない構造的理由を実測** (読み取り専用で `git show origin/ops-state:projects.json`):
+  blocking 4 件の内訳は announced 1 (P-0092 immich-postgres 更新) + active 3
+  (P-0116 restic 週次健康診断 / P-0157 restic 静停止監視 / P-0161 分離 Job プロファイル)。
+  announced は採択フローが進めば抜けるが、**active 3 は各プロジェクトが完了しない限り
+  弁は開かない**。つまり「開く日を待つ」戦略は active の消化ペースに律速される —
+  数日単位で開くとは期待せず、毎セッション確認を続けるのが正しい待ち方
+- 当日の手順はセッション 3 固定のまま不変 (--run 背景起動 → 全 zero 確認 → PATCH ready
+  解除 → PUT merge)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。blocking 内訳は announced 1 + active 3 なので、
+  弁が開くのは P-0092 が消えたあとも active 3 の完了待ちになる可能性が高い
+
 ## 発見 (スコープ外。curriculum が拾うもの)
 
 - なし (今回の範囲では)。強いて挙げれば「projects.json の state ライフサイクルに
