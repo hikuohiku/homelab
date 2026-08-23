@@ -563,3 +563,78 @@
   関数定義は bash 呼び出しごとにインラインで)。FailedMount の監視は Pod 名に対して
   行うこと (Job 名の events には出ない)。監視窓は最低 2 分確保すること。
   PROGRESS.md 追記は cat >> ヒアドキュメントで (file edit ツールは誤マッチ注意)
+
+## checkpoint (予算上限) — 2026-08-23T09:33Z セッション 27
+
+予算ソフト上限に達したため本セッションで停止。実装は一切していない
+(最終セッションの職務は状態の書き残しのみ)。**未コミット変更は無し**
+(`git status` clean、`origin/project/p-0161` と一致。commit も破棄も不要だった)。
+
+### 受入チェックリストの消化状況
+
+- [x] **verify 1 green**: `ops/profiles/private-data/README.md` 存在 + trifecta 言及
+  (セッション 1 で達成。以降全セッションで再実測 rc=0)
+- [x] **verify 2 green**: `python3 -m unittest ops.tests.test_private_data_profile`
+  22 tests OK (セッション 1 で達成。CI discover 全体も 264 tests OK)
+- [ ] **verify 3 未達 (唯一の未達)**: `demo.json` 未存在。
+  **ブロッカーは人間の Secret apply 1 コマンドのみ** — worker 側にできることは
+  プローブと待機だけで、25 回のプローブすべて `FailedMount: secret
+  "p0161-mail-fixture" not found` で未適用を再確定した (最終プローブ 09:27:16Z、
+  依頼投稿から ~175 分)。クラスタ残骸 0
+
+### 止まっている場所
+
+- 人間への依頼は投稿済み: issue #56 コメント id=5384629207
+  (2026-08-23T06:30:10Z)。依頼内容は「Secret `p0161-mail-fixture` を namespace
+  `autopilot` へ apply してほしい」(値はリポジトリ内
+  `ops/profiles/private-data/secret-fixture.yaml` の合成 fixture — 本物の私的データではない)
+- 以降 26 セッション (プローブ 25 回) 返信無し・未適用のまま待機。
+  重複依頼・迂回 (ConfigMap 代用等) は dod 違反として一度もしていない
+- 実装本体 (テンプレート 4 ファイル + テスト) は完成済みでコミット済み:
+  `ops/profiles/private-data/{README.md, job.yaml, networkpolicy.yaml,
+  secret-fixture.yaml}` + `ops/tests/test_private_data_profile.py`
+
+### 次に取るべき一手 (再開されたら)
+
+1. **issue #56 の返信確認** — page 3 まで見ること (per_page=80/100 だと依頼以降の
+   返信は page 3 にしか現れない。`curl -H "Authorization: Bearer
+   $AUTOPILOT_GITHUB_TOKEN"` の GET。`gh` CLI は無い)
+2. **Secret 存在プローブ 1 回** (手順は「次のセッションへ」ブロック 1〜4 のまま):
+   `kubectl delete -f ops/profiles/private-data/job.yaml --ignore-not-found`
+   → NP → jobs apply → model **Pod 名** の events を field-selector で ~2 分監視
+   (FailedMount は Job でなく Pod のイベント — セッション 17 発見)。
+   kubectl は in-cluster SA 経由 (セッション 13 記録の k() 関数を bash 呼び出しごとに
+   インライン定義)
+3. **走らなかったら** (まだ未適用なら): delete して静かに撤収。それ以上のことはしない。
+   この場合は stall 判断の人間への情報として「必要なのは Secret apply の 1 コマンド」
+   だけを伝えればよい
+4. **走ったら**: README「実行手順」どおり wait → logs 収集 → ops-feedback 着地確認
+   (`git fetch origin ops-feedback && git show origin/ops-feedback:ops/feedback/demo/P-0161/digest.md`)
+   → 撤収 → `ops/projects/logs/P-0161/demo.json` 書き込みまで一気に。
+   形式は「次のセッションへ」ブロック参照。**egress_denied は DENIED 行のみを証拠に
+   判定し、ALLOWED が 1 本でも出たら false の失敗記録にする** (偽りの完全性を作らない)
+5. 罠の再掲: apply 前 PVC 再作成必須 (古い sentinel で誤 push) /
+   `/tmp/opencode` 書き込み不可なので mktemp 一択 / PROGRESS.md 追記は cat >> ヒアドキュメント /
+   publisher script に `set -x` 禁止 (token 漏えい面)
+
+### 残った不確実性
+
+- **k3s NetworkPolicy が egress を実際に遮断するかは未実測** (apps/ 配下初の NP になる)。
+  demo run を通さないと分からない。効かなかった場合は `egress_denied: false` の
+  失敗記録が正しい結果であり、それ自体は段階 3 審査にとって価値のある実測になる
+- Secret 存在下での publisher push・sentinel 経路も同様に未実測
+  (apply/撤収経路のみ実走り検証済み — 実測 7)
+- 人間がいつ apply するか (あるいするか否か) は不明。175 分時点で返信無しは異常ではない
+  が、予算上限により worker 側の待機はここで打ち切り
+
+### 継続する価値があるか (stall 判断のための正直な評価)
+
+- **再開コストは極小**: 実装 (dod の 4 項目中 1・2・4 に相当) は完成済み。
+  verify 3 を閉じるのに必要なのは「人間の Secret apply 1 コマンド + worker の
+  demo run 1 回 (数十分)」だけ
+- **逆に言えば人間が apply しないなら進展は不可能** — 迂回手段は存在しない
+  (writer SA は secrets を触れない実測あり、ConfigMap 代用は dod 違反)。
+  「Secret apply を人間に頼る設計自体が妥当だったか」は stall 時点で問われてしかるべき論点
+- 本プロファイルの価値は demo run の成否に依存しない部分でも残る: trifecta 分離の
+  設計判断 (NetworkPolicy は Pod 単位でコンテナを区別できない→2 Pod 構成への読み替え、
+  実測 1・2) は README に文書化済みで、段階 3 審査の材料になりうる
