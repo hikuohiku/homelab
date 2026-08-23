@@ -225,3 +225,81 @@ Application の syncStatus を先に見ること)。stale 判定の実効確認�
 run が無い」状態を作らないとできないので不要。テストを足すときは
 collect 経路のクロック凍結 (freeze_clock) を踏襲すること —
 test_report_dashboard_smoke.py 型の壁時計依存テストは潜在フラワ (上記実測参照)。
+
+### セッション 3 (2026-08-23)
+
+**実装の追加作業は無し。初回夜間 run の前に全実装の readiness 監査をした結果、
+残課題ゼロを確認した。** verify 3 は merge + 初回計測 + reporter run 待ちのまま
+(下記「最短経路」参照)。コードは一切変更していない。
+
+## readiness 監査の実測 (セッション 3)
+
+初回夜間 run が落ちる要因になりそうな点を端から確認し、全部既に正しいことを
+render 実物で裏どった:
+
+- **App of Apps 配線**: root `kubectl kustomize apps` は 17 docs 全て Application で、
+  `recovery-canary` を含む。app 単位 `kubectl kustomize apps/recovery-canary` は
+  7 docs (Namespace / SA / Role / RoleBinding / runner ConfigMap / Deployment /
+  CronJob)。verify 1 の grep は root 側の Application 名に一致している
+- **schedule**: CronJob render 実測 `schedule='43 3 * * *'`, `timeZone=None`。
+  JST 評価は substrate 前例 (version-watcher / dashboard-smoke / syncthing restic-backup
+  の各 cronjob.yaml コメントが同じ根拠で統一済み) のとおりで、修正不要
+- **reporter の読み取り権限**: reporter は ClusterRole (cluster-wide) なので、
+  recovery-canary ns の ConfigMap GET も resourceNames `recovery-probe` で拾える。
+  collect_recovery_probe のパス
+  `/api/v1/namespaces/recovery-canary/configmaps/recovery-probe` と一致済み
+- **runner のエッジケース再点検**:
+  - DELETE が 404 (前夜失敗の残置で対象が既に無い) でも待機経路へ進むので、
+    残置状態からも自己回復する
+  - wait_ready は wait_gone (404 or uid 変化) 通過後しか呼ばれないため、
+    「削除前の旧 Pod が Ready のまま」を誤計測する窓は無い
+  - PUT の resourceVersion 競合時は retry 無しでクラッシュ → 記録無し → 集約側が
+    stale で拾う (dashboard-smoke と同じ挙動。許容)
+  - activeDeadlineSeconds 1500 > HEAL_TIMEOUT_S 1200 で、Job タイムアウトは
+    「記録を書けないクラッシュ」側に倒れる (stale 経路。意図どおり)
+
+## verify 自己実測 (セッション 3)
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 再実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse -v` | **green (27 tests OK)** 再実測 |
+| 3 | `git show origin/ops-health-report:ops/health/latest.json ...` | red (recovery_probe: None。merge 後の初回計測待ち) |
+
+追加実施: ops/tests 467 本 / ops/heart/tests / ops/runner/tests 全 green。
+check_credential_map / check_dashboard_smoke_script_sync / check_doc_commands /
+check_download_ledger_script_sync / check_health_reporter_target /
+check_pvc_usage_script_sync / check_version_sync 全 OK。
+check_app_list_sync は既存 6 drift のみ (version-watcher / nats / autopilot-core が
+CLAUDE.md・apps/README.md に無い main 由来のもの。増減なし)。
+check_autopilot_image_pin は base/head の worktree 引数が必要な CI 専用コマンドで
+単独実行不可 (環境制限であり、本プロジェクトのスコープ外)。
+
+## verify 3 を最短で green にする手順 (merge 後の人間 or 次セッション向け)
+
+merge 後 ArgoCD が sync するのを待ってから、夜間スケジュール (03:43 JST) を待たずに
+初回計測を起こせる:
+
+```bash
+# 1. ArgoCD が canary をデプロイし終えたことを先に確認 (これを飛ばすと
+#    Deployment 404 → wait-recreate の fail 記録を 20 分かけて書くだけになる)
+kubectl -n recovery-canary get deploy recovery-canary
+# 2. CronJob から Job を手動起動 (夜を待たない)
+kubectl -n recovery-canary create job --from=cronjob/recovery-canary-probe p0258-first-run
+# 3. 結果 (~3 分 + Pod 起動分。ArgoCD reconciliation 既定が値に乗る)
+kubectl -n recovery-canary logs job/p0258-first-run
+kubectl -n recovery-canary get cm recovery-probe -o jsonpath='{.data.report\.json}'
+# 4. 次の reporter run (:00/:30 JST) 後に verify 3 を実行
+```
+
+手動起動しない場合は翌朝 03:43 JST の自動 run で同じことが起こる (差分は日付のみ)。
+ok=false になったら report.json の phase/error で切り分け (session 2 の一言節の表を参照)。
+
+## 次のセッションへの一言
+
+**やるべき実装は何も無い。** このブランチはレビュー/merge を待つだけの状態。
+次セッションが verify 3 を確認するときは上の手順どおり「ArgoCD sync 済みの確認 →
+(任意) 手動 Job 起動 or 夜間 run 待ち → reporter run 待ち」の順で。verify 3 が
+green になるのは merge された世界の latest.json なので、ブランチ上で何度回しても
+red のままであることに注意 (自分の実装の問題ではない)。テスト追加等の派生作業は
+せず、発見はこのファイルの「発見」節に追記するだけでよい。
