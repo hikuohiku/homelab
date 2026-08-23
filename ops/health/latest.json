@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-23T21:00:09Z",
+  "generated_at": "2026-08-23T21:30:05Z",
   "applications": [
     {
       "name": "agent-rbac",
@@ -256,6 +256,13 @@
     },
     {
       "name": "runner-p-0228-a1-gf6c6",
+      "namespace": "autopilot",
+      "phase": "Failed",
+      "restarts": 0,
+      "waiting_reasons": []
+    },
+    {
+      "name": "runner-p-0235-a1-94w46",
       "namespace": "autopilot",
       "phase": "Failed",
       "restarts": 0,
@@ -602,8 +609,8 @@
       "containers": [
         {
           "name": "application-controller",
-          "cpu": "8370124n",
-          "memory": "232820Ki"
+          "cpu": "2587246n",
+          "memory": "308692Ki"
         }
       ]
     },
@@ -613,8 +620,8 @@
       "containers": [
         {
           "name": "applicationset-controller",
-          "cpu": "348525n",
-          "memory": "25928Ki"
+          "cpu": "271806n",
+          "memory": "27820Ki"
         }
       ]
     },
@@ -624,8 +631,8 @@
       "containers": [
         {
           "name": "dex-server",
-          "cpu": "0",
-          "memory": "28040Ki"
+          "cpu": "20431n",
+          "memory": "26836Ki"
         }
       ]
     },
@@ -635,8 +642,8 @@
       "containers": [
         {
           "name": "notifications-controller",
-          "cpu": "91091n",
-          "memory": "26744Ki"
+          "cpu": "46483n",
+          "memory": "27856Ki"
         }
       ]
     },
@@ -646,8 +653,8 @@
       "containers": [
         {
           "name": "redis",
-          "cpu": "4877454n",
-          "memory": "22928Ki"
+          "cpu": "4950945n",
+          "memory": "23036Ki"
         }
       ]
     },
@@ -657,8 +664,8 @@
       "containers": [
         {
           "name": "repo-server",
-          "cpu": "1411174n",
-          "memory": "90496Ki"
+          "cpu": "513906n",
+          "memory": "96344Ki"
         }
       ]
     },
@@ -668,24 +675,24 @@
       "containers": [
         {
           "name": "server",
-          "cpu": "291575n",
-          "memory": "30404Ki"
+          "cpu": "355646n",
+          "memory": "30876Ki"
         }
       ]
     },
     {
       "namespace": "autopilot",
-      "name": "autopilot-core-6cfc69c867-kmndw",
+      "name": "autopilot-core-5f5b4ffff-978ms",
       "containers": [
         {
-          "name": "driver",
-          "cpu": "175093n",
-          "memory": "6200Ki"
+          "name": "opencode",
+          "cpu": "59507454n",
+          "memory": "260416Ki"
         },
         {
-          "name": "opencode",
-          "cpu": "1516905n",
-          "memory": "467944Ki"
+          "name": "driver",
+          "cpu": "200078n",
+          "memory": "5488Ki"
         }
       ]
     },
@@ -695,30 +702,30 @@
       "containers": [
         {
           "name": "heart",
-          "cpu": "84390484n",
-          "memory": "179308Ki"
+          "cpu": "15613654n",
+          "memory": "52056Ki"
         }
       ]
     },
     {
       "namespace": "autopilot",
-      "name": "curriculum-system-a791959-glzf6",
+      "name": "curriculum-system-a791999-45c2g",
       "containers": [
         {
           "name": "curriculum",
-          "cpu": "538576320n",
-          "memory": "483452Ki"
+          "cpu": "611735830n",
+          "memory": "545624Ki"
         }
       ]
     },
     {
       "namespace": "autopilot",
-      "name": "nats-7869dc88f6-nk78h",
+      "name": "nats-7f78479765-9nl8q",
       "containers": [
         {
           "name": "nats",
-          "cpu": "506814n",
-          "memory": "5044Ki"
+          "cpu": "1757644n",
+          "memory": "6940Ki"
         }
       ]
     },
@@ -728,8 +735,8 @@
       "containers": [
         {
           "name": "web",
-          "cpu": "6228014n",
-          "memory": "69720Ki"
+          "cpu": "26781753n",
+          "memory": "71832Ki"
         }
       ]
     },
@@ -739,19 +746,19 @@
       "containers": [
         {
           "name": "runner",
-          "cpu": "391504551n",
-          "memory": "486156Ki"
+          "cpu": "420487087n",
+          "memory": "492560Ki"
         }
       ]
     },
     {
       "namespace": "autopilot",
-      "name": "telegram-adapter-75955df588-qrqsc",
+      "name": "telegram-adapter-7798d7bc88-ldfjq",
       "containers": [
         {
           "name": "adapter",
-          "cpu": "132041n",
-          "memory": "7216Ki"
+          "cpu": "21815n",
+          "memory": "4180Ki"
         }
       ]
     },
@@ -761,8 +768,8 @@
       "containers": [
         {
           "name": "dev",
-          "cpu": "62460425n",
-          "memory": "2349692Ki"
+          "cpu": "73159027n",
+          "memory": "1904112Ki"
         }
       ]
     },
@@ -772,8 +779,8 @@
       "containers": [
         {
           "name": "coder",
-          "cpu": "2732779n",
-          "memory": "60952Ki"
+          "cpu": "2441399n",
+          "memory": "57908Ki"
         }
       ]
     },
@@ -783,8 +790,8 @@
       "containers": [
         {
           "name": "postgres",
-          "cpu": "27651442n",
-          "memory": "66516Ki"
+          "cpu": "31076278n",
+          "memory": "73564Ki"
         }
       ]
     },
@@ -794,8 +801,8 @@
       "containers": [
         {
           "name": "dex",
-          "cpu": "181602n",
-          "memory": "15296Ki"
+          "cpu": "288917n",
+          "memory": "14060Ki"
         }
       ]
     },
@@ -805,8 +812,8 @@
       "containers": [
         {
           "name": "external-secrets",
-          "cpu": "1466551n",
-          "memory": "41624Ki"
+          "cpu": "2376662n",
+          "memory": "41736Ki"
         }
       ]
     },
@@ -816,8 +823,8 @@
       "containers": [
         {
           "name": "cert-controller",
-          "cpu": "520153n",
-          "memory": "54468Ki"
+          "cpu": "565543n",
+          "memory": "56000Ki"
         }
       ]
     },
@@ -827,8 +834,8 @@
       "containers": [
         {
           "name": "webhook",
-          "cpu": "324469n",
-          "memory": "32496Ki"
+          "cpu": "333803n",
+          "memory": "32804Ki"
         }
       ]
     },
@@ -838,8 +845,8 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "2267358n",
-          "memory": "245360Ki"
+          "cpu": "2412091n",
+          "memory": "246508Ki"
         }
       ]
     },
@@ -849,8 +856,8 @@
       "containers": [
         {
           "name": "postgres",
-          "cpu": "22684938n",
-          "memory": "41064Ki"
+          "cpu": "30642745n",
+          "memory": "31380Ki"
         }
       ]
     },
@@ -860,8 +867,8 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "2438391n",
-          "memory": "723496Ki"
+          "cpu": "2766578n",
+          "memory": "716400Ki"
         }
       ]
     },
@@ -871,8 +878,8 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "8203709n",
-          "memory": "8572Ki"
+          "cpu": "5045967n",
+          "memory": "8184Ki"
         }
       ]
     },
@@ -882,8 +889,8 @@
       "containers": [
         {
           "name": "coredns",
-          "cpu": "3911803n",
-          "memory": "24724Ki"
+          "cpu": "2609907n",
+          "memory": "24456Ki"
         }
       ]
     },
@@ -893,8 +900,8 @@
       "containers": [
         {
           "name": "local-path-provisioner",
-          "cpu": "64940n",
-          "memory": "15924Ki"
+          "cpu": "153861n",
+          "memory": "13360Ki"
         }
       ]
     },
@@ -904,8 +911,8 @@
       "containers": [
         {
           "name": "metrics-server",
-          "cpu": "4579966n",
-          "memory": "35368Ki"
+          "cpu": "4399571n",
+          "memory": "35056Ki"
         }
       ]
     },
@@ -915,8 +922,8 @@
       "containers": [
         {
           "name": "syncthing",
-          "cpu": "998302n",
-          "memory": "24480Ki"
+          "cpu": "563354n",
+          "memory": "22772Ki"
         }
       ]
     },
@@ -926,8 +933,8 @@
       "containers": [
         {
           "name": "nameserver",
-          "cpu": "145712n",
-          "memory": "7552Ki"
+          "cpu": "76431n",
+          "memory": "7140Ki"
         }
       ]
     },
@@ -937,8 +944,8 @@
       "containers": [
         {
           "name": "operator",
-          "cpu": "609281n",
-          "memory": "56596Ki"
+          "cpu": "584445n",
+          "memory": "56808Ki"
         }
       ]
     },
@@ -948,8 +955,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2037126n",
-          "memory": "29424Ki"
+          "cpu": "2495807n",
+          "memory": "29776Ki"
         }
       ]
     },
@@ -959,8 +966,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "3114623n",
-          "memory": "43272Ki"
+          "cpu": "2951514n",
+          "memory": "42060Ki"
         }
       ]
     },
@@ -970,8 +977,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2550183n",
-          "memory": "31492Ki"
+          "cpu": "2760240n",
+          "memory": "31064Ki"
         }
       ]
     },
@@ -981,8 +988,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2451604n",
-          "memory": "33928Ki"
+          "cpu": "2498544n",
+          "memory": "33732Ki"
         }
       ]
     },
@@ -992,8 +999,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "4640489n",
-          "memory": "51420Ki"
+          "cpu": "4022623n",
+          "memory": "50480Ki"
         }
       ]
     },
@@ -1003,8 +1010,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2193438n",
-          "memory": "29820Ki"
+          "cpu": "2405562n",
+          "memory": "29924Ki"
         }
       ]
     },
@@ -1014,8 +1021,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2595984n",
-          "memory": "29536Ki"
+          "cpu": "3013896n",
+          "memory": "29320Ki"
         }
       ]
     },
@@ -1025,8 +1032,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "3575278n",
-          "memory": "39412Ki"
+          "cpu": "3032122n",
+          "memory": "39048Ki"
         }
       ]
     },
@@ -1036,8 +1043,8 @@
       "containers": [
         {
           "name": "vaultwarden",
-          "cpu": "136193n",
-          "memory": "32988Ki"
+          "cpu": "165361n",
+          "memory": "31556Ki"
         }
       ]
     }
@@ -1045,13 +1052,13 @@
   "node_metrics": [
     {
       "name": "nixos",
-      "cpu": "2145142658n",
-      "memory": "8112852Ki"
+      "cpu": "2259917280n",
+      "memory": "7104784Ki"
     }
   ],
   "pvc_usage": [
     {
-      "generated_at": "2026-08-23T15:05:03Z",
+      "generated_at": "2026-08-23T21:05:03Z",
       "namespace": "immich",
       "usage": [
         {
@@ -1060,7 +1067,7 @@
         },
         {
           "pvc": "immich-postgres-data",
-          "bytes": 357130207
+          "bytes": 357867187
         }
       ],
       "backup_listing": {
@@ -1145,22 +1152,22 @@
       }
     },
     {
-      "generated_at": "2026-08-23T15:15:03Z",
+      "generated_at": "2026-08-23T21:15:03Z",
       "namespace": "vaultwarden",
       "usage": [
         {
           "pvc": "vaultwarden-data",
-          "bytes": 4608572
+          "bytes": 4641532
         }
       ]
     },
     {
-      "generated_at": "2026-08-23T15:25:07Z",
+      "generated_at": "2026-08-23T21:25:08Z",
       "namespace": "coder",
       "usage": [
         {
           "pvc": "coder-postgres-data",
-          "bytes": 87765580
+          "bytes": 87888460
         }
       ]
     }
@@ -1270,7 +1277,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2643,
+        "last_sync_age_seconds": 838,
         "message": null
       },
       {
@@ -1279,7 +1286,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 1800,
-        "last_sync_age_seconds": 1414,
+        "last_sync_age_seconds": 145,
         "message": null
       },
       {
@@ -1288,7 +1295,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2382,
+        "last_sync_age_seconds": 576,
         "message": null
       },
       {
@@ -1297,7 +1304,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 1800,
-        "last_sync_age_seconds": 1765,
+        "last_sync_age_seconds": 1760,
         "message": null
       },
       {
@@ -1306,7 +1313,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 1821,
+        "last_sync_age_seconds": 16,
         "message": null
       },
       {
@@ -1315,7 +1322,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 1800,
-        "last_sync_age_seconds": 850,
+        "last_sync_age_seconds": 1417,
         "message": null
       },
       {
@@ -1324,7 +1331,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2421,
+        "last_sync_age_seconds": 616,
         "message": null
       },
       {
@@ -1333,7 +1340,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2405,
+        "last_sync_age_seconds": 600,
         "message": null
       },
       {
@@ -1342,7 +1349,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2419,
+        "last_sync_age_seconds": 614,
         "message": null
       },
       {
@@ -1351,7 +1358,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2402,
+        "last_sync_age_seconds": 595,
         "message": null
       },
       {
@@ -1360,7 +1367,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 1761,
+        "last_sync_age_seconds": 3556,
         "message": null
       },
       {
@@ -1369,7 +1376,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2377,
+        "last_sync_age_seconds": 572,
         "message": null
       },
       {
@@ -1378,7 +1385,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2371,
+        "last_sync_age_seconds": 566,
         "message": null
       },
       {
@@ -1387,7 +1394,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2376,
+        "last_sync_age_seconds": 571,
         "message": null
       },
       {
@@ -1396,7 +1403,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2399,
+        "last_sync_age_seconds": 592,
         "message": null
       },
       {
@@ -1414,7 +1421,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2627,
+        "last_sync_age_seconds": 822,
         "message": null
       },
       {
@@ -1423,7 +1430,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2611,
+        "last_sync_age_seconds": 806,
         "message": null
       },
       {
@@ -1432,7 +1439,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2383,
+        "last_sync_age_seconds": 578,
         "message": null
       },
       {
@@ -1441,7 +1448,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2414,
+        "last_sync_age_seconds": 609,
         "message": null
       },
       {
@@ -1450,7 +1457,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2411,
+        "last_sync_age_seconds": 606,
         "message": null
       },
       {
@@ -1459,7 +1466,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2404,
+        "last_sync_age_seconds": 598,
         "message": null
       },
       {
@@ -1468,7 +1475,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 2310,
+        "last_sync_age_seconds": 505,
         "message": null
       }
     ]
@@ -1488,12 +1495,12 @@
     ],
     "heartbeat": {
       "last_start": {
-        "timestamp": "2026-08-23T20:59:50Z",
-        "iteration": 54
+        "timestamp": "2026-08-23T21:29:59Z",
+        "iteration": 77
       },
       "last_end": {
-        "timestamp": "2026-08-23T21:00:01Z",
-        "iteration": 54,
+        "timestamp": "2026-08-23T21:28:59Z",
+        "iteration": 76,
         "exit_code": 0,
         "elapsed_seconds": 11
       }
