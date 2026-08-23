@@ -440,3 +440,53 @@ BusyBox grep 対応の等価コマンド 2 案 (どちらもこの環境で rc=0
   先行していたら rebase → validate.py 0 error を確認してから push すること
 - 今晩 (08-24 02:45 JST 窓) の定期 backup 成功が鮮度維持の前提。B2 cap 恒久対策は
   人間側課題のまま (P-0080 依頼への直接回答は #56 で未確認)
+
+## session7 (P-0116 worker, 2026-08-23)
+
+やったこと: issue #56 の回答再確認 (なし) と受入 3 項目の全再実測。コード・manifest 側の
+変更は無し (session6 結論の再確認セッション)。**wrapper 向けに重要な push 上の発見 1 件あり**
+
+### issue #56 の確認結果
+
+全 176 件を API で再取得。最新は 2026-08-23T00:24:16Z `ack P-0102` のままで、
+verify #1 文言判断への回答は**まだ来ていない** (session6 から変化なし)。
+open PR もまだ無い (wrapper が作る段階)。
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep unrecognized option) — red のまま
+- #1 `--include` 無し等価版 `grep -rq 'restic-check' apps/`: **rc=0**
+  (`apps/restic-check/` 実体ありを再確認)
+- #2: **28 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+
+### 発見: origin/project/p-0116 と履歴分岐 — wrapper の push は --force-with-lease 必須
+
+- session6 の rebase で local HEAD は履歴書き換え済み。現在 remote とは
+  `[ahead 69, behind 10]` の分岐状態 (fetch 済み実測)
+- remote tip は rebase 前の古いハッシュ (1082b3e1「受入 #3 の green Run 成立」) で、
+  session6 の rebase commit (a3a9173f) は**remote 未到達**
+- 通常 push は non-fast-forward で拒否される → **wrapper は
+  `git push --force-with-lease origin project/p-0116` を使うこと**
+- 内容面の損失は無い: local HEAD = origin/main の全コミット + 本プロジェクト作業で、
+  remote ブランチの内容の上位互換 (`git diff origin/project/p-0116 HEAD -- . ':!ops/projects'`
+  の差分は main 先行分のみ)
+- 教訓: rebase による履歴書き換えをしたら、その時点で次の push は force 系になる。
+  分岐検知は `git status -sb` の ahead/behind 表示で一目で判る
+
+### verify 現状
+
+- #1 grep: **red のまま** (heart 判断待ち。コード側に直すものは無い — session5/6 と同じ結論)
+- #2 unittest: **green (28 tests)**
+- #3 evidence: **green**
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完全に完了。#1 の唯一の未達は issue #56 の heart 回答待ち
+  (回答が来ていたら文言判断に従うだけ)
+- **push は `--force-with-lease` で** (上記「発見」参照)。通常 push だと拒否されて
+  セッション成果が remote に届かない
+- PR 作成時は verify #1 が BusyBox 環境では文言どおりだと赤になる点を説明に必ず明記
+  (session5 からの繰り返し依頼)
+- push 前に `git fetch && git log HEAD..origin/main --oneline` で main 先行を確認するのは継続
