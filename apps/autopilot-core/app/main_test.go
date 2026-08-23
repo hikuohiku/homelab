@@ -255,3 +255,31 @@ func TestSeenRoundTrip(t *testing.T) {
 		t.Fatalf("保存した既読が読めるべき: %v had=%v", got, had)
 	}
 }
+
+func TestPromptAcceptsAll2xx(t *testing.T) {
+	// prompt_async の成功は 204 No Content。ここを取りこぼすと、送信できているのに
+	// 失敗と誤認して同じ書き置きを永久に再送する (2026-08-23 に実害が出た)
+	for _, code := range []int{200, 201, 202, 204} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(code)
+		}))
+		c := newClient(&config{opencodeURL: server.URL})
+		if err := c.prompt(context.Background(), "ses_1", "hi"); err != nil {
+			t.Fatalf("status=%d は成功として扱うべき: %v", code, err)
+		}
+		server.Close()
+	}
+}
+
+func TestPromptRejectsNon2xx(t *testing.T) {
+	for _, code := range []int{400, 404, 500} {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(code)
+		}))
+		c := newClient(&config{opencodeURL: server.URL})
+		if err := c.prompt(context.Background(), "ses_1", "hi"); err == nil {
+			t.Fatalf("status=%d は失敗として扱うべき", code)
+		}
+		server.Close()
+	}
+}

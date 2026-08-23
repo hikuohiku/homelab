@@ -11,7 +11,10 @@ metadata:
   labels:
     app: autopilot-core
 spec:
-  replicas: 1
+  # 一時的に 0。2026-08-23、prompt_async の 204 を失敗と誤認して同じ書き置きを
+  # 30 秒ごとに再送し続ける不具合が出たため、配信を止めている。
+  # 修正版のイメージを digest pin する PR で 1 に戻すこと
+  replicas: 0
   # セッション storage を単一 PVC に持つので、rolling 中の二重起動を避ける
   strategy:
     type: Recreate
