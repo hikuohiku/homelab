@@ -652,3 +652,57 @@ verify 再実測 + 上記確認 + 最小ログ追記で終えてよい。
 本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
 リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
 docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
+
+### 2026-08-23 セッション19 — セッション18 手順どおりの兆候確認 (main 零新着・動いた ops-state/p-0116 は無関係。監視外だった ops-dashboard/ops-feedback を追加実測し不動・既知履歴のみ。issue #56 は増減ゼロ)
+
+**やったこと**: spec DoD の追加実装は無し。セッション5〜18 と同じく verify 再実測 +
+外部シグナル確認だけをした。
+
+1. **verify 再実測**: #1 rc=1 / #2 rc=0 / #3 rc=2。セッション3 以降ずっと同一
+   (#1/#3 は verdict=keep ゆえ意図通り failing、#2 green)
+2. **観測環境の再実測** (19 回目の独立実測、結果同じ): `env` の proxmox/pve/tailscale 系無し
+   (rc=1) / `tailscale` `pvesh` `qm` `gh` CLI すべて absent (rc=1)
+3. **origin/main の新着確認**: `git fetch --prune` 後、`8c5cbd7d..origin/main` の commit は
+   **ゼロ**。動いたブランチは 2 本、判定はすべて diff 本文側で grep -c:
+   - `ops-state` (897f7985..90df8b9b): heartbeat.json / metrics.jsonl のみ。
+     追加行の PBS/backup/バックアップ/qm shutdown/112 言及 **0** → 無関係
+   - `project/p-0116` (87fd3410..9fb4a833): 自ログ PROGRESS.md のみ。同言及 **0**・
+     docs/terraform/P-0142 paths へのタッチ **0** → 無関係。
+     なお p-0115 (31bb94bb) / p-0139 (a86d5bae) / p-0143 (e5211068) /
+     p-0144 (d4c68d3b) / ops-health-report (1fc66b50) は不動を実測
+4. **監視リスト外だった `ops-dashboard` / `ops-feedback` を追加実測**: fetch に
+   `[new branch]` 出力が無かった = 既存ブランチ (セッション18 の fetch 時点から存在)。
+   先端は dashboard 662d2b3e (2026-08-22T14:33Z) / feedback f2f582af (2026-08-10) で
+   **ともにセッション18 の確認時刻より前 = 今セッションでは不動**。PBS 関連パス
+   (docs/pbs-retirement.md / pbs.tf.ignore / P-0142 logs) へのタッチは既知の履歴コミットのみ
+   (faaa73a0 2026-06-21 手動管理方針 / d068b1ec T-0116 pbs.tf.ignore 草案追加) で新規性無し。
+   今後はこの 2 本もブランチ基準に入れる
+5. **issue #56 を GitHub REST API で実測**: page ごとに個別 `json.loads` + `mktemp -d`
+   で集計した結果 **合計 178 件・unique id 178・max id 5384140771・最終
+   2026-08-23T04:09:12Z = セッション18 基準から増減ゼロ**。新着が無いため本文精読は発生せず。
+   条件 A/B の実施報告は未着のまま
+
+→ verdict は `keep` のまま、inventory への反映対象なし。docs/pbs-retirement.md は書かない。
+
+**次のセッションへの一言**: やり方はセッション5〜19 と同一。main 比較基準は引き続き
+`8c5cbd7d..origin/main` (今回は零新着)。動いたブランチは「docs/terraform/P-0142 logs
+パス」と「PBS/backup/qm shutdown/112 言及」を diff 本文側で grep -c すればよく、
+中身の精読は不要。今回のブランチ基準:
+ops-state 90df8b9b / p-0115 31bb94bb / p-0116 9fb4a833 / p-0143 e5211068 /
+p-0144 d4c68d3b / p-0139 a86d5bae (不動) / ops-health-report 1fc66b50 (不動) /
+ops-dashboard 662d2b3e / ops-feedback f2f582af (この 2 本はセッション19 で監視対象に追加)。
+fetch に `[new branch]` が出たら初動で先端時刻と PBS 関連パスへのタッチ有無を確認する
+(ops-dashboard/ops-feedback が監視外のまま残っていた教訓)。
+**罠** (実測済み、繰り返さないこと): (a) log メッセージ内の「112」「P-0142」
+「#56」は誤マッチするので本文側判定。(b) `grep | head` の rc は当てにならない。(c) issue #56
+のコメント確認は webfetch 不可 — REST API を使い page ごとに個別 `json.loads` する (連結
+パースは壊れる。id も数えると改変検出に強い)。(d) `/tmp/opencode` は書き込み不可 — 一時
+ファイルは必ず `mktemp -d` で作ったディレクトリに置くこと。(e) **issue #56 は他プロジェクト
+worker の依頼コメントで増えることがある** (セッション17 実測)。コメント総数の増減だけで
+発火判断せず、新着分の本文を必ず精読して「条件 A/B の実施報告 or docs/backup.md 更新 or
+inventory 反映依頼」かを判定すること (今回の基準: issue #56 178 件 / 最終
+2026-08-23T04:09:12Z / 最終 id 5384140771)。
+verify 再実測 + 上記確認 + 最小ログ追記で終えてよい。
+本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
+リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
+docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
