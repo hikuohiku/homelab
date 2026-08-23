@@ -4,8 +4,8 @@
 # ブランチだった。自宅クラスタの内部イベントが外部 SaaS を経由する構造で、GitHub が
 # 落ちるかトークンが切れると所有者の「止めて」が heart に届かない。ここを閉じる。
 #
-# 秘密はこのファイルに書かない。認証情報は Deployment が env で渡し、
-# NATS が $VAR 形式で展開する (include ではなく env 展開を使うのはそのため)。
+# 秘密はこのファイルに書かない。載っている NKey は公開鍵で、秘密ではない。
+# 対応する seed は Doppler に置き、クライアント側だけが持つ。
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -30,20 +30,24 @@ data:
 
     # 設計 D13: 誰がどの subject に触れるかをコードではなく設定で縛る。
     # producer は publish だけ、consumer は subscribe だけ。
-    # 事故 (producer が consumer の subject を消す等) を権限で塞ぐ
+    # 事故 (producer が consumer の subject を消す等) を権限で塞ぐ。
+    #
+    # 認証は NKey。ここに載っているのは**公開鍵**で、秘密ではない (Git に載せてよい)。
+    # クライアントは seed (SU… で始まる秘密) で nonce に署名するだけで、
+    # 秘密そのものはネットワークに出ない。パスワード方式だと NATS が
+    # 「Plaintext passwords detected」と警告する状態になっていた (2026-08-23 実測) ため、
+    # 誰も接続していないうちに NKey へ移した。seed は Doppler に置く。
     authorization {
       users: [
         {
-          user: producer
-          password: $NATS_PRODUCER_PASSWORD
+          nkey: UANFJHMEHZNT7FJAL4T65T2UEIW6EEUN4HSMWSELNP6HJYYUW4YD6VD4
           permissions: {
             publish: { allow: ["events.>"] }
             subscribe: { allow: ["_INBOX.>"] }
           }
         },
         {
-          user: consumer
-          password: $NATS_CONSUMER_PASSWORD
+          nkey: UB2E2ROEPF2TMEOOCPEU32U4WRMZNNPOEI3EYM57ERGQOSQYPAH64KZO
           permissions: {
             # JetStream の consumer は $JS.API 経由で読む。pull consumer に必要な分だけ許す
             publish: { allow: ["$JS.API.>", "_INBOX.>"] }

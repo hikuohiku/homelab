@@ -79,9 +79,10 @@ DECLARED_DOPPLER_KEYS = frozenset(
         "CLAUDE_CODE_OAUTH_TOKEN",
         "DISCORD_WEBHOOK_URL",
         "OPENCODE_API_KEY",
-        # NATS (apps/nats)。producer / consumer で鍵を分ける (設計 D13)
-        "NATS_CONSUMER_PASSWORD",
-        "NATS_PRODUCER_PASSWORD",
+        # NATS (apps/nats)。producer / consumer で鍵を分ける (設計 D13)。
+        # NKey の seed。サーバは公開鍵しか持たず、これを使うのはクライアント側
+        "NATS_CONSUMER_NKEY_SEED",
+        "NATS_PRODUCER_NKEY_SEED",
         # telegram-adapter (apps/telegram-adapter)。OpenClaw の置き換えで
         # OPENCLAW_GATEWAY_TOKEN は不要になった (control plane を持たない)
         "TELEGRAM_ALLOWED_USER_ID",
