@@ -1,0 +1,86 @@
+{
+  "project": "P-0142",
+  "captured_at": "2026-08-23T03:10:57Z",
+  "source": {
+    "proxmox_mcp": "unavailable",
+    "observations": [
+      "本セッション (worker) のツールセットに mcp__proxmox__* が存在しない。.mcp.json は Claude Code 起動時に読まれる構成であり、この実行環境では MCP サーバーが起動していない (2026-08-23 実測)",
+      "環境変数に PROXMOX_* / PVE_* 系が存在しない (`env | grep -iE 'proxmox|pve'` rc=1、2026-08-23 実測)。terraform/proxmox/pbs.tf.ignore 冒頭コメントの 2026-08-07 実測と同じ結果の再確認",
+      "tailscale CLI がこの実行環境に存在しない (`command -v tailscale` 失敗)。node01 管理面へのネットワーク経路が無い",
+      "terraform/proxmox の proxmox_endpoint は変数注入 (variables.tf、実値は TFC workspace 側) でリポジトリ内に値が無く、到達試行自体ができない"
+    ],
+    "conclusion": "PBS VM の稼働状況・PVE 側 vzdump backup job・PBS 内部 job をこの環境からは一切観測できなかった"
+  },
+  "vm": {
+    "observed_live": false,
+    "repo_recorded": {
+      "_note": "ライブ観測ではない。terraform/proxmox/pbs.tf.ignore (手動管理の構成記録) からの引用",
+      "name": "pbs",
+      "vmid": 112,
+      "node": "node01",
+      "cores": 4,
+      "memory_dedicated_mib": 8192,
+      "disk_gb": 64,
+      "disk_storage": "local-lvm",
+      "bios": "seabios",
+      "install_media": "local:iso/proxmox-backup-server_4.1-1.iso",
+      "started_repo_recorded_value": true
+    }
+  },
+  "jobs": [],
+  "jobs_note": "取得不能につき空配列。『backup ジョブが存在しない』という意味ではない。T-0072 (2026-08-06) 以降ずっと未確認のままの項目で、本プロジェクトでも埋められなかった。層として (a) PVE 側 vzdump backup job (/cluster/backup 相当: スケジュール・対象 VM/CT・retention) と (b) PBS 内部の sync/prune/verify job の両方とも未観測。(b) は PVE API からは原理的に見えないため、(a) が取れた場合でも別途 PBS 自体へのアクセスが要る。",
+  "restic_targets_note": "docs/backup.md (一次情報源) からの引用。保持世代は全件 --keep-daily 7 --keep-weekly 4 --keep-monthly 6。単一 B2 バケットにパス末尾で分離",
+  "restic_targets": [
+    {
+      "target": "immich-library",
+      "restic_path_suffix": "immich",
+      "includes_db_dump": true,
+      "note": "immich 内蔵日次 DB ダンプが同梱され immich-postgres-data を代替",
+      "restore_test": "T-0071, 2026-08-05, 16 秒 / 332 MiB",
+      "pbs_protects": "unobserved"
+    },
+    {
+      "target": "immich-postgres-data",
+      "restic_path_suffix": null,
+      "note": "生 PVC は対象外。immich-library 同梱の内蔵ダンプで代替",
+      "restore_test": "(代替経路経由)",
+      "pbs_protects": "unobserved"
+    },
+    {
+      "target": "vaultwarden-data",
+      "restic_path_suffix": "vaultwarden",
+      "restore_test": "T-0071, 2026-08-06, 9 秒",
+      "pbs_protects": "unobserved"
+    },
+    {
+      "target": "coder-postgres-data",
+      "restic_path_suffix": "coder-postgres",
+      "note": "pg_dump -Fc 経由",
+      "restore_test": "T-0071, 2026-08-06, 8 秒",
+      "pbs_protects": "unobserved"
+    },
+    {
+      "target": "coder-<workspace-id>-home",
+      "restic_path_suffix": "coder-workspace-homes",
+      "note": "オーケストレータ方式 (workspace ごとに動的 PVC)。--host <workspace-id> で世代管理",
+      "restore_test": "T-0117, 2026-08-07, 31 秒 / 925 MiB",
+      "pbs_protects": "unobserved"
+    },
+    {
+      "target": "syncthing-data",
+      "restic_path_suffix": "syncthing",
+      "restore_test": "P-0047, 2026-08-10, sha256 突き合わせまで完了",
+      "pbs_protects": "unobserved"
+    }
+  ],
+  "cross_reference": {
+    "method": "docs/backup.md の restic 対象 6 行それぞれに「PBS が守っているか」列を対応させた (上の restic_targets[].pbs_protects)。PBS 側のジョブ一覧を取得できなかったため全行 unobserved。dod (2) の突き合わせ表の実測結果は『比較不能』そのもの",
+    "conclusion": "「PBS にしか無いもの」の有無を確定できなかった。docs/backup.md T-0072 時点の既知論点として、PBS が node01 (qemu/113) を対象にした VM 単位バックアップを持っていたとしても、node01 自体は Terraform + NixOS image で宣言的なため IaC 再適用で代替可能 (T-0065/T-0072 の既存判断)。逆に PBS 内部に PVE から見えない sync/prune 対象があった場合の内容は完全に未知"
+  },
+  "pbs_only": {
+    "known": false,
+    "note": "観測不能のため存在の有無自体が未確定。null (不明) と『無い』を混同しないこと"
+  },
+  "verdict": "keep",
+  "reason": "Proxmox MCP・credential・tailscale 経路のすべてがこの実行環境に無く、PBS の稼働状況と backup ジョブを一切観測できなかった (source.observations)。「PBS にしか無い守り」の有無を確定できないまま退役の可否は判断できない。確認していないものを無いとみなさない方針 (CHARTER §4、docs/backup.md T-0072 と同じ流儀) により退役を保留する。注意: この keep は『PBS 固有の価値を実測して見つけた』という意味ではなく『実測不能ゆえの保守側デフォルト』である。人間または構築セッション (Coder workspace、T-0107 で PROXMOX_API_TOKEN の Sys.Modify を実測済み) が (a) PVE 側 vzdump backup job 一覧と (b) PBS 内部の datastore/job/sync/prune 設定を確認した時点で再判断できる。その際は本ファイルの restic_targets[].pbs_protects 列を unobserved から置き換えれば突き合わせ表が完成する"
+}
