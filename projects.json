@@ -5024,12 +5024,77 @@
       "spawn_count": 1,
       "job": "runner-p-0231-a1",
       "drift_count": 0
+    },
+    {
+      "id": "P-0234",
+      "title": "更新サイクルを 1 周完走させて終わらせる — auto 対象は「latest か理由付き waiver 台帳のどちらか」に収束させ、version_drift キー消失の怪も同じ検査で捕まえる",
+      "state": "proposed",
+      "branch": "project/p-0234",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "python3 ops/tools/version_settle_check.py --inventory ops/inventory.json --waivers ops/version-waivers.jsonl",
+        "git fetch origin ops-health-report && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); assert 'version_drift' in d, 'version_drift キーが健康レポートから消えている'\"",
+        "python3 ops/check_version_sync.py"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0235",
+      "title": "backup が黙って止まってからの経過時間を、既存の健康レポートの中に住ませる — 新装置を増やさず、reporter の 30 分周期に「最後の成功から何時間」を足す",
+      "state": "proposed",
+      "branch": "project/p-0235",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "git fetch origin ops-health-report && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); b=d['backup_freshness']; need={'immich','coder','vaultwarden','syncthing'}; assert need <= set(b) and all(isinstance(v.get('hours_since_success'),(int,float)) for v in b.values())\"",
+        "python3 -m unittest discover -s ops/tests -p 'test_backup_freshness*.py'"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2000000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0237",
+      "title": "健康の最後の濁りを今日拭う — immich の OutOfSync を P-0222 の延長でゼロにし、死んだはずの photo-intake credential の幽霊を始末して secret_synced_errors=0 を実測する",
+      "state": "proposed",
+      "branch": "project/p-0237",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": true,
+      "verify": [
+        "git fetch origin ops-health-report && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); bad=[a['name'] for a in d['applications'] if a['sync']!='Synced']; assert not bad, f'OutOfSync 残存: {bad}'; assert d['externalsecrets']['secret_synced_errors']==0, d['externalsecrets']['errored']\"",
+        "git fetch origin ops-health-report && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); deg=[a['name'] for a in d['applications'] if a['health']!='Healthy']; assert not deg, f'Degraded 残存: {deg}'\"",
+        "! grep -rn 'photo-intake' apps/",
+        "python3 ops/check_app_list_sync.py"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-23T20:39:42Z",
-  "last_activity_at": "2026-08-23T21:13:57Z",
+  "last_activity_at": "2026-08-23T21:15:12Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
-  "last_curriculum_dry": true,
+  "last_curriculum_dry": false,
   "stop_engaged": false
 }
