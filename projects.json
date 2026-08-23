@@ -3430,7 +3430,7 @@
     {
       "id": "P-0157",
       "title": "#49 は「失敗すら起こらない」形で再発する — 全 restic リポジトリの『最後の成功から何時間』を毎時測り、静停止を最初の 1 時間で捕まえる",
-      "state": "active",
+      "state": "stalled",
       "branch": "project/p-0157",
       "irreversible": false,
       "capabilities": [],
@@ -3485,7 +3485,8 @@
       "veto_deadline": "2026-08-23T05:47:24Z",
       "spawn_count": 1,
       "job": "runner-p-0157-a1",
-      "drift_count": 0
+      "drift_count": 0,
+      "stalled_reason": "budget_exhausted"
     },
     {
       "id": "P-0161",
@@ -3735,8 +3736,8 @@
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T06:12:51Z",
-  "last_activity_at": "2026-08-23T07:58:47Z",
+  "last_curriculum_at": "2026-08-23T08:07:24Z",
+  "last_activity_at": "2026-08-23T08:07:24Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
