@@ -16,6 +16,11 @@ configMapGenerator:
       # `python /scripts/report.py` で起動するため sys.path[0]=/scripts となり、
       # 追加マウント無しで解決する
       - download_budget.py
+      # report.py から `import check_cert_expiry` される (P-0188)。正本は
+      # ops/tools/check_cert_expiry.py で、これは手動同期コピー (version_watch.py
+      # と同じ事情: configMapGenerator は kustomization.yaml の外のファイルを
+      # 読めない)。同一性は ops.tests.test_cert_expiry が sha256 で機械検査する
+      - check_cert_expiry.py
 
 generatorOptions:
   disableNameSuffixHash: true

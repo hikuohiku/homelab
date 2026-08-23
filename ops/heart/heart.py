@@ -334,6 +334,9 @@ class Heart:
         # B2 download cap の帳簿の警報すべき状態 (P-0128)。warn/exceed のときだけ
         # 中身があり、それ以外は None (budget_alert_due が繰り返しを落とす)
         budget = facts.budget_alert(health_doc)
+        # 証明書期限の警報すべき状態 (P-0188)。warn (<30日) / critical (<7日) の
+        # ときだけ中身があり、それ以外は None
+        cert = facts.cert_alert(health_doc)
         try:
             jobs = facts.collect_jobs(self.k8s_client(), self.cfg.namespace)
         except Exception as e:
@@ -421,6 +424,21 @@ class Heart:
             )
             budget_queued = True
 
+        # 証明書期限の警報 (P-0188)。budget と同じ 2 流路 + 同じ抑制:
+        # warn (<30日) を briefing-queue へ、critical (<7日・失効済み含む) は
+        # briefing に加えて incident 通知へ。同一 status の同一日内の再通知は
+        # cursors で落とし、status が変わったら (warn→critical への悪化) 再度鳴らす。
+        # 書き込み順序の制約 (save_cursors より前) も budget ブロックと同じ
+        cert_incident_text = None
+        cert_queued = False
+        if facts.budget_alert_due(cert, cursors.get("cert_expiry_alert"), today):
+            cursors["cert_expiry_alert"] = {"status": cert["status"], "date": today}
+            cert_queued = True
+            if cert["status"] == "critical":
+                cert_incident_text = (
+                    f"証明書が 7 日以内に失効します (または既に失効): {cert['reason']}"
+                )
+
         # --- 一段目: 状態遷移を副作用より先に永続化する (レビュー指摘 [8])。
         # ここで落ちても副作用は未実行なので、次のビートが同じ判断をやり直すだけ。
         # 逆順 (実行→保存) だと、保存失敗の翌ビートが「実行済みの副作用」を知らずに
@@ -440,6 +458,16 @@ class Heart:
                 },
             )
             log(f"download_budget alert: {budget['status']} — queued to briefing")
+        if cert_queued:
+            sf.append_jsonl(
+                "briefing-queue.jsonl",
+                {
+                    "at": now_iso(now),
+                    "source": f"cert-expiry ({cert['status']})",
+                    "body": cert["reason"],
+                },
+            )
+            log(f"cert expiry alert: {cert['status']} — queued to briefing")
         # タスク依頼の受領 (P-0091)。id 重複は merge_new が落とすので、
         # カーソル巻き戻り等で同じ note を再取り込みしても積み直さない
         queue = sf.read_jsonl(tasks.QUEUE_FILE)
@@ -458,6 +486,11 @@ class Heart:
                 log(f"[shadow] notify[incident] {budget_incident_text[:80]}")
             else:
                 notifier.send("incident", budget_incident_text, now)
+        if cert_incident_text:
+            if self.cfg.shadow:
+                log(f"[shadow] notify[incident] {cert_incident_text[:80]}")
+            else:
+                notifier.send("incident", cert_incident_text, now)
 
         sf.append_jsonl(
             "metrics.jsonl",
@@ -471,6 +504,7 @@ class Heart:
                 "health_fresh": health_fresh,
                 "breaker": breaker_info,
                 "budget_status": budget["status"] if budget else None,
+                "cert_status": cert["status"] if cert else None,
                 "vetoes": vetoes,
                 "stop_all": stop_all,
                 "actions": [a["type"] for a in actions],

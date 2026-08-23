@@ -22,6 +22,10 @@ import urllib.request
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import download_budget
 
+# TLS 証明書の期限台帳 (P-0188)。download_budget 同様 /scripts に載る手動同期コピー
+# (正本は ops/tools/check_cert_expiry.py。同一性は ops.tests.test_cert_expiry が検査)
+import check_cert_expiry
+
 SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
 K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
 K8S_PORT = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
@@ -358,6 +362,20 @@ def collect_externalsecrets():
     }
 
 
+def collect_cert_expiry():
+    """TLS Secret 全件と pveproxy 証明書の期限台帳 (P-0188)。
+
+    収集ロジック本体は check_cert_expiry モジュール (ops/tools/ の手動同期コピー
+    が /scripts に載る)。ここでは reporter の既存経路 (SA token) を k8s_get として
+    注入するだけ。Proxmox 側は PROXMOX_TOKEN_ID/SECRET が無いと unconfigured
+    エントリになり警報対象にならない (budget の unconfigured 同扱い)。Secret の
+    値は取得・出力せず、tls.crt をパースした派生値 (notAfter/SAN/残日数) のみ。
+    残り <30 日で warn (briefing 対象)、<7 日で critical (incident 対象)、
+    パース不能は parse_error として台帳に載り summary を warn 床まで押し上げる。
+    """
+    return check_cert_expiry.collect_report(k8s_get=k8s_get)
+
+
 def collect_nodes():
     data = k8s_get("/api/v1/nodes")
     out = []
@@ -627,6 +645,7 @@ def main():
         "pvc_usage": collect(collect_pvc_usage),
         "download_budget": collect(collect_download_budget),
         "externalsecrets": collect(collect_externalsecrets),
+        "cert_expiry": collect(collect_cert_expiry),
         "autopilot": collect(collect_autopilot_health),
         "notes": (
             "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 "
@@ -659,6 +678,14 @@ def main():
             "status.refreshTime（最終成功同期）からの経過秒。「Ready=True のまま last_sync_age_seconds が "
             "refresh_interval_seconds を大きく超え続ける」場合は上流への同期が静かに滞留しているサイン。"
             "Secret 本体の値は取得・記録しない（RBAC も external-secrets.io/externalsecrets の get/list のみ）。"
+            " cert_expiry キーは TLS 証明書の期限台帳（P-0188）。type=kubernetes.io/tls の Secret 全件と "
+            "Proxmox pveproxy 証明書（GET /nodes/{node}/certificates/info、agent token の読み取り権限内）から "
+            "notAfter・SAN・残日数を載せる。Secret の値そのものは取得・記録せず tls.crt をパースした派生値のみ"
+            "（RBAC の secrets get/list はこのためだけに追加）。summary.status は ok / warn / critical / no_data。"
+            "warn は残り 30 日未満（heart が briefing に積む）、critical は残り 7 日未満と失効済み（incident 通知）。"
+            "読めない Secret は parse_error エントリとして台帳に残り、summary を warn 未満に沈めない（fail-closed）。"
+            "t0107.resolved は「期待する接続先名が pveproxy 証明書の SAN にあるか」の機械比較で、true でも "
+            "terraform apply 禁止の解除にはならない（解除条件は docs/pveproxy-tls.md の 3 条件）。"
         ),
     }
 

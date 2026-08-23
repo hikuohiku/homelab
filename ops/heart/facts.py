@@ -96,6 +96,38 @@ def budget_alert_due(alert, prev, today):
     return not (prev.get("status") == alert.get("status") and prev.get("date") == today)
 
 
+# 証明書期限の警報レベル (P-0188)。report.py の cert_expiry.summary.status と同じ語彙。
+# warn (残り <30 日) は briefing 対象、critical (残り <7 日・失効済み含む) は
+# incident 通知の対象。ok / no_data / parse_error 単独では鳴らさない —
+# parse_error は report 側の summary を warn 床まで押し上げるので、ここには
+# 「素の parse_error」は届かない設計になっている
+CERT_ALERT_STATUSES = ("warn", "critical")
+
+
+def cert_alert(doc):
+    """latest.json から証明書期限の警報すべき状態を抽出する (P-0188)。
+
+    report の cert_expiry.summary.status が warn / critical のときだけ
+    {status, reason} を返す。それ以外 (ok / no_data、latest.json 無し・壊れ・
+    cert_expiry キー無し・収集エラーでセクションごと無い) は None。
+    unconfigured を鳴らさないのは budget_alert() と同じ判断。観測のみを行い
+    判断しない (モジュール冒頭の原則)。繰り返し抑制は budget_alert_due()
+    (status/date 汎用の純関数) を再利用する。
+    """
+    if not isinstance(doc, dict):
+        return None
+    ce = doc.get("cert_expiry")
+    if not isinstance(ce, dict):
+        return None
+    summary = ce.get("summary")
+    if not isinstance(summary, dict):
+        return None
+    status = summary.get("status")
+    if status not in CERT_ALERT_STATUSES:
+        return None
+    return {"status": status, "reason": summary.get("reason")}
+
+
 def collect_jobs(k8s, namespace):
     """heart が生んだ Job の実状態。{job_name: {"active":bool,"failed":bool,"succeeded":bool}}"""
     out = {}

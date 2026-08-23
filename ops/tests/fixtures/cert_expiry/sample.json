@@ -1,0 +1,72 @@
+{
+  "_comment": "合成 fixture (P-0188)。実証明書は test_pve_tls_docs の使い捨てテスト用 (CN=pve-tls-test.invalid、秘密ではない)。coder/immich の 2 枚は同じ DER の notAfter だけを差し替えたもの。tls.key は意図的に含まない (台帳は tls.crt しか読まない)。",
+  "now": "2026-08-23T12:00:00Z",
+  "k8s_secrets": {
+    "items": [
+      {
+        "metadata": {
+          "name": "argocd-tls",
+          "namespace": "argocd"
+        },
+        "type": "kubernetes.io/tls",
+        "data": {
+          "tls.crt": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURFRENDQWZpZ0F3SUJBZ0lKUXRBa1ZyKzIvdTZoTUEwR0NTcUdTSWIzRFFFQkN3VUFNQjh4SFRBYkJnTlYKQkFNVEZIQjJaUzEwYkhNdGRHVnpkQzVwYm5aaGJHbGtNQjRYRFRJMk1EZ3lNakU0TWpFek9Gb1hEVE0yTURneApPVEU0TWpFek9Gb3dIekVkTUJzR0ExVUVBeE1VY0habExYUnNjeTEwWlhOMExtbHVkbUZzYVdRd2dnRWlNQTBHCkNTcUdTSWIzRFFFQkFRVUFBNElCRHdBd2dnRUtBb0lCQVFDeEZhb292Vm0yS1hEMzV2L25aeUJmdVNrWTZ3NmIKY0xuUGp4dWpJQ2RUNy9ic3A5Y2ZPUEd1QzNDc1VYZk9JQ1ZhTUZYQ0hFaDRER2FmOGtLcThVODAxNmpFUnlVWQphS0I4RmhYLzd3VnFpcXJYVStZQzAzMWpsSVlOczZVQW9hZ2U0VDhSdkVmR1hqRkcvUWx6UDhjRXBuR3UzUnEvCmZJUG1rTzhyVzdXcjVldmhoVEpSWkJZUUVBd2hsd0Y2dTBSeEJOTkFubG1iWjFiQUtIZVM0bFI3dFJFSHM3QysKNVMvVHduM3pxTUpkdW5yMkZzK1FMeGtsdnh0TWlBd01iYWxHa045QngxakUzK1hVcmsrKzAzcXVxaVNwRVdwWgpJMk1oVmxNZG12anJraGRuUVBlMHBqSGxxRXJFTzQ1T3BXeHVhWjdHZjltZXJqbVNyY1pqeXUwSEFnTUJBQUdqClR6Qk5NQXdHQTFVZEV3UUZNQU1CQWY4d0N3WURWUjBQQkFRREFnS2tNREFHQTFVZEVRUXBNQ2VDQ1d4dlkyRnMKYUc5emRJSVVjSFpsTFhSc2N5MTBaWE4wTG1sdWRtRnNhV1NIQkg4QUFBRXdEUVlKS29aSWh2Y05BUUVMQlFBRApnZ0VCQUs3TVZaazV5cURHYWd1S1ptWG9EbUJRMFdFNlRUSVNyQmpYclNVWnk5Q05oblVEc21LYURDVmhXU1dLCmE5dGM0a3RXbEtZMkNSTDlJeGpxMkEvVndwdU1FeGEwYnBKbFd5WFM1bVZmN3hhTXZuRm5oVlVqS0p5VnlwVGgKazJpNkhwZUF4YzZpZ053SVF1WmNJekxnZVgrNG5UUWpDcGljSWFuYlVvU0g0b29YQlFQbDdCdmNCZWhxenhoNwovbndhUFBiU1htcmluenlLR1RxRm9NQlo5YmE5UkV6dUJFaTM5eHZuQkJJanA0OXRHbjRuWXlqbHhjSVl6dG1LCnFObTY2NnZRN0RZWDh6azNHbFAvL3c1N2VZV0Roa0xrM3ZSeGxxSURDOXYxb3QrTDRmaVFIM3JZNGVCY0QrQ0kKV2pnVzJ3MjBwa0UyYzB1NnZCWm1sRFFlaUxzPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+        }
+      },
+      {
+        "metadata": {
+          "name": "coder-access",
+          "namespace": "coder"
+        },
+        "type": "kubernetes.io/tls",
+        "data": {
+          "tls.crt": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURFRENDQWZpZ0F3SUJBZ0lKUXRBa1ZyKzIvdTZoTUEwR0NTcUdTSWIzRFFFQkN3VUFNQjh4SFRBYkJnTlYKQkFNVEZIQjJaUzEwYkhNdGRHVnpkQzVwYm5aaGJHbGtNQjRYRFRJMk1EZ3lNakU0TWpFek9Gb1hEVEkyTURreApOVEV5TURBd01Gb3dIekVkTUJzR0ExVUVBeE1VY0habExYUnNjeTEwWlhOMExtbHVkbUZzYVdRd2dnRWlNQTBHCkNTcUdTSWIzRFFFQkFRVUFBNElCRHdBd2dnRUtBb0lCQVFDeEZhb292Vm0yS1hEMzV2L25aeUJmdVNrWTZ3NmIKY0xuUGp4dWpJQ2RUNy9ic3A5Y2ZPUEd1QzNDc1VYZk9JQ1ZhTUZYQ0hFaDRER2FmOGtLcThVODAxNmpFUnlVWQphS0I4RmhYLzd3VnFpcXJYVStZQzAzMWpsSVlOczZVQW9hZ2U0VDhSdkVmR1hqRkcvUWx6UDhjRXBuR3UzUnEvCmZJUG1rTzhyVzdXcjVldmhoVEpSWkJZUUVBd2hsd0Y2dTBSeEJOTkFubG1iWjFiQUtIZVM0bFI3dFJFSHM3QysKNVMvVHduM3pxTUpkdW5yMkZzK1FMeGtsdnh0TWlBd01iYWxHa045QngxakUzK1hVcmsrKzAzcXVxaVNwRVdwWgpJMk1oVmxNZG12anJraGRuUVBlMHBqSGxxRXJFTzQ1T3BXeHVhWjdHZjltZXJqbVNyY1pqeXUwSEFnTUJBQUdqClR6Qk5NQXdHQTFVZEV3UUZNQU1CQWY4d0N3WURWUjBQQkFRREFnS2tNREFHQTFVZEVRUXBNQ2VDQ1d4dlkyRnMKYUc5emRJSVVjSFpsTFhSc2N5MTBaWE4wTG1sdWRtRnNhV1NIQkg4QUFBRXdEUVlKS29aSWh2Y05BUUVMQlFBRApnZ0VCQUs3TVZaazV5cURHYWd1S1ptWG9EbUJRMFdFNlRUSVNyQmpYclNVWnk5Q05oblVEc21LYURDVmhXU1dLCmE5dGM0a3RXbEtZMkNSTDlJeGpxMkEvVndwdU1FeGEwYnBKbFd5WFM1bVZmN3hhTXZuRm5oVlVqS0p5VnlwVGgKazJpNkhwZUF4YzZpZ053SVF1WmNJekxnZVgrNG5UUWpDcGljSWFuYlVvU0g0b29YQlFQbDdCdmNCZWhxenhoNwovbndhUFBiU1htcmluenlLR1RxRm9NQlo5YmE5UkV6dUJFaTM5eHZuQkJJanA0OXRHbjRuWXlqbHhjSVl6dG1LCnFObTY2NnZRN0RZWDh6azNHbFAvL3c1N2VZV0Roa0xrM3ZSeGxxSURDOXYxb3QrTDRmaVFIM3JZNGVCY0QrQ0kKV2pnVzJ3MjBwa0UyYzB1NnZCWm1sRFFlaUxzPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+        }
+      },
+      {
+        "metadata": {
+          "name": "immich-tls",
+          "namespace": "immich"
+        },
+        "type": "kubernetes.io/tls",
+        "data": {
+          "tls.crt": "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSURFRENDQWZpZ0F3SUJBZ0lKUXRBa1ZyKzIvdTZoTUEwR0NTcUdTSWIzRFFFQkN3VUFNQjh4SFRBYkJnTlYKQkFNVEZIQjJaUzEwYkhNdGRHVnpkQzVwYm5aaGJHbGtNQjRYRFRJMk1EZ3lNakU0TWpFek9Gb1hEVEkyTURndwpNVEF3TURBd01Gb3dIekVkTUJzR0ExVUVBeE1VY0habExYUnNjeTEwWlhOMExtbHVkbUZzYVdRd2dnRWlNQTBHCkNTcUdTSWIzRFFFQkFRVUFBNElCRHdBd2dnRUtBb0lCQVFDeEZhb292Vm0yS1hEMzV2L25aeUJmdVNrWTZ3NmIKY0xuUGp4dWpJQ2RUNy9ic3A5Y2ZPUEd1QzNDc1VYZk9JQ1ZhTUZYQ0hFaDRER2FmOGtLcThVODAxNmpFUnlVWQphS0I4RmhYLzd3VnFpcXJYVStZQzAzMWpsSVlOczZVQW9hZ2U0VDhSdkVmR1hqRkcvUWx6UDhjRXBuR3UzUnEvCmZJUG1rTzhyVzdXcjVldmhoVEpSWkJZUUVBd2hsd0Y2dTBSeEJOTkFubG1iWjFiQUtIZVM0bFI3dFJFSHM3QysKNVMvVHduM3pxTUpkdW5yMkZzK1FMeGtsdnh0TWlBd01iYWxHa045QngxakUzK1hVcmsrKzAzcXVxaVNwRVdwWgpJMk1oVmxNZG12anJraGRuUVBlMHBqSGxxRXJFTzQ1T3BXeHVhWjdHZjltZXJqbVNyY1pqeXUwSEFnTUJBQUdqClR6Qk5NQXdHQTFVZEV3UUZNQU1CQWY4d0N3WURWUjBQQkFRREFnS2tNREFHQTFVZEVRUXBNQ2VDQ1d4dlkyRnMKYUc5emRJSVVjSFpsTFhSc2N5MTBaWE4wTG1sdWRtRnNhV1NIQkg4QUFBRXdEUVlKS29aSWh2Y05BUUVMQlFBRApnZ0VCQUs3TVZaazV5cURHYWd1S1ptWG9EbUJRMFdFNlRUSVNyQmpYclNVWnk5Q05oblVEc21LYURDVmhXU1dLCmE5dGM0a3RXbEtZMkNSTDlJeGpxMkEvVndwdU1FeGEwYnBKbFd5WFM1bVZmN3hhTXZuRm5oVlVqS0p5VnlwVGgKazJpNkhwZUF4YzZpZ053SVF1WmNJekxnZVgrNG5UUWpDcGljSWFuYlVvU0g0b29YQlFQbDdCdmNCZWhxenhoNwovbndhUFBiU1htcmluenlLR1RxRm9NQlo5YmE5UkV6dUJFaTM5eHZuQkJJanA0OXRHbjRuWXlqbHhjSVl6dG1LCnFObTY2NnZRN0RZWDh6azNHbFAvL3c1N2VZV0Roa0xrM3ZSeGxxSURDOXYxb3QrTDRmaVFIM3JZNGVCY0QrQ0kKV2pnVzJ3MjBwa0UyYzB1NnZCWm1sRFFlaUxzPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+        }
+      },
+      {
+        "metadata": {
+          "name": "vw-admin-tls",
+          "namespace": "vaultwarden"
+        },
+        "type": "kubernetes.io/tls",
+        "data": {
+          "tls.crt": "dGhpcyBpcyBub3QgYSBjZXJ0aWZpY2F0ZQ=="
+        }
+      }
+    ]
+  },
+  "proxmox": {
+    "node": "node01",
+    "response": {
+      "data": {
+        "pem-sha256": "0f:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff:00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff",
+        "info": [
+          {
+            "subject": "/CN=node01",
+            "issuer": "/CN=Proxmox Virtual Environment Cluster CA",
+            "notbefore": 1753689600,
+            "notafter": 1893456000,
+            "public-key-bits": 2048,
+            "public-key-type": "rsa",
+            "san": [
+              "DNS:localhost",
+              "IP:127.0.0.1",
+              "IP:::1",
+              "IP:192.168.1.2"
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

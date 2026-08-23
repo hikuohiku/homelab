@@ -37,6 +37,14 @@ rules:
     # 見るための読み取り。Secret 本体ではなく ExternalSecret CR のみで、
     # write 系 verb は含まない
     verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["secrets"]
+    # P-0188。kubernetes.io/tls 型 Secret の期限台帳のための読み取り。
+    # tls.crt を DER パースした派生値 (notAfter・SAN・残日数) だけをレポートに
+    # 載せ、tls.key 等の値そのものは取得・出力しない (report.py の
+    # collect_cert_expiry と ops/tools/check_cert_expiry.py の docstring 参照)。
+    # write 系 verb は含まない
+    verbs: ["get", "list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
