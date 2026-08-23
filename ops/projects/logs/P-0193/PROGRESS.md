@@ -2,11 +2,11 @@
 
 ## 現在の状態
 
-受入 4 項目のうち **1・4 が green** (セッション 1, 2026-08-23)。残り 2・3 は failing。
+受入 4 項目のうち **1・2・4 が green** (セッション 2, 2026-08-23)。残り 3 は failing。
 
 - [x] 1. `ops/tools/dashboard_smoke.py` 存在 + py_compile — 実サイトで全 12 検査合格を実測済み
-- [ ] 2. `python3 -m unittest ops.tests.test_dashboard_smoke` — **次のセッションの最優先** (下記「テスト作成の手引き」)
-- [ ] 3. `grep -q 'dashboard_smoke' apps/ops-health-reporter/report.py` — reporter 畳み込み未着手
+- [x] 2. `python3 -m unittest ops.tests.test_dashboard_smoke` — 33 本 OK (セッション 2)
+- [ ] 3. `grep -q 'dashboard_smoke' apps/ops-health-reporter/report.py` — reporter 畳み込み未着手。**次のセッションの最優先** (下記「reporter 畳み込みへの引き継ぎ」)
 - [x] 4. `smoke-result.json` 初回記録 — 実描画の断言結果 + PNG を commit 済み
 
 ## 実行ログ
@@ -40,6 +40,41 @@
   `find_heart_chips` (`class="heart-chip "` に**末尾空白がある**実測形)、
   `check_freshness` の境界 (max_age_s ちょうど/超過)
 - 実 DOM の較正済みサンプルは smoke-result.json と、このファイルの下の実測メモ参照
+
+### セッション 2 (2026-08-23)
+
+やったこと:
+
+1. `ops/tests/test_dashboard_smoke.py` 新設 (33 本、全て標準ライブラリの unittest)。
+   手引きどおり `from ops.tools import dashboard_smoke` で import (副作用無しを確認済み)。
+   固定した契約:
+   - 正常ページで `evaluate_dom` の検査名リスト 9 個を**並びごと**固定
+     (reporter 畳み込みがこの名前に依存するため)。全 pass も断言
+   - 矛盾 5 形状を両方向で: warning 共存 / HEART SIGNAL LOST 共存 /
+     チップ混在 (ok+bad) / 観測なし+正常チップ / 古い心拍。それぞれ対応する
+     check 名が FAIL になり ok が倒れること。加えて「bad チップのみなら
+     no-mixed-heart-signals は鳴らさない」「チップ無しは共存検査対象外」という
+     役割分担、「鮮度の失敗が矛盾検査に漏れない」独立性も固定
+   - 白画面: rendering 4 検査が鳴るが render-complete は鳴らさない (loading マーク
+     自体が無いため。役割分担の固定)
+   - スピナ残置: render-complete のみ鳴る
+   - `parse_jst_stamp`: 基本解析・年越し前年巻き戻し・5 分 skew を巻き戻さない・
+     閏日 "02/29" を **warnings.simplefilter("error") 付きで**解析 (非推奨パスに
+     触れたらテストが落ちる構造)・解釈不能ラベルは None
+   - `visible_text`: flight data (`__next_f.push`) の中身が可視テキストにも
+     矛盾検査にも乗らないこと。style 除外・charref 解決・壊れた HTML で例外を出さない
+   - `find_heart_chips`: 実測形 `class="heart-chip "` (末尾空白) と
+     `heart-chip--bad` の両方、改行跨ぎ (re.S)、無関係 div の無視
+   - `check_freshness` 境界: max_age_s ちょうどは沈黙 (> でのみ鳴る)、+1 秒で鳴る。
+     LAST HEART 欠落・解釈不能は fail
+2. dashboard_smoke.py の docstring 内「別 PR で足す」を実態に合わせて更新。
+
+分かったこと:
+
+- fixture で最初、正常系が masthead 検査で落ちた。原因は合成 DOM に
+  `MISSION CONTROL` 文言 (identity ブロック) を入れ忘れという単純ミス。
+  実 DOM 断面は smoke-result.json と page.tsx (L354-399) を突き合わせて作れば足りる
+- テスト実行は約 0.02 秒。chromium 不要なので CI/cluster 外どこでも回る
 
 reporter 畳み込み (項目 3) への引き継ぎ:
 
@@ -84,5 +119,7 @@ reporter 畳み込み (項目 3) への引き継ぎ:
 
 ## 次のセッションへの一言
 
-項目 2 (unittest) から着手。純関数は揃っていて fixture を当てるだけ。
-その次は項目 3 (reporter + rbac + CronJob)。CDP 方式の罠は上に全部書いた。
+残りは項目 3 (reporter 畳み込み + rbac + CronJob) のみ。上の「reporter 畳み込み
+(項目 3) への引き継ぎ」と PROJECT.md を読んでから着手すること。verify 4 項目中
+1・2・4 は既に green なので、report.py への畳み込み (grep 対象) だけで全 green になる。
+CDP 方式の罠は上に全部書いた。in-cluster 初回実行の実績だけまだ無い。
