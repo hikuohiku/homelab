@@ -12,6 +12,9 @@ test_openclaw_bridge.py と同じ形)。import 副作用を持たないので cl
   送信側はそれを見て送信を諦める
 - JST の日境界: [day 00:00, day+1 00:00)。UTC と日付がずれるコミットも
   JST で正しい日に落ちる
+- 前日の最終状態: history ファイル名は reporter が UTC 日付で付けるため、
+  ファイルの最終行ではなく「JST 日境界より前の最新スナップショット」を
+  generated_at で選ぶ (最終行を使うと朝実行では約 30 分前との比較になる)
 - backup 鮮度: 複数 listing から最新 1 本。未来 mtime は負の年齢を作らない
 """
 
@@ -62,6 +65,12 @@ def listing(namespace, mtimes, path="/mnt/backups"):
             ],
         },
     }
+
+
+def snap(iso, names):
+    """history jsonl の 1 行 (latest.json 同形スナップショット) を最小構成で作る。"""
+    return {"generated_at": iso,
+            "applications": [app(n, "Healthy") for n in names]}
 
 
 class CountMergesTest(unittest.TestCase):
@@ -184,26 +193,65 @@ class BackupFreshnessTest(unittest.TestCase):
                                 now="garbage")
 
 
-class LastJsonLineTest(unittest.TestCase):
-    def test_takes_last_line(self):
+class JstDayEndUtcTest(unittest.TestCase):
+    def test_boundary_is_1500z_of_previous_day(self):
+        # JST 2026-08-23 00:00 = 2026-08-22 15:00Z。history ファイル名が UTC 日付
+        # (実測: report.py が generated_at[:10] を使う) なので、この変換が
+        # 「前日の最終状態」探索の基準になる
+        self.assertEqual(
+            mb.jst_day_end_utc(datetime.date(2026, 8, 22)),
+            datetime.datetime(2026, 8, 22, 15, 0, tzinfo=datetime.timezone.utc),
+        )
+
+
+class JsonlDocsTest(unittest.TestCase):
+    def test_parses_lines_in_order(self):
         raw = b'{"v": 1}\n{"v": 2}\n'
-        self.assertEqual(mb.last_json_line(raw), {"v": 2})
+        self.assertEqual(mb.jsonl_docs(raw), [{"v": 1}, {"v": 2}])
 
-    def test_broken_line_is_skipped_and_earlier_line_wins(self):
-        # 途中 (たとえば末尾直前) に壊れ行があっても、その前の完全な
-        # スナップショットを「最終状態」として使う
-        self.assertEqual(mb.last_json_line(b'{"v": 1}\n{"torn"\n'), {"v": 1})
-        self.assertEqual(mb.last_json_line(b'{"a": "}\n{"b": 2}\n'), {"b": 2})
+    def test_blank_broken_and_non_dict_lines_are_skipped(self):
+        raw = b'\n{"a": 1}\n{"torn"\n[1, 2]\n42\n{"b": 2}\n'
+        self.assertEqual(mb.jsonl_docs(raw), [{"a": 1}, {"b": 2}])
 
-    def test_trailing_blank_lines_are_skipped(self):
-        raw = b'{"v": 1}\n\n\n'
-        self.assertEqual(mb.last_json_line(raw), {"v": 1})
+    def test_empty_or_all_broken_input(self):
+        self.assertEqual(mb.jsonl_docs(b""), [])
+        self.assertEqual(mb.jsonl_docs(None), [])
+        self.assertEqual(mb.jsonl_docs(b"not json\n"), [])
 
-    def test_empty_or_broken_returns_none(self):
-        self.assertIsNone(mb.last_json_line(b""))
-        self.assertIsNone(mb.last_json_line(None))
-        self.assertIsNone(mb.last_json_line(b"not json\n"))
-        self.assertIsNone(mb.last_json_line(b'{"ok"}\n'))  # JSONDecodeError
+
+class PrevApplicationsTest(unittest.TestCase):
+    def test_picks_latest_snapshot_before_boundary_across_files(self):
+        # 実データ (history/2026-08-22.jsonl は UTC 08-22 の 48 行を持ち、JST 昨日の
+        # 終わり 15:00Z はその途中) を縮約した回帰。ファイル順と無関係に
+        # 「境界より前の最新」を選ぶ。境界ちょうど (今日の最初の瞬間) は除外
+        docs = [
+            snap("2026-08-22T14:30:05Z", ["immich"]),   # 境界直前 → 採用
+            snap("2026-08-22T15:00:05Z", ["after"]),    # 境界後 → 除外
+            snap("2026-08-21T23:30:04Z", ["older"]),    # もっと古い
+        ]
+        boundary = mb.jst_day_end_utc(datetime.date(2026, 8, 22))
+        result = mb.prev_applications(docs, boundary)
+        self.assertEqual([a["name"] for a in result], ["immich"])
+
+    def test_unusable_rows_are_not_candidates(self):
+        # 境界前で最新の行が比較不能でも、その前の完全なスナップショットを使える
+        docs = [
+            {"generated_at": "2026-08-22T14:30:00Z", "applications": None},
+            {"generated_at": "2026-08-22T12:00:00Z"},          # applications 無し → 対象外
+            {"applications": [app("x", "Healthy")]},           # generated_at 無し → 対象外
+            {"generated_at": "壊れ", "applications": []},      # 時刻壊れ → 対象外
+            snap("2026-08-22T09:00:00Z", ["keeper"]),
+        ]
+        boundary = mb.jst_day_end_utc(datetime.date(2026, 8, 22))
+        result = mb.prev_applications(docs, boundary)
+        self.assertEqual([a["name"] for a in result], ["keeper"])
+
+    def test_nothing_usable_returns_none(self):
+        boundary = mb.jst_day_end_utc(datetime.date(2026, 8, 22))
+        after_boundary_only = [snap("2026-08-22T15:00:05Z", ["after"])]
+        self.assertIsNone(mb.prev_applications(after_boundary_only, boundary))
+        self.assertIsNone(mb.prev_applications([], boundary))
+        self.assertIsNone(mb.prev_applications(None, boundary))
 
 
 class BriefContractTest(unittest.TestCase):
@@ -289,6 +337,15 @@ class BriefContractTest(unittest.TestCase):
         all_healthy = [app("coder", "Healthy")]
         lines = mb.brief_lines(current_apps=all_healthy, prev_apps=None)
         self.assertIn("健全性: 1 アプリすべて Healthy", lines)
+
+    def test_non_list_prev_is_treated_as_missing(self):
+        # prev_apps が list 以外 (壊れた形状。fetch 側では起こらないが契約として
+        # 「壊れない」) でも「?→X」の疑似追加を作らない
+        apps = [app("coder", "Healthy")]
+        for prev in ({"applications": []}, "garbage"):
+            lines = mb.brief_lines(current_apps=apps, prev_apps=prev)
+            health = [line for line in lines if line.startswith("健全性")]
+            self.assertEqual(health, ["健全性: 1 アプリすべて Healthy"])
 
     def test_backup_line_variants(self):
         self.assertIsNone(mb.line_backup(None))

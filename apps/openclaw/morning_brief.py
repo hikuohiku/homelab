@@ -27,6 +27,7 @@ Telegram 送信はこの brief 1 通のみで、受信はしない (受信は br
 """
 
 import datetime
+import http.client
 import json
 import os
 import re
@@ -182,26 +183,62 @@ def backup_freshness(pvc_usage, now=None):
     return best
 
 
-def last_json_line(raw_bytes):
-    """history jsonl (複数行) の末尾から辿り、最初に JSON として読めた行を返す。
+def jst_day_end_utc(day):
+    """JST の day が終わる瞬間 (= 翌日 00:00 JST) を UTC で返す。
 
-    末尾の空行・壊れた行は無視してさらに前を辿る (途中の壊れ行があっても
-    直近の完全なスナップショットを「前日の最終状態」として使う)。
-    1 行も読めなければ None。history は 1 行 1 スナップショットの追記専用
-    ファイルなので最終行で近似する。
+    history ファイル名は reporter が UTC 日付で付ける (report.py の generated_at は
+    UTC strftime で、[:10] をファイル名に使う — 実測: history/2026-08-22.jsonl の
+    中身は 2026-08-22T00:00Z〜23:30Z)。「昨日の最終状態」を探すには JST→UTC の
+    日付変換が要る。JST = UTC+9 なので境界は常に前日の 15:00Z。
+    """
+    return (datetime.datetime(day.year, day.month, day.day, tzinfo=JST)
+            + datetime.timedelta(days=1)).astimezone(datetime.timezone.utc)
+
+
+def jsonl_docs(raw_bytes):
+    """history jsonl (複数行) を dict のリストに解釈する。読めた行の順序を保つ。
+
+    空行・JSON として読めない行・dict にならない行は黙って捨てる (追記専用
+    ファイルの途中破損で全体を止めない)。
     """
     if not raw_bytes:
-        return None
+        return []
     text = raw_bytes.decode("utf-8", "replace")
-    for line in reversed(text.splitlines()):
+    docs = []
+    for line in text.splitlines():
         line = line.strip()
         if not line:
             continue
         try:
-            return json.loads(line)
+            doc = json.loads(line)
         except json.JSONDecodeError:
             continue
-    return None
+        if isinstance(doc, dict):
+            docs.append(doc)
+    return docs
+
+
+def prev_applications(docs, boundary):
+    """history 全行から「boundary より前の最新スナップショット」を選び applications[] を返す。
+
+    ファイル名 (UTC 日付) の最終行は「前日の最終状態」にならない — JST 朝 8 時実行では
+    最終行は約 30 分前になるため、各行の generated_at で判定して境界以前の最新を使う。
+    generated_at が読めない行・applications が list でない行は選考対象外
+    (比較に使えないデータを「最終状態」として偽らない)。
+    見つからなければ None (呼び出し側は summary 表示に落とす)。
+    """
+    best_doc = None
+    best_at = None
+    for doc in docs or []:
+        at = parse_iso(doc.get("generated_at"))
+        apps = doc.get("applications")
+        if at is None or not isinstance(apps, list) or at >= boundary:
+            continue
+        if best_at is None or at > best_at:
+            best_at, best_doc = at, doc
+    if best_doc is None:
+        return None
+    return best_doc["applications"]
 
 
 def _fmt_age_hours(hours):
@@ -277,10 +314,11 @@ def brief_lines(merges=None, current_apps=None, prev_apps=None, backup=None,
     これが送信文の構造そのもの。「3 行を超えない」はここで構造的に担保される
     (行生成器が 3 個しか無いため)。テストで機械にも固定する。
     """
-    # 前日データが無い (None)・空 ([] も同義) のときは比較不能なので変化を出さず
-    # summary 表示に落とす。素の prev_apps を health_changes に渡すと全アプリが
-    # 「?→X」の擬似的な新規出現に見えてしまい、障害でも無い日に誇張した変化を見せる
-    prev_usable = bool(prev_apps)
+    # 前日データが無い (None)・空 ([] も同義)・list 以外 (壊れた形状) のときは
+    # 比較不能なので変化を出さず summary 表示に落とす。素の prev_apps を
+    # health_changes に渡すと全アプリが「?→X」の擬似的な新規出現に見えてしまい、
+    # 障害でも無い日に誇張した変化を見せる
+    prev_usable = isinstance(prev_apps, list) and bool(prev_apps)
     lines = [
         line_delivered(merges),
         line_health(
@@ -310,7 +348,8 @@ def github_get(path, token, raw=False):
 
     raw=True は report.py get_raw_content() と同じ理由 (Contents API は 1MB 超で
     content フィールドを返さない) で生バイトを受け取る。失敗時は status だけを
-    返し呼び出し側に判断させる (1 ソースの失敗で全体を止めない)。
+    返し呼び出し側に判断させる (1 ソースの失敗で全体を止めない)。HTTPError だけでなく
+    接続エラー・タイムアウト (URLError / socket.timeout = OSError の一族) も同じ扱い。
     """
     request = urllib.request.Request(
         "https://api.github.com" + path,
@@ -326,6 +365,10 @@ def github_get(path, token, raw=False):
     except urllib.error.HTTPError as error:
         error.read()
         return error.code, None
+    except (OSError, http.client.HTTPException) as error:
+        # HTTPError/URLError/socket.timeout はすべて OSError の一族。1 ソースの
+        # ネットワーク障害で Job 全体を落とさず、その行だけ省かせる
+        return "{}: {}".format(type(error).__name__, error), None
     if raw:
         return 200, body
     try:
@@ -358,20 +401,29 @@ def fetch_sources(repo, report_ref, base_branch, day, token, now):
     else:
         log("latest.json 取得失敗: status={}".format(status))
 
-    status, raw = github_get(
-        "/repos/{}/contents/ops/health/history/{}.jsonl?ref={}".format(
-            repo, day.isoformat(), report_ref),
-        token, raw=True,
-    )
-    if status == 200:
-        prev_doc = last_json_line(raw)
-        if isinstance(prev_doc, dict):
-            candidates = prev_doc.get("applications")
-            prev_apps = candidates if isinstance(candidates, list) else None
-    else:
-        # 前日ファイルが無い (reporter 停止日など) は「変化の比較不能」であり、
-        # 障害ではないのでログだけ残す
-        log("history/{}.jsonl 取得失敗: status={}".format(day.isoformat(), status))
+    # 前日の最終状態: history ファイル名は UTC 日付 (jst_day_end_utc 参照) なので
+    # 「JST day の終わりより前の最新スナップショット」を generated_at で選ぶ。
+    # reporter が境界付近で止まっていても前日ファイルの最終行を使えるよう
+    # day とその前日の最大 2 ファイルを見る
+    boundary = jst_day_end_utc(day)
+    docs = []
+    for offset in (0, 1):
+        name = (day - datetime.timedelta(days=offset)).isoformat()
+        status, raw = github_get(
+            "/repos/{}/contents/ops/health/history/{}.jsonl?ref={}".format(
+                repo, name, report_ref),
+            token, raw=True,
+        )
+        if status == 200:
+            docs.extend(jsonl_docs(raw))
+        else:
+            # 前日ファイルが無い (reporter 停止日など) は「変化の比較不能」であり、
+            # 障害ではないのでログだけ残す
+            log("history/{}.jsonl 取得失敗: status={}".format(name, status))
+    prev_apps = prev_applications(docs, boundary)
+    if prev_apps is None:
+        log("境界 {} 以前の比較可能なスナップショット無し。健全性は summary 表示".format(
+            boundary.isoformat()))
 
     day_start = datetime.datetime(day.year, day.month, day.day, tzinfo=JST)
     day_end = day_start + datetime.timedelta(days=1)
