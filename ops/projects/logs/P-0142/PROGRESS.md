@@ -684,14 +684,48 @@ docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `r
 
 → verdict は `keep` のまま、inventory への反映対象なし。docs/pbs-retirement.md は書かない。
 
-**次のセッションへの一言**: やり方はセッション5〜19 と同一。main 比較基準は引き続き
+### 2026-08-23 セッション20 — セッション19 手順どおりの兆候確認 (main 零新着・動いた 5 本 ops-state/p-0115/p-0116/p-0139/p-0144 を各々 diff 本文実測し無関係 — ops-state のキーワードヒット 7 件は heartbeat ステータス辞書の誤マッチ、p-0115 の自ログ +47 行に PBS/backup 言及ゼロで条件 A/B 報告に非ず。不動 4 本を再実測。issue #56 は増減ゼロ)
+
+**やったこと**: spec DoD の追加実装は無し。セッション5〜19 と同じく verify 再実測 +
+外部シグナル確認だけをした。
+
+1. **verify 再実測**: #1 rc=1 / #2 rc=0 / #3 rc=2。セッション3 以降ずっと同一
+   (#1/#3 は verdict=keep ゆえ意図通り failing、#2 green)
+2. **観測環境の再実測** (20 回目の独立実測、結果同じ): `env` の proxmox/pve/tailscale 系無し
+   (rc=1) / `tailscale` `pvesh` `qm` `gh` CLI すべて absent
+3. **origin/main の新着確認**: `git fetch --prune` 後、`8c5cbd7d..origin/main` の commit は
+   **ゼロ**。今回は動いたブランチが 5 本、判定はすべて diff 本文側で grep -c:
+   - `ops-state` (90df8b9b..5e3bf637): heartbeat.json / metrics.jsonl のみ。
+     追加行のキーワードヒットは **7 件だが全件ステータス辞書の `"P-0142": "active"`
+     誤マッチ** (罠 (a) の再現。本文側判定により無関係)
+   - `project/p-0115` (31bb94bb..fcf85a36): 自ログ PROGRESS.md +47 行のみ。
+     追加行の PBS/backup/バックアップ/qm shutdown/112 言及 **0**・
+     docs/terraform/P-0142 paths へのタッチ **0** → 無関係。
+     **p-0115 は条件 A/B を運びうる RTO 演習系なので毎回丁寧に見るが、今回も報告なし**
+   - `project/p-0116` (9fb4a833..edaef17f): 自ログ +79 行のみ。
+     キーワードヒット 1 件は本文中の「fetch で動いたのは ops-state・project/p-0142」
+     という言及のみ = 誤マッチ → 無関係
+   - `project/p-0139` (a86d5bae..92ddef26): fired.json + テストのみ。同言及 **0** → 無関係
+   - `project/p-0144` (d4c68d3b..da0286ca): fetch_devices.py + テストのみ。同言及 **0** → 無関係。
+     なお p-0143 (e5211068) / ops-health-report (1fc66b50) / ops-dashboard (662d2b3e) /
+     ops-feedback (f2f582af) は不動、fetch に `[new branch]` 出力無しを実測
+4. **issue #56 を GitHub REST API で実測**: page ごとに個別 `json.loads` + `mktemp -d`
+   で集計した結果 **合計 178 件・unique id 178・max id 5384140771・最終
+   2026-08-23T04:09:12Z = セッション19 基準から増減ゼロ**。新着が無いため本文精読は発生せず。
+   条件 A/B の実施報告は未着のまま
+
+→ verdict は `keep` のまま、inventory への反映対象なし。docs/pbs-retirement.md は書かない。
+
+**次のセッションへの一言**: やり方はセッション5〜20 と同一。main 比較基準は引き続き
 `8c5cbd7d..origin/main` (今回は零新着)。動いたブランチは「docs/terraform/P-0142 logs
 パス」と「PBS/backup/qm shutdown/112 言及」を diff 本文側で grep -c すればよく、
 中身の精読は不要。今回のブランチ基準:
-ops-state 90df8b9b / p-0115 31bb94bb / p-0116 9fb4a833 / p-0143 e5211068 /
-p-0144 d4c68d3b / p-0139 a86d5bae (不動) / ops-health-report 1fc66b50 (不動) /
-ops-dashboard 662d2b3e / ops-feedback f2f582af (この 2 本はセッション19 で監視対象に追加)。
-fetch に `[new branch]` が出たら初動で先端時刻と PBS 関連パスへのタッチ有無を確認する
+ops-state 5e3bf637 / p-0115 fcf85a36 / p-0116 edaef17f / p-0143 e5211068 (不動) /
+p-0144 da0286ca / p-0139 92ddef26 / ops-health-report 1fc66b50 (不動) /
+ops-dashboard 662d2b3e (不動) / ops-feedback f2f582af (不動)。
+heartbeat のステータス辞書に P-0145 / P-0147 (ともに announced) が出現している —
+将来これらのブランチとして現れたら、fetch に `[new branch]` が出たときと同じく
+初動で先端時刻と PBS 関連パスへのタッチ有無を確認すること
 (ops-dashboard/ops-feedback が監視外のまま残っていた教訓)。
 **罠** (実測済み、繰り返さないこと): (a) log メッセージ内の「112」「P-0142」
 「#56」は誤マッチするので本文側判定。(b) `grep | head` の rc は当てにならない。(c) issue #56
