@@ -52,3 +52,46 @@
 
 実装は完了している。レビュー指摘が来たらその解消が最優先。verify(3) は merge 後の
 heart ビート待ちであり、それ以外にやることはないはず (やることが出たらこの欄に追記)。
+
+## worker セッション 2 (2026-08-23) — verify(3) の事前監査。merge 後 green 化を実証済み・コード変更なし
+
+### やったこと
+
+レビュー指摘は無し。唯一の failing 項目 verify(3) は「merge → heart 初回ビート」でしか
+green にならないため、**push を伴わずにその通過を事前実証するリハーサル**をした。
+コード変更は不要と判断 (変更ゼロがこのセッションの結論)。
+
+1. `git worktree add --detach <tmp> origin/ops-state` で ops-state を /tmp に展開
+2. 本物の `Heart.publish_reminders()` を**実台帳 × 実時刻 (beat と同一条件: UTC now)** で
+   実行。state_dir だけ worktree へ差し替え (`h.state_dir = worktree`)
+3. worktree 内で add -A + commit (**push はしない**) → `git show HEAD:briefing/reminders.txt`
+   が通る = verify(3) と同じ判定式が通る形
+4. 断片はレンダラ CLI 出力 (`python3 -m ops.life.reminders`) と一致:
+   「今日 8/24 ゴミ収集 (仮置き)…」の 1 行。render-sample.txt とも整合
+
+### リハーサルで確認できたこと
+
+- publish_reminders が書くのは `briefing/reminders.txt` のみ (git status はそれだけ)。
+  commit_and_push_state() の add -A で確実に載る
+- beat の順序は sync_main → sync_state_branch → … → publish_reminders →
+  commit_and_push_state (heart.py:502-507)。merge 後最初のビート (~120s) で載る
+- state_dir のルート = ブランチルートなのでパス対応は正しい (ops-state 側に既存
+  briefing/ は無いが mkdir で作られる)
+- 台帳欠損時は黙ってスキップ。unittest 24 本 + test_reminders_beat.py 再実測 OK、
+  validate.py も通過
+
+### 分かったこと・罠
+
+- **このサンドボックスでは /tmp/opencode が root 所有 755 で書けない**
+  (autopilot uid 10001)。一時ファイルは `mktemp -d /tmp/xxx.XXXXXX` (/tmp 直下) を使う
+- リハーサル手法は再利用可: merge 後に verify(3) が 2 ビート待っても green にならないとき、
+  同じ手順を再実行すれば「レンダラ/配線が壊れた」か「heart pod 側 (sync_main, 再起動) か」を
+  即切り分けできる
+- 断片の「今日/明日」ラベルは描画時に確定する値。heart が止まれば古い表示のまま残るが、
+  heart 止滞は既存の HEART チップが面するので二重の面張りはしなかった
+
+### 次のセッションへの一言
+
+コードは完成・変更不要。verify(3) は merge → heart 初回ビートで green 化する**ことを
+リハーサルで実証済み**。レビュー指摘があればその解消が最優先。merge 後に red が続くようなら
+上のリハーサルを再実行して heart pod 側を疑うこと。
