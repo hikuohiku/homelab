@@ -5226,7 +5226,42 @@
         "soft_cap": 2500000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T21:47:38Z",
+        "verify": [
+          {
+            "cmd": "python3 -m unittest ops.tests.test_event_consumer",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_event_consumer (unittest.loader._FailedTest.test_event_consumer)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_event_consumer\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_event_consumer'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "python3 ops/tools/event_probe.py --subject events.raw.telegram.dm --text '止めて (合成疎通テスト)' --expect-note-within-seconds 120 --report /tmp/opencode/event-probe.json && python3 -c \"import json; d=json.load(open('/tmp/opencode/event-probe.json')); assert d['note_arrived'] and d['latency_seconds'] < 120\"",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-qcwpahap/repo/ops/tools/event_probe.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "python3 -c \"import json,subprocess; out=subprocess.run(['git','show','origin/ops-feedback:notes.json'],capture_output=True,text=True); import sys; sys.exit(0 if 'event_probe' in json.dumps(json.loads(out.stdout)) else 1)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,subprocess; out=subprocess.run(['git','show','origin/ops-feedback:notes.json'],capture_output=True,text=True); import sys; sys.exit(0 if 'event_probe' in json.dumps(json.loads(out.stdout)) else 1)\n                                                                                                                                                                                     ~~~~~~~~~~^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/json/__init__.py\", line 352, in loads\n    return _default_decoder.decode(s)\n           ~~~~~~~~~~~~~~~~~~~~~~~^^^\n  File \"/usr/lib/python3.14/json/decoder.py\", line 345, in decode\n    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/json/decoder.py\", line 363, in raw_decode\n    raise JSONDecodeError(\"Expecting value\", s, err.value) from None\njson.decoder.JSONDecodeError: Expecting value: line 1 column 1 (char 0)\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0243",
@@ -5249,7 +5284,42 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T21:47:38Z",
+        "verify": [
+          {
+            "cmd": "test -f ops/profiles/private-data/networkpolicy.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 ops/profiles/private-data/exfil_drill.py --report /tmp/opencode/exfil-drill.json && python3 -c \"import json; d=json.load(open('/tmp/opencode/exfil-drill.json')); assert d['labeled_blocked'] is True and d['unlabeled_allowed'] is True\"",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-yiu292_p/repo/ops/profiles/private-data/exfil_drill.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "python3 -c \"import json; d=json.load(open('ops/stage3/readiness.json')); c=[x for x in d['criteria'] if 'trifecta' in str(x.get('id',''))+str(x.get('name',''))]; assert c and c[0].get('pass') is True, 'criterion 1 still false'\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json; d=json.load(open('ops/stage3/readiness.json')); c=[x for x in d['criteria'] if 'trifecta' in str(x.get('id',''))+str(x.get('name',''))]; assert c and c[0].get('pass') is True, 'criterion 1 still false'\n                                                                                                                                                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: criterion 1 still false\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
