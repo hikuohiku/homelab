@@ -881,7 +881,57 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   validate.py が archive.jsonl 先頭不一致 error を出したら origin/main を merge
   (セッション 20 の発見節参照)。unittest 件数は固定値でないので「OK か」で判断すること
 
+### セッション 23 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking メンバーは 3 件で不変**
+  (P-0092 / P-0161 / P-0175。checked=62)。固定指示どおり実演習は見送り
+- 本セッションの実イベントその 1: **台帳完全凍結 5 例目** (22→23)。
+  全 62 件の id+state 写像が完全一致 (内訳 delivered 27 / vetoed 2 / stalled 29 /
+  announced 1 / active 3 も不変。announced+active メンバー同一:
+  P-0092 / P-0161 / P-0164 自己 / P-0175)
+- 実イベントその 2 (**凍結の構造に 2 様態を発見**): 今回の凍結は
+  **「projects.json の新 version 自体がゼロ」型**だった — 同ファイルを触る commit は
+  09:00:21 (8a4598af, P-0175 drift_count 追加) を最後に一切出ておらず、ops-state の
+  beats が beat71 → beat83 (09:27:28Z) まで進む間に version 数 0。対して前例の
+  21→22 凍結は「新 version は出続けるが中身の id+state が不変」型 (drift_count
+  churn あり) だった。つまり完全凍結には **(a) raw version が出るが id+state 不変 /
+  (b) raw version 自体が止まる** の 2 様態があり、「凍結 = version 間 diff 見る」
+  方式だと (b) を観測対象にできない。(a)(b) どちらでも id+state 写像の一致判定は
+  正しく機能する — 判定方法を変える必要は無いが、「version 出力の有無」自体が
+  heart の書き込み挙動の観測点になることは覚えておいてよい
+- main 不動 (`git merge-base --is-ancestor origin/main HEAD` が真。merge 不要)。
+  ドラフト PR #524 は初手から mergeable_state=clean・ci/GitGuardian success
+  (head=5d24c8932 不変。base が動いていないので unknown 罠も発火せず)
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 3), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 294 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git merge-base --is-ancestor origin/main HEAD          # 真 = main 不動・merge 不要
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932 不変
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。「0 か否か」だけを見る原則は維持。
+  validate.py が archive.jsonl 先頭不一致 error を出したら origin/main を merge
+  (セッション 20 の発見節参照)。unittest 件数は固定値でないので「OK か」で判断すること
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 23, ライフサイクル観測の続き) **台帳完全凍結 5 例目** (22→23、
+  id+state 写像 62/62 一致、内訳・announced+active メンバーも完全同一) と同時に、
+  **完全凍結には 2 様態があることを発見**: (a) 新 version は出続けるが id+state が
+  不変型 (前例: 21→22, drift_count churn あり) と、(b) **projects.json の新 version
+  自体がゼロになる型** (本例: 同ファイルを触る commit は 09:00:21 を最後に皆無で、
+  beats が beat71→beat83 まで進んでいる間も version 数 0)。「凍結 = version 間
+  diff」方式では (b) はそもそも観測対象にならず、id+state 写像判定は (a)(b) 両方で
+  正しく機能する。version 出力の有無自体は heart の書き込み挙動の観測点。
+  自タスク unittest 39 / 全体 294 green、validate 0 error、targets 3/3 ready、
+  前置条件の劣化無し
 
 - (セッション 22, ライフサイクル観測の続き) **台帳完全凍結 4 例目** (21→22、
   id+state 写像 62/62 一致)。P-0175 の active 入場 (ops-state beat58,
