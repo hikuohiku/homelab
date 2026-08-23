@@ -1,0 +1,83 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: version-watcher
+  namespace: version-watcher
+spec:
+  # 毎晩 1 回。schedule に timeZone を書いていないので node01 のローカルタイム (JST) 評価。
+  # 分は health-reporter (*/30 = :00/:30 側) と重ならない位置にずらす
+  schedule: "37 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      # 比較可能な約 40 対象を直列で HTTP する (registry / GitHub Releases / npm)。
+      # dockerhub は対象あたり 2 リクエスト (家族アンカー + 全体ページ。
+      # version_watch.dockerhub_latest を参照) なので合計 49 リクエスト。
+      # health-reporter の 120s は 1 リクエスト数回分の想定だが、こちらは対象数に
+      # 比例するので伸ばす。1 リクエストあたりの上限 15s (watch.py PER_REQUEST_TIMEOUT)
+      # × 49 = 735s < 900s (+ GitHub 書き込みのリトライ待ちの余裕)。超えたら Job 失敗
+      # として可視化される
+      activeDeadlineSeconds: 900
+      template:
+        spec:
+          # k8s API は一切読まない (GitHub API とのみ話す) ので rbac.yaml / ServiceAccount は
+          # 同型構成 (ops-health-reporter) から意図的に省略し、token も mount しない。
+          # PROJECT.md の「同型構成」からの逸脱は P-0126 PROGRESS 2026-08-23 セッション1 で
+          # 決済済み。権限が無いことを pod 側からも担保させる
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: watch
+              image: python:3.14-alpine
+              terminationMessagePolicy: FallbackToLogsOnError
+              command: ["python", "/scripts/watch.py"]
+              env:
+                - name: GITHUB_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: github-health-reporter-token
+                      key: token
+                - name: GITHUB_REPO
+                  value: hikuohiku/homelab
+                - name: REPORT_BRANCH
+                  value: ops-health-report
+                - name: BASE_BRANCH
+                  value: main
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              # 外向き HTTP の直列処理が主体でメモリは数十MB規模。256Mi は実測ではなく
+              # 「暴走しても他 Pod を巻き込まない」目的の緩い上限（CHARTER §4。実使用量に
+              # 張り付いた値ではないため、OOMKill を誘発するリスクは低いと判断した）
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: script
+              configMap:
+                name: version-watcher-script
+            - name: tmp
+              emptyDir: {}
