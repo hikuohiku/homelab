@@ -126,8 +126,14 @@ notifications:
     trigger.on-degraded: |
       - when: app.status.health.status == 'Degraded' && app.spec.destination.namespace != 'autopilot'
         send: [discord-app-degraded]
+    # operationState は任意セクション (一度も sync していない App や操作受付直後には存在
+    # しない)。素の . で .phase を辿るとその App の評価が毎 round エラーになる
+    # ("cannot fetch phase from <nil>" — 2026-08-23 の合成障害注入中に controller ログで
+    # 実測、error ログが出るだけで通知は出ない)。公式ドキュメントと同じ ?. 演算子で
+    # 保護し、無ければ false 扱いにする (argo-cd.readthedocs.io Triggers の
+    # 「Accessing Optional Manifest Sections and Fields」)
     trigger.on-sync-failed: |
-      - when: app.status.operationState.phase in ['Error', 'Failed'] && app.spec.destination.namespace != 'autopilot'
+      - when: app.status?.operationState.phase in ['Error', 'Failed'] && app.spec.destination.namespace != 'autopilot'
         send: [discord-app-sync-failed]
 
   # 全 Application への一括購読 (per-app annotation を 14 本に撒かなくてよい)。

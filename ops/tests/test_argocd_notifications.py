@@ -22,6 +22,10 @@ notifier の `$<key>` 参照の不一致、kustomization resources への載せ�
      verbatim で載せ、controller は trigger.<名前> のキーしか読まない。裸の on-degraded 等
      は「trigger '...' is not configured」で黙って発火しない (2026-08-23 合成障害注入中に
      controller ログで実測した失敗形。verify #4 の drill で初めて露見した)
+  7. when が operationState を素の . で辿っていないこと — operationState は任意セクション
+     (sync 未実行の App や操作受付直後には無い) で、素の . 辿りはその App の評価を毎 round
+     「cannot fetch phase from <nil>」エラーにする (2026-08-23 drill 直後の controller ログで
+     実測)。公式ドキュメントと同じ ?. (optional chaining) を使う
 
 **既知の死角**: YAML 構造しか見ない。Discord に実際に届いたかは fired.json (合成障害の
 証跡) と controller ログが担う。また render 自体は CI (ci.yml の kustomize build
@@ -41,6 +45,7 @@ ARGOCD_DIR = ROOT / "apps" / "argocd"
 REQUIRED_TRIGGERS = ("on-degraded", "on-sync-failed")
 TRIGGER_PREFIX = "trigger."
 NOISE_FILTER = "autopilot"
+UNSAFE_OPERATION_STATE_ACCESS = "app.status.operationState"
 WEBHOOK_SECRET_NAME = "argocd-notifications-secret"
 WEBHOOK_URL_KEY = "discord-webhook-url"
 DISCORD_SERVICE = "discord"
@@ -96,7 +101,14 @@ def find_problems(notifications: dict, kustomization_resources: list,
                     f"trigger {name} の when に destination.namespace != '{NOISE_FILTER}' "
                     f"によるノイズフィルタが無い。器自身の変化で毎時鳴ることになる"
                 )
-                break
+            if UNSAFE_OPERATION_STATE_ACCESS in when:
+                problems.append(
+                    f"trigger {name} の when が {UNSAFE_OPERATION_STATE_ACCESS} を素の '.' で"
+                    f"辿っている。operationState は sync 未実行の App には存在せず、評価が "
+                    f"毎 round 'cannot fetch phase from <nil>' エラーになる (通知は出ないが "
+                    f"error ログが積み続く)。公式ドキュメントと同じ "
+                    f"app.status?.operationState (optional chaining) を使うこと"
+                )
 
     # (3) trigger.send → template 参照の整合
     for name, trig in triggers.items():
@@ -270,7 +282,7 @@ class TestFindProblems(unittest.TestCase):
                     "  send: [discord-app-degraded]\n"
                 ),
                 "trigger.on-sync-failed": (
-                    "- when: app.status.operationState.phase in ['Error', 'Failed']"
+                    "- when: app.status?.operationState.phase in ['Error', 'Failed']"
                     " && app.spec.destination.namespace != 'autopilot'\n"
                     "  send: [discord-app-sync-failed]\n"
                 ),
@@ -329,6 +341,19 @@ class TestFindProblems(unittest.TestCase):
         problems = find_problems(notifications, self.RESOURCES, self.ES_DOC)
         self.assertTrue(any("接頭辞" in p for p in problems))
         self.assertTrue(any("not configured" in p for p in problems))
+
+    def test_bare_operation_state_access_fails(self):
+        """operationState を素の . で辿る when は、sync 未実行 App の評価を毎 round
+        「cannot fetch phase from <nil>」エラーにする (2026-08-23 drill 直後の
+        controller ログ実測)。?. (optional chaining) を必須にする。"""
+        notifications = self.make_notifications()
+        notifications["triggers"]["trigger.on-sync-failed"] = (
+            "- when: app.status.operationState.phase in ['Error', 'Failed']"
+            " && app.spec.destination.namespace != 'autopilot'\n"
+            "  send: [discord-app-sync-failed]\n"
+        )
+        problems = find_problems(notifications, self.RESOURCES, self.ES_DOC)
+        self.assertTrue(any("optional chaining" in p for p in problems))
 
     def test_unsubscribed_trigger_fails(self):
         notifications = self.make_notifications(subscriptions=[])
