@@ -1,0 +1,27 @@
+# P-0139 合成障害用の捨て Deployment。
+# 存在しない image タグを指し、ImagePullBackOff → Application health Degraded を起こす。
+# **metadata.namespace は書かない** — Application の destination.namespace (p0139-drill) に
+# 落ちることを意図している。apps/vaultwarden のように namespace をハードコードした実 app
+# path を source に流用すると destination を無視して本番 ns に適用される (2026-08-23 実測事故、
+# PROGRESS.md のセッション 3 参照)。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: p0139-drill-broken
+  labels:
+    app.kubernetes.io/name: p0139-drill-broken
+    app.kubernetes.io/part-of: p0139-drill
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: p0139-drill-broken
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: p0139-drill-broken
+    spec:
+      containers:
+        - name: broken
+          # docker.io/library/nginx に存在しないタグ。manifest unknown で即 ErrImagePull になる
+          image: nginx:p0139-drill-nonexistent-tag

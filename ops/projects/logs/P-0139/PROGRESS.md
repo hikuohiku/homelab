@@ -79,3 +79,69 @@
    send 成功/失敗行、(c) 人間への Discord 実視認依頼。fired.json の形式は自由
    (delivered/message_id が真であればよい) ので、取れる証跡を全部貼る
 5. 検証後、PROGRESS 追記 + fired.json を commit。verify #4 が wrapper 実測で初めて green になる
+
+### セッション 3 (2026-08-23) — ドライランが本番を踏んだ → 合成障害の設計を安全側へ修正
+
+**やったこと**: drill fixture 追加 (`ops/projects/logs/P-0139/drill/`)。verify の状態変化なし
+(#1/#3 green、#2 sandbox 恒久 red、#4 merge 待ち)。**merge 未確認**: origin/main は
+4e637dc0 のまま (配線 commit d92ce734 未収録)、PR も未作成を GitHub API で実測。
+
+**⚠️ 事故と復旧 (必読)**: セッション 2 の計画どおり `apps/vaultwarden` を source に
+destination.namespace: p0139-drill の捨て Application を apply したところ、
+vaultwarden の全マニフェストが **metadata.namespace: vaultwarden をハードコードしていて
+destination を無視し本番 ns に適用された**。image 差し替えも本番 Deployment に一時適用され、
+strategy: Recreate のため旧 pod が即 kill → broken tag で ImagePullBackOff → 本家
+vaultwarden App (automated+selfHeal) が git HEAD へ復帰、という流れで
+02:56–02:58Z 頃に約 2 分の vaultwarden 断が起きた。最終状態: image 正常
+(1.37.1-alpine)、全 14 App Synced/Healthy、drill Application 削除済み、scratch ns 削除済み。
+前兆は SharedResourceWarning 条件群 (名前衝突を namespace 越しに検知)。
+**教訓: 実 app path の流用禁止。合成障害は drill/ 配下の最小 manifest を使う**
+(namespace を書かず destination に任せる設計。本 commit 済み、render 検証済み)。
+
+**verify #2 について (環境実験の結果)**:
+
+- helm v3.18.4 を `$HOME/bin/helm` に導入したところ
+  `kubectl kustomize --enable-helm --helm-command=$HOME/bin/helm apps/argocd` は **exit 0** —
+  配線の render 自体に問題ないことを実証 (fixture テストを超える実レンダ確認)
+- flag 無しで通す道は無いことを実測: kubectl v1.35.0 は kuberc (~/.kube/rc, KUBECTL_KUBERC=true)
+  を完全無視する (わざと不正な rc を置いても挙動不変)、PATH 先頭 /usr/local/sbin は root 所有で
+  shim も置けない (uid 10001)
+- 結論: verify #2 はこの sandbox では恒久 red。render の担保は CI のみ
+  (ci.yml:102 `kustomize build --enable-helm`)。「wrapper 再実測で green」は期待できないので、
+  完了判定から外すか CI 結果での代替を wrapper/レビュー側に委ねるしかない
+
+**分かったこと (実測)**:
+
+- ArgoCD は destination.namespace より各マニフェストの metadata.namespace を優先する。
+  CreateNamespace=true でも destination ns には何も作られず空 ns だけ残る
+- apps/vaultwarden の Deployment は strategy: Recreate (RWO PVC 由来) — image 変更=即 pod 入れ替え
+- selfHeal による本番復帰は速い (実測 ~2 分)。ただし merge 後は復帰までの Degraded 窓で
+  Discord が実際に鳴る。つまり merge 後に同種ミスをすると本番障害が人間に通知される。
+  手順は drill/ 設計を厳守すること
+- sandbox: kubectl v1.35.0 (kustomize v5.7.1 内蔵)・curl 可・gh/kustomize/doppler 無し・
+  uid 10001 (root dir 書けない)。~/bin/helm は残置 (chart 検証に再利用可)
+
+**次のセッションへの一言 (= やることリスト)**:
+
+1. merge 確認 (`git log origin/main`)。**未 merge なら待つしかない**。PR 作成は verify 全 green
+   後の wrapper 運用らしく (#2 が恒久 red なのでここは wrapper 側判断が必要)、
+   停滞しているようなら issue #56 に「verify #2 の扱い」を相談する発見を書くのはあり
+2. merge 済みなら設定反映を確認: `kubectl get cm argocd-notifications-cm -n argocd -o yaml` に
+   `trigger.on-degraded` + `service.webhook.discord`、`kubectl get externalsecret -n argocd`
+   で discord-webhook 分が SecretSynced
+3. **ブランチが push 済みであること**を確認してから捨て Application を apply:
+   source = repoURL https://github.com/hikuohiku/homelab.git / targetRevision **project/p-0139** /
+   path **ops/projects/logs/P-0139/drill**、destination = https://kubernetes.default.svc /
+   namespace p0139-drill、syncPolicy automated + CreateNamespace=true。
+   drill/deployment.yaml は namespace を書いていないので必ず destination ns に落ちる。
+   apply 直後に `kubectl get deploy -n p0139-drill` で drill 分しか無いことを確認する
+   (本番 ns に何か作られたら即 Application 削除)
+4. pod ImagePullBackOff → app health Degraded (数分) → 通知評価。
+   `kubectl get app p0139-notification-drill -n argocd -o jsonpath='{.metadata.annotations}'`
+   に `notified.argoproj.io/on-degraded.*` stamp、controller ログ
+   (`kubectl logs -n argocd deploy/argocd-notifications-controller | grep -i drill`)
+   に send 成功行
+5. fired.json 作成 (delivered / message_id または代替証跡: annotation stamp・log 行・時刻・
+   App 名・削除確認)。message_id 直接取得は不可 (secret 読めない、セッション 2 調べ済み)
+6. 後始末: Application 削除 → ns p0139-drill 削除 → 両方 NotFound 確認 → PROGRESS 追記 +
+   fired.json commit
