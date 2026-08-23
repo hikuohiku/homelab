@@ -1,0 +1,5 @@
+{
+  "source": "ops/rules.json#/argocd_controller",
+  "memory_limit_warn_percent": 80,
+  "_comment": "ops/rules.json (人間レビュー必須パス) の argocd_controller 節の同期コピー。reporter は in-cluster で repo の rules.json を直接読めず、configMapGenerator も kustomization.yaml 外のファイルを読めない (version_watch.py の二重管理先例) ためこの形。configMapGenerator で /scripts に載り、report.py が読む。drift は ops/check_argocd_alert_sync.py (CI) が落とす。値を変えるときは rules.json 側を正として両方変えること"
+}

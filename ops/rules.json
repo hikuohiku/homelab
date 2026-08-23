@@ -44,6 +44,10 @@
     "stale_seconds": 7200,
     "_comment": "watchdog (外部) が ops-state の heartbeat をこの時間以上 stale と見たら通知。report.py の sinceSeconds=7200 と同じ値に揃えている"
   },
+  "argocd_controller": {
+    "memory_limit_warn_percent": 80,
+    "_comment": "ops-health-reporter の latest.json argocd セクション (P-0181) が argocd-application-controller-0 のメモリ実使用を limit の何% とみなしたら近接警報 (warn) にするか。100% は exceed。旧 limit では観測ピーク時点で既に ~78% で OOMKill しており、上限ちょうどで鳴る計器は手遅れ (download_budget の WARN_RATIO=0.8 と同じ倒し方)。reporter は in-cluster でこのファイルを読めないため apps/ops-health-reporter/argocd-alerts.json へ同期コピーし、ops/check_argocd_alert_sync.py (CI) が一致を検査する — 片側だけ変えないこと"
+  },
   "transcripts": {
     "retention_days": 30,
     "max_total_gb": 10,

@@ -16,6 +16,10 @@ configMapGenerator:
       # `python /scripts/report.py` で起動するため sys.path[0]=/scripts となり、
       # 追加マウント無しで解決する
       - download_budget.py
+      # 近接警報 (P-0181) の閾値。ops/rules.json の argocd_controller 節由来の同期コピー
+      # (reporter は in-cluster で rules.json を直接読めないため)。drift は CI の
+      # ops/check_argocd_alert_sync.py が検査する。片側だけ変えないこと
+      - argocd-alerts.json
 
 generatorOptions:
   disableNameSuffixHash: true

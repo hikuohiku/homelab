@@ -1,0 +1,58 @@
+{
+  "tool": "ops/tools/argocd_memory_series.py",
+  "project": "P-0181",
+  "source": {
+    "kind": "git",
+    "ref": "origin/ops-health-report",
+    "path": "ops/health/history"
+  },
+  "pod": "argocd-application-controller-0",
+  "container": "application-controller",
+  "window": {
+    "first": "2026-08-05T08:00:04Z",
+    "last": "2026-08-23T09:30:05Z"
+  },
+  "sample_count": 867,
+  "skipped_lines": 0,
+  "stats": {
+    "sample_count": 867,
+    "peak_bytes": 417382400,
+    "peak_timestamp": "2026-08-23T04:30:08Z",
+    "min_bytes": 189210624,
+    "median_bytes": 274092032,
+    "p95_bytes": 330230579,
+    "daily_peak_bytes": {
+      "2026-08-05": 329396224,
+      "2026-08-06": 311566336,
+      "2026-08-07": 325722112,
+      "2026-08-08": 354541568,
+      "2026-08-09": 326078464,
+      "2026-08-10": 362983424,
+      "2026-08-11": 346116096,
+      "2026-08-12": 353259520,
+      "2026-08-13": 355172352,
+      "2026-08-14": 335335424,
+      "2026-08-15": 366166016,
+      "2026-08-16": 333107200,
+      "2026-08-17": 334618624,
+      "2026-08-18": 344293376,
+      "2026-08-19": 366346240,
+      "2026-08-20": 313413632,
+      "2026-08-21": 325689344,
+      "2026-08-22": 359133184,
+      "2026-08-23": 417382400
+    }
+  },
+  "growth": {
+    "slope_ki_per_day": 15.943,
+    "leak_suspect": false,
+    "significant": false,
+    "projected_30d_growth_ki": 478.29,
+    "rule": "leak_suspect: 系列全体が単調非減少 / significant: slope>0 かつ 30日外挿 >= 中央値 x 0.10"
+  },
+  "notes": [
+    "観測ピーク (398.0Mi @ 2026-08-23T04:30:08Z) は 30 分間隔サンプリングの下限。",
+    "OOMKill の実績がある場合、真のピークは旧 limit 以上だったことが確定するので",
+    "limit 引き直しは「観測ピーク」と「OOMKill 実績値」の両方を根拠にすること。"
+  ]
+}
