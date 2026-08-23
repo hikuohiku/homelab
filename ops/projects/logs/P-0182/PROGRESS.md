@@ -227,3 +227,29 @@ merge 無し。本ファイル追記 + commit して終了。
 手順は一切変わらない。merge 済み判定 → 遡及レシピで continuation_count 出現を探す、
 未 merge なら待機 1〜2 回して観測事実だけ追記して終了。監視対象の薄まりは
 curriculum 新規採択と review-reject 復帰 (P-0164/0181) で自然に補われる想定。
+
+## セッション7 の記録 (2026-08-23 11:10–11:22Z)
+
+**やったこと**: ops-state 監視のみ。冒頭 fetch (ops-state 91565e93b..81f47e1c6 更新を取得) →
+refs/pull 照合 0 件 = PR 未開 → origin/main 未含も確認 → 4.5 分待機 ×2 を挟んで
+3 回確認したが merge 無し。本ファイル追記 + commit して終了。
+
+**盤面の実測 (11:11Z / 11:16Z / 11:21Z の 3 回)**:
+
+- `continuation_count` の出現は 0 のまま (merge 前なので当然)
+- heart は生存: beat 169 @ 11:11:19Z → beat 178 @ 11:21:22Z (ビート約 70 秒間隔を維持)
+- **観測候補が全滅した**: セッション6 までの候補 2 件が両方 stalled になり、
+  しかもどちらも予算死では無い — P-0164 は `stalled_reason: error`
+  (11:01:13Z notify 後に runner エラー)、P-0181 は `stalled_reason: review_rejected`
+  (10:55:25Z notify 後)。review-reject 復帰パターンでの補充は今回外れた
+- **P-0175 は 2 周目を完了し in_review へ**: 11:12:26Z に consume_result +
+  spawn_reviewer を audit で実視。reject で active に戻れば再び候補になりうる
+- **actives 実測は自プロジェクト P-0182 のみ** — 「死にうる」他者プロジェクトが
+  0 の水位。curriculum の新規採択 (spawn_curriculum) 以外に観測候補の供給源が無い。
+  死の頻度は半日 3 件+だったので、採択が続けば数時間以内に予算死は再発する見込み
+- 人間の活動兆候: 変化なし (今日の merge は #527〜#532 のまま、本 PR のレビューは未開)
+
+**次のセッションへの一言**: 変更なし — merge 待ち。ただし盤面は「actives = 自分のみ」
+まで薄まったので、観測候補の主供給源は curriculum 新規採択。手順は一切変わらない:
+冒頭 fetch → refs/pull 照合 → merge 済みなら遡及レシピで continuation_count 出現を探す、
+未 merge なら待機 1〜2 回して観測事実だけ追記して終了。
