@@ -103,3 +103,71 @@ worker セッションごとに追記する。書式は自由だが、証跡 (�
    (送信開始マーカー。完了後も残すのが設計)。消さないこと
 3. 証跡が乗ったら返信待ち (セッション 1 の記載どおり。inbox 読み取り専用、
    render_seeds_section → seeds.md、沈黙は締め日付を正直に書いて記録)
+
+
+## セッション 3 (worker, 2026-08-23)
+
+### やったこと: 送信チェーンの全面監査 (1 通きりの予算を守る事前点検) と実行手順の訂正
+
+- **サンドボックス再実測**: 今回は in-cluster runner pod (hostname
+  `runner-p-0192-a1-jfgr8`、KUBERNETES_SERVICE_HOST=10.43.0.1)。
+  env に `AUTOPILOT_GITHUB_TOKEN` は**在る**が TELEGRAM_BOT_TOKEN /
+  TELEGRAM_ALLOWED_USER_ID は無く、SA token も未 mount
+  (/var/run/secrets/kubernetes.io/serviceaccount 無し) で kubectl 不資格。
+  **結論: 送信は本セッションからも不可能** (GitHub token 単独では sendMessage できない)
+- 送信は 1 回きり (予算規則: 追加送信なし) なので、走らせる前にチェーン全体を点検した:
+  - `apps/wish-seeds/wish_seeds.py` ≡ `ops/tools/wish_seeds.py` (diff 一致実測)
+  - job.yaml の Secret 3 キー ≡ `apps/telegram-adapter/external-secret.yaml` の
+    宣言キー (TELEGRAM_BOT_TOKEN / TELEGRAM_ALLOWED_USER_ID / AUTOPILOT_GITHUB_TOKEN)、
+    `ops/rules.json` allowed_autopilot_doppler_keys にも 3 キー登録済み
+  - root `apps/kustomization.yaml` 登録済み / `kubectl kustomize apps` で
+    Application 16 個 / `kubectl kustomize apps/wish-seeds` rc=0 (3 docs)
+  - `send_telegram` は Telegram 応答が `ok:false` だと raise する →
+    message_id が空の証跡は書けない構造 (verify 2 を汚すパスが無い)
+  - decide_send の参照順 (main → branch、evidence → pending) は fail-safe 側。
+    put_file は既存ファイルに sha 付き上書き対応
+  - py_compile ok / `apps/wish-seeds/__pycache__` は git 非追跡を実確認
+- unittest 再実測 (全 green): test_wish_seeds 16 / test_wish_seeds_job 22 /
+  discover ops/tests・heart・runner。validate.py 0 error
+  (warning 11 件は backlog.json 由来の既存分を目視確認、本ブランチ無関係)
+
+### 重要な訂正: 「just preview apps <branch>」単独では Job は走らない (前セッション手順の訂正)
+
+- justfile の preview(apps) は自身の出力で認めているとおり
+  「Child apps with targetRevision: HEAD still track main」。新規アプリをルート経由で
+  認識させると、子 wish-seeds Application は HEAD (= main) を向き、main には
+  `apps/wish-seeds/` がまだ無いので Job が作られない → **送信されずに終わる**。
+  セッション 2 の「次のセッションへ 1」の手順はこのままだと永遠に送信されない
+- **正しい手順 (pre-merge 推奨。証跡も同じ PR で main に乗る)**:
+  1. `just preview apps project/p-0192` (子 Application を認識させる)
+  2. `just preview wish-seeds project/p-0192` (子をブランチへ向ける。
+     root の auto-sync は自動で止まる → 子がブランチから Job を sync → 走る)
+  3. 完後 `just preview-reset wish-seeds` → `just preview-reset apps`
+  - 注意: 手順 2・3 はクラスタ操作なので人間か cluster アクセスのある環境で実施
+- フォールバック (merge 先): merge 後 ArgoCD が main 由来で Job を作り送信、
+  証跡は Contents API で project/p-0192 ブランチへ書かれる。ただしこの場合
+  証跡が main に乗るのは次回 merge 時。この repo は古い project branch を
+  削らない運用 (p-0182 等が現存、2026-08-23 fetch 実測) なので
+  「書き込み先ブランチ消失 → abort」の発火可能性は低い
+- **限界の明示**: 上記は justfile と ArgoCD app-of-apps の意味論の読解によるもので、
+  クラスタ実測ではない (本セッションに cluster アクセス無し)。手順 2 の直後に
+  ArgoCD UI / `kubectl get job -n autopilot wish-seeds-ask` で Pod 起動を必ず目視すること
+
+### 分かったこと / 発見 (スコープ外なのでここに書くだけ)
+
+- inbox 実測 (read-only、origin/ops-feedback): note 4 件、最新
+  `20260823-120317-1e88e232.json`。問いかけ以前のものばかりで**募集への返信は 0**
+  (まだ 1 通も送っていないので当然。将来の沈黙判定の基準線として記録)
+- `/tmp/opencode` はこのサンドボックスでは書き込み不可だった (Permission denied)。
+  固定パス tmp の罠の変種。「mktemp 使え」の先輩規則が正しかった
+
+### 次のセッションへ
+
+1. 送信は上記 3 ステップの実施待ち。`git fetch` して origin/project/p-0192 に
+   ask-evidence.json の commit が乗ったら verify 1・2 が green になる (wrapper 実測が正)
+2. `ask-pending.json` が origin のブランチに現れるのは正常 (送信開始マーカー)。
+   消さないこと (セッション 2 記載どおり)
+3. 返信待ち〜seeds.md 反映はセッション 1 記載のとおり。注意:
+   render_seeds_section() の沈黙文には送信日「2026-08-23」が固定で焼かれている
+   (`ops/tools/wish_seeds.py`)。実際の送信日と違う場合は seeds.md 反映時に
+   その場で正直に書き換えること (コードは触らない)
