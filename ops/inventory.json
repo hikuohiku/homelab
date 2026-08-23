@@ -67,12 +67,13 @@
       "id": "vaultwarden",
       "kind": "image",
       "name": "vaultwarden/server",
-      "current": "1.37.1-alpine",
+      "current": "1.37.2-alpine",
+      "last_swept_at": "2026-08-23T04:54:24Z",
       "file": "apps/vaultwarden/deployment.yaml",
       "match": "vaultwarden/server:",
       "upstream": "github:dani-garcia/vaultwarden",
       "policy": "auto",
-      "note": "#49 の当事者。1.37.0 は alpine ビルドが壊れていた前例あり。リリースノートは必ず全文読む"
+      "note": "#49 の当事者。1.37.0 は alpine ビルドが壊れていた前例あり。リリースノートは必ず全文読む。P-0145 で 1.37.1→1.37.2 に更新 (migration 無しを tag diff で確認、クライアント 2026.8.0+ 対応)"
     },
     {
       "id": "coder",
