@@ -2,8 +2,9 @@
 
 ## 現在の状態
 
-受入 4 項目 **すべて green** (セッション 3, 2026-08-23 自己実測)。ただし DoD 本体としては
-**heart 側への警報配線と in-cluster 初回実行の実績が残っている** (下記「セッション 3」参照)。
+受入 4 項目 **すべて green** (セッション 4, 2026-08-23 自己実測)。レビュー指摘 2 件
+(heart 警報配線の未実装 / reporter の rc=2 代役レコード取り扱い) はセッション 4 で解消済み。
+DoD 本体として残っているのは **in-cluster 初回実行の実績** のみ (下記「セッション 4」参照)。
 
 - [x] 1. `ops/tools/dashboard_smoke.py` 存在 + py_compile — 実サイトで全 12 検査合格を実測済み
 - [x] 2. `python3 -m unittest ops.tests.test_dashboard_smoke` — 33 本 OK (セッション 2)
@@ -165,6 +166,58 @@ yaml parse 全件 / ops/tests + heart/tests 計 544 テスト green。
   latest.json `dashboard_smoke` キーで確認すること。Service DNS 到達性・chromium の
   非特権描画・TMPDIR=/tmp の user-data-dir はすべて初回実行で初めて実測になる)
 
+### セッション 4 (2026-08-23)
+
+レビュー指摘 2 件の解消が本セッションの全内容。
+
+やったこと:
+
+1. **heart 側への警報配線 (指摘 1 = DoD(3) の本体)**:
+   - `ops/heart/facts.py` に `dashboard_smoke_alert(doc)` 新設。
+     latest.json の `dashboard_smoke.status` が **fail / stale** のときだけ
+     `{status, reason, failed_checks}` を返す。ok / no_data / 壊れ / キー無しは None。
+     no_data を沈黙させるのは budget の unconfigured/no_data と同じ判断
+     (鳴らせる状態になってから既存経路に乗る)。rc=2 代役レコード
+     (tool_error 付き fail) も乗せる — 装置故障も人間に見せるべきで、区別は reason が担う
+   - `ops/heart/heart.py` の beat に budget 流儀 (P-0128) どおりで配線:
+     cursors キー `dashboard_smoke_alert` で同一 status・同一日内の再通知を落とし
+     (budget_alert_due() を流用 — 中身は status/date の一般判定)、
+     briefing-queue.jsonl へ `{"source": "dashboard-smoke (<status>)", "body": <reason>}` を追記、
+     `notifier.send("incident", ...)` を送る。metrics.jsonl に `dashboard_smoke_status` 追加
+   - **DoD(3)「失敗時のみ briefing/incident に乗り、成功は通知予算を消費しない」の成立証跡**:
+     `ops/heart/tests/test_dashboard_smoke_alert_beat.py` (4 本) が実物の Heart.beat() を
+     shadow で連続実行し実ファイルで固定 — fail の cursor 永続化・同日内再通知抑制・
+     fail→stale の同日再発火・**ok/no_data/観測失敗では cursor も queue も触らないこと**
+     (成功日は記録のみ) を検査。単体は `test_dashboard_smoke_alert.py` (6 本)
+2. **reporter の rc=2 代役レコード取り扱い (指摘 2)**:
+   `_dashboard_smoke_summary()` が fallback レコードの tool_error/tool_error_rc を
+   読み捨て、「描画断言が不合格: 」(内訳空) の嘘文面になっていたのを修正。
+   tool_error 由来への reason 分岐 + 切り詰め (200 字) 載せ。stale 最優先は不変。
+   内訳が空の通常 fail にも「失敗検査の内訳が記録されていない」を明示。
+   notes 文面も更新。テスト 6 本追加 (`SummaryToolErrorTest`)
+
+分かったこと / 設計判断:
+
+- budget_alert_due() を名前そのままで流用した (smoke 専用の due 関数は作らない)。
+  中身は `(alert, prev, today)` の status/date 比較だけで budget 固有の何者も無く、
+  抑制の両方向固定は test_budget_alert*.py がすでに持っている。heart.py 側に
+  「名前は budget だが汎用」コメントを残してあるので、後続セッションが
+  smoke 用コピーを作ろうとしたらまずこのコメントを読むこと
+- reason は reporter が必ず文字列を書く契約だが、壊れていたら str() で捏造せず None。
+  警報自体 (status ベース) は倒さない
+- テスト合計: ops/tests 354 本 + heart/tests 206 本 = 560 本 green (前回比 +16)。
+  verify 4/4 再実測 green
+
+verify 自己実測: 4 項目すべて green。
+
+残っていること:
+
+- **in-cluster 初回実行の実績のみ** (merge 後に初回 CronJob 実行 →
+  `kubectl get configmap dashboard-smoke -n autopilot` と次回 reporter run の
+  latest.json `dashboard_smoke` キーで確認。手順は「セッション 3」参照)。
+  heart 側配線は merge 後の最初の fail/stale ビートから自動で効く
+  (初回ビートで cursor 未初期化 → 即鳴る。過去分の遡及通知ではないので問題無し)
+
 ### 実測済みの罠 (次のセッションのあなたは再測しなくてよい)
 
 1. **`--virtual-time-budget` はこのページで死ぬ**: transcript の EventSource (SSE) と
@@ -202,13 +255,10 @@ yaml parse 全件 / ops/tests + heart/tests 計 544 テスト green。
 
 ## 次のセッションへの一言
 
-verify 4 項目はすべて green。残りは DoD 本体の仕上げが 2 つ:
-(1) **heart 側の警報配線** — `ops/heart/facts.py` に budget_alert 流儀の抽出関数
-(latest.json の dashboard_smoke.status が fail/stale のときだけ中身を返す) を足し、
-heart.py の download_budget ブロック (L401-442 と L456-460) を雛形に cursors 込みで
-briefing/incident へ流す。テストは test_budget_alert*.py 2 本が雛形。no_data は沈黙
-(鳴らせる状態になってから既存経路に乗る、budget の unconfigured/no_data と同じ判断)。
-(2) **in-cluster 初回実行の実績づけ** — merge 後の CronJob 初回実行を確認する
-(手順は上「セッション 3」末尾)。装置側の設計メモはすべてこのファイルと
-apps/ops-dashboard/dashboard-smoke-cronjob.yaml 冒頭コメントに書いた。
-ConfigMap を ArgoCD 管理外にした理由も含めて。
+レビュー指摘 2 件は解消済み (heart 警報配線 + reporter の rc=2 取り扱い)。verify 4/4 green。
+**残るは in-cluster 初回実行の実績づけ 1 つだけ**: merge 後の CronJob 初回実行を確認する
+(`kubectl get configmap dashboard-smoke -n autopilot` と次回 reporter run の
+latest.json `dashboard_smoke` キー。手順は上「セッション 3」末尾)。Service DNS 到達性・
+chromium の非特権描画・TMPDIR=/tmp の user-data-dir はすべて初回実行で初めて実測になる。
+heart 側の警報は merge 後最初の fail/stale ビートから効くので、装置側の追加作業は無し。
+発見節の「tailnet URL 実質解消」を人間確認で確定させるか curriculum へ出すかも判断すること。
