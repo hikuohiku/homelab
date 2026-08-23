@@ -535,7 +535,55 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   あと blocking 数が前回と同じでも中身は入れ替わるので、「減った/増えた」より「0 か否か」
   だけを見ること (この原則は今回でさらに強化)
 
+### セッション 14 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま**、blocking 4 件に減少
+  (P-0092 / P-0116 / P-0161 / P-0163。checked=61。wrapper 実測 08:07 と同一内訳)。
+  固定指示どおり実演習は見送り。コード変更は無し
+- 本セッションの実イベント: **台帳の総計が久々に動いた**。読み取り専用
+  `git show origin/ops-state:projects.json` の内訳は delivered 26 / vetoed 2 /
+  **stalled 28** / announced 1 / **active 4** / **in_review 0**
+  (セッション 13 は stalled 26 / active 5 / in_review 1)。個別照合の結果:
+  **P-0157 が active → stalled へ抜け、P-0174 が in_review → stalled へ抜けた**。
+  減少 2 件の行き先が揃って stalled — つまり blocking の減少は一切の前進を伴わない
+  「停滞への流出」だった。in_review が空になるのは初観測以来初 (現時点で 0 件)
+- main は不動 (cc1c86626)。PR #524 は mergeable_state=clean 継続
+  (head=5d24c8932 不変)、ci + GitGuardian success。
+  小ネタ: API 呼び出しの token は `AUTOPILOT_GITHUB_TOKEN` を使う
+  (`GITHUB_TOKEN` / `GH_TOKEN` は env に存在しない — 今回 empty token で
+  Bad credentials を踏んだ)
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 4), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 281 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git fetch origin && git rev-parse origin/main          # cc1c86626 (不動)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- 当日の手順はセッション 3 固定のまま不変 (--run 背景起動 → 全 zero 確認 → PATCH ready
+  解除 → PUT merge)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。「0 か否か」だけを見る原則は維持。今回 blocking が
+  減ったのは前進でなく stalled 流出だったので、「減少傾向」への期待はさらに下げてよい。
+  unknown 待ちの注意だけ残す: mergeable_state が unknown なら数秒〜十数秒待って再取得、
+  dirty 確定時のみ update-branch → ci 再 green を待つ
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 14, ライフサイクル観測の続き) **blocking 数の減少が進捗を意味しない第 3 の
+  反例: stalled への流出**。セッション 12→13 は「総計不変・中身だけ入れ替わり」だったが、
+  13→14 では総計自体が動き (active 5→4 / in_review 1→0 / stalled 26→28)、抜けた
+  P-0157 (active→stalled) と P-0174 (in_review→stalled) は揃って停滞行きだった。
+  delivered が 1 件も増えていないのに blocking は減る — 「弁に近づいている/遠ざかっている」
+  を台帳カウントから読むのはどちらも不可能で、判定は常に「announced+active == 0 か」の
+  実測一択。併せて **in_review → stalled の出口方向を初観測** (従来は in_review→active
+  のみ)。in_review は差し戻しから停滞まで複数の行き先を持つ中間状態であり、
+  in_review の出現・消滅はいずれも弁とは無相関
 
 - (セッション 13, ライフサイクル観測の続き) **台帳の総計が不変でもメンバーシップは
   入れ替わる**: セッション 12→13 で active/in_review のカウントは 1 件も変わらなかったが、
