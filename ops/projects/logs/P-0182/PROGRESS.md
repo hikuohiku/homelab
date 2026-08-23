@@ -8,6 +8,8 @@
   verify 4 (resume-evidence.json) のみ意図的に未達 — 下記「DoD (4) 証跡の取り方」参照。
 - 2026-08-23 セッション3: 監視セッション。**merge 未了・PR 未開を確認** (下記経過)。
   証跡は merge 前なので原理的に発生不能。今日の予算死 3 件を特定したがすべて旧挙動。
+- 2026-08-23 セッション4: 監視セッション。**merge 未了・PR 未開のまま** (約 11 分監視、
+  下記経過)。verify 1〜3 green 再実測。コード変更なし。
 
 ## 経過
 
@@ -62,6 +64,23 @@ ops-state 監視と観測レシピの実測検証。コード変更なし。
   "beat 118" は別インスタンスのものが線形履歴に混在)。監査照合は必ずコミット時刻で行う。
 - verify 1〜3 再実測 green (15 tests OK)。ブランチは origin/project/p-0182 と同期済み。
 
+### セッション4 (2026-08-23)
+
+ops-state 監視の続き。コード変更なし。
+
+- **merge 未了・PR 未開を再確認** (10:26〜10:39Z、約 11 分監視): origin/main 先頭は
+  #532 (feat/telegram-reply-tool)。refs/pull の最新は #533 (P-0181、open) で本ブランチ
+  head 50a0f5726 に対応する pull ref 無し。heart は生存 (beat 129 @ 10:24:35Z →
+  beat 141 @ 10:38:32Z、約 70 秒間隔を維持)。10:38:32Z に spawn_curriculum を確認 —
+  新規採択があれば観測対象が増える。
+- **今日の budget_exhausted 出現コミットは遡及列挙で合計 11 件** (00:22〜09:41Z)。
+  セッション3 特定の P-0157/0116/0161 を含むすべてが merge 前の旧挙動 stalled。
+  遡及レシピ (下記) はこの実行で再検証済み、そのまま使える。
+- **active 盤面を実測**: P-0092 announced / **P-0164 active cap=3M** /
+  **P-0175 active cap=1.5M** / **P-0181 active cap=1.2M** / P-0182 (自プロジェクト) active。
+  P-0181 は 10:23:21Z consume_review → spawn_runner 済みで、merge 後に最初に死ぬ候補の筆頭。
+- verify 1〜3 再実測 green (15 tests OK)。ブランチは origin/project/p-0182 と同期済み。
+
 ## 分かったこと (次のセッションへの罠と前提)
 
 - **runner の soft_cap は projects.json でなく main の archive.jsonl spec から来る**
@@ -87,6 +106,9 @@ ops-state 監視と観測レシピの実測検証。コード変更なし。
   - runner 環境に `gh` CLI は無い。PR の有無は
     `git ls-remote origin | grep refs/pull` をブランチ head SHA と照合して判定する。
     PR コメント/レビュー状態はこの環境からは読めない (プロンプトの「レビュー指摘」節が情報源)。
+    **注意 (セッション4 実測)**: `grep -c <head-sha>` は `refs/heads/project/p-0182`
+    自身にもマッチする。PR 判定は必ず `refs/pull` に絞ること
+    (`git ls-remote origin | grep "refs/pull.*<head-sha>"`)。
   - **証跡は遡及可能**: 遷移は ops-state の git 履歴と audit.jsonl に永久残る。
     ライブ監視を逃しても後から履歴を漁って resume-evidence.json が書けるので、
     監視のためにセッションを連打する必要はない。merge 後の最初の監視で十分。
@@ -147,5 +169,11 @@ merge 後に遷移が発火していれば、grep continuation_count がヒッ�
 
 唯一のゲートは人間 merge。merge 済みになったら (refs/pull 照合 or main の log)、
 上のレシピで continuation_count 出現を探し、出典つきで resume-evidence.json に書く。
-actives は P-0164/0175/0181 (+ curriculum が随時新規採択)。死の頻度は半日 3 件+なので、
+actives は P-0164/0175/0181 (+ curriculum が随時新規採択。セッション4 時点で 10:38:32Z
+に spawn_curriculum を確認済み)。死の頻度は半日 3 件+なので、
 merge から数時間以内の観測を期待してよい。
+
+監視セッションの進め方 (セッション3/4 の実績): 冒頭で fetch → merge 状態確認
+(refs/pull 絞り込み) → 未 merge なら数分待機を 1〜2 回繰り返して様子見。
+それでも merge 無しなら本セッションの観測事実をこのファイルに追記して commit して終了でよい
+(証跡は遡及可能なので連打不要)。merge 済みなら遡及レシピで発火を探すのが主タスク。
