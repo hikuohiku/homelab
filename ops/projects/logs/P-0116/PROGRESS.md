@@ -1343,3 +1343,60 @@ merge 済み)・受入全項目と validate.py の再実測。コード・manife
 - **main 先行チェックは毎回最初に**: fetch → `git log HEAD..origin/main` が空でなければ
   先に rebase してから検査する (session6/13/21 で 3 回発生)
 - push は **`--force-with-lease`**、push 前の main 先行確認は継続
+
+## session28 (P-0116 worker, 2026-08-23)
+
+やったこと: **remote 分岐の差し替わりを検出し merge で統合** (本セッション最大の論点)。
+加えて issue #56 の回答再確認 (**なし**)・open PR 確認 (**3 件**: #512 P-0118 +
+#515 P-0128 + #516 P-0126。いずれも本プロジェクト無関係)・main 先行確認 (**なし**)・
+受入全項目と validate.py・discover 全体の再実測。
+
+### remote branch が P-0102 継続 lineage に差し替わっていた (behind 10)
+
+fetch 後に `origin/project/p-0116` が session27 既知の状態から**別系譜に移動**
+(`[ahead 94, behind 10]`)。remote 側の 10 コミットは旧起点 (5c9a1c73 = Merge #490 直後)
+から `7a6e0066 initializer → … → b8a90a0f checkpoint → b5ebb516 引き継ぎ →
+1082b3e1 green Run 成立 (実機 evidence)` という **P-0102 本流 + 継続 + green Run の系譜**。
+放置すると次の `--force-with-lease` push で green Run の evidence commit を**消していた**
+(lease は remote-tracking ref を見るので、fetch 済みなら破壊が成功してしまう)。
+
+### merge の内容と根拠
+
+- 先に内容比較を実施: remote 版 PROGRESS.md 全 378 行がローカル版の先頭 378 行と
+  **バイト一致** (`diff` 実測)。restic-check のコード・テスト・evidence も blob 一致で、
+  ローカル木は remote 内容の完全上位集合だった (green Run 記録はこちらの session5 として
+  既有 — 履歴の付け替えで SHA だけ違う同内容だった模様。考古学は未追究でも実害なし)
+- `git merge origin/project/p-0116` → CONFLICT は PROGRESS.md (add/add) のみ。
+  `git checkout --ours` で解決 (上位集合であることを事前実測済みなので安全)。
+  マージ後ツリーは `git diff --cached f87488e5 --stat` が**空** = 内容変化ゼロ、
+  祖先統合のみ
+- 結果: `[ahead 95, behind 0]`。以降の push は fast-forward で通り、force 不要
+
+### 受入再実測 (2026-08-23 本セッション、merge 後)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option`) — red のまま
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** /
+  `find apps/ -name '*.yaml' | xargs grep -lq`: **rc=0**
+  (`apps/restic-check/` 配下 7 ファイルを実測: application/cronjob/job_main/
+  kustomization/namespace/restic-external-secret/restic_check_runner)
+- #2: **28 tests OK** / おまけで `discover -s ops/tests` 全体も **177 tests OK** (merge 後の保証)
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- main 先行: **なし**。issue #56: **177 件で増減なし** (最新 2026-08-23T01:23:30Z)、
+  P-0116 関連キーワード走査で該当 2 件はいずれも他プロジェクト宛の古いコメント
+  (busybox version 調査・health-reporter) で verify #1 文言への回答では**ない**
+
+### 次セッションへの要点
+
+- **push の危険は消えた**: remote tip は祖先になったので fast-forward push でよい
+  (`--force-with-lease` を続けても安全だが、もう破壊する局面はないはず)
+- **毎回の冒頭チェックを強化**: 「main 先行」だけでなく **自分の remote 分岐の移動も必ず確認**
+  すること (`git rev-list --count HEAD..origin/project/p-0116`)。今回のように heart/wrapper が
+  系譜ごと差し替えてくることがある。**diverge したら rebase ではなく merge 一択**
+  (我々の履歴には rebase で吸収した main 側コミットが大量に含まれるため、rebase すると
+  main 側コミットまで再生されて壊れる)
+- 変化なしの結論は不変: コード側は完全に完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら
+  文言判断に従うだけ。来ていなければ再実測して追記で足りる (session8 の文案・環境メモも有効)
+- GitHub API 走査は AUTOPILOT_GITHUB_TOKEN 付きで (session15 実踩)、paging はページごと
+  ファイル保存→個別 json.load (session20 回避策)。/tmp/opencode は root 所有で読み取り専用、
+  一時ファイルは `mktemp /tmp/接頭辞.XXXXXX`
