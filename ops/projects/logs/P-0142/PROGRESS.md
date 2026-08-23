@@ -72,6 +72,62 @@ resource 本体・経緯節は無変更、`.ignore` のまま維持。commit 済
 不可なら手順書は書かない」)。判断の根拠は `pbs-inventory.json` の `reason` と本ログ。
 **手順書を後から書いて verify を green に揃えるのは verdict=keep との矛盾なので絶対にやらない。**
 
+### 2026-08-23 セッション4 — 「これが揃えば可になる」条件の集約 (PROJECT.md keep 時義務の消化)
+
+**やったこと**: spec DoD の追加実装は無し (全項目着地済みのまま変えない)。本セッションの成果は
+次の 3 点。
+
+1. **verify 再実測**: #1 rc=1 / #2 rc=0 / #3 rc=2。セッション3 記録から変化なし
+   (#1/#3 は docs/pbs-retirement.md 未存在による意図通り failing、#2 green)
+2. **観測環境の再実測** (セッション2・3 に続く 3 回目の独立実測、結果も同じ):
+   ツールセットに `mcp__proxmox__*` 無し (`.mcp.json` はリポジトリにあるがこの実行環境では
+   読まれておらず MCP サーバー未接続) / `env | grep -iE 'proxmox|pve'` rc=1 /
+   `tailscale` `pvesh` `qm` CLI 無し。`ssh`・`kubectl` バイナリは存在するが、PBS の IP は
+   README 上プレースホルダ (`<pbs-ip>`) で実値がリポジトリに無く、PVE credential も無いため
+   到達手段にならない。k8s 層の read を CLI で代行するのは credential 分離の原則に反するので
+   使わない (CLAUDE.md「インフラ参照は MCP 経由」)
+3. **リポジトリ横断の証跡掃除** (docs/ 全体・Plans.md・README.md・CLAUDE.md・ops/journal/
+   2026-08.md): 未回収の PBS 関連事実は **1 件も無かった**。docs/backup.md の「わかっている
+   こと」「わからないこと」#1〜#5、T-0072 判断、T-0116/T-0117 の経緯はすべて inventory の
+   `vm.repo_recorded` / `restic_targets` / `jobs_note` / `cross_reference` に反映済み
+
+**「これが揃えば可になる」条件** (PROJECT.md keep 時義務「保留理由と条件を PROGRESS.md に
+残す」の消化。出典は既存記録のみ — docs/backup.md L572-584 の「わからないこと」#1〜#5 +
+T-0072 判断節 + inventory `reason`。新規の推測は含まない):
+
+- **条件 A — PVE 側の vzdump backup job 確認** (「わからないこと」#1/#2/#3 に相当):
+  Datacenter > Backup (`pvesh get /cluster/backup` 相当) に、PBS storage を指す job /
+  qemu 112 や node01 (113) を対象に含む job が**実在しない**こと。実在した場合は退役即否では
+  なく、その job の保持対象・世代が restic 側 (B2 6 対象、`--keep-daily 7 --keep-weekly 4
+  --keep-monthly 6`) で代替されるかを先に評価する
+- **条件 B — PBS 内部の確認** (「わからないこと」#5 の片系構成確認を含む): PBS 自体への
+  アクセス (WebUI `:8007` / `ssh root@<pbs-ip>`。IP は Proxmox WebUI で確認) で
+  datastore 一覧・sync/prune/verify job・保存済み backup group を確認し、
+  **restic/B2 6 対象 + node01 の IaC 再適用で代替されないものが無い**こと。
+  この層は PVE API からは原理的に見えないため、条件 A が空でも条件 B は別途必要
+- **判断ルール**: A+B で「PBS にしか無い守り」がゼロと確定できたら verdict を `retire` に更新し、
+  **そのとき初めて** docs/pbs-retirement.md を書く (verify #1/#3 はこの時 green になる)。
+  一部だけ代替不能なら `partial`。確定できないなら `keep` のまま (現状維持)
+- **手続き**: 実施者は人間または構築セッション (Coder workspace、T-0107 実測で
+  `PROXMOX_API_TOKEN` Sys.Modify 在り)。依頼窓口は issue #56。結果は inventory に
+  `source` を unavailable → 観測値に置き換え、`jobs` を埋め、`restic_targets[].pbs_protects`
+  列を `unobserved` から置換し、`verdict`/`reason` を更新する形で反映する
+- **不可逆性の注意**: `qm shutdown 112` までと `qm start 112` は可逆。`qm destroy 112` は
+  PBS 内に保存されたバックアップ世代を**一緒に消す** (=「わからないこと」#5 の片系構成の
+  解消と裏表)。destroy は条件 A+B の確定後かつ観察期間 (1〜2 週間、pbs.tf.ignore 手順 3)
+  経過後のみ
+
+**分かったこと**: PROJECT.md の keep 時義務は「手順書を作らない」だけでなく「条件を PROGRESS に
+残す」までだったが、セッション2・3 では再開条件が一言レベルで散在しており、実機アクセス可能な
+者が読んで機械的に実行できる集約が無かった。本セッションでそれを埋めた。**spec DoD の範囲で
+残っている作業はこれで本当に無い。**
+
+**次のセッションへの一言**: セッション3 と同じ — **やることは残っていない。** verify #1/#3 を
+green に揃える目的での docs/pbs-retirement.md 作成は verdict=keep との矛盾なので絶対にしない
+(書いてよいのは上記判断ルールで verdict が `retire`/`partial` になった後だけ)。wrapper や
+レビューへの説明には、PROJECT.md 受入チェックリスト直下の許容段落 + 本節の条件リスト +
+`pbs-inventory.json` の `reason` を使う。
+
 ## 発見 (スコープ外。curriculum が拾うこと)
 
 - **worker 実行環境に `.mcp.json` の MCP サーバーが一切接続されていない**。CLAUDE.md の
