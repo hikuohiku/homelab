@@ -278,3 +278,52 @@ webhook URL は autopilot-writer SA には読めない (RBAC 実測 Forbidden) �
    裁定 2 件のみ: **#2** (sandbox では恒久 red。CI 通過と本セッションの render 実証で実質担保) と
    **#4** (delivered:true は三点実測、message_id は原理的取得不能 → 人間視認 or 判定除外)
 3. fired.json 追記・再発火は不要。drill fixture も触らない
+
+### セッション 6 (2026-08-23) — drill ログから nil operationState の欠陥を発見・修正、待機状態の再確認
+
+**やったこと**:
+
+1. **merge 状況**: 未 merge のまま (`git branch -r --contains 1a193e89` は
+   origin/project/p-0139 のみ。main tip = 8c5cbd7d)。main 側は P-0126/0128/0141 を消化したが
+   apps/argocd への触りゼロ → コンフリクト余地なし (diff origin/main...HEAD は本企画ファイルのみ)
+2. **新規発見と修正 (本セッションの主成果)**: controller ログ直近 24h に error 1,095 行。
+   全部 hour 03 に集中しており、1,088 行は既知の裸キーバグ窗口 (03:26→03:42)。
+   残り **7 行 (03:43:08-03:46:01Z) は新種**: `cannot fetch phase from <nil>`。
+   原因は on-sync-failed の when が `app.status.operationState.phase` と素の . で辿っており、
+   **drill Application は kubectl apply のみで一度も sync されず operationState が nil**
+   だったこと。そのような App では条件評価が毎 round エラーになる (配信は妨げられない —
+   エラー時は false 扱い。ただし error ログだけ積み続く)。公式ドキュメント
+   (argo-cd.readthedocs.io Triggers「Accessing Optional Manifest Sections」) と同じ
+   optional chaining `app.status?.operationState.phase` に修正し、fixture テストにも
+   裸アクセスを弾く検査を追加 (テスト 13→14)
+3. **再確認**: verify #1 green / #3 14 tests OK / ops.tests 全体 163 OK /
+   helm PATH render rc=0 (27,222 行、cm ちょうど 7 キー、render 出力に新 when 反映、
+   on-degraded は無変更) / クラスタの merge 前状態も正しい (cm=[context]、ES は dex 分のみ、
+   drill 残骸ゼロ、argocd App Synced/Healthy)
+4. **fired.json 更新**: `nil_operation_state_finding` 節を追加し、`verification_caveat` を
+   「drill 送信時の同一バイト突合は commit 1a193e89 時点」と明確化 (証跡経路は
+   on-degraded で不変なので証跡自体は無傷)
+
+**分かったこと**:
+
+- notifications-engine は条件評価エラーを false 扱いにするため配信は止まらないが、error
+  ログが該当 App がある限り毎 round 出続ける。「黙って発火しない」(裸キー) と対になる
+  「鳴るはずの時以外ずっと騒ぐ」型の罠
+- 公式ドキュメントは operationState を任意セクションと明記し `?.` を答えとして示している。
+  一方 catalog の on-health-degraded は health.status を素のまま (health は常に存在するため)。
+  「optional なセクションには ?.,必在のセクションには素の .」が判別基準
+- `unittest discover ops/tests` の「post: True/False」出力は check_heartbeat_fresh.py の
+  テストが tempfile で判定ロジックを試す stdout であり実投稿ではない (comments.json を
+  tmp 配下から読む実装で確認済み)
+
+**次のセッションへの一言 (= やることリスト)**:
+
+1. merge 済みか最初に確認 (`git branch -r --contains 1a193e89 && git branch -r --contains
+   a08db5a9`)。merge 済みならクラスタ反映を実測: cm data が 7 キー (on-sync-failed は ?. 付き
+   であること) / externalsecret の discord 分が SecretSynced / controller ログの error 増加ゼロ
+2. 未 merge ならやることは無い。レビュー側の裁定事項は従来どおり 2 件:
+   **#2** (sandbox 恒久 red、CI + render 実証で実質担保) と **#4** (message_id は原理的取得不能、
+   人間視認 or 判定除外)。追加で 1 点レビュー用メモ: **on-sync-failed 式の生きた発火検証は未実施**
+   (drill が on-degraded 経由だったため)。docs パターンの verbatim 採用 + fixture で担保済みだが、
+   追加注入での実証を望むなら人間裁定が必要
+3. fired.json / drill fixture は触らない

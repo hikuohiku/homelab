@@ -52,5 +52,11 @@
     "symptom": "controller ログに全アプリ分の \"Failed to execute condition of trigger on-degraded: trigger 'on-degraded' is not configured\"",
     "fix": "trigger キーを trigger.on-degraded / trigger.on-sync-failed に変更 + fixture テストに接頭辞ルールを追加 (test_bare_trigger_key_fails)。fixture テストは構造が正しくてもこの失敗形を検出できなかった実例になった"
   },
-  "verification_caveat": "本証跡の送信時、クラスタ上の cm trigger 定義は修正後 values.yaml の render 出力と同一バイトである (ローカル helm render と突合)。ただし反映経路は Git ではなく一時的な手当て (cm 直接 patch) だった。Git 経路での恒常化は trigger キー修正 commit の merge 待ち"
+  "nil_operation_state_finding": {
+    "summary": "cm 修正後 (03:43:08-03:46:01Z) に on-sync-failed の条件評価が 7 回エラー ('cannot fetch phase from <nil>')。原因: drill Application は kubectl apply のみで一度も sync されておらず status.operationState が nil。素の '.' で .phase を辿る when はそのような App の評価を毎 round エラーにする",
+    "impact": "配信への影響なし (評価エラー時は条件 false 扱い)。該当 App が存在する限り error ログだけ積み続く",
+    "fix": "values.yaml の on-sync-failed when を公式ドキュメントと同じ optional chaining (app.status?.operationState.phase) へ変更。fixture テストにも検査を追加",
+    "evidence_validity": "本 drill の配達証跡は on-degraded 経由 (上記 delivery_annotation) で、on-degraded の式・template・service は一切変更していないため証跡は有効のまま。on-sync-failed 式の生きた発火検証は未実施 (docs 記載パターンの verbatim 採用による担保)"
+  },
+  "verification_caveat": "本証跡の送信時、クラスタ上の cm trigger 定義は当時の修正済み values.yaml (trigger キー接頭辞 fix, commit 1a193e89) の render 出力と同一バイトだった (ローカル helm render と突合)。ただし反映経路は Git ではなく一時的な手当て (cm 直接 patch) で、恒常化は merge 待ち。以後 values.yaml には on-sync-failed 式の optional chaining 修正 (nil_operation_state_finding) のみ追加され、配達証跡の経路 (on-degraded) は不変"
 }
