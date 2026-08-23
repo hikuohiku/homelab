@@ -363,3 +363,27 @@ recovery_probe 無し。merge 前なので正しい)。新たな発見は無し�
 `git diff --name-only HEAD...origin/main` で重複確認だけすること。merge された世界に
 なったらセッション 3 記載の手順 (ArgoCD sync 確認 → 手動 Job or 03:43 JST 待ち →
 reporter run 待ち) で初回計測を起こし、verify 3 を green にするのが最初で最後の残作業。
+
+## セッション 6 (2026-08-24 08:57 JST)
+
+**実装は無し (セッション 3〜5 の結論どおり)。ブランチはまだ merge されていない。**
+このコミットの変更はこの追記のみ。session 5 からわずか 2 分後の起動で、main の先頭
+(#579)、reporter の最新 run (2026-08-23T23:30:05Z)、`git diff --name-only
+HEAD...origin/main` の差分ファイル群 (`ops/heart/*` / `archive.jsonl`、重複ゼロ) の
+すべてが session 5 時点から不変だった。3 項目を再実測した:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 5 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse -v` | **green (27 tests OK)** 5 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | red (`recovery_probe: None`) — merge 前なので想定どおり |
+
+新たな発見は無し。
+
+## 次のセッションへの一言
+
+セッション 4/5 と同じ。**やることは「merge 待ち」以外にない。** 状況が凍結している
+間は verify 1/2 の再実測と上表の更新だけでよい。main が動いたら
+`git diff --name-only HEAD...origin/main` で重複確認だけすること。merge された世界に
+なったらセッション 3 記載の手順 (ArgoCD sync 確認 → 手動 Job or 03:43 JST 待ち →
+reporter run 待ち) で初回計測を起こし、verify 3 を green にするのが最初で最後の残作業。
