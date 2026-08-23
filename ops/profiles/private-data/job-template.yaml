@@ -46,3 +46,13 @@ spec:
             requests:
               cpu: 50m
               memory: 64Mi
+          volumeMounts:
+            - name: opencode-tmp
+              mountPath: /tmp/opencode
+      volumes:
+        # イメージ焼き込みの /tmp/opencode は root:root 755 で runAsUser 10001
+        # から不変 (P-0243 実測 — ドリルの --report 先がここで沈んだ)。fsGroup
+        # 配下の emptyDir を載せて「書き込み可能な作業場」にする (spawn.py 同型)
+        - name: opencode-tmp
+          emptyDir:
+            sizeLimit: 64Mi

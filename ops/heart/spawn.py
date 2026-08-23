@@ -165,6 +165,8 @@ def build_job(cfg, kind, *, project=None, project_id=None, attempt=0, extra_env=
                             "volumeMounts": [
                                 {"name": "data", "mountPath": "/data"},
                                 {"name": "work", "mountPath": "/work"},
+                                {"name": "opencode-tmp",
+                                 "mountPath": "/tmp/opencode"},
                             ],
                             "resources": {
                                 "requests": {"cpu": "200m", "memory": "512Mi"}
@@ -178,6 +180,17 @@ def build_job(cfg, kind, *, project=None, project_id=None, attempt=0, extra_env=
                             "persistentVolumeClaim": {"claimName": "autopilot-data"},
                         },
                         {"name": "work", "emptyDir": {"sizeLimit": "4Gi"}},
+                        {
+                            # P-0243 実測: イメージに焼き込まれた /tmp/opencode は
+                            # root:root 755 で runAsUser 10001 から不変。fsGroup
+                            # (上記 securityContext) 配下の emptyDir をこのパスに
+                            # 載せることで「/tmp/opencode は書き込み可能な作業場」
+                            # という契約が初めて成立する (P-0243 の受入 verify が
+                            # --report 先をここに置くので、これが無いと毎回沈む)。
+                            # イメージ側の中身は空なので上書きで失うものもない
+                            "name": "opencode-tmp",
+                            "emptyDir": {"sizeLimit": "64Mi"},
+                        },
                     ],
                 },
             },
