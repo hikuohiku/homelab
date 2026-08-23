@@ -1,0 +1,55 @@
+{
+  "proposals": [
+    {
+      "id": "P-9101",
+      "title": "immich の postgres を更新する",
+      "why": "イメージが古い",
+      "cell": ["k8s", "repair"],
+      "verify": ["kubectl get pod -n immich"],
+      "irreversible": false,
+      "touches_apps": false,
+      "budget": {"soft_cap_tokens": 300000},
+      "confidence": "confident"
+    },
+    {
+      "id": "P-9102",
+      "title": "ops-state の間引き方針を見直す",
+      "why": "書き込みが多い気がする",
+      "cell": ["observability", "repair"],
+      "dod": "書き込み頻度が下がる",
+      "verify": [],
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "budget": {"soft_cap_tokens": 300000},
+      "confidence": "confident"
+    },
+    {
+      "id": "P-9103",
+      "title": "skills ライブラリを整備する",
+      "why": "再利用できたほうがよい",
+      "cell": ["kubernetes", "refactor"],
+      "dod": "skills が整理される",
+      "verify": [""],
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "budget": {"soft_cap_tokens": 300000},
+      "confidence": "sure"
+    },
+    {
+      "id": "P-9104",
+      "title": "coder のワークスペース起動を速くする",
+      "why": "待ち時間が長い",
+      "cell": ["self", "repair"],
+      "dod": "起動が速くなる",
+      "verify": ["echo ok"],
+      "irreversible": true,
+      "capabilities": [],
+      "touches_apps": false,
+      "budget": {},
+      "confidence": "confident",
+      "request_id": "req-orphan-001"
+    }
+  ]
+}

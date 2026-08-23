@@ -343,6 +343,34 @@ def sh(args, cwd=None, check=True, timeout=300):
     return p
 
 
+def build_archive_records(proposals, adopted):
+    """全案を archive.jsonl の行レコードへ整形する (純粋関数。P-0210)。
+
+    判定役の scores を id で引き、**棄却案だけ** に reject_reason / improve_hint を
+    転記する (採択案は触らない)。判定の教師信号が生成に戻る唯一の経路で、
+    ここが切れていると生成役は死因を知らず同型再提案を繰り返す。
+    scores 側の欠落 (旧契約の出力・判定役の書き忘れ) は転記を飛ばすだけで落とさない —
+    案自体は採否にかかわらず archive に残すのがこの関数の責務。
+    """
+    adopted_ids = {a.get("id") for a in adopted.get("adopted", [])}
+    scores_by_id = {
+        s.get("id"): s for s in adopted.get("scores", []) if isinstance(s, dict)
+    }
+    out = []
+    for p in proposals.get("proposals", []):
+        rec = dict(p)
+        rec["adopted"] = p.get("id") in adopted_ids
+        score = scores_by_id.get(p.get("id"))
+        if not rec["adopted"] and isinstance(score, dict):
+            for key in ("reject_reason", "improve_hint"):
+                value = score.get(key)
+                if isinstance(value, str) and value.strip():
+                    rec[key] = value.strip()
+        rec["proposed_at"] = now_iso()
+        out.append(rec)
+    return out
+
+
 class Budget:
     def __init__(self, soft_cap_tokens, max_sessions):
         self.soft_cap = soft_cap_tokens
@@ -1044,17 +1072,14 @@ class Runner:
         sh(["git", "checkout", "--quiet", "-B", branch, "origin/main"],
            cwd=self.repo_dir)
         path = self.repo_dir / "ops" / "projects" / "archive.jsonl"
-        adopted_ids = {a.get("id") for a in adopted.get("adopted", [])}
+        records = build_archive_records(proposals, adopted)
         with open(path, "a") as f:
-            for p in proposals.get("proposals", []):
-                rec = dict(p)
-                rec["adopted"] = p.get("id") in adopted_ids
-                rec["proposed_at"] = now_iso()
+            for rec in records:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         sh(["git", "add", str(path)], cwd=self.repo_dir)
         sh(["git", "commit", "--quiet", "-m",
-            f"curriculum: {len(proposals.get('proposals', []))} 案 "
-            f"(採択 {len(adopted_ids)})"], cwd=self.repo_dir)
+            f"curriculum: {len(records)} 案 "
+            f"(採択 {sum(1 for r in records if r['adopted'])})"], cwd=self.repo_dir)
         sh(["git", "push", "--quiet", "-u", "origin", branch], cwd=self.repo_dir)
         pr = self.gh.request(
             "POST", f"/repos/{self.repo}/pulls",

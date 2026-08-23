@@ -1,0 +1,58 @@
+{
+  "proposals": [
+    {
+      "id": "P-9001",
+      "title": "docs/node01-storage.md に拡張前の容量確認手順を足す",
+      "why": "拡張手順はあるのに実行前の影響確認が文書化されておらず、手順どおり動くと実ディスクを圧迫したまま拡張する恐れがある",
+      "cell": ["storage", "prevent"],
+      "dod": "拡張手順の冒頭に lvs/pvc 使用量の確認ステップと判断基準が載る",
+      "verify": ["test -f docs/node01-storage.md", "grep -q '使用量' docs/node01-storage.md"],
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "budget": {"soft_cap_tokens": 300000},
+      "confidence": "confident"
+    },
+    {
+      "id": "P-9002",
+      "title": "ops-dashboard の書き置き送信時の楽観更新をやめる",
+      "why": "送信ボタンで UI 先行表示した結果がサーバ側の失敗で消え、書いた人が二度書きになる (critic 所見)",
+      "cell": ["self", "repair"],
+      "dod": "POST 失敗時に楽観表示を巻き戻し、入力内容を復元する",
+      "verify": ["cd apps/ops-dashboard && npm run build"],
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "budget": {"soft_cap_tokens": 1000000},
+      "confidence": "unsure"
+    },
+    {
+      "id": "P-9003",
+      "title": "syncthing の同期競合ファイルの発生頻度を測る",
+      "why": "競合 (*.sync-conflict) が起きていても気づけず、静かなデータ分岐が続いている。まず実態を数える",
+      "cell": ["storage", "investigate"],
+      "dod": "1 週間分の競合発生ログと発生パターンの要約が memory に残る",
+      "verify": ["python3 ops/check_doc_commands.py"],
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "budget": {"soft_cap_tokens": 300000},
+      "confidence": "confident",
+      "proposed_by": "human-request",
+      "request_id": "req-example-001"
+    },
+    {
+      "id": "P-9004",
+      "title": "Tailscale ACL の到達性を外部視点で実験する",
+      "why": "credential 分離 (#36) の実効境界が文書上の主張にとどまっており、実際にどこまで届くか未計測",
+      "cell": ["security", "experiment"],
+      "dod": "agent 権限から write 系 API への到達試行の結果表が残る",
+      "verify": ["just preflight"],
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "budget": {"soft_cap_tokens": 300000},
+      "confidence": "confident"
+    }
+  ]
+}
