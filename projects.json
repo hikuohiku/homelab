@@ -5028,7 +5028,7 @@
     {
       "id": "P-0234",
       "title": "更新サイクルを 1 周完走させて終わらせる — auto 対象は「latest か理由付き waiver 台帳のどちらか」に収束させ、version_drift キー消失の怪も同じ検査で捕まえる",
-      "state": "proposed",
+      "state": "stalled",
       "branch": "project/p-0234",
       "irreversible": false,
       "capabilities": [],
@@ -5081,12 +5081,13 @@
           "python3 ops/check_version_sync.py"
         ],
         "broken": []
-      }
+      },
+      "stalled_reason": "adopt_gate_some_pass"
     },
     {
       "id": "P-0235",
       "title": "backup が黙って止まってからの経過時間を、既存の健康レポートの中に住ませる — 新装置を増やさず、reporter の 30 分周期に「最後の成功から何時間」を足す",
-      "state": "proposed",
+      "state": "active",
       "branch": "project/p-0235",
       "irreversible": false,
       "capabilities": [],
@@ -5127,12 +5128,13 @@
         "verdict": "all_fail",
         "passed": [],
         "broken": []
-      }
+      },
+      "veto_deadline": "2026-08-23T21:19:10Z"
     },
     {
       "id": "P-0237",
       "title": "健康の最後の濁りを今日拭う — immich の OutOfSync を P-0222 の延長でゼロにし、死んだはずの photo-intake credential の幽霊を始末して secret_synced_errors=0 を実測する",
-      "state": "proposed",
+      "state": "stalled",
       "branch": "project/p-0237",
       "irreversible": false,
       "capabilities": [
@@ -5197,12 +5199,13 @@
           "! grep -rn 'photo-intake' apps/"
         ],
         "broken": []
-      }
+      },
+      "stalled_reason": "adopt_gate_some_pass"
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T20:39:42Z",
-  "last_activity_at": "2026-08-23T21:15:12Z",
+  "last_curriculum_at": "2026-08-23T21:19:10Z",
+  "last_activity_at": "2026-08-23T21:19:10Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
