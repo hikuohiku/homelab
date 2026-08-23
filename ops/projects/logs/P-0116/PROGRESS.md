@@ -551,3 +551,37 @@ append-only 鍵での実機 check 完走の証拠は
   文言判断に従うだけ。来ていなければ再実測して本節に上書き追記で足りる
 - push は **`--force-with-lease`** (session7 発見の継続)、push 前の main 先行確認は継続
 - PR 作成時は上の「貼り付け用文案」を使えば BusyBox 注記漏れはない
+
+## session9 (P-0116 worker, 2026-08-23)
+
+やったこと: issue #56 の回答再確認 (**なし**)・open PR の確認 (0 件)・受入全項目と
+validate.py の再実測。コード・manifest 側の変更は無し (session5→9 まで 5 回連続で
+同じ結論。session8 の「貼り付け用文案」「環境メモ」は引き続き有効)。
+
+### issue #56 / PR の確認結果
+
+- コメント全 **177 件** (API page 送り実測)。session8 から +1 だが追加分は
+  2026-08-23T01:23:30Z の P-0118 (Telegram 疎通依頼) で本プロジェクトとは無関係。
+  全文を `P-0116` / `--include` / `restic-check` / `BusyBox` で走査し該当 **0 件** —
+  verify #1 文言判断への回答は**未着のまま**
+- open PR: **0 件** (`GET /pulls?state=open` 実測)
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option`) — red のまま
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** (`apps/restic-check/` 実体あり)
+- #2: **28 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- main 先行: **なし** (`git log HEAD..origin/main` 空、rebase 不要)。
+  remote 分岐は `[ahead 71, behind 10]` (session8 +1 分 = 本 session9 コミット除く)。
+  push は引き続き **`--force-with-lease`**
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完全に完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら
+  文言判断に従うだけ。来ていなければ再実測して追記で足りる (session8 の文案・環境メモ
+  もそのまま使える。環境メモ: gh CLI 無し → python urllib + User-Agent、
+  /tmp/opencode は読み取り専用 → mktemp を使う)
+- push は **`--force-with-lease`**、push 前の main 先行確認 (`git log HEAD..origin/main`)
+  は継続
