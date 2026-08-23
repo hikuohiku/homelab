@@ -97,7 +97,56 @@ evidence test -s rc=0。discover 全 377 tests OK。
   TestClassificationIgnoresSource が検知する形になった。triage.classify 自体のシグネチャ変更は
   mypy 等では守られていない (型チェックなし) ので、実挙動でのみ見える
 
+### worker #3 (2026-08-23) — 待機中の実測を前進: bridge 稼働の間接証明と「worker から kubectl 不可能」の確定
+
+**やったこと**:
+
+- **ops-feedback 再確認**: inbox は依然 dashboard 由来 2 件のみ・telegram note 0 件
+  (02:05Z 実測)。48h 期限 **2026-08-25T01:20Z** 未到来のため指摘 (b) の条件は未成立
+- **issue スレッドを実測** (GitHub API、AUTOPILOT_GITHUB_TOKEN 使用): 依頼投稿
+  (5383567514, 01:23:30Z) 以降の人間返信なし。依頼が人間にまだ届いていない可能性も含め、
+  以降のセッションはスレッド確認を習慣にするとよい (`gh` 無しの環境なので curl + API)
+- **bridge 側が生きていることを間接観測で実測** (新規):
+  `git fetch origin ops-health-report` → `ops/health/latest.json`
+  (generated_at 2026-08-23T02:00:23Z) で openclaw アプリ Synced/Healthy、pod
+  `openclaw-6f75b7d78-2drqz` の gateway / feedback-bridge **両コンテナが pod_metrics 計上**
+  (feedback-bridge cpu 292419n = ポーリングループ稼働中)、pod_issues に openclaw 関連なし。
+  未着の第一仮説「まだ送信されていない」が妥当になり、48h 待つ判断を実測で後押し。
+  evidence.json の `transport.bridge_liveness` に記録済み
+- **レビュー指摘 (b) の前提に穴があることを確定させ、evidence.json の next_action を書き換えた**:
+  指摘の調査手順 `kubectl -n autopilot logs deploy/openclaw -c feedback-bridge` は
+  **worker セッションから実施不可能**。apps/autopilot/rbac.yaml:83-84 の設計どおり runner には
+  SA token が mount されず (`/var/run/secrets/kubernetes.io/serviceaccount` 無し)、
+  kubeconfig も無い (kubectl 実測: localhost:8080 接続拒否)。KUBERNETES_SERVICE_HOST env のみ
+  存在するので一見クラスタに届きそうに見えるのが罠。worker に可能な観測は
+  ops-health-report ブランチと issue スレッドのみ。48h 超過後の正しい次手を next_action に明記:
+  bridge 稼働中なら issue #56 経由で人間へ「ログ実行 or 送信済みかの確認」を依頼、
+  bridge 落ちなら apps/openclaw 側修正を検討
+
+**verify 実測 (すべて green)**: unittest 9 tests OK / drill --check rc=0 (7/7 ok) /
+evidence test -s rc=0。
+
+**分かったこと / 次への引き継ぎ**:
+
+- **次のセッションの最初の仕事は変わらず feedback_note_url を埋めること**
+  (`git fetch origin ops-feedback && git ls-tree -r --name-only origin/ops-feedback
+  ops/feedback/inbox/`)。届いていれば blob URL・本文・triage 分類結果を evidence.json に記入。
+  「止めて」系の実送信でも全停止を実地に踏ませない (spec 明記)
+- 期限超過後は **kubectl を再試行しない** (必ず失敗する)。evidence.json の
+  `transport.next_action` と `transport.bridge_liveness` に調整済みの計画があるのでそれに従う
+- ops-health-report ブランチの latest.json は worker にとって唯一のクラスタ観測点。
+  generated_at を必ず見る (古い場合は reporter 自体の死を疑う)
+- readiness は startupz (channel 障害でも Ready を外さない設計、apps/openclaw/deployment.yaml
+  コメント) のため、「ArgoCD Healthy」は Telegram チャネル自体の生死まで証明しない。
+  チャネル断の最終確認はどうしても gateway ログ (= 人間 or heart の助け) が必要
+
 ## 発見 (curriculum へ)
 
-- (なし — スコープ外の問題には触れなかった)
+- レビュー指摘の調査手順が、runner サンドボックスの権限モデル (rbac.yaml の
+  「worker はトークン automount 無しで API に触れない」) と不一致のまま出てくることがある
+  (本件: kubectl logs による bridge 調査を worker に指示したが実行不可能だった)。
+  対応方向の候補: レビュー prompt 側で「worker 実行環境から可能な手順か」の自問を足す /
+  heart 側に診断用の log 読み出し窓口を用意する / runner Job への pods/log read 付与を
+  検討する (現状は意図的な隔離なので変更には substrate の規則が乗る)。本プロジェクトでは
+  evidence.json の next_action に回避策を書くだけで対処した
 
