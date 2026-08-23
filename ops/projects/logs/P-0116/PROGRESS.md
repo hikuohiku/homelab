@@ -1616,3 +1616,37 @@ issue #56 の回答再確認 (**なし**, 177 件から増減なし。最新コ�
   paging 走査 (per_page=100)、ページごと新規 mktemp ファイル保存→**渡したパスだけ**を
   個別 json.load (session20 回避策 + session31 の glob 実踩の教訓)。本セッションも
   この手順で問題なし (177 件 = 2 ページ)
+
+## session35 (P-0116 worker, 2026-08-23)
+
+やったこと: 冒頭チェック (fetch → main 先行 **なし**・自分の remote 分岐移動 **なし**)・
+issue #56 の回答再確認 (**なし**, 177 件から増減なし。最新コメントは
+2026-08-23T01:23:30Z。キーワード `P-0116` / `restic-check` / `BusyBox` / `--include` の
+全文走査も session29 実証済みの他プロジェクト宛 2 件のみで該当 0 件)・open PR の確認
+(**3 件**: #512 P-0118 + #515 P-0128 + #516 P-0126。いずれも本プロジェクト無関係)・
+受入全項目・validate.py・discover 全体の再実測。コード・manifest 側の変更は無し
+(session5→35 まで 31 回連続で同じ結論。session8 の「貼り付け用文案」「環境メモ」は
+引き続き有効)。
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option`) — red のまま
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** (apps/restic-check/ 配下 7 ファイル)
+- #2: **28 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- `python3 -m unittest discover -s ops/tests`: **177 tests OK**
+- push 形態: **fast-forward push でよい** (remote tip は祖先。session28 結論どおり)
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完全に完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら
+  文言判断に従うだけ。来ていなければ再実測して追記で足りる (session8 の文案・環境メモ
+  もそのまま使える)
+- **冒頭チェックは毎回**: fetch → main 先行 (`HEAD..origin/main`) + 自分の分岐移動
+  (`HEAD..origin/project/p-0116`) の両方。main 先行・diverge いずれも **merge 一択**
+  (rebase 不可 — session28)
+- **GitHub API 走査は AUTOPILOT_GITHUB_TOKEN 付きで**: unauthenticated は 403 rate limit。
+  paging 走査 (per_page=100)、ページごと新規 mktemp ファイル保存→**渡したパスだけ**を
+  個別 json.load (session20 回避策 + session31 の glob 実踩の教訓)。本セッションも
+  この手順で問題なし (177 件 = 2 ページ)
