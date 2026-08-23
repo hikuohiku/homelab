@@ -141,5 +141,16 @@ autopilot namespace の Pod (heart / runner / reviewer / …) が動く環境の
   大きく変えるならここも見直す — verified_at: 2026-08-08
 - ops-health-report ブランチの `ops/health/latest.json` は最新 1 点のみ (上書き)。
   傾向は `ops/health/history/YYYY-MM-DD.jsonl` — verified_at: 2026-08-05
-- coder / immich / vaultwarden の ArgoCD `Degraded` は T-0106 (append-only 鍵の Doppler 未登録)
-  由来の既知事象。新規異常ではない。鍵が登録されれば自然解消する — verified_at: 2026-08-06
+- coder / immich / vaultwarden の ArgoCD `Degraded` について (2026-08-22 に P-0111 が訂正):
+  旧注記「T-0106 由来・鍵登録で自然解消する」は半分だけ正しかった。ExternalSecret は
+  2026-08-07 の作成時から一度も SecretSyncedError になっておらず、鍵は最初から通っていた。
+  実際の源泉は **backup CronJob の子 Job 失敗** (ArgoCD v3.2.1 `resourceHealthSource: appTree`
+  が live の Job 失敗を Application health に反映) で、health 履歴では 2026-08-10 夜〜翌
+  08-11 夕方 (17:45Z の成功 run で解消) と 08-22 夜にだけ Degraded になり、08-12〜08-21 は
+  終日 Healthy だった (=「16 日間 Degraded」という認識は誤観測)。Job 失敗の奥の一次原因は **Backblaze B2 の download cap 超過**
+  (`download_cap_exceeded`。アカウント単位で鍵の種類に無関係。usage counter は毎日
+  00:00 UTC リセット — 公式ドキュメント + p0111-cap-watch による実測どおり 08-23T00:04Z に回復、
+  手動 backup 成功で全アプリ Healthy へ復帰)。一次原因の実名と修繕手順は
+  ops/projects/logs/P-0111/root_cause.md。
+  「既知事象だから」と latest.json の断片で決めつけず、直近 backup Job の成否を見ること
+  — verified_at: 2026-08-23
