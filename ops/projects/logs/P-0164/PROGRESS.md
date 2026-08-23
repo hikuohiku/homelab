@@ -724,7 +724,60 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   依然根拠がない。unknown 待ちの注意は継続: mergeable_state が unknown なら数秒〜十数秒待って
   再取得、dirty 確定時のみ update-branch → ci 再 green を待つ
 
+### セッション 19 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま**、blocking 2 件で不変
+  (P-0092 / P-0161。checked=61)。固定指示どおり実演習は見送り。コード変更は無し
+- 本セッションの実イベント: **前セッション初出の `merging` の出口を初観測**
+  (P-0163: merging→delivered)。台帳差分の実測では 61 件のうちこの 1 件のみが動いた
+  (60/61 不変。全員分の state 一括 diff で churn 無しを確認 — カウント比較だけでなく
+  メンバーシップ照合までやったのはセッション 13 の教訓どおり)。
+  内訳は delivered 27 (+1) / vetoed 2 / stalled 29 / announced 1 / active 2 (+自己) /
+  merging 0 / in_review 0。セッション 18 の「マージ済み・完了前」解釈が出口の実観測で確定し、
+  中間状態の全ライフサイクル in_review→merging→delivered が P-0163 単体で完観測された。
+  なお merging の観測サンプルは依然 1 例であり、in_review のように複数行き先を
+  持つかどうかは未判定
+- 塞ぎ手 P-0092 (announced) / P-0161 (active) は不変。delivered 増は完結方向の進行だが
+  blocking 数に反映されないため弁判定への含意はゼロ — 判定原則
+  (announced+active==0 の実測一択) は不変
+- main は不動 (a962e4211)。PR #524 は mergeable_state=clean 初手継続
+  (main 不動時は unknown を経由しない — セッション 17 観測の再裏取り)。
+  head=5d24c8932 不変・ci/GitGuardian success
+- ops-state ブランチは進行 (669768126→bca671802、先頭は heart: beat 51)
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 2), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 281 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git fetch origin && git rev-parse origin/main          # a962e4211 (不動)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。「0 か否か」だけを見る原則は維持。unknown 待ちの注意は継続:
+  mergeable_state が unknown なら数秒〜十数秒待って再取得、dirty 確定時のみ
+  update-branch → ci 再 green を待つ
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 19, ライフサイクル観測の続き) **中間状態 `merging` の出口を初観測**
+  (P-0163: merging→delivered、セッション 18 初出の翌セッションで実観測)。
+  「マージ済み・完了前」という状態表現の仮説が出口方向の実測で確定し、
+  in_review→merging→delivered の全ライフサイクルが同一プロジェクト上で完結観測された。
+  in_review には stalled 行きの出口もあった (セッション 14) ので「中間状態 = 停滞予備軍」とも
+  読めたが、merging は初サンプルでいきなり完結方向へ抜けた。ただしサンプル 1 例なので
+  in_review 的な多方向性を持つかは未判定。なお delivered が増えても blocking 数
+  (announced+active) は動かないため、完結方向の進行が弁開放に直結するわけではない
+
+- (セッション 19, 台帳差分の検査手法) カウント比較だけだと補償ペアの churn
+  (X: stalled→active と Y: active→stalled が同時に起きてカウント不変、等) を
+  見逃す — セッション 13 の教訓の実践として、今回は全 61 件の id+state を
+  セッション 17 時点の ops-state commit と一括 diff して churn 無しまで確認した。
+  差分検査は「カウント集計」ではなく「id+state の整列 diff」1 発でよい
 
 - (セッション 18, ライフサイクル観測の続き) **未観測だった中間状態 `merging` が台帳に初出**
   (P-0163: in_review→merging)。セッション 8 メモ「コード上散見する review/merging 等の
