@@ -359,3 +359,42 @@ briefing/reminders.txt とも無し = 未 merge の裏付け)。**main はセッ
 (a)(b)(c) で切り分け。リハーサル系の再実施は不要 (セッション 2〜8 で網羅済み)、
 Node 側テストの無劣化もセッション 7 実測済み。**やることは merge 待ちの監視だけ**:
 verify(3) が green になったら受入全項目 green を記録して完了報告に進む
+
+## worker セッション 10 (2026-08-23) — 監視セッション。ops-state beat 50・main 不動を確認。コード変更なし
+
+### やったこと
+
+レビュー指摘は無し。受入 5 項目を自前実測: 4/5 green、verify(3) のみ red
+(実 fetch で origin/ops-state 先端 beat 50 `heartbeat at 2026-08-23T20:55Z` を確認し
+reminders.json / briefing/reminders.txt とも無し = 未 merge の裏付け)。
+main はセッション 4 以後ずっと不動 (origin/main = 31a806191) で衝突監査は省略。
+`git branch -r --contains HEAD` は origin/project/p-0231 のみ = 未 merge。
+
+セッション 7〜9 の方針に従いリハーサル / 横断 E2E / Node 側テストの再実施はスキップ。
+本セッションの新規情報は監視データとテスト件数の照合のみ:
+
+1. **heart 稼働継続の間接証拠が更新**: ops-state はセッション 9 実測の beat 48 から
+   beat 50 へ進行。merge 後 green 化の前提 (heart が生きている) は崩れていない
+2. **ドリフト防止の再計測**: verify(2) 指定コマンドで unittest **24 本** OK。
+   加えて `unittest discover` による全テスト群 **452 本 OK** (無劣化)。
+   validate.py OK (0 error, warning 11 件は既知)
+3. **台帳の次 due を確認**: 今セッション実測時点 (8/23 21時台 UTC) ではゴミ収集 8/24 (none)
+   が 48h 窓内 → merge されれば live 断片は非空。防災の日 9/1 (year) の窓開始は 8/30
+
+### 分かったこと・罠
+
+- **前セッション記録の「unittest 28 本」は指定コマンドの実測値ではない**:
+  `python3 -m unittest ops.tests.test_reminders` の正は 24 本 (verify(2) がこれを指定)。
+  全発見 (`python3 -m unittest discover -s ops/tests -t .`) なら 452 本。
+  件数表記のずれに次セッションは混乱しないこと (どちらも green)
+- (既知の再確認) gh CLI 不在のため PR 状態は見えない。merge 待ちの判定は
+  `git branch -r --contains HEAD` + verify(3) の red/green で代用する
+
+### 次のセッションへの一言
+
+結論不変: コード完成・変更不要。verify(3) は merge → heart 初回ビート (~120s) で green。
+レビュー指摘があればその解消が最優先。merge 後 red 継続時はセッション 3 末尾の
+(a)(b)(c) で切り分け。リハーサル系・Node 側テストの再実施は不要 (網羅済み)。
+**やることは merge 待ちの監視だけ**: verify(3) が green になったら受入全項目 green を
+記録して完了報告に進む。なお 8/27〜8/29 頃の merge なら初回ビートの断片は空文面だが
+壊れではない (セッション 6・9 実証済み)
