@@ -287,3 +287,34 @@ docs/・terraform/・P-0142 logs への差分」と「PBS/112 言及」の 2 点
 本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
 リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
 docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
+
+### 2026-08-23 セッション10 — セッション9 手順どおりの兆候確認 (main が初めて動いたが無関係)
+
+**やったこと**: spec DoD の追加実装は無し。セッション5〜9 と同じく verify 再実測 +
+外部シグナル確認だけをした。**唯一の変化は origin/main が初めて動いたこと**だが、
+中身は条件 A/B と無関係だった (下記 3 参照)。
+
+1. **verify 再実測**: #1 rc=1 / #2 rc=0 / #3 rc=2。セッション3 以降ずっと同一
+   (#1/#3 は verdict=keep ゆえ意図通り failing、#2 green)
+2. **観測環境の再実測** (9 回目の独立実測、結果同じ): `env` の proxmox/pve/tailscale 系無し
+   (rc=1) / `tailscale` `pvesh` `qm` `gh` CLI すべて absent。MCP ツール (`mcp__proxmox__*`) も無し
+3. **origin/main の新着確認**: `git fetch --prune` 後、`f4a7862b..origin/main`(=8c5cbd7d) に
+   **10 commit 新着** — セッション5 以降「main は一度も動いていない」が初めて覆れた。
+   中身は P-0128 (B2 download budget/ledger) と P-0141 (unknown death probe) の merge。
+   全 diff を実測: **docs/・terraform/・P-0142 logs への差分は 0 行、PBS/112 言及も 0 件**
+   → 条件 A/B とは無関係。なお p-0128/p-0141 ブランチは削除済み (prune 済み)
+4. **project/p-0115 再確認**: 更新されていた (f9a45bf2..d8a67197)。新着 commit 1 件の stat を
+   実測: 自ログ PROGRESS.md +46 行のみ (docs/・terraform/ 差分ゼロ)。同ログ自身も
+   「#56 の新規コメントは 0 件」と実測しており整合
+5. **issue #56 を webfetch で直接読んだ**: コメント無し = 条件 A/B の実施報告は未着
+
+→ verdict は `keep` のまま、inventory への反映対象なし。docs/pbs-retirement.md は書かない。
+
+**次のセッションへの一言**: やり方はセッション5〜10 と同一でよいが、**main 比較基準を更新**:
+次回の「origin/main 新着」は `8c5cbd7d..origin/main` で見ること (f4a7862b 基準のままだと
+P-0128/P-0141 分が毎回新着として出てくる)。判定は「docs/・terraform/・P-0142 logs への差分」
+と「PBS/112 言及」の 2 点だけでよく、中身の精読は不要。verify 再実測 + 上記確認 +
+最小ログ追記で終えてよい。
+本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
+リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
+docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
