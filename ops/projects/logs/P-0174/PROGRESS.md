@@ -105,3 +105,62 @@ verify 2 項目とも green 自力実測 (`test -f` OK、unittest 26 tests OK)�
 - 既知の未解決問題なし。残務はレビュー対応の想定。
 - 発見: ops/validate.py の warning 11 件 (backlog refs が指す ops/dashboard/* 不在 +
   todo 0 件警告) — 本プロジェクト外の既存問題。curriculum が拾うべきだが P-0174 とは無関係。
+
+## 2026-08-23 session 4
+
+レビュー指摘なし (verdict 不在)・verify green 継続のため、もう 1 回フレッシュ目で
+実装と「外の世界との接合部」を突き合わせる自己レビューをしたら **機能の主信号が
+実質死んでいる統合バグ** を見つけて修正した。
+
+### やったこと
+
+1. **Bug 修正 (重大): 健全性の「前日比」が朝の実行では約 30 分前との比較になっていた**
+   - history ファイル名は reporter が **UTC 日付** で付ける (report.py の generated_at は
+     UTC strftime、`history_path = ...format(generated_at[:10])`。実データ確認:
+     history/2026-08-22.jsonl の中身は 2026-08-22T00:00Z〜23:30Z の 48 行)。
+     一方 morning_brief は `day` = JST 昨日 で `history/{day}.jsonl` を取り **その最終行**
+     を前日状態にしていた。JST = UTC+9 なので毎朝 08:00 JST (= 23:00Z) 実行時点では
+     要求したファイルは「今日の UTC 日」の追記中ファイルで、最終行は約 30 分前の
+     スナップショット。つまり (b) 健全性行はほぼ常に「変化なし」になり昨日の変化は
+     永遠に見えない。session 2/3 の dry-run が偶然変化を見せたのは実行時刻が昼過ぎ
+     (UTC 日が切り替わった後) だったからで、cron 本番時刻では顕在化しなかった。
+   - 修正: 「JST day が終わる瞬間」(= 翌日 00:00 JST = 前日 15:00Z) より前の最新
+     スナップショットを各行の generated_at で選ぶ (`jst_day_end_utc` +
+     `prev_applications`)。境界跨ぎの欠損に備え day とその前日の最大 2 ファイルを
+     見る (`jsonl_docs` で全行を dict 化)。generated_at 読めない行 /
+     applications が list でない行は選考対象外。1 ファイルの最終行では絶対に
+     正しい「前日の最終状態」にならないのがこの bug の核心。
+   - 実データ回帰: 選ばれる baseline は history/2026-08-22.jsonl の 14:30Z 行で、
+     openclaw / version-watcher がそこに居ないため dry-run の「openclaw ?→Healthy」は
+     正しい正直な出力だった (旧コードだと 07:30Z 行と比較して「変化なし」に潰れていた)。
+2. **Bug 修正: github_get がネットワークエラーで Job 全体を落としていた**
+   - except は HTTPError のみ。タイムアウト・DNS 失敗等 (URLError / socket.timeout =
+     OSError の一族) は素通りして fetch_sources を貫通 → 1 ソースの瞬断で Job 失敗 =
+     brief 全体が消える。docstring が謳う「1 ソースの失敗で全体を止めない」と不一致。
+   - 修正: `(OSError, http.client.HTTPException)` も握って status 文字列を返す
+     (呼び出し側は ==200 以外をログして欠かすだけ)。send_telegram は握らない
+     (送信失敗は Job を落として正しい)。TimeoutError/ConnectionResetError を
+     urlopen に差し替えて例外経路を実走確認済み。
+3. 強化: `brief_lines` の prev_usable を `isinstance(prev_apps, list)` 追加
+   (非 list を渡すと dict 反復で空 map になり全アプリ「?→X」の疑似追加になる。
+   fetch 側では起こらないが純関数の契約「壊れない」を守る)。
+4. verify 自力実測: unittest **32 tests OK** / `test -f` green /
+   `kubectl kustomize apps/openclaw` 通過 / validate.py 0 error /
+   live API で --dry-run 再確認 (3 行出力・送信なし)。
+
+### 分かったこと / 決めたこと
+
+- **純関数テストは「自分の手で作ったデータ」しか食べない**: 今回の UTC/JST bug は
+  composer の契約は全部満たした上で、外部 (reporter) の命名規約という接合面で起きた。
+  接合部の疑いは本物のデータ (`git show origin/ops-health-report:...`) でのみ潰せる。
+- 前日比の意味論: baseline = 「JST 昨日の終わりより前の最新」= 昨晩から今朝までの
+  変化を見せる (「寝ている間の変化」)。PROGRESS session 2 の「history/{昨日}.jsonl の
+  最終行 vs latest.json」の意図を timezone 分だけ正しく直した形。仕様変更ではない。
+- last_json_line はこの修正で使われなくなったため削除した (test も差し替え)。
+
+### 次のセッションへの一言
+
+- 既知の未解決問題なし。残務はレビュー対応の想定。merge 後・初回送信前に
+  openclaw-credentials Secret 同期確認 (TELEGRAM_BOT_TOKEN 未登録なら
+  CreateContainerConfigError で fail-loud、仕様どおり) は session 3 から継続の宿題。
+- 発見: なし (今回の修正はすべて本プロジェクトのスコープ内)。
