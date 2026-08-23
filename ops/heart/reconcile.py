@@ -77,6 +77,32 @@ def _stall(p, actions, reason, ntype=None, text=None):
         actions.append(_action("notify", p["id"], ntype=ntype, text=text))
 
 
+def _continue_budget(p, cfg, now):
+    """budget_exhausted を「休憩」に変える (P-0182)。終端にせず proposed へ戻し、
+    予算を積み直す。新規登録ではない (_register_spec は使わない — 終端エントリの
+    再登録は reconcile 冒頭の id 重複チェックが弾く) ので、既存エントリを
+    その場で変更する。prs 履歴は残す (ensure_pr がブランチ head の open PR を
+    再利用する)。
+    """
+    p["state"] = "proposed"
+    p["continuation_count"] = p.get("continuation_count", 0) + 1
+    p["last_continuation_at"] = now_iso(now)
+    p["budget"]["soft_cap"] += cfg.get("extra_budget_tokens", 2000000)
+    for k in (
+        "job",
+        "drift_count",
+        "restart_count",
+        "quota_wait_until",
+        "quota_wait_count",
+        "veto_deadline",
+        # ゲートは継続のたびに再実測させる (初回採択時の測定を流用しない —
+        # 「信念でなく実測」)。試行カウンタも新規扱いに戻す
+        "adopt_gate",
+        "adopt_gate_attempts",
+    ):
+        p.pop(k, None)
+
+
 def _register_spec(doc, spec, rules, now):
     """main の archive.jsonl で採択された spec を proposed として登録する。"""
     doc["projects"].append(
@@ -323,12 +349,33 @@ def decide(doc, facts, rules, now):
                 actions.append(_action("consume_result", pid))
                 actions.append(_action("spawn_reviewer", pid))
             elif result and result.get("state") == "budget_exhausted":
+                # --- 予算切れは終端でなく休憩にできる (P-0182) ---
+                # 可否は「プロジェクトブランチに続きがあるか」の観測次第。
+                # 観測は I/O なので heart.beat() が fact として集めて渡す
+                continuation = rules["runner"].get("continuation") or {}
+                evidence = (facts.get("continuation_evidence") or {}).get(pid)
+                if evidence is None:
+                    # 観測に失敗したビートでは判断しない (jobs=None と同じ規約。
+                    # 「無い」と取り違えて誤 stalled にしない)。消費もしないので
+                    # 次のビートが同じ事実を読み直す
+                    continue
                 actions.append(_action("consume_result", pid))
-                _stall(
-                    p, actions, "budget_exhausted", "question",
-                    f"{pid} が予算 (soft cap) を使い切りました。"
-                    "継続する価値があれば予算を積んで再開を指示してください",
-                )
+                if (
+                    not continuation.get("enabled")
+                    or p.get("continuation_count", 0)
+                    >= continuation.get("max_continuations", 1)
+                    or not evidence
+                ):
+                    _stall(
+                        p, actions, "budget_exhausted", "question",
+                        f"{pid} が予算 (soft cap) を使い切りました。"
+                        "継続する価値があれば予算を積んで再開を指示してください",
+                    )
+                    continue
+                # 継続発火: proposed へ戻し、以後は通常の採択ゲート→予告→veto 窓→
+                # 着手の流れに合流する。人間への再予告は通常の announce に乗り、
+                # veto の対象 (勝手な再走ではない)
+                _continue_budget(p, continuation, now)
             elif result and result.get("state") == "waiting_quota":
                 # アカウントの利用上限は器の外側の事実であって、プロジェクトの停滞
                 # ではない。通知も出さない (障害ではない)。projects.json の state は

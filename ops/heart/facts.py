@@ -282,6 +282,58 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
     return vetoes, acks, stop_all, review_needed, resume_all, task_requests, new_cursors
 
 
+def progress_path(project_id):
+    """プロジェクト文脈 (PROGRESS.md) のリポジトリ内パス。runner と同じ位置。"""
+    return f"ops/projects/logs/{project_id}/PROGRESS.md"
+
+
+def collect_continuation(repo_dir, doc, results):
+    """P-0182: budget_exhausted 判定中の active プロジェクトについて、
+    「プロジェクトブランチに続きがあるか」を観測する。
+
+    返すのは {project_id: True / False / None}:
+      True  = ブランチ上に PROGRESS.md がある (checkpoint を書いて止まった
+              worker ループの予算死 = 継続の候補)
+      False = ブランチまたは PROGRESS.md が無い (initializer 中の予算死など。
+              継続するものが何も無い)
+      None  = 観測に失敗した (「無い」と区別する。decide 側はこのビートでは
+              判断しない)
+
+    runner は checkpoint セッションの push **後**に result.json を書くため、
+    ビート冒頭の sync_main の fetch がその push に追いつかないことがある。
+    証拠取り逃しによる誤 stalled を防ぐため、判定対象ブランチだけ取り直して
+    から読む。
+    """
+    out = {}
+    for p in doc["projects"]:
+        pid = p["id"]
+        result = results.get(pid)
+        if (
+            p["state"] != "active"
+            or not result
+            or result.get("state") != "budget_exhausted"
+        ):
+            continue
+        branch = p.get("branch", "")
+        if not branch:
+            out[pid] = False
+            continue
+        try:
+            gitutil.run(
+                ["fetch", "--quiet", "origin", branch], cwd=repo_dir, check=False
+            )
+            if not gitutil.ls_remote_branch(repo_dir, branch):
+                out[pid] = False
+                continue
+            out[pid] = (
+                gitutil.show(repo_dir, f"origin/{branch}", progress_path(pid))
+                is not None
+            )
+        except Exception:
+            out[pid] = None
+    return out
+
+
 def load_adopted_specs(repo_dir):
     """main の archive.jsonl から採択済み spec を {id: spec} で返す (同 id は最後の行が有効)。"""
     specs = {}

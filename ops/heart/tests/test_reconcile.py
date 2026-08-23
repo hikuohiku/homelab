@@ -412,9 +412,15 @@ class TestActiveObservation(unittest.TestCase):
         self.assertIn("spawn_runner", kinds(actions))
 
     def test_budget_exhausted_stalls_with_question_and_consumes(self):
+        """継続の証拠が確認できない予算死は stalled + question で人間に渡す。
+        P-0182 以降、checkpoint 付きの死は proposed へ戻る継続レーンに進む —
+        そちらの遷移表は ops/tests/test_budget_continuation.py が仕様。"""
         p = project(state="active", job="runner-p-0001-a1")
         d, actions = reconcile.decide(
-            doc(p), facts(results={"P-0001": {"state": "budget_exhausted"}}), RULES, NOW
+            doc(p),
+            facts(results={"P-0001": {"state": "budget_exhausted"}},
+                  continuation_evidence={"P-0001": False}),
+            RULES, NOW,
         )
         self.assertEqual(d["projects"][0]["state"], "stalled")
         self.assertIn("consume_result", kinds(actions))

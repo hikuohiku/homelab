@@ -30,6 +30,12 @@
     "max_sessions_per_project": 300,
     "unknown_error_max_rounds": 3,
     "_unknown_comment": "unknown のまま残った死 (直後の API プローブでも死因を確定できなかった回, P-0141) の連続閾値。既知死因の 3 連続 error とは別カウンタ。超えたら incident 型で人間に渡す",
+    "continuation": {
+      "enabled": true,
+      "extra_budget_tokens": 2000000,
+      "max_continuations": 1,
+      "_comment": "budget_exhausted を終端でなく休憩にする (P-0182)。checkpoint / PROGRESS.md がプロジェクトブランチ上に確認できる予算死は stalled 化せず proposed へ戻して再予告する (extra_budget_tokens を積み、プロジェクトごとに max_continuations 回まで)。再予告は通常の announce に乗り veto 窓の対象 — 勝手な再走ではない。initializer 中の予算死 (何も push されていない) は継続するものが無いので従来どおり stalled"
+    },
     "_comment": "soft_cap はプロジェクト採択時に上書き可。超過で checkpoint 最終ターン→終了 (硬い上限ではない。heart が状況を通知し、継続価値があれば予算を積んで再開する)"
   },
   "chore": {

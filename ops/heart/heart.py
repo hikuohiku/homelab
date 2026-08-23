@@ -340,6 +340,11 @@ class Heart:
             log(f"job collection failed (観測不能として扱う): {e}")
             jobs = None
         results, reviews = facts.collect_results(self.cfg.data_dir)
+        # P-0182: 予算死の継続判定に使う「ブランチに続きがあるか」の観測。
+        # 観測対象が無ければ空、失敗した項目は None (decide が保守的に扱う)
+        continuation_evidence = facts.collect_continuation(
+            self.repo_dir, doc, results
+        )
         branches = [
             p["branch"]
             for p in doc["projects"]
@@ -395,6 +400,7 @@ class Heart:
             "curriculum": curriculum,
             "critic": critic,
             "adopted_specs": adopted_specs,
+            "continuation_evidence": continuation_evidence,
         }
         doc, actions = reconcile.decide(doc, f, self.cfg.rules, now)
 
