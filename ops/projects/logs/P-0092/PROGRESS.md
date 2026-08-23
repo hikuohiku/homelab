@@ -202,3 +202,44 @@ RESTARTS=0 (AGE 37m — 観察起点 16:40:08Z と整合)。CrashLoop の兆し�
   3〜10 が 2026-08-23T16:59〜17:12Z の約 13 分に 8 回起きた。worker 側は「窓満了前は何も
   しない」しか打てないため、満了時刻を知っている runner 側で次回起動を満了後まで遅らせる
   (または起動間隔を空ける) のが器側の改善点。それまでは worker が最小工数で抜けるしかない
+
+## 2026-08-23T17:18Z (セッション 13、開始 2026-08-23T17:18:09Z)
+
+**観察継続中。** `date -u` で 2026-08-23T17:18:09Z を確認、窓の満了
+(2026-08-24T16:40:08Z) まで約 23.4h 残っているため、最小工数で終える。
+読み取りのみのデータポイント: `kubectl get po -n immich -l app=immich-postgres`
+で同じく `immich-postgres-68d65f4b9d-jtbvz` が Running / Ready 1/1 /
+RESTARTS=0 (AGE 38m — 観察起点 16:40:08Z と整合)。CrashLoop の兆しは無し。
+やることは「次のセッションへの一言」から変わらない。
+
+## 次のセッションへの一言
+
+**やることは 1 つ: 窓の満了 (2026-08-24T16:40:08Z) 後に起きたセッションだけが
+下の手順を実行する。満了前なら「観察継続中」と書いて commit して終わり。**
+適用起点は **Pod 開始 2026-08-23T16:40:08Z** (= 窓の満了は 2026-08-24T16:40:08Z)。
+
+窓満了後セッションの手順 (全部読み取りのみ):
+
+1. `git fetch origin ops-health-report && git show origin/ops-health-report:ops/health/latest.json`
+   で (a) `generated_at` が直近であること、(b) applications の immich が Healthy、
+   (c) `pvc_usage` immich エントリの `backup_listing.files` に **`immich-db-backup-20260824T*`**
+   があり mtime が 24h 以内、(d) `pod_issues` に immich-postgres の新規異常が無いこと
+2. `kubectl get po -n immich -l app=immich-postgres` で restarts=0 のまま (CrashLoop 無し)。
+   念のため `kubectl logs deploy/immich-postgres --since=24h | grep -iE 'fatal|error|panic'`
+   も見る (FATAL レベルが無いこと。INFO は無視)
+3. restic バックアップの合否は **baseline 比較** (「分かったこと」節参照) で行う。
+   baseline より悪化していなければ観察は成立とする。内蔵日次ダンプの成功を主、restic を従
+4. 成立していたら docs/immich-postgres-upgrade.md の末尾に `## 本番適用記録` を追記する。
+   載せるもの: 適用日時と PR #555 (merge commit 2efaadf74)、rollout 実績 (旧 Pod 停止→新 Pod
+   16:40:08Z 開始、Ready まで約 44 秒)、DB 4 手順の結果、適用後の状態
+   (vchord 1.1.1 / probes=1 / server 16.14 / 検索成功)、24h 観察の結果 (restarts、バックアップ、
+   ArgoCD health)。**事実のみを書き、推測には推測と明記する**
+5. commit する。これで wrapper の verify 3 が green になり、以後は器の通常経路へ乗る。
+   完成宣言はしないこと
+
+注意:
+
+- **最小工数で終えること**。wrapper が数分間隔で再起動している。budget soft cap を
+  無駄に消費しないこと
+- **`## 本番適用記録` の前倒し執筆は絶対にしない**。この見出しを書いた瞬間 verify 3 の
+  grep が green になり、wrapper が観察未成立のままレビューへ進めてしまう
