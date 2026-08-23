@@ -2909,7 +2909,7 @@
     {
       "id": "P-0139",
       "title": "アプリが Degraded になっても誰の耳にも鳴らない — ArgoCD Notifications (既に稼働済み・設定ゼロ) を Discord に繋ぎ、合成障害で本当に鳴るところまで通す",
-      "state": "active",
+      "state": "stalled",
       "branch": "project/p-0139",
       "irreversible": false,
       "capabilities": [
@@ -2976,7 +2976,8 @@
       "veto_deadline": "2026-08-23T02:07:40Z",
       "spawn_count": 1,
       "job": "runner-p-0139-a1",
-      "drift_count": 0
+      "drift_count": 0,
+      "stalled_reason": "budget_exhausted"
     },
     {
       "id": "P-0141",
@@ -3551,7 +3552,7 @@
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-23T05:43:46Z",
-  "last_activity_at": "2026-08-23T05:47:24Z",
+  "last_activity_at": "2026-08-23T06:02:35Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
