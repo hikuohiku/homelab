@@ -1,0 +1,10 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# telegram-adapter — OpenClaw (P-0090 / P-0107) の置き換え。
+# 自前ビルドの単一バイナリなので ConfigMap スクリプトを持たない
+# (Go ソースは app/ にあり、.github/workflows/build-telegram-adapter-image.yml が焼く)。
+# namespace は既存の autopilot を使うため namespace.yaml は無い
+resources:
+  - external-secret.yaml
+  - deployment.yaml
