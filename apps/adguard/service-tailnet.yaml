@@ -1,0 +1,38 @@
+# DNS (53/tcp + 53/udp) と管理 UI (:3000) を tailnet に公開する。
+#
+# tailscale LoadBalancer (type: LoadBalancer + loadBalancerClass: tailscale) は
+# L3 DNAT で Service の全ポート・全プロトコルを転送するため DNS の udp/tcp 両方が
+# 通る (syncthing-sync 実績、apps/syncthing/service-tailnet.yaml 同型)。
+# 管理 UI を Ingress / 公開 LoadBalancer に載せずこの Service 経由のみにするのは、
+# 「tailnet 内からだけ到達可能」を Service 型の選択で担保するため
+# (PROJECT.md やらないこと: 管理 UI の外部公開)。
+#
+# expose 設定値 (DoD 4 の記録項目):
+#   - hostname: adguard → tailnet デバイス名。端末側の DNS 先は
+#     adguard.<tailnet domain> (MagicDNS 名)。UI は http://adguard.<tailnet>:3000
+apiVersion: v1
+kind: Service
+metadata:
+  name: adguard
+  namespace: adguard
+  labels:
+    app: adguard
+  annotations:
+    tailscale.com/hostname: adguard
+spec:
+  type: LoadBalancer
+  loadBalancerClass: tailscale
+  selector:
+    app: adguard
+  ports:
+    - name: dns-tcp
+      port: 53
+      targetPort: dns-tcp
+      protocol: TCP
+    - name: dns-udp
+      port: 53
+      targetPort: dns-udp
+      protocol: UDP
+    - name: http
+      port: 3000
+      targetPort: http
