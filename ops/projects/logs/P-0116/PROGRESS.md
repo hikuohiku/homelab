@@ -5823,3 +5823,69 @@ open PR は **4 件のまま** (#527/#526/#512 ready + #524 draft、全て既知
 - **PROGRESS.md への追記は必ずファイル末尾** (session46 教訓 + session112 事故の再発防止。
   本セッションも `cat >> ... <<EOF` の純粋追記)
 
+
+## checkpoint (予算上限) — 最終セッション
+
+wrapper による予算ソフト上限到達時の最終セッション。**実装はしていない** (指示どおり)。
+やったのは現在地の再実測と、以下の記録のみ。
+
+### 冒頭確認 (手順 2 の結果)
+
+- `git status`: **working tree clean**、`project/p-0116` は origin と同期
+  (HEAD a322a32da = session119)。未コミット変更が無かったため **commit も破棄も発生せず**
+
+### 受入チェックリストの現在地 (2026-08-23 本セッション再実測)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep v1.37.0 が `--include` 非対応) — red 継続。
+  等価版 `grep -rq 'restic-check' apps/` は **rc=0**。manifest 一式
+  (`apps/restic-check/` — namespace / ExternalSecret 2 本 / CronJob 2 コンテナ構成 /
+  job_main.py / runner コピー / kustomization / application) はブランチ上に健在で配線済み
+- #2: **green** — `python3 -m unittest ops.tests.test_restic_check_runner` → 28 tests OK
+- #3: **green** — `ops/projects/logs/P-0102/check_evidence.json` 実測 5 repos 全 exit_code==0
+  (実鍵・クラスタ内一時 Job による proof)
+- discover 全体: **234 tests OK** (CI 同一コマンド)。`ops/validate.py` 0 error / 11 warning
+  (既存 warning のみ)
+
+→ 実質 **3 項目中 2 項目 green**。残る #1 の赤は仕様文言と実行環境 (BusyBox) の不整合であり、
+コードの欠陥ではない (issue #56 で回答待ち、総数 180 のまま増減なし)
+
+### 最大の論点: 成果物が main に届いていない
+
+本セッション実測:
+
+- `git ls-tree origin/main apps/restic-check/` → **空** (main に存在しない)
+- `git ls-tree origin/main ops/projects/logs/P-0102/` → 空
+- open PR 4 件 (#527/#526/#512 ready + #524 draft) は全て無関連。
+  **project/p-0116 → main の PR は存在しない**
+
+つまり CronJob 一式は「ブランチ上で完成」しているが、main merge → ArgoCD sync →
+定期実行の初回観測まで**一本も流れていない**。「継続する価値があるか」の判断材料として:
+コードと evidence は揃っている。残作業は実質次の 3 点のみ。
+
+### 次に取るべき一手 (具体的)
+
+1. 冒頭チェックは **session119「次セッションへの要点」のリストに従う** (merge 方針・
+   issue の読み方・discover コマンド等は全てそこに書いてあるので繰り返さない)
+2. issue #56 の回答確認: コメント取得は per_page=100&page=2 の末尾。総数基準 180。
+   `--include` 問題への回答が来ていたら、その文言判断に従って受入 #1 を確定させるだけ
+3. 回答が無い場合でも前進は可能: project/p-0116 から main へ PR を出す
+   (`gh pr create --base main --head project/p-0116`)。PR 説明には BusyBox grep
+   `--include` 制限を明記する (session2「罠」節の文言を転用)。
+   ただし「#1 が spec 文言どおり赤いまま merge してよいか」は人間判断の余地が高いので、
+   迷うなら **draft PR で出して #56 で尋ねる**のが安全
+4. merge 後: ArgoCD sync 待ち → namespace `restic-check` に CronJob `restic-check` が
+   立つことを確認 → 手動起動 (`kubectl create job --from=cronjob/restic-check <名前>
+   -n restic-check`) で初回実行を観測し、成功なら黙ること・失敗時に Discord webhook が
+   鳴ることを確認して完了
+
+### 残った不確実性
+
+- **issue #56 に人が答えるか未知** (session98〜119 を通じて 180 件のまま)。答えが来なければ
+  #1 はこのまま (等価版 green + 制限の明記) で合意形成するか、永遠に赤のままかの二択
+- **CronJob 本体の定期実行はまだ一度も観測されていない** (#3 の evidence は一時 Job での
+  proof。日曜 05:30 JST の本番初回実行と webhook 経路の実地確認は未達)
+- main 側は日々動いている (session114 で telegram-adapter 置換を取り込み済み)。
+  再開時は冒頭の三点マージ走査を省略しないこと
+
+再開された worker へ: このプロジェクトはコード面では終わっている。あなたの仕事は
+「merge されて実際に毎週走るようになること」と「#56 の文言問題の決着」だけ。
