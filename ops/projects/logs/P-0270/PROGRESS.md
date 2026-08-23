@@ -80,3 +80,58 @@ $ python3 ops/check_version_sync.py && python3 ops/check_credential_map.py   # �
    `doubleclick.net` がブロック応答・`example.org` が正常解決を実測してコマンドと出力を貼る
 3. イメージを上げるときは deployment 内 2 箇所 + inventory current を同じ PR で。
    GROUPS の restic 6 ファイル一致も崩さないこと
+
+### s3 (2026-08-23) — test_adguard_manifest 新設 (verify #2 → green、**verify 全項目 green**)
+
+**やったこと** (commit af5914ff5):
+
+- `ops/tests/test_adguard_manifest.py` を新設 (40 テスト)。s2 の案どおり
+  レンダリング 8 オブジェクト / image 2 箇所同値 / memory limits 無し (deployment
+  init+本体・CronJob 両方) / schedule 2 本 / tailscale LB + hostname annotation /
+  inventory 2 エントリの file 実在に加え、下記も固定した:
+  - PVC の `Prune=false` annotation (ロールバック節のデータ消失回避が外れたら落ちる)
+  - seed ConfigMap の中身を YAML としてパース: `http.address=0.0.0.0:3000` 固定
+    (ウィザード後の UI :80 移動防止)、filter 有効・upstream/bootstrap 有無、
+    **`users` を書かない**こと (管理ユーザーは人間が作る)
+  - backup CronJob = append-only 鍵 (`adguard-restic-backup-credentials`) /
+    retention = 削除鍵 (`adguard-restic-credentials`)、repository suffix `:adguard`、
+    readOnly mount、retention は PVC mount 無し、保持世代 `7/4/6`
+  - ExternalSecret: doppler ClusterSecretStore、backup だけ
+    `B2_ACCOUNT_{ID,KEY}_APPEND_ONLY` を引く
+  - application.yaml (path/ns/CreateNamespace/automated) と apps/kustomization.yaml
+    への配線、ディレクトリ内 yaml の未配線検出
+
+**実測**:
+
+```
+$ python3 -m unittest ops.tests.test_adguard_manifest -v     # Ran 40 tests, OK ← verify #2 green
+$ python3 -m unittest discover -s ops/tests -t .             # Ran 480 tests, OK
+$ kubectl kustomize apps/adguard >/dev/null; echo $?         # 0 ← verify #1 green (再確認)
+$ python3 -c "...inventory..." ; echo $?                     # 0 ← verify #3 green (再確認)
+$ python3 ops/validate.py                                    # 0 error (warning 11 件は既存)
+$ python3 ops/check_version_sync.py && python3 ops/check_credential_map.py   # とも ok
+```
+
+**テスト設計の要点** (次のセッションはここを読めば再調査不要):
+
+- **kubectl/kustomize を呼ばない**: CI の ops job には入っていない (ci.yml 実測、
+  test_backup_coverage.py 冒頭にも同じ事情あり)。代わりに PyYAML で resources 6 ファイルを
+  直接パースし「連結 = レンダリング相当」として検査。ネットワーク不出
+- **バージョン番号は anchor にしなかった**: 正しい引き上げ手順 (deployment 2 箇所 +
+  inventory current を同一 PR) ならテストを触らず通る。代わりに「initContainer と本体と
+  inventory current が同値」「restic 2 CronJob 同値」の一致性不変条件で部分更新を落とす。
+  タグ形式の v 付きのみチェック (Docker Hub 実測に基づく inventory note の前提)
+- **変異試験済み**: image タグ片側変更 → FAILED / Prune=true 変更 → FAILED /
+  schedule 衝突時刻変更 → FAILED をそれぞれ実測してから戻した。「通って当たり前」の
+  空振りテストではない
+
+**次のセッションへの一言**:
+
+1. **コード側の verify は完了** (全 3 項目 green)。残りは DoD (3)(4) のみ:
+   PR → CI green → merge → ArgoCD Synced/Healthy 確認 → 使い捨て Job (ArgoCD 管理外、
+   消したことをここに書く) で `doubleclick.net` ブロック / `example.org` 正常解決を実測し、
+   コマンドと出力をこのファイルに貼る。expose 設定値は s2 の記録を使える
+2. 人間のウィザード (:3000, users 空) を待たずに dig 実測できるはず (seed 設定で DNS+
+   filter は動く)。ダメならその事実と人間手順を記録して止まること — 完了宣言はしない
+3. テストを壊すような manifest 変更をするときは test_adguard_manifest も同一 PR で
+   直す (schedule・保持世代・鍵分離はすべて意図的な選択として pin してある)
