@@ -48,6 +48,30 @@ commit 済み。push は wrapper が行う。
   「その結論も成果」のケース。wrapper が verify 全 green を要求して詰まるようなら、
   この PROGRESS の記述が判断根拠
 
+### 2026-08-23 セッション3 — pbs.tf.ignore コメント更新 (dod 全項目着地)
+
+**やったこと**: dod (4) を完了。`terraform/proxmox/pbs.tf.ignore` の「確認できていないこと」節を
+セッション2 の再実測 (`mcp__proxmox__*` ツール無し / `PROXMOX_*`・`PVE_*` 系 env 無し /
+tailscale CLI 無し = 2026-08-07 実測と同じ結果の再確認) で置き換えた。
+resource 本体・経緯節は無変更、`.ignore` のまま維持。commit 済み (b5b3e42b)。push は wrapper。
+
+**verify の現状** (自分で実行して実測): #1 rc=1 / #2 rc=0 / #3 rc=2。
+#1・#3 は docs/pbs-retirement.md 未存在による failing で、これは意図通り (下記)。
+
+**spec DoD の消化状況**:
+
+| dod | 状態 |
+|-----|------|
+| (1) pbs-inventory.json | ✅ セッション2 (source: unavailable + jobs: [] + 推測ゼロ) |
+| (2) restic 突き合わせ表 | ✅ 結論「比較不能」を JSON 内に記録 (`restic_targets[].pbs_protects` 全行 unobserved) |
+| (3) docs/pbs-retirement.md | 替意に不作成 — verdict=keep。dod (2)「その結論も成果」のケース |
+| (4) pbs.tf.ignore コメント更新 | ✅ 本セッション |
+
+→ spec の DoD はすべて着地した。verify #1/#3 が green にならないままの完結は PROJECT.md 受入
+チェックリスト直下の段落が明示的に許容する (「verdict を partial や keep にしても verify は通る /
+不可なら手順書は書かない」)。判断の根拠は `pbs-inventory.json` の `reason` と本ログ。
+**手順書を後から書いて verify を green に揃えるのは verdict=keep との矛盾なので絶対にやらない。**
+
 ## 発見 (スコープ外。curriculum が拾うこと)
 
 - **worker 実行環境に `.mcp.json` の MCP サーバーが一切接続されていない**。CLAUDE.md の
@@ -58,7 +82,10 @@ commit 済み。push は wrapper が行う。
   （PVE/PBS 層は不可、k8s/ArgoCD 層も同様に mcp__kubectl__ / mcp__argocd__ が無いので不可のはず。
   未実測だがツールセットの構造上ほぼ確実）
 
-**次のセッションへの一言**: 残る作業は dod (4) のみ — `terraform/proxmox/pbs.tf.ignore` の
-「確認できていないこと」節を本実測 (2026-08-23 再確認、MCP/credential/tailscale すべて不達)
-で置き換えること。resource 本体と経緯節は触らない。`.ignore` のまま維持。
-手順書 (docs/pbs-retirement.md) は書かないこと (verdict=keep。上記参照)。
+**次のセッションへの一言** (セッション3 より): **やることは残っていない。spec DoD は全項目
+着地済み** (上表参照)。verify #1/#3 を green にするための手順書追記など、verdict をひっくり返す
+行動はしないこと。wrapper がレビューに進めない場合は、PROJECT.md の受入チェックリスト直下の
+許容段落 + `pbs-inventory.json` の `reason` + 本ログが判断根拠。人間または構築セッションが
+手順1 (PVE 側 vzdump job 一覧と PBS 内部 job の確認) を実施した場合は、inventory の
+`restic_targets[].pbs_protects` 列を置き換えて突き合わせを完成させ、verdict を再判断する —
+それがこのプロジェクトを再開する唯一の条件。
