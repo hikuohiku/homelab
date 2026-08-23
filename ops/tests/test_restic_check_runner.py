@@ -276,7 +276,10 @@ class TestMain(unittest.TestCase):
         env = {"RESTIC_CHECK_RESULTS_DIR": records_dir}
         with mock.patch.dict(os.environ, env, clear=True), \
                 redirect_stdout(StringIO()) as stdout:
-            code = rcr.main()
+            # 時刻は凍結アンカー NOW を注入する。実時刻を使うと「snapshot が 24h 超で
+            # warn」という仕様の都合で、アンカーから 29h 後 (2026-08-23T07:00Z 以降) に
+            # all-green テストだけが時限爆弾として red になる (session104 実測)
+            code = rcr.main(now=NOW)
         return code, stdout.getvalue()
 
     def write_records(self, tmpdir, records, name="{}.json"):
@@ -299,14 +302,9 @@ class TestMain(unittest.TestCase):
         self.assertEqual(code, 1)
 
     def test_all_checks_pass_but_stale_returns_two(self):
+        # レコードも凍結アンカー基準で組む (実時刻混在は別の時限爆弾になる — session104)
         with tempfile.TemporaryDirectory() as tmp:
-            now = datetime.now(UTC)
-            records = make_records(ages_hours={})
-            for rec in records:
-                rec["snapshots_json"] = _snap_json(
-                    dt=now - timedelta(hours=5)) if rec["repo"] != "immich" \
-                    else _snap_json(dt=now - timedelta(hours=48))
-            self.write_records(tmp, records)
+            self.write_records(tmp, make_records(ages_hours={"immich": 48.0}))
             code, _ = self.run_main(tmp)
         self.assertEqual(code, 2)
 

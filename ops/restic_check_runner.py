@@ -291,9 +291,10 @@ def load_records(results_dir):
     return records
 
 
-def main(argv=None):
+def main(argv=None, now=None):
+    """now は evaluate() への時刻注入 (単体テスト用。None なら実時刻)。"""
     results_dir = os.environ.get("RESTIC_CHECK_RESULTS_DIR", "/work/results")
-    evaluation = evaluate(load_records(results_dir))
+    evaluation = evaluate(load_records(results_dir), now=now)
     report = render_report(evaluation)
     print(report)
     webhook = os.environ.get("RESTIC_CHECK_WEBHOOK_URL", "")

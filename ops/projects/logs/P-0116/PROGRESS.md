@@ -4854,3 +4854,74 @@ credential 無し報告 — いずれも本プロジェクト無関係)・open P
   一時ファイルが必要なときは必ず mktemp (/tmp/opencode 直書きは Permission denied — session99)
 - **open PR は 1 件** (session103 時点): #512 P-0118 のみ。番号・タイトルも見ること
 - **PROGRESS.md への追記は必ずファイル末尾** (session46 教訓の再掲)
+
+
+## session104 (P-0116 worker, 2026-08-23)
+
+やったこと: 冒頭チェック → **main 先行なし**。remote 分岐移動は ops-state beat (154→158) と
+p-0157/p-0161 記録追加・新規 `exercise/p-0164-labels` (実コミット 2 件だが vaultwarden/coder
+Application への演習ラベル付与のみで領域外。open PR #524 draft — 演習後に撤去見込み) のみ。
+issue #56 再確認 (**総数 180 から増減なし**: heart による grep `--include` 問題への回答は
+まだ無し。末尾は P-0161 worker の人間向け依頼 06:30:10Z のまま)。コード側の変更は
+下記の時限爆弾修理のみ。
+
+### 時限爆弾を発見して修理 (本セッションの主成果)
+
+- discover を回したら **269 OK + 1 FAIL** (前セッションまで 270 OK)。fail は自領域
+  `test_restic_check_runner` の `TestMain.test_all_green_returns_zero` (code 2 != 0)
+- 根因: TestMain は実時刻を使う `main()` 経路なのに、レコードは凍結アンカー
+  `NOW = 2026-08-22T12:00Z` 基準で組まれていた。デフォルト snapshot は NOW−5h =
+  **2026-08-22T07:00Z** なので、実時刻が 2026-08-23T07:00Z を越えた瞬間に「24h 超」warn が
+  発火し all-green テストだけ red 化。session98〜103 が green だったのは単に期限内だったから
+- 2 個目: `test_all_checks_pass_but_stale_returns_two` は実時刻基準でレコードを組んでおり、
+  **2026-08-23T12:00Z 以降は逆方向で red になる時限爆弾**だった (発火前に発見・修理)
+- 修正内容:
+  - runner `main(argv=None, now=None)` に evaluate への時刻注入口を追加。本番契約は不変
+    (`apps/restic-check/job_main.py` は引数なし呼び出しのまま)
+  - TestMain.run_main が `rcr.main(now=NOW)` を注入 (以後 TestMain は時刻非依存で安定)
+  - stale テストも `make_records(ages_hours={"immich": 48.0})` で凍結アンカーに統一
+  - `ops/restic_check_runner.py` → `apps/restic-check/restic_check_runner.py` へ byte 同一コピー
+    (`ops/check_restic_check_script_sync.py` 実測 ok)
+
+### 受入再実測 (2026-08-23 本セッション, 07:xx UTC)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option: include=*.yaml`) — red のまま。
+  オプション解析段階の失敗なのでリポジトリ側では如何ともならない (#56 回答待ち)
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** (apps/restic-check/ 健在)
+- #2: **28 tests OK** (時限爆弾修理後)
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- `python3 -m unittest discover -s ops/tests`: **270 tests OK, rc=0**
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら文言判断に従うだけ。
+  来ていなければ再実測して末尾への追記で足りる
+- **TestMain にケースを足すときは必ず run_main 経由** (now 注入済み)。実時刻や実時刻基準の
+  レコードを混ぜると時限爆弾の再燃になる (session104 の教訓)
+- **runner を編集したら apps/restic-check/restic_check_runner.py へ必ずコピー**
+  (sync check が CI で守っているが、手元でも先に回すと無駄な push を避けられる)
+- 冒頭チェック・merge 方針・API 走査・mktemp・サマリ拾いの各注意点は session103 以前と
+  同じ (省略しないこと)。main 先行・diverge いずれも **merge 一択** (rebase 不可 — session28)
+- **issue #56 のコメント総数は 180 が最新基準** (session98〜104 実測で 180 のまま)。今後は
+  181 以上で新規着信を疑うこと。ただし最新タイムスタンプとキーワード走査で
+  本プロジェクト関連かを必ず判別すること。**合計数の数え方は p1 + p2 を足す**
+- **curriculum 採択が来たら merge してから validate.py 再実測**: archive.jsonl 先頭一致
+  チェックは main 未追従だと error になる (session92 教訓)
+- **新規 remote 分岐でもコミットゼロなら走査対象外**。remote 分岐は毎回目視、判別基準は
+  「本プロジェクト領域に触れるか」のみ。実コミットの有無は三点マージ diff 走査で判定
+  (p-0164/p-0174/exercise-p-0164-labels 実績)
+- **P-0157 (backup 鮮度監視) は verify 対象が ops/health・ops/rules.json・
+  test_backup_freshness 側**で apps/restic-check/ とは別 (session94〜104 実測でも領域接触ゼロ)
+- **p-0139 系ブランチとの diff 走査は新規コミットだけを見ること**
+  (`git log origin/main..相手` + `git diff --stat origin/main...相手`)
+- **discover の総数は merge で動く**: 固定値ではない (本セッション時点で 270)。
+  rc=0 と OK を確認すること
+- **issue コメントの「最新 N 件」取得は per_page=100&page=2 (最終ページ) の末尾を使う**
+  (session92 実測: sort/direction パラメータは当てにならない)
+- **API 走査は python 内で完結させると一時ファイル不要**。AUTOPILOT_GITHUB_TOKEN を
+  Bearer ヘッダに付けること。GITHUB_REPO は owner/repo 形に正規化。
+  一時ファイルが必要なときは必ず mktemp (/tmp/opencode 直書きは Permission denied — session99)
+- **open PR は 2 件** (session104 時点): #524 P-0164 演習用 draft (演習後撤去見込み) と
+  #512 P-0118。番号・タイトルも見て本プロジェクト関連かを判別すること
+- **PROGRESS.md への追記は必ずファイル末尾** (session46 教訓の再掲)
