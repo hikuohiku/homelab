@@ -422,3 +422,58 @@ restic 1 本の成功が「ライブラリ+ダンプ」の担保になる (resti
 
 次のセッションへ: 観察継続のみ。`## 本番適用記録` は絶対に書かない。
 見るのは (1) postgres Pod の RESTARTS=0 維持、(2) job 29791785 の成否。
+
+## 2026-08-23T18:05Z (セッション 32、開始 2026-08-23T17:56:46Z)
+
+**観察継続 + エスカレーション確定。** `date -u` で 2026-08-23T18:05:10Z を確認、窓の満了
+(2026-08-24T16:40:08Z) まで約 22.6h。Pod 実測: `immich-postgres-68d65f4b9d-jtbvz`
+Running / Ready 1/1 / RESTARTS=0 / AGE 82m (観察起点 16:40:08Z と整合)。CrashLoop 無し。
+namespace 全体も immich-server / ML / valkey 含め健全。
+
+### 新規データポイント 1 — 窓内の restic 実行は job 29791785 で最後 (セッション 31 の仮説を訂正)
+
+CronJob の schedule 文字列 `45 2 * * *` は **UTC ではなくノードローカル (JST) で解釈されている**。
+
+- 実証: `spec.timeZone` 未設定・manifest は 2026-08-10 (P-0028) 以降無変更なのに、
+  直近 4 日以上すべて 17:45Z 発火 (= JST 表記の 02:45)。retention (`45 3 * * 0`) も
+  Sat 18:45Z 発火 (23h 前 = 日曜 03:45 JST) で同じ挙動
+- 推定メカニズム: k3s 組み込み controller-manager のローカルタイム解釈 (仮説。実証したのは発火時刻のみ)
+- 結論: **次回発火は 2026-08-24T17:45Z = 窓満了後**。セッション 31 の「cron 文字列どおりなら
+  次回 02:45Z があり得る」は誤り。job 29791785 が窓内唯一の restic 実行だった
+
+### 新規データポイント 2 — job 29791785 は昨日と同一の B2 403 経路に入った
+
+- 17:45Z 開始後 ~14 分間ログゼロ。理由が判明: command 冒頭の
+  `restic snapshots >/dev/null 2>&1` が出力を握り潰すため (沈黙自体は異常ではない)
+- ~18:00Z 実測: snapshots が諦めて `restic init` にフォールバックし、こちらの
+  `Stat(<config/>) b2_download_file_by_name: 403` リトライが見え始めた (指数バックオフ)
+- 昨日 (29790345) の実績: attempt1 開始から 28.5 分で Error → backoffLimit:1 で
+  attempt2 も 29 分で Error、計 ~58 分で job Failed。今夜も同様なら
+  **~18:43Z 頃に Failed 確定**する見込み
+
+### 新規データポイント 3 (スコープ外・重大) — 被害は immich に留まらない
+
+- vaultwarden / coder / syncthing の restic-backup もすべて「47h 前成功 → 23h 前一斉 Failed」。
+  4 アプリは同一 bucket + 同一 append-only credential を共用する設計 (docs/backup.md)
+- 一方 retention (削除権限つき別鍵 `immich-restic-credentials`) は 23h 前に Complete
+- 結論: B2 アカウント/bucket 全体ではなく、**共用 append-only application key
+  (`*_APPEND_ONLY`) が 2026-08-21T17:45Z〜08-22T17:45Z の間に壊れた** (期限切れ or
+  無効化か。docs/backup.md に duration 設定の記載は無し)。オフサイトバックアップが
+  ~24h 前から全滅状態
+
+### 判定とエスカレーション
+
+- セッション 31 の規則どおり **本番適用記録は書かない**: 窓内 restic 成功は通常スケジュールでも
+  到達不能になり、走っている 1 本も外部認証エラーで死にゆく最中
+- 本体の観察項目 (CrashLoop 無し) は順調に蓄積中。DoD を塞いでいるのは「バックアップ成功」の脚のみで、
+  原因は DB エンジン更新と無関係な外部認証系
+- 人間への依頼: (1) Backblaze コンソールで append-only 鍵を再発行し Doppler の
+  `B2_ACCOUNT_ID_APPEND_ONLY`/`B2_ACCOUNT_KEY_APPEND_ONLY` を更新 (ExternalSecret 再同期)。
+  (2) もし窓内完成を目指すなら鍵修正後に手動 restic 実行
+  (`kubectl create job --from=cronjob/immich-restic-backup`) で窓内成功を狙えるが、
+  これは spec の kubectl-write 名目 (rollout 監視・緊急 scale) 外なので人間の承認が前提
+
+次のセッションへ: 観察継続のみ。`## 本番適用記録` は絶対に書かない。見るのは
+(1) postgres Pod の RESTARTS=0 維持、(2) job 29791785 の最終状態 (~18:43Z 以降の起動なら
+Failed 確定済みのはず、`kubectl get jobs -n immich | grep 29791785`)。
+B2 鍵が人間の手で直った兆候 (新規 job の Complete 等) がない限り状況は変わらない。
