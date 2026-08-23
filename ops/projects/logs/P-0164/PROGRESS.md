@@ -646,7 +646,52 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   unknown 待ちの注意だけ残す: mergeable_state が unknown なら数秒〜十数秒待って再取得、
   dirty 確定時のみ update-branch → ci 再 green を待つ
 
+### セッション 17 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま**、blocking 4→3 件に減少
+  (P-0092 / P-0116 / P-0161。checked=61)。固定指示どおり実演習は見送り。コード変更は無し
+- 本セッションの実イベント: **完全凍結 2 連続 (15→16) の後、台帳が動いた。変化はたった 1 件**。
+  `git show` 差分の実測で P-0163 が active→in_review に遷移したのみ (60/61 件が不変)。
+  内訳は delivered 26 / vetoed 2 / stalled 28 / announced 1 / active 3 (+自己) / in_review 1。
+  凍結明けも大規模入れ替わりでなく単一メンバーの最小遷移だった。ops-state ブランチは
+  進行 (fetch で e76d32ab6→3a7e91543)
+- 小ネタ (弁に無関係): **P-0163 が in_review に再入場** (セッション 12 に入り、13 に
+  active へ復帰した 2 周目)。台帳上で往復振動する唯一のプロジェクトであり、in_review =
+  双方向中間状態説の確度をさらに上げた。なお blocking 減少 (4→3) の出口は delivered でも
+  stalled でもなく横滑りの in_review — 「減少 = 弁への前進」への反例がまた 1 件増えただけで、
+  判定原則 (announced+active==0 の実測一択) は不変
+- main は不動 (cc1c86626)。PR #524 は mergeable_state=clean 初手継続
+  (head=5d24c8932 不変、unknown 待ち無し)、ci + GitGuardian success
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 3), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 281 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git fetch origin && git rev-parse origin/main          # cc1c86626 (不動)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- 当日の手順はセッション 3 固定のまま不変 (--run 背景起動 → 全 zero 確認 → PATCH ready
+  解除 → PUT merge)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。「0 か否か」だけを見る原則は維持。台帳は凍結明けに
+  P-0163 のみ動いたが、これを「弁開放へ向かう潮流」と読む根拠は無い (P-0163 は過去にも
+  往復して戻ってきている)。unknown 待ちの注意だけ残す: mergeable_state が unknown なら
+  数秒〜十数秒待って再取得、dirty 確定時のみ update-branch → ci 再 green を待つ
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 17, ライフサイクル観測の続き) **完全凍結の明け方も最小単位だった**。
+  15→16 の完全凍結 2 連続の後、台帳差分は P-0163 active→in_review のたった 1 件
+  (60/61 件不変を実測)。凍結明け = 大規模入れ替わり、という期待は裏切られた。
+  P-0163 はセッション 12→13 で往復を完了済みの **2 周目の in_review 入場**であり、
+  台帳上で往復振動する唯一のプロジェクト。in_review 双方向中間状態説をさらに後押しする一方、
+  blocking 減少 (4→3) の出口が delivered/stalled でなく横滑り in_review なのは
+  「減少 = 弁への前進」反例の追加にすぎず、判定は常に announced+active==0 の実測一択
 
 - (セッション 16, ライフサイクル観測の続き) **完全凍結が 2 セッション連続** (15→16)。
   スナップショット比較の 3 パターンのうち「完全凍結」が連続出現し、凍結は例外的イベントで
