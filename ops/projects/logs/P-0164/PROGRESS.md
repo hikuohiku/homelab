@@ -762,7 +762,71 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   mergeable_state が unknown なら数秒〜十数秒待って再取得、dirty 確定時のみ
   update-branch → ci 再 green を待つ
 
+### セッション 20 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま**、blocking 2 件で不変
+  (P-0092 / P-0161。checked=61)。固定指示どおり実演習は見送り
+- 本セッションの実イベントその 1: **台帳が完全凍結 3 例目** (19→20)。
+  全 61 件の id+state 一括 diff で完全一致 (churn ゼロを実測)、カウント内訳も
+  同一 (delivered 27 / vetoed 2 / stalled 29 / announced 1 / active 2 (+自己))。
+  ops-state ブランチは進行したが中身は heart beat 更新のみ
+  (bca671802→e3ef18ede、beat 51→56) — 「ブランチ進行 ≠ 台帳遷移」の追加例
+- 実イベントその 2: **main 史上 3 度目の前進** (a962e4211→ab8a9a15e、
+  PR #529 curriculum 採択)。待機中のドラフト PR #524 は無介入で clean を維持し
+  **材料耐久 4 例目**: base 移動直後は mergeable_state=unknown を返し
+  (12 秒待ちで clean 復帰 — セッション 11 発見の罠の 4 回目の再現)、
+  head=5d24c8932 不変・ci/GitGuardian success
+- 実イベントその 3 (**新規に起きたこと**): validate.py が **1 error に劣化**
+  (`archive.jsonl: origin/main の内容と先頭一致しない`)。原因は PR #529 の
+  curriculum が ops/projects/archive.jsonl へ 6 行追記したことで、main より
+  遅れている自ブランチでは startswith 検査が機械的に失敗するもの
+  (改変・削除の検知が目的なので期待どおりの動作ではある)。前例 0f2aeb5a0
+  (PR #523 取り込み時) に倣い **origin/main を本ブランチへ merge して解消**
+  (コンフリクト無し、本プロジェクト領域への影響なし)。merge 後に validate は
+  0 error へ復帰。併せて merge により全体 unittest は **281→294 に変動**
+  (main 側で test_openclaw_bridge.py 削除・test_syncthing_acceptance.py 追加)
+- 前置条件の再実測 (merge 後・劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 2), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 294 tests OK (281 から変動)
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git fetch origin && git rev-parse origin/main          # ab8a9a15e (本日 3 度目の前進)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean (unknown 12 秒後に復帰) / head=5d24c8932 不変
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。「0 か否か」だけを見る原則は維持。追加の注意が 1 つ:
+  validate.py が archive.jsonl 先頭不一致の error を出したら壊れていない —
+  **「自ブランチが main より遅れている」サイン**なので origin/main を merge すれば
+  消える (curriculum 採択のたびに起きうる。詳細は発見節)。前置条件の unittest 件数は
+  固定値でない (281→294 実測) ので「OK か」で判断すること
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 20, 受入検証の保守) **validate.py の archive.jsonl 先頭一致検査は、
+  main より遅れた長寿命ブランチ上で curriculum 採択のたびに誤爆する**。
+  check_projects_archive はローカルの ops/projects/archive.jsonl が
+  `git show origin/main:` の内容の startswith であることを見るため、curriculum が
+  追記して main が長くなった瞬間から「遅れ」自体が error として報じられる
+  (改変検知という本来の目的からは正しい挙動)。対処は origin/main を自ブランチへ
+  merge するだけでよい (PR #523 時の 0f2aeb5a0 に続き今回 PR #529 でも実施 —
+  これで 2 例。curriculum 採択 → プロジェクトブランチの validate が赤、の
+  定型として覚えてよい)
+
+- (セッション 20, 前置条件の数値) **全体 unittest の件数は固定値ではない**
+  (281→294 を実測)。プロジェクト横断の discover は他プロジェクトのテストファイルが
+  main へ入る/消えるたびに増減するので、前置条件の記録・比較は件数ではなく
+  「全 OK か」で行うべき。自タスクの 39 件 (test_deploy_continuity) は不変
+
+- (セッション 20, ライフサイクル観測の続き) **完全凍結の 3 例目** (19→20、
+  id+state 一括 diff で churn ゼロまで確認)。14→15 (初観測) / 15→16 (2 連続) は
+  連続していたが、今回はそれらと非連続な位置で再出現 — 凍結凍結⇄凍結明けが交互に
+  来る周期性は無い。塞ぎ手 P-0092 (announced) / P-0161 (active) は不変で、
+  delivered も 27 のまま動かず。判定原則 (announced+active==0 の実測一択) は不変
 
 - (セッション 19, ライフサイクル観測の続き) **中間状態 `merging` の出口を初観測**
   (P-0163: merging→delivered、セッション 18 初出の翌セッションで実観測)。
