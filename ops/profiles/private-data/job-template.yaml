@@ -1,0 +1,48 @@
+# private-data 分離 Job のテンプレート断片 (参考。ArgoCD には適用されない)。
+#
+# 実際の private-data Job は ops/heart/spawn.py が組み立てる。PROJECT.md (仕様 JSON)
+# の capabilities に "private-data" を宣言すると、spawn.py が下記 template.metadata.labels
+# と同等のラベルを Pod に付け、NetworkPolicy private-data-egress-lock の選択対象になる。
+# このファイルは「手で Job を書くときの形」を固定する参照であり、apps/ 配下に置くと
+# ArgoCD が実物として適用するので置かない。
+#
+# 脅威モデルと運用条件は同ディレクトリの README.md。
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: private-data-job-template
+  namespace: autopilot
+  annotations:
+    homelab.hikuohiku.dev/note: >-
+      reference-only fragment — real jobs are built by ops/heart/spawn.py
+      (capability "private-data" adds this label automatically)
+spec:
+  backoffLimit: 0
+  ttlSecondsAfterFinished: 21600
+  template:
+    metadata:
+      # NetworkPolicy private-data-egress-lock の選択キー。この 1 行が本体。
+      labels:
+        private-data: "true"
+    spec:
+      restartPolicy: Never
+      # 私的データを読む Pod にクラスタへの書き込み権限は要らないのが普通。
+      # トークンも mount しない (k8s API への出口は NP 側でも塞がっているが、
+      # 深層防御としてここでも断つ)
+      serviceAccountName: autopilot-runner
+      automountServiceAccountToken: false
+      securityContext:
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+      containers:
+        - name: worker
+          # image は実装時に決める (digest pin 推奨, #49 の教訓)。
+          # livenessProbe/readinessProbe を付けないこと — 本プロファイルは
+          # ingress 全拒否なので probe が誤検知する
+          image: python:3.14-alpine
+          command: ["python3", "-c", "pass"]
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi

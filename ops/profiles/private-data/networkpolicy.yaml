@@ -1,0 +1,44 @@
+# private-data 分離プロファイルの NetworkPolicy (P-0243)。
+#
+# このファイルは 2 箇所に存在する: 正本が ops/profiles/private-data/networkpolicy.yaml、
+# 本番コピー (ArgoCD 管理・恒久痕跡) が apps/autopilot/networkpolicy.yaml。
+# 内容はバイト単位で一致しなければならず、ops/tests/test_private_data_profile.py が
+# 毎回検査する (drift guard)。穴を開ける/閉じるときは必ず両側 + テストを一緒に変えること。
+#
+# 選択対象は metadata.labels に private-data: "true" を持つ Pod のみ。
+# 他の Pod・他 namespace の通信は一切変えない (クラスタ規模の既定拒否一発導入を
+# 狙って P-0039 / P-0086 / P-0129 / P-0178 の 4 死が全員死んでいる — 1 PR 1 論点)。
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: private-data-egress-lock
+  namespace: autopilot
+spec:
+  podSelector:
+    matchLabels:
+      private-data: "true"
+  policyTypes:
+    - Ingress
+    - Egress
+  # ingress 全拒否が「namespace 内最小」。私的データを読む Job に入口は要らない。
+  # livenessProbe 等を持つ Pod をこのラベルにしないこと (probe を殺しかねない)。
+  # DNS 応答は egress 規則のコネクション追跡で返るので、出口側だけ開けば足りる。
+  ingress: []
+  egress:
+    # 名前解決だけは生かす (P-0224/P-0233 の DoD 残留知見: DNS を殺すと
+    # 「ポリシーによる拒否」と「名前解決不能」が区別できず、exfil_drill の反証力が落ちる)
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # ↑ 現時点では fail-closed: DNS 以外の出口 (LLM API / GitHub / k8s API 含む) は
+    #   全部落ちる。これは意図的。P-0203 egress census (docs/security/) が main に
+    #   届いたら「実測された必要先」だけをここに追加する — 推測で穴を開けない

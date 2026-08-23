@@ -8,6 +8,14 @@ SA の選択がここの安全上の本体 (決定 #5 宣言制注入):
   - 既定は autopilot-runner (クラスタへの書き込み権限なし、トークン automount なし)
   - PROJECT.md が capabilities に "kubectl-write" を宣言し、予告にもそれが
     載ったプロジェクトの Job にだけ autopilot-writer を注入する
+
+ラベルの宣言制注入 (P-0243):
+  - capabilities に "private-data" を宣言したプロジェクトの Job には Pod ラベル
+    private-data=true を付け、NetworkPolicy private-data-egress-lock
+    (apps/autopilot/networkpolicy.yaml) の既定拒否 egress 下に置く。
+    現在の envelope では DNS 以外の外部接続 (LLM API / GitHub / k8s API 含む) が
+    一切できない — P-0203 egress census 由来の必要先が開くまでの意図的な fail-closed。
+    宣言するプロジェクトは「成果物を Pod 外のオーケストレータが回収する」形で動くこと
 """
 
 from .k8s import K8sError
@@ -35,6 +43,15 @@ def build_job(cfg, kind, *, project=None, project_id=None, attempt=0, extra_env=
     # worker はクラスタ API に触れない (automount 無し)。reviewer は read プローブの
     # ために読み取りトークンを持つ (autopilot-runner は autopilot-reader に bind 済み)
     automount = use_writer or kind == "reviewer"
+    # private-data 分離プロファイル: 宣言したプロジェクトの Job だけ既定拒否 egress 下へ
+    locked = "private-data" in capabilities
+    labels = {
+        "app.kubernetes.io/managed-by": "heart",
+        "heart/kind": kind,
+        "heart/project": pid.lower(),
+    }
+    if locked:
+        labels["private-data"] = "true"
 
     role_env = {
         "runner": "worker",
@@ -120,11 +137,7 @@ def build_job(cfg, kind, *, project=None, project_id=None, attempt=0, extra_env=
         "metadata": {
             "name": name,
             "namespace": cfg.namespace,
-            "labels": {
-                "app.kubernetes.io/managed-by": "heart",
-                "heart/kind": kind,
-                "heart/project": pid.lower(),
-            },
+            "labels": labels,
         },
         "spec": {
             "backoffLimit": 0,
@@ -132,11 +145,7 @@ def build_job(cfg, kind, *, project=None, project_id=None, attempt=0, extra_env=
             "ttlSecondsAfterFinished": 21600,
             "template": {
                 "metadata": {
-                    "labels": {
-                        "app.kubernetes.io/managed-by": "heart",
-                        "heart/kind": kind,
-                        "heart/project": pid.lower(),
-                    }
+                    "labels": labels
                 },
                 "spec": {
                     "restartPolicy": "Never",
