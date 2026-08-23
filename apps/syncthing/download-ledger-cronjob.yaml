@@ -228,13 +228,20 @@ data:
     def merge_runs(existing, incoming):
         """既存 runs と今回分を id でマージ (同一 id は今回分を優先)。
 
-        id を持たない壊れた記録は (date, job, bytes) を代わりの鍵にして残す
-        (集計側 sum_window が最終的に検査するため、ここでは捨てない)。
+        非 dict の壊れた記録は例外にせず落として個数を返す (タプル第 2 要素)。
+        JSON パース失敗ではないため「壊れた帳簿からの再出発」経路には引っかからず、
+        残しておくと sort や集計で毎回同じ場所に当たって帳簿更新が永久停止する
+        (レビュー指摘。実証済み: 'str' object has no attribute 'get')。
+        黙って捨てない — 呼び出し側が payload の dropped_records に出す
+        (unknown_jobs と同じ考え方)。trim_runs も非 dict を落とすので、
+        帳簿へ載る記録はここで除いた場合と変わらない。数だけが残る。
+        id を持たない記録は (date, job, bytes) を代わりの鍵にして残す。
         """
         merged = {}
+        dropped = 0
         for run in list(existing or []) + list(incoming or []):
             if not isinstance(run, dict):
-                merged[id(run)] = run
+                dropped += 1
                 continue
             key = run.get("id")
             if not key:
@@ -242,7 +249,7 @@ data:
             merged[key] = run
         out = list(merged.values())
         out.sort(key=lambda r: (str(r.get("date")), str(r.get("id") or "")))
-        return out
+        return out, dropped
 
 
     def trim_runs(runs, today):
@@ -304,12 +311,15 @@ data:
             except ValueError:
                 pass
 
-        runs = trim_runs(merge_runs(existing_runs, new_runs), now)
+        merged_runs, dropped_records = merge_runs(existing_runs, new_runs)
+        runs = trim_runs(merged_runs, now)
         report = {
             "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
             "namespace": NAMESPACE,
             "runs": runs,
             "unknown_jobs": unknown,
+            # 壊れていた既存記録の個数。0 でも常に載せる (payload の形を安定させる)
+            "dropped_records": dropped_records,
         }
         put_configmap(CONFIGMAP_NAME, {"report.json": json.dumps(report, ensure_ascii=False)})
         print(

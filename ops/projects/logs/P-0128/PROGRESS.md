@@ -218,3 +218,75 @@
 
 - 新規なし。pvc_usage.py と同型の「同一埋め込みスクリプト複製 + CI 同期チェック」パターンが
   3 ファイル → 4 ファイルに増えただけ (check_pvc_usage_script_sync.py と同型のチェックを追加済み)
+
+## 2026-08-23 セッション 4 — レビュー指摘 2 点の解消 (警報の再送時限爆弾・帳簿の崩壊入力)
+
+### やったこと
+
+レビュー指摘 2 点を**両方**解消した。verify 2 項目とも再実行で green
+(23 tests OK, grep rc=0)。`ops/tests` 全体 178 tests OK (+6)、`ops/heart/tests` 全体
+196 tests OK (+3)、runner tests 36 OK、CI の consistency checks 7 本すべて OK。
+
+- **指摘 1 (【重大】budget 警報カーソルが永続化されず 120s ごとに再送される) → heart.beat の
+  順序を修正して解消**。`cursors["download_budget_alert"]` への書き込みと
+  budget_incident_text/budget_queued の計算ブロックを `sf.save_cursors(cursors)` の
+  **前に**移動した (ops/heart/heart.py:410-422)。セッション 3 のコメントは「先に置く」と宣言して
+  いたが実装が逆だった — StateFiles._save_json は即時 json.dump のため後書きは反映されず、
+  warn 継続中は briefing 追記 + incident 送信が同日中ずっと繰り返され daily_budget (6/日) を
+  budget alert が使い切る時限爆弾だった (cap 実値設定で即発火)
+- **指摘 1 のテスト追加**: `ops/heart/tests/test_budget_alert_beat.py` 新設。外部依存
+  (git/GitHub/k8s/Discord) をパッチして実物の Heart.beat() を shadow モードで連続回し、
+  実ファイルで固定する結合テスト: (a) warn ビート直後に cursors.json へ前回記録が
+  **永続化されている**こと (save 後書きに戻すとここで即落ちする)、(b) 同一 status・同一日内の
+  続ビートは積み直さないこと、(c) warn→exceed は同日でも積み直すこと、(d) unconfigured/
+  観測失敗は cursor も queue も触らないこと。**変異実測済み**: バグ版 (save 後書き) に戻すと
+  FAILED (failures=1)、修正版で OK — facts 単体テストでは防げなかった結合部分を実際に守る
+- **指摘 2 (merge_runs が非 dict 記録で AttributeError → 帳簿更新永久停止) → 非 dict を落として
+  個数を返す設計へ変更で解消**。旧 docstring の「捨てず残す (sum_window が検査する)」は嘘だった —
+  trim_runs が非 dict を落とすため集計側には届かず、sort key の r.get() で産出側自身が死ぬだけ。
+  新契約: `merge_runs()` は `(merged_runs, dropped_count)` を返し、非 dict は例外にせず除外。
+  main() は payload に `dropped_records` を **0 でも常に**載せる (形を安定させ、unknown_jobs と
+  同じ「黙って消さない」原則)。report.py の collect_download_budget() は runs しか読まないので
+  追加キーは透過
+- **指摘 2 のテスト追加**: `ops/tests/test_download_ledger_script.py` 新設。埋め込みスクリプトは
+  import 時副作用 (SA token 読み) を持つため importlib ロードできず、YAML から実抽出したソースを
+  AST で関数+定数だけ抜いて exec する方式 (check_download_ledger_script_sync.extract_block_scalar
+  を再利用)。指摘の実証済み崩壊入力 (`["garbage", None, 42, ...]`) で dropped=3・正常記録は生存、
+  id マージの今回分優先・id 無しの代替鍵・空入力・merge→trim 後に壊れ記録が混入しないことを固定。
+  **変異実測済み**: 旧実装に戻すと FAILED (failures=3, errors=3)
+- e2e 再実測: 変更後の埋め込みスクリプトを YAML から抽出し偽 k8s_request で main() を回した。
+  壊れた既存帳簿 (`broken-string` + KEEP_DAYS 窓外の有効記録) から再出発し、PUT payload に
+  `dropped_records=1`・resourceVersion 保持・unknown_jobs 記録まで確認
+
+### 実測
+
+- verify #1/#2 green。ops/tests 178 / heart tests 196 / runner tests 36、全て OK
+- CI consistency checks 7 本 (version_sync / pvc_usage_sync / download_ledger_sync /
+  health_reporter_target / doc_commands / feedback / credential_map) 全て OK
+- py_compile (ruff F821 代用): heart.py + 新テスト 2 ファイル + 抽出済み埋め込みスクリプト +
+  ops/ 全体の compileall、すべて OK
+- kustomize build: vaultwarden/coder/syncthing は `kubectl kustomize` で OK。
+  immich は helm バイナリ無しで失敗することを再確認 (エラーメッセージは "is 'helm' installed?"
+  = 既知の環境制約であり manifest 起因ではない)。4 ファイルとも YAML パース OK。
+  push 後の wrapper/CI で immich の build (--enable-helm) 通過を確認すること (セッション 3 から引継ぎ)
+
+### 未解決の罠・開いた設計問答 (次セッション以降)
+
+- セッション 3 の罠節は全部そのまま有効 (推定値未較正/coder LEDGER_RULES 同期/warn の毎日通知/
+  helm・pip・ruff 無し)
+- test_budget_alert_beat.py は Heart.beat() を通すため、将来 beat() の観測手順が増えると
+  パッチ対象 (facts.load_health / collect_jobs / collect_prs / collect_feedback /
+  collect_curriculum / load_adopted_specs / gitutil 3 関数 / Gh.ensure_branch / k8s_client) の
+  追加が必要になりうる。失敗したらまず「どの外部依存が素通りしたか」を見る
+- 埋め込みスクリプトのテストは AST 抽出方式。スクリプト内に関数以外の新しいモジュールレベルの
+  純粋な定数を足したら test_download_ledger_script.py の CONSTANTS への追加を忘れないこと
+  (assert not missing が落ちるので気づけるようにはしてある)
+
+### 発見 (スコープ外。curriculum が拾うこと)
+
+- このサンドボックスでは `/tmp/opencode` への書き込み自体が Permission denied
+  (リダイレクトだけでなく cp -t も不可)。プロンプト指示の一時ファイル作成先として使えないので、
+  使う場合は repo 内か引数なし mktemp
+- `mock.patch.object(Heart, "k8s_client", ...)` が必要な理由: heart.py は
+  `facts.collect_jobs(self.k8s_client(), ns)` と引数評価で K8s クライアントを生成するため、
+  collect_jobs だけパッチしても SA token 読みが走る (except で握り潰されるが非決定的)

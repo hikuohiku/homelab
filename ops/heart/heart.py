@@ -398,18 +398,15 @@ class Heart:
         }
         doc, actions = reconcile.decide(doc, f, self.cfg.rules, now)
 
-        # --- 一段目: 状態遷移を副作用より先に永続化する (レビュー指摘 [8])。
-        # ここで落ちても副作用は未実行なので、次のビートが同じ判断をやり直すだけ。
-        # 逆順 (実行→保存) だと、保存失敗の翌ビートが「実行済みの副作用」を知らずに
-        # 二重実行する
-        sf.save_projects(doc)
-        sf.save_cursors(cursors)
         # B2 download cap の警報 (P-0128)。既存の流路 2 本に乗せる:
         # briefing-queue.jsonl (review_needed と同じ位置) と incident 通知 (下段)。
         # 鳴るのは budget.status が warn/exceed のときだけで、同じ status の同一日内
         # の再通知は cursors の前回記録で落とす (ビートは 120s で回るため)。
-        # 前回記録は save_cursors より先に cursors へ置く — 後から書くとこのビートで
-        # 永続化されず、次のビートが同じ警報を積み直す
+        # cursors への書き込みは下の save_cursors(cursors) より **前** に行う。
+        # StateFiles._save_json は即時 json.dump のため、save の後から dict へ入れても
+        # cursors.json には反映されず、次のビートの load_cursors() に前回記録が無くて
+        # 警報を積み直す (レビュー指摘。collect_feedback が new_cursors を返してから
+        # save する既存パターンと同じ順序)
         today = now.date().isoformat()
         budget_incident_text = None
         budget_queued = False
@@ -423,6 +420,13 @@ class Heart:
                 f"B2 download cap の帳簿が {budget['status']} です: {budget['reason']}"
             )
             budget_queued = True
+
+        # --- 一段目: 状態遷移を副作用より先に永続化する (レビュー指摘 [8])。
+        # ここで落ちても副作用は未実行なので、次のビートが同じ判断をやり直すだけ。
+        # 逆順 (実行→保存) だと、保存失敗の翌ビートが「実行済みの副作用」を知らずに
+        # 二重実行する
+        sf.save_projects(doc)
+        sf.save_cursors(cursors)
 
         for item in review_needed:
             sf.append_jsonl("briefing-queue.jsonl", {"at": now_iso(now), **item})
