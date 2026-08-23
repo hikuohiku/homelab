@@ -71,6 +71,11 @@ def gate(*records):
     return {"at": "2026-08-07T11:59:00Z", "verify": verify}
 
 
+def merge_error(reason, status=405, pr=42):
+    """heart.execute() の merge_pr が失敗時に書き戻す形 (adopt_gate と同じ流儀)。"""
+    return {"at": "2026-08-07T11:59:00Z", "pr": pr, "status": status, "reason": reason}
+
+
 class TestAnnounce(unittest.TestCase):
     def test_proposed_with_zero_window_activates_same_beat(self):
         """アイドルかつ可逆 → 窓 0 で、予告と同じビートで着手まで進む
@@ -702,6 +707,116 @@ class TestMergeAndSoak(unittest.TestCase):
         d, actions = reconcile.decide(doc(p), facts(merged_prs={42: True}), RULES, NOW)
         self.assertEqual(d["projects"][0]["state"], "delivered")
         self.assertIn("deliver", kinds(actions))
+
+    def test_merge_conflict_stalls_with_question(self):
+        """コンフリクトは再試行で直らない。毎ビート叩き続けず人間に渡す
+        (2026-08-23: P-0216 が 405 "merge conflicts" で無限再試行した)。"""
+        p = project(state="merging", prs=[42], merging_since="2026-08-07T11:00:00Z",
+                    merge_error=merge_error("Pull Request has merge conflicts"))
+        d, actions = reconcile.decide(
+            doc(p), facts(open_prs={42: {"head": "project/p-0001",
+                                         "checks_green": True}}),
+            RULES, NOW,
+        )
+        self.assertEqual(d["projects"][0]["state"], "stalled")
+        self.assertEqual(d["projects"][0]["stalled_reason"], "merge_conflict")
+        self.assertNotIn("merge_pr", kinds(actions))  # もう叩かない
+        notifies = [a for a in actions if a["type"] == "notify"]
+        self.assertEqual(len(notifies), 1)
+        self.assertEqual(notifies[0]["ntype"], "question")
+
+    def test_merge_conflict_notifies_only_once(self):
+        """stalled は終端なので、同じ失敗が残っていても次のビートで再通知しない。"""
+        p = project(state="merging", prs=[42], merging_since="2026-08-07T11:00:00Z",
+                    merge_error=merge_error("Pull Request has merge conflicts"))
+        d, _ = reconcile.decide(
+            doc(p), facts(open_prs={42: {"head": "project/p-0001",
+                                         "checks_green": True}}),
+            RULES, NOW,
+        )
+        d, actions = reconcile.decide(
+            d, facts(open_prs={42: {"head": "project/p-0001", "checks_green": True}}),
+            RULES, NOW,
+        )
+        self.assertEqual([a for a in actions if a["type"] == "notify"], [])
+
+    def test_merge_conflict_frees_the_slot(self):
+        """コンフリクトで stalled になったら running から外れ、次の案件が着手できる。
+
+        走行数はビート冒頭で数えるので、空くのは次のビート (他の stalled 遷移と同じ)。
+        永久に塞がないことがここの要点。"""
+        import copy
+        rules1 = copy.deepcopy(RULES)
+        rules1["runner"]["max_concurrent"] = 1
+        stuck = project(state="merging", prs=[42],
+                        merging_since="2026-08-07T11:00:00Z",
+                        merge_error=merge_error("Pull Request has merge conflicts"))
+        waiting = project(id="P-0002", state="announced", branch="project/p-0002",
+                          veto_deadline="2026-08-07T11:00:00Z")
+        d, actions = reconcile.decide(
+            doc(stuck, waiting),
+            facts(running_runners=1,
+                  open_prs={42: {"head": "project/p-0001", "checks_green": True}}),
+            rules1, NOW,
+        )
+        self.assertEqual(d["projects"][0]["state"], "stalled")
+        self.assertEqual(d["projects"][1]["state"], "announced")
+        d, actions = reconcile.decide(
+            d,
+            facts(running_runners=0,
+                  open_prs={42: {"head": "project/p-0001", "checks_green": True}}),
+            rules1, NOW,
+        )
+        self.assertEqual(d["projects"][1]["state"], "active")
+        self.assertIn("spawn_runner", kinds(actions))
+
+    def test_transient_merge_failure_retries(self):
+        """ネットワーク断・5xx は直りうる。従来どおり再試行する。"""
+        for err in (
+            merge_error("Server Error", status=500),
+            merge_error("<urlopen error timed out>", status=None),
+        ):
+            with self.subTest(err=err):
+                p = project(state="merging", prs=[42],
+                            merging_since="2026-08-07T11:00:00Z", merge_error=err)
+                d, actions = reconcile.decide(
+                    doc(p), facts(open_prs={42: {"head": "project/p-0001",
+                                                 "checks_green": True}}),
+                    RULES, NOW,
+                )
+                self.assertEqual(d["projects"][0]["state"], "merging")
+                self.assertIn("merge_pr", kinds(actions))
+
+    def test_other_405_reasons_retry(self):
+        """405 は理由まで見る。base 更新や必須チェック待ちは再試行で直る。"""
+        for reason in (
+            "Base branch was modified. Review and try the merge again.",
+            "Required status check \"ci\" is expected.",
+        ):
+            with self.subTest(reason=reason):
+                p = project(state="merging", prs=[42],
+                            merging_since="2026-08-07T11:00:00Z",
+                            merge_error=merge_error(reason))
+                d, actions = reconcile.decide(
+                    doc(p), facts(open_prs={42: {"head": "project/p-0001",
+                                                 "checks_green": True}}),
+                    RULES, NOW,
+                )
+                self.assertEqual(d["projects"][0]["state"], "merging")
+                self.assertIn("merge_pr", kinds(actions))
+
+    def test_merge_conflict_of_older_pr_is_ignored(self):
+        """別 PR (作り直し前) の失敗記録で、今の PR の merge を止めない。"""
+        p = project(state="merging", prs=[41, 42],
+                    merging_since="2026-08-07T11:00:00Z",
+                    merge_error=merge_error("Pull Request has merge conflicts", pr=41))
+        d, actions = reconcile.decide(
+            doc(p), facts(open_prs={42: {"head": "project/p-0001",
+                                         "checks_green": True}}),
+            RULES, NOW,
+        )
+        self.assertEqual(d["projects"][0]["state"], "merging")
+        self.assertIn("merge_pr", kinds(actions))
 
     def test_soak_no_new_unhealthy_delivers(self):
         p = project(state="soaking",

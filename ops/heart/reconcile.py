@@ -32,6 +32,10 @@ from .statefiles import TERMINAL_STATES, now_iso, parse_iso
 REVIEW_TIMEOUT_HOURS = 2
 REVIEW_MAX_RETRIES = 2
 MERGING_TIMEOUT_HOURS = 24
+# merge の失敗のうち、再試行では絶対に直らないもの = コンフリクト。
+# 24h の見張り時限だけでは毎分 API を叩き続ける (2026-08-23 に P-0216 で実測)
+MERGE_CONFLICT_STATUS = 405
+MERGE_CONFLICT_MARKER = "merge conflict"
 ADOPT_GATE_MAX_ATTEMPTS = 3  # 測定が書き戻されないまま回り続ける proposed を打ち切る
 # 上限待ち (P-0026) も例外にしない。runner の 7200s は 1 プロセス内の上限にすぎず、
 # waiting_quota → respawn → また waiting_quota の周回そのものには時限が無い。
@@ -41,6 +45,25 @@ QUOTA_WAIT_MAX_ROUNDS = 6
 # 自己観測 (critic) の間隔。指標 (状態別滞留・アイドル率) は日次の粒度で足り、
 # それより短くしても同じ 24h の窓を読み直すだけになる (P-0045)
 CRITIC_INTERVAL_HOURS = 24
+
+
+
+def merge_conflict(err):
+    """merge_pr の失敗記録がコンフリクトか (再試行で直らない失敗か) を判定する純関数。
+
+    GitHub の merge API は 405 を複数の理由で返す ("Base branch was modified"、
+    必須チェック未達など)。それらは再試行で直るので、**理由の文字列まで見て**
+    コンフリクトだけを選り分ける。ネットワーク断や 5xx は従来どおり再試行する。
+    """
+    if not isinstance(err, dict):
+        return False
+    try:
+        status = int(err.get("status"))
+    except (TypeError, ValueError):
+        return False
+    if status != MERGE_CONFLICT_STATUS:
+        return False
+    return MERGE_CONFLICT_MARKER in str(err.get("reason", "")).lower()
 
 
 def _action(kind, project_id=None, **kw):
@@ -532,6 +555,19 @@ def decide(doc, facts, rules, now):
                     p["state"] = "delivered"
                     actions.append(_action("deliver", pid))
             elif pr_num in prs:
+                # 直前の merge がコンフリクトで失敗していたら、もう叩かない。
+                # 失敗の事実は heart.execute() が p["merge_error"] に書き戻す
+                # (adopt_gate と同じ「実測は execute・判定は純関数」の分担)。
+                # 別 PR に対する古い記録では止めない
+                err = p.get("merge_error")
+                if err and err.get("pr") == pr_num and merge_conflict(err):
+                    _stall(
+                        p, actions, "merge_conflict", "question",
+                        f"{pid} の PR #{pr_num} が main とコンフリクトしています。"
+                        "再試行では直らないので merge を止めました。ブランチを"
+                        "作り直すか、PR を閉じる判断をください",
+                    )
+                    continue
                 if prs[pr_num].get("checks_green"):
                     actions.append(_action("merge_pr", pid, pr=pr_num))
                 elif (
