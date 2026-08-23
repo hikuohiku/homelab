@@ -24,6 +24,7 @@ import traceback
 from datetime import datetime, timezone
 
 from . import adoptgate, config, facts, gitutil, metrics, reconcile, spawn, tasks
+from ..life import reminders
 from .gh import Gh
 from .notify import Notifier, veto_footer
 from .statefiles import StateFiles, now_iso
@@ -251,6 +252,26 @@ class Heart:
         dst.parent.mkdir(parents=True, exist_ok=True)
         src.rename(dst)
 
+    def publish_reminders(self, now):
+        """main の暦台帳から 48h 文面を作り ops-state の briefing/reminders.txt へ (P-0231)。
+
+        repo_dir は sync_main() 済みなので ops/reminders.json は常に最新。
+        公開は commit_and_push_state() の add -A に乗るだけ (第二の書き手は
+        作らない)。文面の生成ロジックは ops/life/reminders.py の専権 —
+        ダッシュボード側で due 計算を複製しないため (CHARTER §1)。
+        戻り値は「ファイルを書き換えたか」。
+        """
+        ledger_path = self.repo_dir / "ops" / "reminders.json"
+        if not ledger_path.exists():
+            return False
+        fragment = reminders.render(reminders.load_ledger(ledger_path), now=now) + "\n"
+        target = self.state_dir / "briefing" / "reminders.txt"
+        if target.exists() and target.read_text() == fragment:
+            return False
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(fragment)
+        return True
+
     # --- critic (日次の自己観測) の入出力 ---
     def critic_dir(self):
         d = self.cfg.data_dir / "critic"
@@ -475,6 +496,13 @@ class Heart:
         if len(merged) != len(queue):
             sf.rewrite_jsonl(tasks.QUEUE_FILE, merged)
             log(f"task requests queued: total={len(merged)}")
+        # 暦の断片 (P-0231)。台帳は生活データで壊れていても本業の状態機械より
+        # 軽いので、失敗はログしてビートを続ける。直しは次のビートが運ぶ
+        try:
+            if self.publish_reminders(now):
+                log("reminders fragment updated")
+        except Exception as e:
+            log(f"reminders publish failed (次のビートで再試行): {e}")
         gitutil.commit_and_push_state(
             self.state_dir, self.cfg.state_branch, f"heart: beat {i} decide"
         )
