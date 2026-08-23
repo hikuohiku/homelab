@@ -231,3 +231,44 @@
   test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
 - main がまた動いたら同じ要領で追い越すこと (#577 以降はコンフリクト放置が
   即「人間待ち停止」に繋がるため、追い越しの価値は上がっている)
+
+## セッション 7 (2026-08-23 23:18 UTC) — origin/main (#578) を追い越し、全検証の現状再確認
+
+### やったこと
+
+- **現在地を再実測**: /tmp/opencode は依然 root:root 755・uid 10001 で不変
+  → V2 は本 Pod では fail-fast rc=2・クラスタ副作用ゼロで red で正しい。
+  セッション 3〜6 の診断は今日も正しい
+- **main 新着の内容確認**: #578 は curriculum 帳簿 (archive.jsonl +6 行のみ) で、
+  本 PR が触る 14 ファイルと重複なし (diff --stat で実測)
+- **P-0203 census を main の木で再確認** (`git ls-tree -r origin/main | grep -c egress`):
+  まだ無い (rc=1)。NP は DNS-only fail-closed のままが正解。穴開けタスクは引き続き休止中
+- **origin/main を merge** (今回の本体): コンフリクトなしで取り込み完了
+  (f45ef2051)。archive.jsonl の追記も一緒に入った
+- **merge 後に検証一式を再走**: unittest 全 454 本 OK (#578 取り込み後も退行なし) /
+  python3 ops/validate.py: error 0, warning 11 (既存問題) /
+  spec verify V1 green・V3 green・V2 red (既知 fail-fast rc=2)
+
+### 分かったこと
+
+- heart のテスト数はセッション 6 記載の 253 本から 454 本に増えていた (main 側で
+  テスト追加が進んでいた)。本ブランチの spawn.py 変更を含めて全部 green なので、
+  「253 本」という数字自体はもう古い — 次セッションは件数でなく OK/NG だけ見ること
+- validate.py は error 0 を維持。warning 11 件は dashboard refs と todo 枯渇で既存問題
+
+### 検証 (全部自分で実走済み)
+
+- spec verify V1 green / V3 green / V2 red (既知 fail-fast rc=2、書き込みプローブで即中断)
+- unittest 全 454 本 OK (退行なし)
+- python3 ops/validate.py: error 0, warning 11 (既存)
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4〜6 から一歩も動いていない**: V2 は本 PR の merge+sync 後の
+  新 runner Pod で自動 green 化する。Pod 内での再走は無駄。やることは「PR merge を待つ」だけ
+- census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+  到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+- main がまた動いたら同じ要領で追い越すこと (curriculum 帳簿はほぼ毎時流れてくるが
+  archive.jsonl 追記のみなら重複ゼロで自動 merge 可能。spawn.py 等を触る PR が来たら
+  重複確認を丁寧に)
