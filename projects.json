@@ -2707,7 +2707,7 @@
     {
       "id": "P-0118",
       "title": "口は開いたが号令は通ったことがない — Telegram 受信からの停止/再開キーワード判定を、実輸送と fixture 判定の両輪で疎通させる",
-      "state": "active",
+      "state": "in_review",
       "branch": "project/p-0118",
       "irreversible": false,
       "capabilities": [],
@@ -2766,7 +2766,7 @@
       "prs": [
         512
       ],
-      "review_requested_at": "2026-08-23T01:46:46Z",
+      "review_requested_at": "2026-08-23T02:07:40Z",
       "review_retries": 0,
       "review_cycles": 2
     },
@@ -2833,7 +2833,7 @@
     {
       "id": "P-0128",
       "title": "2 日前に backup を全滅させた犯人は B2 の download cap — cap を消費するのは誰かを帳簿につけ、上限近傍で鳴る計器を既存経路に植える",
-      "state": "active",
+      "state": "in_review",
       "branch": "project/p-0128",
       "irreversible": false,
       "capabilities": [],
@@ -2878,12 +2878,17 @@
       "veto_deadline": "2026-08-23T01:35:00Z",
       "spawn_count": 1,
       "job": "runner-p-0128-a1",
-      "drift_count": 0
+      "drift_count": 0,
+      "prs": [
+        515
+      ],
+      "review_requested_at": "2026-08-23T02:07:40Z",
+      "review_retries": 0
     },
     {
       "id": "P-0139",
       "title": "アプリが Degraded になっても誰の耳にも鳴らない — ArgoCD Notifications (既に稼働済み・設定ゼロ) を Discord に繋ぎ、合成障害で本当に鳴るところまで通す",
-      "state": "proposed",
+      "state": "active",
       "branch": "project/p-0139",
       "irreversible": false,
       "capabilities": [
@@ -2946,12 +2951,13 @@
         "verdict": "all_fail",
         "passed": [],
         "broken": []
-      }
+      },
+      "veto_deadline": "2026-08-23T02:07:40Z"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-23T01:31:56Z",
-  "last_activity_at": "2026-08-23T02:05:00Z",
+  "last_activity_at": "2026-08-23T02:07:40Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
