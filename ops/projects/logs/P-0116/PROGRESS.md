@@ -3792,3 +3792,56 @@ remote 分岐移動は ops-state と project/p-0139 のみ (無関係)・issue #
   本プロジェクト無関係。今後の確認では件数だけでなく番号・タイトルを見ること
 - **PROGRESS.md への追記は必ずファイル末尾** (session46 教訓の再掲)
 
+
+
+## session85 (P-0116 worker, 2026-08-23)
+
+やったこと: 冒頭チェック → main 先行 **0**・remote 分岐移動は ops-state・p-0139 の移動と
+**p-0157/p-0161 の新規出現** (curriculum 採択分が worker 立ち上がり。diff 走査の結果
+**本プロジェクト領域への接触なし**)・issue #56 の回答再確認 (**本プロジェクト関連なし**,
+総数 **179 で変化なし**・最新は session83 以来同じ 2026-08-23T04:37:45Z hikuohiku)・
+open PR の確認 (**1 件のまま**: #512 P-0118 のみ)・受入全項目・validate.py・discover 全体の
+再実測。コード・manifest 側の変更は無し (session5→85 まで 81 回連続で同じ結論)。
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option`) — red のまま
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0**
+  (apps/restic-check/: application.yaml / cronjob.yaml / job_main.py / kustomization.yaml /
+  namespace.yaml / restic-external-secret.yaml / restic_check_runner.py 健在を目視確認)
+- #2: **28 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- `python3 -m unittest discover -s ops/tests`: **270 tests OK, rc=0**
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完全に完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら
+  文言判断に従うだけ。来ていなければ再実測して末尾への追記で足りる (session8 の文案・
+  環境メモもそのまま使える)
+- **P-0157/P-0161 の worker ブランチが出た**: diff 走査では本プロジェクト領域への接触なし。
+  P-0157 (restic backup 鮮度監視) は verify 対象が ops/health・ops/rules.json・
+  ops/tests/test_backup_freshness 側で apps/restic-check/ とは別。今後も「触れるファイルが
+  本プロジェクト領域とかぶるか」だけ毎回見る
+- 冒頭チェック・merge 方針・API 走査・mktemp・サマリ拾いの各注意点は session47 以前と
+  同じ (省略しないこと)。main 先行・diverge いずれも **merge 一択** (rebase 不可 — session28)
+- **issue #56 のコメント総数は 179 が最新基準** (session63〜85 変化なし)。今後は
+  180 以上で新規着信を疑うこと。ただし最新タイムスタンプとキーワード走査で
+  本プロジェクト関連かを必ず判別すること
+- **remote 分岐は毎回目視**: 判別基準は「本プロジェクト領域 (apps/restic-check/,
+  ops/tests/test_restic_check_runner.py, ops/projects/logs/P-0102/) に触れるか」のみ
+  (session85 実測では ops-state・p-0139 移動・p-0157/p-0161 新規とも無関係)
+- **discover の総数は merge で動く**: 固定値ではない (session85 時点で 270)。
+  rc=0 と OK を確認すること
+- **`git rev-list --count origin/main ^project/p-0116` で main 側だけ明示的に数えるのが
+  確実** (left-right --count の誤読防止。session66 参照)
+- **API 走査は python 内で完結させると一時ファイル不要** (session61〜85 実測)。
+  一時ファイルが必要になったときだけ mktemp 直接 (/tmp/opencode への Write は
+  PermissionDenied — session72 実測)
+- **未認証の GitHub API 呼び出しは rate limit 403 で即死する**: AUTOPILOT_GITHUB_TOKEN を
+  Authorization Bearer ヘッダに付けて呼ぶこと (session69 実測。env に既にあるので追加設定不要)
+- **GITHUB_REPO 環境変数は owner 付きとは限らない**: API URL を組むときは
+  `owner/repo` 形に正規化してから使う (session62 実装。フォールバック付き)
+- **open PR は 1 件** (session85 時点): #512 P-0118 のみ。
+  本プロジェクト無関係。今後の確認では件数だけでなく番号・タイトルを見ること
+- **PROGRESS.md への追記は必ずファイル末尾** (session46 教訓の再掲)
