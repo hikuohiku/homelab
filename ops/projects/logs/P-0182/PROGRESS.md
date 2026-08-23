@@ -337,3 +337,34 @@ continuation_count 出現を探す、未 merge なら待機 1〜2 回して観�
 証跡機会の供給源は curriculum 採択 4 案 (heart/curriculum-20260823-120734, 未 merge) と
 P-0092 の active 化。なお遡及列挙は全履歴ループだとタイムアウトするので
 `--since="2026-08-23T00:00:00Z"` で絞ること (セッション10 実測)。
+
+## セッション11 の記録 (2026-08-23 12:11–12:25Z)
+
+**やったこと**: ops-state 監視のみ。冒頭 fetch → head c371b87b2 を refs/pull 照合
+(0 件 = PR 未開) → 実装コミット c353eca55 が origin/main 未含も確認 → 約 4.5 分待機 ×2 を
+挟んで 3 回確認したが merge 無し。verify 1〜3 を再実測 green (15 tests OK)。
+本ファイル追記 + commit して終了。
+
+**盤面の実測 (12:11Z / 12:18Z / 12:23Z の 3 回)**:
+
+- `continuation_count` の出現は 0 のまま (merge 前なので当然)
+- **curriculum 採択 4 案が projects.json に登録済みを確認**: P-0187 restic 完整性
+  (1.5M, confident) / P-0188 証明書期限台帳 (800k, confident) / P-0192 Telegram 欲望種蒔き
+  (500k, unsure) / P-0193 ダッシュボード検眼 (1M, confident)。いずれも proposed。
+  merge 済み PR #537「curriculum: 7 案 (採択 4)」(d43c61be7)、同 #538 fix/core-prompt-204 も
+  当監視前に通過。heart/curriculum-20260823-120734 は merge 後削除を fetch で実視
+- **P-0164 の死因は error (予算死では無い)**: in_review から stalled(error) へ遷移。
+  P-0174/0181 は stalled(review_rejected)。つまり直近の停滞は予算死ゼロで、
+  今日の budget_exhausted 死は 11 件のまま (最新 = P-0161 @ 09:41:14Z、09:41Z 以降新規無し)
+- actives 実測は自プロジェクト P-0182 のみで変化なし。P-0092 は announced (3M) のまま
+- open_prs は beat 220 時点で 4→6 に増加 (curriculum/fix 分。自 PR は未開のまま)
+- heart は生存: beat 220 @ 12:07:58Z (merge_pr = #537 を audit 実視) → beat 229 @ 12:22:50Z
+  (ビート約 70 秒間隔を維持)
+
+**次のセッションへの一言**: 変更なし — merge 待ち。手順は一切変わらない:
+冒頭 fetch → refs/pull 照合 (ブランチ head SHA で) → merge 済みなら遡及レシピで
+continuation_count 出現を探す、未 merge なら待機 1〜2 回して観測事実だけ追記して終了。
+証跡機会の供給源は更新: proposed 4 案 (P-0187/0188/0192/0193 — 採択・着手後の長尺死待ち) と
+P-0092 の active 化。actives が自分しかいない状態が続くため、次の予算死は
+新規採択が active 化してから数十分钟後になる見込み。遡及列挙時は
+`--since="2026-08-23T00:00:00Z"` で絞ること (セッション10 実測)。
