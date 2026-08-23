@@ -147,6 +147,10 @@ autopilot namespace の Pod (heart / runner / reviewer / …) が動く環境の
   実際の源泉は **backup CronJob の子 Job 失敗** (ArgoCD v3.2.1 `resourceHealthSource: appTree`
   が live の Job 失敗を Application health に反映) で、health 履歴では 2026-08-10 夜と
   08-22 夜にだけ Degraded になり、08-11〜08-21 は終日 Healthy だった (=「16 日間 Degraded」
-  という認識は誤観測)。一次原因の実名と修繕手順は ops/projects/logs/P-0111/root_cause.md。
+  という認識は誤観測)。Job 失敗の奥の一次原因は **Backblaze B2 の download cap 超過**
+  (`download_cap_exceeded`。アカウント単位で鍵の種類に無関係。usage counter は毎日
+  00:00 UTC リセット — 公式ドキュメント + p0111-cap-watch による実測どおり 08-23T00:04Z に回復、
+  手動 backup 成功で全アプリ Healthy へ復帰)。一次原因の実名と修繕手順は
+  ops/projects/logs/P-0111/root_cause.md。
   「既知事象だから」と latest.json の断片で決めつけず、直近 backup Job の成否を見ること
-  — verified_at: 2026-08-22
+  — verified_at: 2026-08-23

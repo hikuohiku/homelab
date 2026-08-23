@@ -240,6 +240,32 @@ kubectl logs p0111-cap-watch -n coder | grep CAP_RECOVERED
 - watch Pod がいない (誰かに消された/自終了済み) 場合は `cap-watch.pod.yaml` を再 apply する。
   `GAVE_UP_AFTER_20H` 出力後もログは残るので回復時刻の実測値として読める。
 
+### 回復の実測 — 検収完了 (セッション 5, 2026-08-23 00:04–00:34Z 実測)
+
+早期判定プロトコルどおりに検収し、本プロジェクトの DoD は充足された:
+
+- **cap 回復: `p0111-cap-watch` が 2026-08-23T00:04:25Z に `CAP_RECOVERED` を出力**
+  (watch は 5 分間隔なのでリセットは 00:00〜00:04Z 窓)。公式ドキュメントの
+  「usage counters は毎日 00:00 GMT リセット」を実測で裏付けた。直前までの 403 連鎖
+  (23:59:24Z 最後の敗北 → 00:04:25Z 成功) も全ログで確認済み。
+- **手動検収 Job 3 本とも真の Complete** (retention の偽陽性ではなく snapshot 保存まで確認):
+  | Job | namespace | 所要 | snapshot |
+  |---|---|---|---|
+  | `p0111-verify-coder` | coder | 数分 | `a2759316` |
+  | `p0111-verify-immich` | immich | 35s | `d9756f83` |
+  | `p0111-verify-vaultwarden` | vaultwarden | 33s | `bf0bfe76` |
+  (同時 3 本のディスク負荷を避けるため coder/immich を先にし、完了後に vaultwarden を起動)
+- **ArgoCD health は子 Pod 成功から数分で Healthy へ復帰** (appTree の即時反映を再実証):
+  coder 00:20:24Z / immich 00:20:26Z / vaultwarden 00:25:00Z。
+- **latest.json (generated_at 2026-08-23T00:30:05Z) で coder=Healthy / immich=Healthy /
+  vaultwarden=Healthy** — verify #2 を worker 自身が実測 green (00:33Z)。
+
+needs-human 化 (cap 引き上げ依頼) は不要だった — 待機のみで解消。ただし「なぜ 08-10 と
+08-22 にだけ超過したか」の消費者特定は未了 (次節)。日次リセット型である以上、
+消費者が日中に cap を食い潰す日は再発する。
+
+後始末: 観測 Pod `p0111-cap-watch` と手動検収 Job 3 本は削除済み (プロトコルどおり)。
+
 ## オープンな疑問 (本プロジェクトのスコープ外 — curriculum へ)
 
 - **cap を消費しているのは誰か特定できていない。** 08-10 と 08-22 に超過、08-11〜08-21 は健全。

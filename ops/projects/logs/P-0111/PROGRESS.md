@@ -125,3 +125,42 @@ vaultwarden = Degraded、失敗 Job 3 本も同様)。判定は本来 08-23 19:3
 Pod が消えていたら `kubectl apply -f ops/projects/logs/P-0111/cap-watch.pod.yaml` で再設置。
 検収完了後は watch Pod と手動 Job を削除してよい。manifest (apps/) 触りは禁止のまま。
 
+
+### セッション 5 (2026-08-23 00:00–00:45Z) — worker (cap 回復を実測・検収完了・verify 全 green)
+
+**状況**: verify #1 PASS / verify #2 RED から開始。セッション内待機を決断
+(rules.json 実読の結果、`session_max_seconds`=259200 (実質無制限) で人間の当日指示
+「動いているのに止めるのはもったいない」があること、無活動 kill 1h は 30 分未満ごとの
+活動イベントで回避できることを確認したため)。
+
+**やったこと**: 00:04Z の cap 回復まで sleep ループで待機 → CAP_RECOVERED を実測 →
+早期判定プロトコルの手動検収 Job を coder/immich/vaultwarden に起動し全て Completed を確認 →
+ArgoCD health 3 アプリとも Healthy を確認 → reporter 収集 (~00:30Z) を待って **verify #2 を
+自ら実測 green** → root_cause.md に「回復の実測」節を追加 → substrate.md の訂正に
+B2 cap の確定事項 (日次 00:00 UTC リセット・実測回復時刻) を補完 (verified_at を 08-23 へ) →
+watch Pod と手動 Job 3 本を削除 (削除後も Healthy 維持を確認) → 本ログ追記。
+
+**分かったこと**:
+
+- **cap リセットは公式どおり 00:00 UTC だった**: 最後の 403 が 23:59:24Z、最初の 200 が
+  00:04:25Z (`p0111-cap-watch` 実測。5 分間隔なのでリセットは 00:00〜00:04Z 窓)。
+- 手動 backup Job は回復直後なら **35 秒〜数分で真の Complete** (snapshot 保存まで確認:
+  `a2759316` / `d9756f83` / `bf0bfe76`)。appTree の health 反映も数分
+  (coder 00:20:24Z / immich 00:20:26Z / vaultwarden 00:25:00Z)。reporter 反映込みでも
+  リセットから約 30 分で完結 — 19:30Z 待ちより 19 時間早い検収になった。
+- **セッション内長時間待機は実用になる**: 28 分間隔の sleep + 軽い status 出力で
+  無活動 kill を回避しつつ 4 時間待てた。トークン消費は微々たるもの。
+  「判定時刻まで次セッションに丸投げ」より、時間ブロックが確定している場合は待機が安い。
+
+**発見 (スコープ外・curriculum 拾い出し用)**:
+
+- 手動 backup Job のログが毎回 `no parent snapshot found, will read all files` になる。
+  Pod 名 (= restic の hostname) が毎 run 変わるため親 snapshot が選ばれず全スキャンに
+  なっている疑い。データは dedup されるので損害はスキャン時間だけだが、バックアップ対象が
+  成長すると効く。CronJob 側で `RESTIC_HOSTNAME` 固定 or `--parent` 指定が対策候補。
+- 同時多発 backup より 25〜30 分のスタッガー (定刻運用と同間隔) のほうが node01 に優しい。
+
+**次のセッションへの一言**: 受入 verify 2 本とも worker 自身が green 実測済み
+(root_cause.md 存在 / latest.json @2026-08-23T00:30:05Z で coder=immich=Healthy)。
+残作業なし。クラスタ後始末も済み (p0111-* は存在しない)、apps/ には一切触れていない。
+あとは wrapper の再実測とレビューのみ。
