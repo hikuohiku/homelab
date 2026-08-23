@@ -652,3 +652,44 @@ resume-evidence.json に出典 commit SHA つきで記録) に切り替える。
 P-0193 (1M, 差し戻し戻りで再走中 — merge 後の予算死なら観測候補に復格)、
 補助 P-0092 (announced, 3M)。**P-0192 は merge 前死につき恒久脱落** (終端復活レーンは
 仕様外)。候補判定は stalled_reason を必ず見ること (error/review_rejected 死は予算死でない)。
+
+## セッション19 の記録 (2026-08-23 14:16–14:24Z)
+
+**やったこと**: ops-state 監視 (待機 1 回を挟んで計 2 回確認) + verify 1〜3 再実測 green
+(15 tests OK)。冒頭 fetch → merge 信号 2 種を確認: c353eca55 main 未含 × refs/pull 全本
+(520 本) に自ブランチ SHA (rev-list HEAD ^origin/main の 18 件) 無一致 — **両方ネガティブ**。
+約 4.5 分待機後に再確認しても変化無し。本ファイル追記 + commit して終了。
+
+### 盤面の実測
+
+- heart は生存: beat 316 @ 14:13:54Z → beat 322 @ 14:20:48Z (ビート約 70 秒間隔を維持)
+- **今日の予算死は増えていない**: 遡及の最終出現は 04ea792c5 @ beat 310 (= P-0192 の死,
+  14:05:32Z) のまま。budget-dead stalled 集合 10 件で不変
+- **証跡候補上位 2 案がともに稼働中を実視**: P-0196 ブランチ前進 (3de7008b9 → 9b0d07544)、
+  P-0203 ブランチ前進 (fff05783c → d26d7725b)
+- 監査の観測: P-0203 run_adopt_gate verdict=all_fail @ 14:06:47Z → announce+spawn_runner
+  @ 14:09:06Z。過去 64 件の run_adopt_gate と照合した結果、**P-0196 @ 12:34:28Z と同一の
+  通常パターン** (採択案は all_fail 判定でも announce される) — 例外的挙動では無いので
+  発見節には置かない。解釈は heart の領分
+- states 実測: stalled 35 / delivered 29 / vetoed 2 / announced 1 / active 4 — セッション18
+  終了時から不変。actives = P-0182 (自枠, 1.5M) + P-0193 1M + P-0196 4.5M + P-0203 1.2M、
+  P-0092 announced 3M も据え置き
+- `continuation_count` の出現は全エントリで 0 のまま
+- 人間の活動兆候: 本セッション観測範囲では変化なし (main 進まず、refs/pull 520 本のまま)
+
+**次のセッションへの一言**: 変更なし — merge 待ち。**毎セッション最初にセッション16 の
+「発見」節を読むこと** (wrapper 経由では PR は構造的に開かない)。merge 信号は
+「c353eca55 が origin/main に含まれる」または「refs/pull に自ブランチのいずれかの commit SHA
+が出現」(人間の手動 PR) の 2 つだけ。SHA 照合は `git rev-list HEAD ^origin/main` の全件を
+`git ls-remote origin 'refs/pull/*/head'` の結果と照合する (refs/pull はローカル fetch 対象外。
+セッション19 で for-each-ref が 0 本になる罠を実測済み)。
+merge 済みを検知したら遡及レシピ
+(`git log -S'"budget_exhausted"' origin/ops-state -- projects.json` で予算死を列挙 →
+各死の時刻が merge 時刻より後なら continuation_count / proposed 戻しを
+`git show origin/ops-state:projects.json` で確認 → 実遷移 1 件以上を
+resume-evidence.json に出典 commit SHA つきで記録) に切り替える。
+未 merge の間は待機 1〜2 回 + 観測事実の追記のみで終えてよいが、**自枠の予算残量が尽きる
+方向にいることを前提に、毎セッション確実に PROGRESS を commit して終わること**。
+証跡機会の供給源: 最有力 **P-0196 (cap 4.5M, 稼働中)**、次点 P-0203 (1.2M, 稼働中)、
+P-0193 (1M)、補助 P-0092 (announced, 3M)。P-0192 は恒久脱落。候補判定は stalled_reason を
+必ず見ること。
