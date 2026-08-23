@@ -230,6 +230,17 @@ GROUPS = [
         ],
     },
     {
+        # core イメージは同一ファイル内の 3 箇所 (init 2 つと driver) に出る。
+        # 1 箇所だけ pin し忘れると「MCP バイナリは新しいのに driver は古い」等の
+        # 食い違いが起きるので、_all でファイル内の一致を検査する
+        "name": "autopilot-core image digest (init 2 つと driver の 3 箇所)",
+        "targets": [
+            ("apps/autopilot-core/deployment.yaml", lambda: extract_image_tag_all(
+                "apps/autopilot-core/deployment.yaml", "ghcr.io/hikuohiku/homelab-autopilot-core@"
+            )),
+        ],
+    },
+    {
         "name": "immich server / machine-learning tag (inventory: immich-server, immich-machine-learning)",
         "targets": [
             ("apps/immich/values.yaml (controllers.main, server)", lambda: extract_tag_in_block(

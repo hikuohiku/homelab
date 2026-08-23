@@ -38,8 +38,12 @@ spec:
         # opencode が MCP サーバを子プロセスとして起動できるよう、返信ツールの
         # バイナリを共有 emptyDir へ置く。opencode 側のイメージ (autopilot) には
         # このバイナリが無いため、core イメージから運ぶ
+        #
+        # 以下 3 箇所 (init 2 つと driver) の core イメージ digest は必ず同じ値にする。
+        # 39d2fa51173ac3ce112ac02e302c4037a07c626c (PR #535 の merge commit) の
+        # OCI index digest を registry API の docker-content-digest で実測したもの
         - name: install-mcp-bin
-          image: ghcr.io/hikuohiku/homelab-autopilot-core:latest
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:b40ea393a3e6d4214eb75ad890e643187bbc550fbc42f2f7b400a0d2b3bb4308
           command: ["sh", "-c", "cp /usr/local/bin/telegram-adapter /mcp/telegram-adapter"]
           volumeMounts:
             - name: mcp-bin
@@ -50,7 +54,7 @@ spec:
               drop: ["ALL"]
         # ConfigMap は read-only mount なので、opencode が書ける場所へ配置し直す
         - name: bootstrap-workdir
-          image: ghcr.io/hikuohiku/homelab-autopilot-core:latest
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:b40ea393a3e6d4214eb75ad890e643187bbc550fbc42f2f7b400a0d2b3bb4308
           command: ["sh", "-c", "cp /config/opencode.json /config/AGENTS.md /work/"]
           volumeMounts:
             - name: config
@@ -117,7 +121,7 @@ spec:
 
         # --- イベントを渡す係 ---
         - name: driver
-          image: ghcr.io/hikuohiku/homelab-autopilot-core:latest
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:b40ea393a3e6d4214eb75ad890e643187bbc550fbc42f2f7b400a0d2b3bb4308
           terminationMessagePolicy: FallbackToLogsOnError
           env:
             - name: AUTOPILOT_GITHUB_TOKEN
