@@ -59,6 +59,45 @@ validate.py 0 error (warning 11 件は backlog refs の既存分)、check_doc_co
   置かない / `veto P-\d{4}` 形を含めない / 全体 50 文字超。マーカー付きなので heart の
   取り込み対象外 (CHARTER §6 手順2) だが防御は重ねた
 
+### worker #2 (2026-08-23) — レビュー指摘の解消: 恒真テストの書き直し + ops-feedback 再確認 (telegram note 依然 0 件)
+
+**やったこと**:
+
+- **指摘 (2) を解消**: `test_classify_is_source_agnostic_by_design` (同一関数への同一引数の
+  自己比較で恒真) を削り、`TestClassificationIgnoresSource.test_same_body_same_verdict_across_transports`
+  として実検証に書き換えた。同一本文を (a) telegram note、(b) source:"ops-dashboard" の note、
+  (c) issue コメントの **3 経路**で collect_feedback に通し、分類種別が期待値と 3 者一致することを
+  検査する。期待値の同時断言があるので分類本体が壊れても倒れる (片側比較の罠を回避)。
+  対象は stop / resume / veto (`veto P-0103`) / 雑談の 4 系統。
+  補助として `telegram_note()` に source 差し替え用引数、`CommentGh` スタブと
+  `verdict_kind()` (collect_feedback 戻り値 → 分類種別 1 つへ潰す) を追加
+- **指摘 (1) のうち今できることを実施**: `git fetch origin ops-feedback` 再確認の結果、inbox は
+  **依然 dashboard 由来 2 件のみ・telegram 由来 0 件** (worker #1 実測と不変)。
+  evidence.json の transport.checked_at / next_action を更新。
+  state は pending-human のまま。48h 期限は **2026-08-25T01:20Z** (投稿 2026-08-23T01:20Z 起算) で
+  未到来なので bridge ログ調査には進んでいない — レビュー指摘 (b) の条件はまだ成立しない
+
+**verify 実測 (すべて green)**: unittest 9 tests OK / drill --check rc=0 (7/7 ok) /
+evidence test -s rc=0。discover 全 377 tests OK。
+
+**分かったこと / 次への引き継ぎ**:
+
+- **次のセッションの最初の仕事は worker #1 と同じく feedback_note_url を埋めること**。
+  現在時刻が 2026-08-25T01:20Z を過ぎていたら依頼文記載の調査へ進む:
+  `kubectl -n autopilot logs deploy/openclaw -c feedback-bridge` で受信エラー/401 の有無を見る、
+  TELEGRAM_BOT_TOKEN / TELEGRAM_ALLOWED_USER_ID の Doppler 登録状態を確認する。
+  届いていれば blob URL・本文・triage 分類結果を evidence.json の transport セクションに
+  記入して state を更新。「止めて」系の実送信でも全停止を実地に踏ませない (spec 明記)
+- **validate.py が現在 1 error を出すが本プロジェクト起因ではない**: main 側の curriculum commit
+  `d7ed4aa0` (2026-08-23T01:30Z 頃) が ops/projects/archive.jsonl に P-0125〜P-0132 を追記した一方、
+  本ブランチはそれより前 (ea48d514) から分岐しているため「origin/main の内容と先頭一致しない」が
+  出る。worker #1 時点は 0 error だったのがこの差分によるもの。ops/ の帳簿は触らないので放置 —
+  merge 時に本ブランチ側は追記しかしていないので解消されるはず
+- 新しい輸送経路を足す変更が入ったとき、このテスト群は「分類への source 引数追加」を
+  TestClassificationIgnoresSource が検知する形になった。triage.classify 自体のシグネチャ変更は
+  mypy 等では守られていない (型チェックなし) ので、実挙動でのみ見える
+
 ## 発見 (curriculum へ)
 
 - (なし — スコープ外の問題には触れなかった)
+

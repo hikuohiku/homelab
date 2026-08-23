@@ -1,12 +1,12 @@
 {
   "project": "P-0118",
-  "updated_at": "2026-08-23T01:23:43Z",
-  "_comment": "verify 3 本それぞれの根拠と、実輸送 (DoD 本体) の現状を 1 目で辿れるようにした。feedback_note_url は人間の実送信を待っている間は null — 次の worker セッションが ops-feedback ブランチを再確認して埋めること",
+  "updated_at": "2026-08-23T01:44:06Z",
+  "_comment": "verify 3 本それぞれの根拠と、実輸送 (DoD 本体) の現状を 1 目で辿れるようにした。feedback_note_url は人間の実送信を待っている間は null — 次の worker セッションが ops-feedback ブランチを再確認して埋めること。48h (2026-08-25T01:20Z) を過ぎても届かなければ next_action の調査に進む",
   "verify": [
     {
       "cmd": "python3 -m unittest ops.tests.test_telegram_veto",
       "status": "green",
-      "evidence": "9 tests OK (2026-08-23, リポジトリルート)。telegram 形 note ({id, source:\"telegram\", received, body} / trim 無し) を collect_feedback 経由で通し、4 系統 (止めて->stop_all / 再開->resume_all / kind:task-request -> task_requests / 雑談 -> review_needed) を fixture 固定。rules.json の stop_keywords・resume_keywords 全量が telegram DM の典型形で分類を決めることを TestRulesKeywordsDriveTelegramVerdicts が証明"
+      "evidence": "9 tests OK (2026-08-23 再実測、リポジトリルート)。telegram 形 note ({id, source:\"telegram\", received, body} / trim 無し) を collect_feedback 経由で通し、4 系統 (止めて->stop_all / 再開->resume_all / kind:task-request -> task_requests / 雑談 -> review_needed) を fixture 固定。rules.json の stop_keywords・resume_keywords 全量が telegram DM の典型形で分類を決めることを TestRulesKeywordsDriveTelegramVerdicts が証明。レビュー指摘で恒真だった source 非依存テストを TestClassificationIgnoresSource として書き直した (同一本文を telegram note / source 違いの note / issue コメントの 3 経路で通し、分類種別が期待値と 3 者一致することを検査)"
     },
     {
       "cmd": "python3 ops/drills/telegram_veto_drill.py --check",
@@ -22,7 +22,7 @@
   ],
   "transport": {
     "state": "pending-human",
-    "checked_at": "2026-08-23T01:10:00Z",
+    "checked_at": "2026-08-23T01:41:00Z",
     "inbox_state": {
       "branch": "ops-feedback",
       "notes_total": 2,
@@ -39,6 +39,6 @@
       "request_summary": "allowlist 登録済みアカウントから Telegram bot へ短文 1 通の送信依頼。48 時間以内に届かなければ bridge ログと TELEGRAM_BOT_TOKEN / TELEGRAM_ALLOWED_USER_ID 登録状態の調査に進む旨も記載"
     },
     "feedback_note_url": null,
-    "next_action": "git fetch origin ops-feedback && git ls-tree -r --name-only origin/ops-feedback ops/feedback/inbox/ で source:\"telegram\" の note を探す。見つかったらその URL (blob link) と本文をここに記入し、triage 分類結果も添える。人間の送信が「止めて」系だった場合は全停止を実地に踏ませないこと (spec 明記) — 証跡は inbox 上の JSON だけで足りる"
+    "next_action": "worker #2 再確認 (2026-08-23T01:41Z): git fetch origin ops-feedback の結果 inbox は依然 dashboard 由来 2 件のみで telegram note 0 件。投稿から 48h = **2026-08-25T01:20Z** を過ぎても届かなければ、依頼文に記載済みの調査へ進む: kubectl -n autopilot logs deploy/openclaw -c feedback-bridge (受信エラー・401 の有無) と TELEGRAM_BOT_TOKEN / TELEGRAM_ALLOWED_USER_ID の Doppler 登録状態の確認。届いた場合は source:\"telegram\" の note を探して blob URL・本文・triage 分類結果を transport セクションに記入し state を更新すること (人間が「止めて」系を送っても全停止を実地に踏ませない — inbox 上の JSON だけで証跡成立、spec 明記)"
   }
 }

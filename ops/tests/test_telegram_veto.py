@@ -44,14 +44,15 @@ class FakeGh:
         return []
 
 
-def telegram_note(body, kind=None):
+def telegram_note(body, kind=None, source="telegram"):
     """bridge.build_note (apps/openclaw/bridge.py) が保存するのと同じ形の note。
     trim 等の加工をしないのが bridge の契約なので、ここでも body は生のまま渡す。
     kind は bridge が付けることは無い (P-0107 の禁じ手) が、dashboard 書き置き等の
-    上流で付与された場合の collect_feedback 契約を固定するために渡せるようにしてある。"""
+    上流で付与された場合の collect_feedback 契約を固定するために渡せるようにしてある。
+    source は分類への非依存を検証するためだけに差し替えられる (下のクラス参照)。"""
     doc = {
         "id": "20260823-000000-abc123",
-        "source": "telegram",
+        "source": source,
         "received": "2026-08-23T00:00:00Z",
         "body": body,
     }
@@ -68,6 +69,39 @@ def collect_telegram_note(raw):
         return facts.collect_feedback(
             FakeGh(), "/repo", dict(CURSORS), RULES, 56, "ops-feedback"
         )
+
+
+class CommentGh:
+    """issue コメント 1 件を返すだけの gh スタブ (輸送元比較用)。"""
+
+    def __init__(self, comments):
+        self.comments = comments
+
+    def issue_comments_since(self, issue, since):
+        return self.comments
+
+
+def collect_issue_comment(body):
+    gh = CommentGh([{"id": "9001", "created_at": "2026-08-23T00:00:00Z", "body": body}])
+    with mock.patch.object(facts, "_list_feedback_files", return_value=[]):
+        return facts.collect_feedback(
+            gh, "/repo", dict(CURSORS), RULES, 56, "ops-feedback"
+        )
+
+
+def verdict_kind(result):
+    """collect_feedback の戻り値を分類種別 1 つに潰す (輸送間の突合用)。
+    呼び出しごとにメッセージ 1 通だけ流すので、満たされる受け皿は高々 1 つ。"""
+    vetoes, _acks, stop_all, review_needed, resume_all, reqs, _ = result
+    if stop_all:
+        return "stop_all"
+    if resume_all:
+        return "resume_all"
+    if vetoes:
+        return "veto"
+    if review_needed or reqs:
+        return "review_needed"
+    return "none"
 
 
 class TestTelegramNoteClassification(unittest.TestCase):
@@ -146,11 +180,38 @@ class TestRulesKeywordsDriveTelegramVerdicts(unittest.TestCase):
                 verdict = triage.classify(kw, RULES)
                 self.assertEqual(verdict["kind"], "resume_all", kw)
 
-    def test_classify_is_source_agnostic_by_design(self):
-        """分類本体は source を受けない (triage.classify の設計)。つまり telegram
-        由来かどうかは分類結果に影響しない — 影響するならこの経路の前提が崩れて
-        いるので、その早期発見用に契約を固定しておく。"""
-        self.assertEqual(triage.classify("止めて", RULES), triage.classify("止めて", RULES))
+
+class TestClassificationIgnoresSource(unittest.TestCase):
+    """分類は本文のみで決まり、届いた経路 (source) に依存しないことの実検証。
+
+    triage.classify は (text, rules) のみを受け、source を引数に持たない (設計)。
+    この契約が壊れると緊急時の「止めて」が経路によって拾われたり漏れたりする —
+    たとえば新しい transport 追加時に「分類へ source を渡して分岐する」変更が
+    入った場合がそれ。同一本文を telegram note・source 違いの note・issue コメント
+    の 3 経路で通し、分類種別が完全一致することに加え、期待種別そのものも同時に
+    断言する (片側だけの比較では分類全体が壊れても気づけないため)。"""
+
+    CASES = [
+        ("止めて", "stop_all"),
+        ("再開", "resume_all"),
+        ("veto P-0103", "veto"),
+        ("今日はいい天気ですね", "review_needed"),
+    ]
+
+    def test_same_body_same_verdict_across_transports(self):
+        for body, expected in self.CASES:
+            with self.subTest(body=body):
+                via_telegram = verdict_kind(
+                    collect_telegram_note(telegram_note(body))
+                )
+                via_dashboard = verdict_kind(
+                    collect_telegram_note(telegram_note(body, source="ops-dashboard"))
+                )
+                via_issue_comment = verdict_kind(collect_issue_comment(body))
+                self.assertEqual(
+                    (via_telegram, via_dashboard, via_issue_comment),
+                    (expected, expected, expected),
+                )
 
 
 if __name__ == "__main__":
