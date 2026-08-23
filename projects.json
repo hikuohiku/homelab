@@ -5631,11 +5631,32 @@
       "spawn_count": 1,
       "job": "runner-p-0270-a1",
       "drift_count": 0
+    },
+    {
+      "id": "P-0272",
+      "title": "Mission Control が器の状態だけを映して依頼を映していない — 「人間の鍵作業」キューを Next.js 化で失った面に復活させる",
+      "state": "proposed",
+      "branch": "project/p-0272",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "python3 ops/tools/human_tasks.py --out /tmp/opencode/human-tasks.json && python3 -c \"import json; d=json.load(open('/tmp/opencode/human-tasks.json')); ts=d.get('tasks',[]); assert len(ts)>=4 and all(all(k in t for k in ('id','title','age_days')) for t in ts), ts\"",
+        "grep -rqiE 'human.?tasks|鍵作業' apps/ops-dashboard/app/src/",
+        "python3 -m unittest ops.tests.test_human_tasks -v"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1000000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T23:14:59Z",
-  "last_activity_at": "2026-08-23T23:49:06Z",
+  "last_curriculum_at": "2026-08-23T23:50:20Z",
+  "last_activity_at": "2026-08-23T23:50:20Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
