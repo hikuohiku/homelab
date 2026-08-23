@@ -573,7 +573,51 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   unknown 待ちの注意だけ残す: mergeable_state が unknown なら数秒〜十数秒待って再取得、
   dirty 確定時のみ update-branch → ci 再 green を待つ
 
+### セッション 15 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま**、blocking 4 件で不変
+  (P-0092 / P-0116 / P-0161 / P-0163。checked=61。wrapper 実測 08:12 と同一内訳)。
+  固定指示どおり実演習は見送り。コード変更は無し
+- 本セッションの実イベント: **台帳が初めて「何も変わらない」を実測された**。
+  `git show origin/ops-state:projects.json` の内訳は delivered 26 / vetoed 2 /
+  stalled 28 / announced 1 / active 4 / in_review 0 とセッション 14 と完全同一で、
+  個別照合でも announced=P-0092 / active=P-0116+P-0161+P-0163 (+自己 P-0164) と
+  メンバーシップごと一致 (churn ゼロ)。なお ops-state ブランチ自体は動いていた
+  (fetch で 2bf8d805b→af68a7017) が、差分は heartbeat.json / metrics.jsonl のみで
+  projects.json は無変化 — 「台帳ブランチの進行」と「状態遷移の有無」は独立であり、
+  ブランチが動いたからと言って照合を省略してはいけない
+- main は不動 (cc1c86626)。PR #524 は mergeable_state=clean 初手継続
+  (head=5d24c8932 不変、unknown 待ち無し)、ci + GitGuardian success
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 4), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 281 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git fetch origin && git rev-parse origin/main          # cc1c86626 (不動)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- 当日の手順はセッション 3 固定のまま不変 (--run 背景起動 → 全 zero 確認 → PATCH ready
+  解除 → PUT merge)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。「0 か否か」だけを見る原則は維持。
+  unknown 待ちの注意だけ残す: mergeable_state が unknown なら数秒〜十数秒待って再取得、
+  dirty 確定時のみ update-branch → ci 再 green を待つ
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 15, ライフサイクル観測の続き) **総計・メンバーシップ双方が完全不変の
+  セッション間を初観測** (14→15)。12→13 は「総計不変・中身入れ替わり」、13→14 は
+  「総計変動・流出型」だったので、スナップショット比較が取りうる 3 パターン
+  (変動あり/中身だけ入れ替わり/完全凍結) が出揃った。いずれのパターンも弁判定への
+  含意はゼロ — 判定は常に dry-run の「announced+active == 0 か」一択、という原則が
+  全パターンで成立することを実測で裏取り完了。併せて ops-state ブランチの進行
+  (heartbeat beat 更新) は projects.json の状態遷移を伴わないことがあるため、
+  「ブランチが動いた=台帳が動いた」という省略は不可
 
 - (セッション 14, ライフサイクル観測の続き) **blocking 数の減少が進捗を意味しない第 3 の
   反例: stalled への流出**。セッション 12→13 は「総計不変・中身だけ入れ替わり」だったが、
