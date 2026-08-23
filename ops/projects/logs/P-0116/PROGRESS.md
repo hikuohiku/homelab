@@ -291,3 +291,88 @@ cap 全滅で欠落済み)。この checkpoint を読む worker は以下を順�
 
 P-0102 は実装健全のまま soft cap を使い切って budget_exhausted で停止。
 この P-0116 は全成果を引き継いだ継続 (予算 4M)。checkpoint と PROGRESS.md から再開。
+
+## session5 (P-0116 worker, 2026-08-23)
+
+やったこと: **受入 #3 の green Run を成立させ、evidence を保存した**。
+`ops/projects/logs/P-0102/check_evidence.json` 新規作成 (5 レコード全 exit_code==0)、
+受入 #3 の python verify はローカル実測 rc=0。受入 #2 も再実測 green (28 tests)。
+
+### その前に起きたこと (前提が崩れていた)
+
+checkpoint の前提「昨夜の backup 窓が成功している」は**崩れていた**。実測:
+
+- 昨晩の窓 (08-23 02:45–04:00 JST = 08-22 17:45Z 頃) は coder-postgres / immich /
+  syncthing / vaultwarden の **4 リポジトリが 403 で失敗** (coder は DeadlineExceeded、
+  他 3 はリトライ後に fatal — session4 障害 1 と同一签名)。coder-workspace-homes
+  だけは成功していた (cap 解除のタイミングか、読み量の差)
+- 最終成功が ~30h 前 → 鮮度警報 (>24h) が発火する状態で、このまま evidence 収取は
+  不可能だった
+- 対処: **既存 CronJob と同一スクリプトの手動 Job で 4 リポジトリを手動 backup**
+  (`kubectl create job --from=cronjob/<name> ... -n <ns>`、vaultwarden をカナリアに
+  して B2 生死を確認してから残り 3 本)。全部 rc=0・snapshot 保存ずみ。
+  append-only への追記のみで非破壊。B2 download 200 実測 (session4 の cap 解除が生きている)
+- 手動 backup / 手動 spawner の Job は片付け済み。chb-* 子 Job は TTL 1h で自然 GC
+
+### 発見 1: workspace-home-backup の spawner が子 Job の失敗を吞み込む
+
+`coder-workspace-home-backup` CronJob の本体は `spawn_backup_jobs.py` (実 backup は
+`chb-<workspace-id>` 子 Job、**ttlSecondsAfterFinished=3600 で自動 GC**)。
+今朝の窓では子が全滅 (403) しても **spawner 本体だけが Complete 表示**になり、
+子の失敗痕跡は 1 時間後に消える。「retention が初期化プローブ失敗を吞み込む」の
+同型盲点。**本プロジェクトの鮮度警報がこれを実際に検出した** (Run #4 の
+workspace-homes age=30.19h WARN — プロジェクト why の 2 例目の実証)。curriculum が
+拾うべき論点: spawner が子 Job の結果を待って反映する設計への改修。
+
+### 発見 2: P-0080 restore drill が immich リポジトリに stale lock を残していた
+
+Run #4 で immich だけ check_rc=11。診断 Pod (通知の飛ばない素 restic check) で切り分け:
+**`repository is already locked by PID 8 on restore-drill-immich-library-cj7pg`
+(lock 生成 2026-08-22T14:37Z, 10h 超 前)**。drill Pod は既に存在しない (= stale 確定)。
+
+- check は排他 lock を取るので失敗するが、backup は共有 lock なので**成功し続ける**。
+  「夜間 backup は黙って成功し check だけが死ぬ」状態だった。夜間 backup 成功と
+  check 失敗の乖離は lock 疑え
+- lock 保持者の死亡確認 (pod/job/cronjob 全空) の上で、append-only 鍵で
+  `restic unlock` → **"successfully removed 2 locks"** (stale drill 分 + 計 2 件目の
+  正体不明 lock。こちらも unlock 後 list locks は空で、稼働中の lock ではなかった)。
+  unlock 後の `restic check --read-data-subset=1%` が **rc=0** — append-only 鍵での
+  check/unlock 完走はこれが初実績 (hide マーカー経路の再裏取り)
+- curriculum が拾うべき論点: restore drill は終了時に lock を解放しない & 専用 repo
+  コピーを使わない設計だと本番 repo に stale lock を撒く。drill 側の後始末 or
+  `--unlock`/lock TTL の常設化
+
+### Green Run (restic-check-evidence2, 2026-08-23T00:59:33Z)
+
+```
+overall=OK(0)
+vaultwarden / immich / coder-postgres / coder-workspace-homes / syncthing
+すべて check=rc0 freshness=ok (age 0.18–0.41h)
+```
+
+- Discord 通知なし (成功時黙る契約どおり)。Job ログ最終行 EVIDENCE_JSON を
+  `ops/projects/logs/P-0102/check_evidence.json` へ保存 → verify #3 rc=0 実測
+- 片付け: `kubectl delete ns restic-check` 済み (apps/kustomization.yaml への配線は
+  済んでいるので、merge 後 ArgoCD が管理を引き取る。未管理リソース衝突は回避)
+- Run #4 (失敗) と診断 Pod ×2 は Discord 通知を飛ばさない構成で実施したが、
+  Run #4 自体は evaluate が CHECK-FAILURE(1) で終わったため **本番 Discord に 1 通
+  飛んでいる** (immich rc=11 + homes 鮮度 WARN の内容。誤報ではなく実障害の検出なので問題なし)
+
+### verify 現状 (このセッション終了時点)
+
+- #1 grep: wrapper 環境では red のまま (BusyBox grep --include 非対応。manifest 実体は
+  `apps/restic-check/` にあり、`grep -rq 'restic-check' apps/` なら rc=0 実測)。
+  **heart による spec 文言判断待ち (issue #56)** — コード側に直すものは無い
+- #2 unittest: **green (28 tests)** 再実測ずみ
+- #3 evidence: **green**。`check_evidence.json` 保存、python verify rc=0 実測
+
+### 次セッションへの要点
+
+- 受入 3 項目のコード側作業は**完了**。残りは heart の verify #1 文言判断のみ
+  (issue #56 に回答が来ているか確認すること)。回答次第で spec 側修正が入るだけで、
+  worker 側の追加実装は不要なはず
+- wrapper が verify を回すとき、#1 は BusyBox 環境では文言どおりだと赤になる点を
+  PR 説明にもう一度明記すること
+- 今晩 (08-24 02:45 JST 窓) の定期 backup が通常どおり成功すれば鮮度は保たれる。
+  cap 再発に備え、次の週次発火 (日曜 05:30 JST) の前に B2 Caps & Alerts の恒久対策
+  (download_cap 上限引き上げ or alert 設定) が人間側で決着していると望ましい
