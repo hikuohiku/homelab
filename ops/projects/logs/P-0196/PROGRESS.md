@@ -268,3 +268,20 @@ verbs:* 済み。chart は default project を作らないため、無いと rec
 3. verify 第 1 項 green / 第 2 項 failing はサンプリング完了まで変わらず、で正常。
 4. up が通って pod が立った後はセッション 3 の引き継ぎ 3 番 (phase / CrashLoop 時の
    SA 名不一致チェック) も有効。
+
+## セッション 5 — 2026-08-23: up 再実行 → まだ人間の一手は来ていない (変化なし)
+
+### やったこと
+
+1. 引き継ぎどおり冒頭で `up` を実行 → admission probe が再び未適用を検出
+   (`SA 'argocd-lab-application-controller' が無い`) → 空 ns 自力掃除 → rc=1 で中断。
+   残置ゼロを自分でも再確認: `argocd-lab-916` / `argocd-lab-1040` とも NotFound、
+   lab-state.json / rss_series.csv 未存在、working tree にコード変更なし。
+   **人間の一手 (`kubectl apply -f ops/projects/logs/argocd-oom-lab/proposed-rbac-for-human.yaml`)
+   はまだ適用されていない**。これ以上のコード側作業はセッション 4 の判断どおり無いので終了。
+2. verify 第 1 項 (--plan) を rc=0 で再確認 (green 継続)。第 2 項は人間待ちで failing のまま (正常)。
+
+### 次セッションへの引き継ぎ
+
+セッション 4 の「次セッションへの引き継ぎ」をそのまま丸ごと引き継ぐ (変更点なし)。
+冒頭の `up` が通ればサンプリング開始、通らなければこのセッションと同じく 1 行記録して終えてよい。
