@@ -3362,11 +3362,34 @@
       "job": "runner-p-0147-a1",
       "drift_count": 0,
       "stalled_reason": "error"
+    },
+    {
+      "id": "P-0151",
+      "title": "Dex が死んだ日、人間は ArgoCD に入れるのか — 認証の単一点を実際に止めて、break-glass を 200 OK で証明する",
+      "state": "proposed",
+      "branch": "project/p-0151",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "test -f docs/auth-break-glass.md && grep -qE argocd docs/auth-break-glass.md && grep -qE admin docs/auth-break-glass.md",
+        "python3 -c \"import json; d=json.load(open('ops/projects/logs/P-0151/drill.json')); assert d.get('session_http') in (200,401,403) and d.get('dex_restored') and d.get('window_seconds',99999)<600\"",
+        "kubectl -n dex get deployment -o name | grep -q dex"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 800000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-23T04:41:22Z",
-  "last_activity_at": "2026-08-23T05:16:26Z",
+  "last_activity_at": "2026-08-23T05:17:40Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
