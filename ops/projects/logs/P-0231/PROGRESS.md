@@ -742,3 +742,49 @@ reminders.json / briefing/reminders.txt とも無し = 未 merge の裏付け)�
 main 監査は origin/main の短縮ハッシュを前回記録 (`c186f070e`) と比較し、不動なら
 再実施スキップ・動いた場合のみ「ファイル集合の共通部分 + merge-tree」の 2 点監査
 (重複ゼロなら rebase 不要の根拠になる)
+
+## worker セッション 19 (2026-08-23) — 監視セッション。main 不動・ops-state beat 71。コード変更なし
+
+### やったこと
+
+レビュー指摘は無し。受入 5 項目を自前実測: 4/5 green、verify(3) のみ red
+(実 fetch で origin/ops-state 先端 beat 71 `heartbeat at 2026-08-23T21:22:53Z` を確認し
+reminders.json / briefing/reminders.txt とも無し = 未 merge の裏付け)。
+`git branch -r --contains HEAD` は origin/project/p-0231 のみ = 未 merge。
+
+セッション 7〜18 の方針に従いリハーサル / 横断 E2E / Node 側テストの再実施はスキップ。
+本セッションの実測:
+
+1. **main は不動**: origin/main = `c186f070e` のまま (セッション 17・18 実測と同一)。
+   衝突監査の前提が変わらないため「ファイル集合 + merge-tree」の再実施はスキップ
+   (セッション 17 の結論 = 重複ゼロ・conflict 0・rebase 不要 がそのまま有効)
+2. **heart 稼働継続の間接証拠が更新**: ops-state はセッション 18 実測の beat 70 から
+   beat 71 へ進行。merge 後 green 化の前提 (heart が生きている) は崩れていない
+3. **ドリフト防止の再計測**: unittest 24 本 OK。validate.py を本セッションでも実行し
+   1 error (archive.jsonl 先頭一致) を再確認 — main・ローカルとも不動のため
+   セッション 18 実測と同一状態 (= 取り込み遅れの副作用、P-0231 起因でない)。
+   render-sample.txt 非空 (138 bytes)、dashboard 側参照 OK
+4. **台帳の次 due を確認**: レンダラ実行 (実時刻 8/23 21:24 UTC) でゴミ収集 8/24 (none)
+   が 48h 窓内と実出力確認 → 今日〜明日の merge なら live 断片は非空。
+   防災の日 9/1 (year) の窓開始は 8/30
+
+### 分かったこと・罠
+
+- 新規の罠は無し。(既知の再確認のみ) gh CLI 不在のため PR 状態は見えない。
+  merge 待ちの判定は `git branch -r --contains HEAD` + verify(3) の red/green で代用する。
+  一時ファイルが必要な場合は `mktemp -d /tmp/x.XXXXXX` (`/tmp/opencode` は root 所有)。
+- レンダラ CLI への台帳パス指定は `--ledger` フラグ (位置引数ではない。素通しで exit 2)
+
+### 次のセッションへの一言
+
+結論不変: コード完成・変更不要。verify(3) は merge → heart 初回ビート (~120s) で green。
+レビュー指摘があればその解消が最優先。merge 後 red 継続時はセッション 3 末尾の
+(a)(b)(c) で切り分け。リハーサル系・Node 側テストの再実施は不要 (網羅済み)。
+**やることは merge 待ちの監視だけ**: verify(3) が green になったら受入全項目 green を
+記録して完了報告に進む。今日〜明日 (〜8/25 頃) の merge なら初回断片は非空、
+8/27〜8/29 頃の merge なら空文面だが壊れではない (セッション 6・9 実証済み)。
+**validate.py は現在 1 error (archive.jsonl 先頭一致) だがこれは main 取り込み遅れの
+副作用で P-0231 起因ではない。merge で自己解消するため触らないこと**。
+main 監査は origin/main の短縮ハッシュを前回記録 (`c186f070e`) と比較し、不動なら
+再実施スキップ・動いた場合のみ「ファイル集合の共通部分 + merge-tree」の 2 点監査
+(重複ゼロなら rebase 不要の根拠になる)
