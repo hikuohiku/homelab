@@ -57,3 +57,58 @@ verify 4/4 は green 済み (wrapper の再実測待ち)。レビュー指摘が
 に全事象の時刻表を取り込んであるので、追証明が必要になったら「同手順の再演習」で代用する。
 report.py 変更は次回 CronJob 実行 (30 分毎) から externalsecrets セクションが出るが、
 RBAC 反映は ArgoCD sync 待ちなので最初の数回は error エントリになっても正常
+
+## セッション2 — 2026-08-23 実機証明 + 収集関数の契約テスト化 (verify 4/4 再実測 green)
+
+レビュー verdict 無し・failing 項目無しなので、DoD 3 の「マージ前に壊れていないこと」を
+実機で閉じることにした。verify 4/4 を自分でも再実測して green 確認済み。
+
+### やったこと
+
+1. **collect_externalsecrets() を実クラスタに対して実行した** (このサンドボックスの
+   SA token で report.py を importlib ロード → 実 API を叩く):
+   - 21 item 中 parse-error **0**。SecretSyncedError は 1 件だけで中身は
+     `syncthing/syncthing-photo-intake-credentials` (セッション1 発見の既知の
+     演習前エラーと完全一致)。errored item の描画は message 切り詰め +
+     `last_sync_age_seconds=None` (target Secret 未作成で最終成功同期が無い)。
+     正常 item は age < interval (例: argocd-dex-client-secret 1984s < 3600s)
+   - status.refreshTime の実測フォーマットは `"2026-08-23T10:16:07Z"` (秒精度) で
+     strptime 書式 `"%Y-%m-%dT%H:%M:%SZ"` と一致。全 item の refreshInterval
+     ("1h"/"30m") もパース成功。**本番 CronJob データでの初回稼働時にサプライズは無い**
+2. **ops/tests/test_report_externalsecrets.py 新設 (11 テスト)**:
+   test_download_ledger_script.py 流儀の AST 抽出 (report.py は import 時に SA
+   token を読むのでクラスタ外からロードできない)。固定するのは文字列 duration の
+   パース・/v1 API パス・1 item 壊れで全体を止めない・message 200 字切り詰め・
+   error エントリ混在ソート・Synced のまま古い item の可視化 (age > interval)
+3. **テストが `_duration_seconds` の実バグ 2 件を暴せたので修正した**
+   (apps/ops-health-reporter/report.py):
+   - 空文字列が **0 を返していた**。0 は「refreshInterval 0 秒」を意味するため
+     last_sync_age_seconds との比較ですべての item が即滞留扱いになり、計器が
+     静かに嘘をつく。None を返すように修正
+   - 単独の単位 ("h") で `int("")` で**例外死**。単位の前に数字が無ければ None
+   - 単位の無い数字列 ("3600") が None だった。秒とみなすよう修正
+     (数値が文字列で来る API 版への備え)。修正後に実機再実行して挙動不変を確認
+
+### 分かったこと (罠と発見)
+
+- **本番レポート (branch ops-health-report) に externalsecrets キーが無いのは正常**。
+  P-0175 は未マージで ArgoCD は main から CronJob を起こすため。10:30Z 時点の
+  latest.json を実見して確認 (キー不在のみで他セクションへの影響なし)。
+  「出ていない=壊れた」と追いかけて時間を溶かさないこと
+- exec で作った関数の `__globals__` は exec に渡した ns 自身。`dict(ns)` とコピーしても
+  関数の globals は変わらないので、k8s_get 差し替えは元の dict へ直接書き込む
+- `ops/validate.py` が archive.jsonl の origin/main 不一致エラーを出すが**本ブランチ起因では
+  無い** (ブランチ分岐後に curriculum が main 側へ追記したため。merge 時に解消)。
+  ops/ の帳簿なので worker は触らない
+- 全テストスイート実測: ops/tests 266 (新規 11 含む) / heart 196 / runner 36 すべて OK、
+  check_version_sync / check_pvc_usage_script_sync / check_download_ledger_script_sync /
+  check_health_reporter_target / check_doc_commands / check_feedback /
+  check_credential_map すべて ok
+
+### 次のセッションへの一言
+
+レビュー指摘が最優先。無ければやることは無いはず — 本プロジェクトの残る不確実性は
+「マージ後に reporter CronJob が externalsecrets セクションを出すか」だけだが、これは
+実クラスタ実行で証明済み (上記 1)。マージ後最初の CronJob 分で latest.json の
+externalsecrets セクションに RBAC 由来の error エントリが出ないことを確認するのが
+最後の仕上げになる (ArgoCD sync 待ちのため merge 前は不可能)

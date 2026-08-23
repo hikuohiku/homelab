@@ -271,22 +271,31 @@ _DURATION_UNITS = {"s": 1, "m": 60, "h": 3600}
 
 
 def _duration_seconds(v):
+    # 決められないときは 0 ではなく None (経過秒との比較で「即滞留」に見えるのを防ぐ)。
+    # 空文字列や単独の単位 ("h") もここへ落とす
     if isinstance(v, bool):
         return None
     if isinstance(v, (int, float)):
         return int(v)
     s = str(v).strip()
+    if not s:
+        return None
     total = 0
     num = ""
     for ch in s:
         if ch.isdigit():
             num += ch
         elif ch in _DURATION_UNITS:
+            if not num:
+                return None
             total += int(num) * _DURATION_UNITS[ch]
             num = ""
         else:
             return None
-    return total if not num else None
+    if num:
+        # 単位の無い数字列は秒とみなす ("3600"。API によっては数値が文字列で来る)
+        total += int(num)
+    return total
 
 
 def collect_externalsecrets():
