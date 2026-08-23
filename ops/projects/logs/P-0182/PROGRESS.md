@@ -608,3 +608,47 @@ resume-evidence.json に出典 commit SHA つきで記録) に切り替える。
 補助供給源: P-0092 (announced, 3M) の active 化、P-0193 のレビュー差し戻し戻り。
 **注意: P-0187 が示したように error 死は予算死より先に来うる** — 候補は state だけでなく
 stalled_reason も確認してから数えること。
+
+## セッション18 の記録 (2026-08-23 14:03–14:15Z)
+
+**やったこと**: ops-state 監視 (待機 1 回を挟んで計 2 回確認) + verify 1〜3 再実測 green
+(15 tests OK)。冒頭 fetch → merge 信号 2 種を確認: c353eca55 main 未含 × refs/pull 全本に
+自ブランチ SHA (rev-list HEAD ^origin/main の 17 件) 無一致 — **両方ネガティブ**。
+約 4.5 分待機後に再確認しても変化無し。本ファイル追記 + commit して終了。
+
+### 盤面の実測
+
+- heart は生存: beat 306 @ 14:00:55Z → beat 312 @ 14:09:16Z (ビート約 70 秒間隔を維持)
+- **P-0192 が budget_exhausted 死** (beat 310 decide / 04ea792c5 @ 14:05:40Z を遡及で実読。
+  P-0161 @ 09:35:24Z 以後約 4.5 時間ぶりの新規予算死)。ただし **merge 前の死なので証跡に
+  ならない**。また PROJECT.md「やらないこと」どおり終端エントリの復活レーンは作らないので、
+  merge 後もこの死が継続発火に変わることはない — **証跡候補から恒久脱落**
+- **P-0193 が in_review → active に戻った** (差し戻し再演。delivered 29 で不変なので通過では
+  無いことを確認)。セッション17 で予告した「補助供給源」が実現 — merge 後に再走して
+  予算死すれば継続発火の観測候補に復帰
+- **curriculum #545 (fff05783c, 採択 1) が merge 済み**: 新 active P-0203 (cap 1.2M) を実読。
+  証跡候補に追加
+- states 実測: stalled 35 / delivered 29 / vetoed 2 / announced 1 / active 4 / in_review 0。
+  actives = P-0182 (自枠, 1.5M) + P-0193 1M + P-0196 4.5M + P-0203 1.2M
+- 今日の予算死は計 11 件目 (P-0192)。budget-dead stalled 集合は 9→10 件
+  (P-0080/0102/0116/0139/0142/0143/0144/0157/0161/0192)
+- `continuation_count` の出現は全エントリで 0 のまま (デッドロックにより当然)
+- 人間の活動兆候: **活発化** — セッション中に main が #540 → #542/#543 (3e522cfef) →
+  #545 (fff05783c) と進み、refs/pull も 519→520。人間は他 PR を積極 merge しているが
+  自ブランチの手動 PR はまだ無い
+
+**次のセッションへの一言**: 変更なし — merge 待ち。**毎セッション最初にセッション16 の
+「発見」節を読むこと** (wrapper 経由では PR は構造的に開かない)。merge 信号は
+「c353eca55 が origin/main に含まれる」または「refs/pull に自ブランチのいずれかの commit SHA
+が出現」(人間の手動 PR) の 2 つだけ。SHA 照合は `git rev-list HEAD ^origin/main` の全件で行う。
+merge 済みを検知したら遡及レシピ
+(`git log -S'"budget_exhausted"' origin/ops-state -- projects.json` で予算死を列挙 →
+各死の時刻が merge 時刻より後なら continuation_count / proposed 戻しを
+`git show origin/ops-state:projects.json` で確認 → 実遷移 1 件以上を
+resume-evidence.json に出典 commit SHA つきで記録) に切り替える。
+未 merge の間は待機 1〜2 回 + 観測事実の追記のみで終えてよいが、**自枠の予算残量が尽きる
+方向にいることを前提に、毎セッション確実に PROGRESS を commit して終わること**。
+証跡機会の供給源 (更新): 最有力 **P-0196 (cap 4.5M)**、次点 P-0203 (新規, 1.2M)、
+P-0193 (1M, 差し戻し戻りで再走中 — merge 後の予算死なら観測候補に復格)、
+補助 P-0092 (announced, 3M)。**P-0192 は merge 前死につき恒久脱落** (終端復活レーンは
+仕様外)。候補判定は stalled_reason を必ず見ること (error/review_rejected 死は予算死でない)。
