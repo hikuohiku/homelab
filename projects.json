@@ -5351,7 +5351,44 @@
         "soft_cap": 4500000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T22:19:32Z",
+        "verify": [
+          {
+            "cmd": "kubectl get deploy -n immich -o json | python3 -c \"import json,sys;d=json.load(sys.stdin);imgs=[c['image'] for it in d['items'] for c in it['spec']['template']['spec'].get('containers',[]) if 'vectorchord' in c['image']];assert imgs and all('16.14-' in i for i in imgs),imgs\"",
+            "ok": true,
+            "rc": 0,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "git fetch origin ops-health-report && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys;d=json.load(sys.stdin);a=[x for x in d['applications'] if x['name']=='immich'][0];assert a['sync']=='Synced' and a['health']=='Healthy',a\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "From https://github.com/hikuohiku/homelab\n * branch                ops-health-report -> FETCH_HEAD\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,sys;d=json.load(sys.stdin);a=[x for x in d['applications'] if x['name']=='immich'][0];assert a['sync']=='Synced' and a['health']=='Healthy',a\n                                                                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: {'name': 'immich', 'namespace': 'argocd', 'sync': 'OutOfSync', 'health': 'Degraded'}\n"
+          },
+          {
+            "cmd": "grep -q '本番実施結果' docs/immich-postgres-upgrade.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "some_pass",
+        "passed": [
+          "kubectl get deploy -n immich -o json | python3 -c \"import json,sys;d=json.load(sys.stdin);imgs=[c['image'] for it in d['items'] for c in it['spec']['template']['spec'].get('containers',[]) if 'vectorchord' in c['image']];assert imgs and all('16.14-' in i for i in imgs),imgs\""
+        ],
+        "broken": []
+      }
     },
     {
       "id": "P-0254",
@@ -5371,7 +5408,33 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T22:19:32Z",
+        "verify": [
+          {
+            "cmd": "python3 -m unittest ops.tests.test_rating_note -v",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "test_rating_note (unittest.loader._FailedTest.test_rating_note) ... ERROR\n\n======================================================================\nERROR: test_rating_note (unittest.loader._FailedTest.test_rating_note)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_rating_note\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_rating_note'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.001s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "python3 ops/tools/rating_e2e_selftest.py && grep -q 'SELFTEST-RATING' /data/ops-state/ratings.jsonl",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-86ws7h67/repo/ops/tools/rating_e2e_selftest.py': [Errno 2] No such file or directory\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
