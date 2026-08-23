@@ -683,7 +683,62 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   往復して戻ってきている)。unknown 待ちの注意だけ残す: mergeable_state が unknown なら
   数秒〜十数秒待って再取得、dirty 確定時のみ update-branch → ci 再 green を待つ
 
+### セッション 18 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま**、blocking 3→2 件に減少
+  (P-0092 / P-0161。checked=61)。固定指示どおり実演習は見送り。コード変更は無し
+- 本セッションの実イベント: **未観測の中間状態 `merging` が台帳に初出**。
+  `git show` 差分の実測では 61 件のうち 2 件が動いた (59/61 不変):
+  P-0163 が in_review→**merging** (in_review の第 3 の出口方向)、
+  P-0116 が active→stalled。内訳は delivered 26 / vetoed 2 / stalled 29 /
+  announced 1 / active 2 (+自己) / merging 1 / in_review 0。
+  P-0163 の merging 化は同プロジェクトの PR #527 が main にマージされたことと同時であり、
+  「PR 済み・完了前」の状態表現という解釈と整合する (セッション 8 メモ「コード上散見する
+  review/merging 等の中間状態が帳簿上未観測」に対し、in_review に続き merging も実在確定)
+- blocking 減少 (3→2) の出口は P-0116 の stalled 流出で、delivered は 26 のまま不変 —
+  「流出による減少」はセッション 14 に続き 2 例目。判定原則 (announced+active==0 の実測一択)
+  は不変。残る塞ぎ手は P-0092 announced + P-0161 active
+- **main が史上 2 度目の前進** (cc1c86626 → a962e4211、PR #527 project/p-0163 マージ)。
+  PR #524 は無介入で mergeable_state=clean を維持 — main 移動直後の unknown は既知の罠どおり
+  出現し (10 秒待ちで clean 復帰)、head=5d24c8932 不変・ci/GitGuardian success。
+  演習材料の耐久性は 3 例目の裏取り
+- ops-state ブランチは進行 (fetch で 3a7e91543→669768126、先頭は heart: beat 43)
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 2), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 281 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git fetch origin && git rev-parse origin/main          # a962e4211 (前進)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- 当日の手順はセッション 3 固定のまま不変 (--run 背景起動 → 全 zero 確認 → PATCH ready
+  解除 → PUT merge)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。「0 か否か」だけを見る原則は維持。blocking は 2 件まで減ったが
+  P-0092 は初日から announced 滞在が続く古参であり、「残り少数 = 開くのが近い」という読みには
+  依然根拠がない。unknown 待ちの注意は継続: mergeable_state が unknown なら数秒〜十数秒待って
+  再取得、dirty 確定時のみ update-branch → ci 再 green を待つ
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 18, ライフサイクル観測の続き) **未観測だった中間状態 `merging` が台帳に初出**
+  (P-0163: in_review→merging)。セッション 8 メモ「コード上散見する review/merging 等の
+  中間状態が帳簿上未観測」に対し、in_review (同日実観測) に続き merging も帳簿に現れ、
+  コードと台帳の状態集合がほぼ一致した。P-0163 の merging 化はそのプロジェクトの PR #527 の
+  main マージと同時に起こっており、**「マージ済み・完了前」の状態表現**と考えるのが妥当。
+  これで in_review の観測された出口は →active (2 例) / →stalled (1 例) / →merging (1 例) の
+  3 方向。なお P-0163 は往復振動する唯一のプロジェクトだったが今度は完結方向へ抜けた —
+  ただしこれを弁開放の前兆と読む根拠は依然無く、塞ぎ手 P-0092/P-0161 が残る限り弁は閉じたまま
+
+- (セッション 18, 演習材料の耐久実測の続き) main 史上 2 度目の前進 (PR #527) でも待機中の
+  ドラフト PR #524 は無介入で clean を維持し、材料の耐久説は 3 例目の裏取りを得た。
+  main 移動直後の mergeable_state は再び unknown を返した (10 秒待ちで clean 復帰) —
+  セッション 11 発見の罠は再現性あり。「unknown = 待つ」運用は確定でよい
 
 - (セッション 17, ライフサイクル観測の続き) **完全凍結の明け方も最小単位だった**。
   15→16 の完全凍結 2 連続の後、台帳差分は P-0163 active→in_review のたった 1 件
