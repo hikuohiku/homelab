@@ -37,10 +37,11 @@ spec:
         fsGroup: 10001
       containers:
         - name: worker
-          # image は実装時に決める (digest pin 推奨, #49 の教訓)。
+          # python:3.14-alpine の OCI index digest pin (exfil_drill.py IMAGE と同じ値。
+          # 上げ方・実測手順は同ファイルのコメント参照)。
           # livenessProbe/readinessProbe を付けないこと — 本プロファイルは
           # ingress 全拒否なので probe が誤検知する
-          image: python:3.14-alpine
+          image: python@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc
           command: ["python3", "-c", "pass"]
           resources:
             requests:

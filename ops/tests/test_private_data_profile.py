@@ -64,6 +64,29 @@ class TestDriftGuard(unittest.TestCase):
         self.assertIn("networkpolicy.yaml", text)
 
 
+class TestImagePinning(unittest.TestCase):
+    """ドリル image の digest pin を固定 (#49 の教訓)。
+
+    drill (exfil_drill.py の IMAGE) と参照テンプレート (job-template.yaml) が
+    同じ digest pin を指すこと。浮遊タグへの退行も 2 箇所の乖離もここで落とす。
+    上げるときは ops/inventory.json の private-data-drill-image の current も
+    同じ値に揃えること (こちらは watcher 側の管轄)。
+    """
+
+    def test_drill_image_is_digest_pinned(self):
+        drill = load_drill()
+        self.assertRegex(
+            drill.IMAGE, r"^python@sha256:[0-9a-f]{64}$",
+            "image は浮遊タグでなく digest pin であること",
+        )
+
+    def test_template_shares_the_same_pin(self):
+        drill = load_drill()
+        text = (REPO / "ops/profiles/private-data/job-template.yaml").read_text(
+            encoding="utf-8")
+        self.assertIn(f"image: {drill.IMAGE}", text)
+
+
 class TestPolicySemantics(unittest.TestCase):
     """fail-closed 形を機械固定。census 由来の穴を開ける時はここを conscious に変える。"""
 

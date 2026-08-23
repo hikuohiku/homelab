@@ -364,6 +364,18 @@
       "observability_impact": "壊れると version_drift の観測が止まり、上流の新版が誰にも見られない状態に戻る（#49 型の静放置の再発）。ただし観測専用 CronJob であり、壊れても homelab 本体の到達性・稼働には影響しない"
     },
     {
+      "id": "private-data-drill-image",
+      "kind": "image",
+      "name": "python:3.14-alpine (private-data exfil ドリル)",
+      "current": "sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc",
+      "file": "ops/profiles/private-data/exfil_drill.py",
+      "match": "IMAGE = \"python@sha256:",
+      "upstream": "dockerhub:library/python",
+      "policy": "manual",
+      "note": "P-0243 で新設。exfil ドリルと job-template.yaml が立てる使い捨て検証 Pod の image。タグ python:3.14-alpine の OCI index digest を registry API の docker-content-digest で実測して pin した（2026-08-23、digest 直接取得でバイト一致を確認済み）。更新は exfil_drill.py の IMAGE・job-template.yaml・本 current の 3 箇所を同じ値に揃えること（drill↔template の一致は ops/tests/test_private_data_profile.py が検査する）。ドリルの判定スクリプトは標準ライブラリのみだが挙動が python 版本に依存しうるため auto にせず manual",
+      "observability_impact": "壊れる（digest を消し忘れて pull 失敗になる等）と exfil ドリルの Pod が起動できなくなり、段階 3 台帳基準 1 の反証（ラベル付き拒否 vs 対照群成功の同時実証）を新規に取れなくなる。本番ワークロードには影響しない"
+    },
+    {
       "id": "gha-setup-helm-version",
       "kind": "binary",
       "name": "helm (azure/setup-helm version input)",

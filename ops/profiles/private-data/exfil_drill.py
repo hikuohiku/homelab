@@ -47,7 +47,10 @@ POD_LABELED = "exfil-drill-labeled"
 POD_CONTROL = "exfil-drill-control"
 
 TARGET_URL = "https://example.com/"
-IMAGE = "python:3.14-alpine"
+# python:3.14-alpine の OCI index digest を registry API の docker-content-digest で
+# 実測して pin (2026-08-23 実測, #49 の教訓)。上げるときはタグを引き直してこの値と
+# job-template.yaml / ops/inventory.json (private-data-drill-image) を同じ値に揃える
+IMAGE = "python@sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc"
 HTTPS_TIMEOUT = 8          # 秒。既定拒否下は SYN 黒穴になり timeout で落ちる
 POD_DEADLINE = 180         # Pod 側の自死 (activeDeadlineSeconds)
 POLL_DEADLINE = 240        # ドリル全体の待ち上限

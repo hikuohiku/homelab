@@ -128,3 +128,61 @@
   本セッションの実測が emptyDir 方式の効能の証拠
 - セッション 2/3 の引き継ぎ事項はすべてそのまま有効: census 到着時の両 NP バイト一致
   更新 + test_egress_allows_dns_and_nothing_else_yet の conscious 更新セット、digest pin 化未処理
+
+## セッション 5 (2026-08-23 深夜) — 持ち越しの digest pin 化を完了。V2 は merge+sync 待ちのまま構造的に red で正しい
+
+### やったこと
+
+- **現在地を再実測**: /tmp/opencode は依然 root:root 755 で uid 10001 から不変
+  → V2 は本 Pod では不変に red (fail-fast rc=2・0.2 秒・クラスタ副作用ゼロ)。
+  V1/V3 は green。origin/main を fetch して #571〜#574 の merge を確認したが、
+  本 PR はまだ未 merge = sync も起きていない。セッション 3/4 の診断は今日も正しい
+- **P-0203 census を main の木で直接確認** (`git ls-tree -r origin/main | grep egress`):
+  まだ無い (rc=1)。census 到着時の NP 更新タスクは引き続き curriculum 行き
+- **持ち越し最後の 1 件「digest pin 化」を実施** (今回の本体):
+  - `python:3.14-alpine` の OCI index digest を registry API で実測:
+    `sha256:05b2b8b732ecd268fee8727a369f936f022d1321b59befd13c30ede22769dcdc`
+    (auth.docker.io の匿名 token → manifests GET の docker-content-digest。
+    tag 取得と digest 直接取得のレスポンスがバイト一致する round-trip まで確認)
+  - exfil_drill.py の IMAGE 定数と job-template.yaml を `python@sha256:05b2…` に変更
+    (両方に上げ方の手順コメント付き)。demo.json はドリル実績の記録なので
+    **意図的に触らない** (過去の証拠を現在値で上書きしない)
+  - ops/inventory.json に `private-data-drill-image` エントリを新設 (policy=manual、
+    match は `IMAGE = "python@sha256:"`)。pin しても観測対象から外れたら #49 型の
+    静放置に戻るだけなので、追跡への載せ込みまでが pin 化の完成と判断した
+  - test_private_data_profile.py に TestImagePinning を追加: drill IMAGE の
+    digest pin 形固定 + drill↔template の同一値固定 (浮遊タグへの退行・2 箇所の
+    乖離をここで落とす)。inventory↔drill の一致までは見ない (watcher 側の管轄)
+
+### 分かったこと
+
+- inventory.json には digest pin 用の既存パターンがある: golang builder の例
+  (`match: "FROM golang@sha256:"`, current に実 digest, policy manual)。
+  前例 e6982d2c5 がほぼ同型。`match` はファイル内部分文字列なので、
+  Python 側は `IMAGE = "python@sha256:` のように定数代入の形で絞るのが精度が出る
+- version watcher / check_version_sync への影響はゼロを実測: 新エントリ追加後も
+  test_version_watch 37 本 OK・check_version_sync 全項目 ok。upstream scheme
+  `dockerhub:library/python` は既存エントリと同じものを再利用したので新規対応は不要
+- validate.py の「archive.jsonl が origin/main 先頭一致せず」error は本ブランチ作業中は
+  常に出る (main 側の追記帳簿が進んでいるだけで、stash 実測で私の変更と無関係と確認)。
+  CI は main 上で回るので PR では問題にならない — 次セッションが驚かないように記す
+
+### 検証 (全部自分で実走済み)
+
+- unittest 37 本 OK (test_private_data_profile + test_stage3_readiness。退行なし)
+- python3 ops/validate.py: 上記 archive.jsonl 以外は error 無し (warning 11 件は既存の
+  backlog refs と todo 枯渇で既存問題)
+- spec verify V1 green / V3 green / V2 red (既知の fail-fast、品質はセッション 3 から不変)
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4 から一歩も動いていない**: V2 は merge+sync 後の新 runner Pod で
+  自動 green 化する。Pod 内での再走は無駄。やることは「merge を待つ」だけ
+- 人間レビュー向け: 今セッションの差分は image の tag→digest 差し替え 2 箇所 +
+  inventory 追記 1 エントリ + drift guard テスト 2 本のみ。spawn.py / apps/ /
+  readiness.json / demo.json には触っていない (前セッションまでの差分に重ねても
+  レビュー範囲は広がらない)。digest の上げ忘れリスクは policy=manual + watcher 観測 +
+  テスト固定の三段で受けている
+- census 到着時の手順はセッション 3/4 記載どおり不変 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)。
+  「digest pin 化未処理」は**解消済み** — 引き継ぎ事項から消してよい
