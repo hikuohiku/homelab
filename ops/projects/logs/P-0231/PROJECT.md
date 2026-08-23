@@ -10,16 +10,17 @@
 
 initializer 開始時点 (2026-08-23, ブランチ project/p-0231 @ 5877f715e) で **全 5 項目 failing を実測済み**。完了判定はこの通り。
 
-- [ ] `test -f ops/reminders.json && test -f ops/life/reminders.py`
-      台帳本体 (main 管理) とレンダラの両ファイルが存在すること。
-- [ ] `python3 -m unittest ops.tests.test_reminders`
-      レンダラの unit テストが通ること。年 recurrence (誕生日など毎年くるもの) と境界日 (今日・明日・明後日の 48h 窓の端) を fixture で固定。
+- [x] `test -f ops/reminders.json && test -f ops/life/reminders.py`
+      台帳本体 (main 管理) とレンダラの両ファイルが存在すること。(2026-08-23 worker 実測 GREEN)
+- [x] `python3 -m unittest ops.tests.test_reminders`
+      レンダラの unit テストが通ること。年 recurrence (誕生日など毎年くるもの) と境界日 (今日・明日・明後日の 48h 窓の端) を fixture で固定。(24 テスト GREEN)
 - [ ] `git fetch origin ops-state -q && git show origin/ops-state:reminders.json >/dev/null 2>&1 || git show origin/ops-state:briefing/reminders.txt >/dev/null 2>&1`
       成果物が **実際に ops-state ブランチへ公開されている**こと。ローカルのファイル存在ではなく、push 済みのリモートブランチから読めることが基準 (「自己申告を信用しない」の機械版)。
-- [ ] `grep -rq 'reminders' apps/ops-dashboard/app/src/`
-      ダッシュボード側のコードが reminders を参照していること (= 読む経路が実在)。
-- [ ] `test -s ops/projects/logs/P-0231/render-sample.txt`
-      レンダラの**実データによる**出力 1 通が logs に保存されていること (空文件不可)。fixture ではなく ops/reminders.json 本体からの生成。
+      ※ 配線は完了 (heart ビートが briefing/reminders.txt を書く。beat 結合テスト付き)。**merge 後に heart が最初のビートを回した時点で green になる**。単一書き手 = heart の原則により、worker が直接 push して先に green にすることはしない
+- [x] `grep -rq 'reminders' apps/ops-dashboard/app/src/`
+      ダッシュボード側のコードが reminders を参照していること (= 読む経路が実在)。(src/lib/reminders.ts ほか GREEN)
+- [x] `test -s ops/projects/logs/P-0231/render-sample.txt`
+      レンダラの**実データによる**出力 1 通が logs に保存されていること (空文件不可)。fixture ではなく ops/reminders.json 本体からの生成。(実時刻・実台帳で生成済み)
 
 ## 設計方針
 
