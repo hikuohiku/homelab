@@ -129,3 +129,35 @@ merge 後も red が続くときの切り分け順: (a) ops-state 最新 commit 
 回っているか確認 → (b) セッション 2/3 のリハーサル (worktree + publish_reminders +
 commit, push 無し) を再実行してレンダラ/配線側を切り分け → (c) heart pod 側を疑う
 (sync_main 済み repo_dir が新 main になっているか / pod 再起動が必要か)。
+
+## worker セッション 4 (2026-08-23) — main 側進行との衝突監査 + 最新 ops-state 先端でリハーサル再通過。コード変更なし
+
+### やったこと
+
+レビュー指摘は無し。唯一の failing は verify(3) のまま (ブランチ未 merge を実測:
+`git branch -r --contains 7335acb20` は origin/project/p-0231 のみ)。このセッションの新規
+価値は **main が分岐点から進んだ (5877f715e → 31a806191, PR #564 ほか)** ことへの対応:
+
+1. **衝突監査**: 自分の触ったファイルと main 側の変更ファイルの積集合 = ゼロ。
+   `git merge-tree` の conflict 数も 0。main は分岐点以後 `ops/heart/` も
+   `apps/ops-dashboard/` も触れていない (意味的なドリフト無し)
+2. **ops-state がさらに進んでいた** (6b0776c32 → 667b796ef, "heart: beat 23") ので
+   リハーサルを最新先端に対して実施: worktree 展開 → 実台帳 × 実時刻 (UTC now) で
+   `publish_reminders()` → add -A + commit (**push 無し**) →
+   `git show HEAD:briefing/reminders.txt` 通過、レンダラ CLI 出力と diff ゼロ一致
+3. テスト再実測: unittest 24 本 OK、validate.py OK (0 error)
+
+### 分かったこと・罠
+
+- heart pod 引き続き稼働中 (beat 23)。merge 後 green 化の前提は崩れていない
+- main 側の進行は本ブランチに一切影響しないことを機械確認した — 以後のセッションで
+  衝突監査を繰り返す必要は薄い (merge 直前に一回やれば十分)
+- Heart の構築は test_reminders_beat.py 流儀 (`HEART_DATA_DIR` tmp 指定 +
+  `HEART_MODE=shadow`) なら credential 無しで可能。リハーサル手順の詳細はここが唯一の
+  ノウハス: `h.state_dir` だけ差し替え、now は `datetime.now(timezone.utc)` (beat 同一条件)
+
+### 次のセッションへの一言
+
+結論不変: コード完成・変更不要。verify(3) だけが merge 待ち (merge → 初回ビート ~120s で
+green)。レビュー指摘があればその解消が最優先。merge 後 red 継続時の切り分け順は
+セッション 3 末尾の (a)(b)(c) をそのまま使う。
