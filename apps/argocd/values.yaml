@@ -70,3 +70,67 @@ repoServer:
     requests:
       cpu: 100m
       memory: 128Mi
+
+# ArgoCD Notifications → Discord 配線 (P-0139)。
+# controller 自体は chart default (notifications.enabled: true) で有効・実機で稼働済みのため
+# enabled の明示はしない。ここで定義した trigger/template/notifier/subscription は chart が
+# argocd-notifications-cm に render し、controller がそれを読んで通知する。
+notifications:
+  # メッセージ内リンクに使う URL。global.domain を未設定のためここで明示する
+  # (省略すると context.argocdUrl が "https://" に落ちて link が壊れる)
+  argocdUrl: https://argocd.tailae6c2.ts.net
+
+  # Discord incoming webhook の URL 本体は Doppler の DISCORD_WEBHOOK_URL。
+  # discord-webhook-external-secret.yaml が argocd-notifications-secret の
+  # discord-webhook-url キーとして供給し、下の notifier の $discord-webhook-url が参照する。
+  # `$<key>` 参照の解決先 Secret 名は argocd-notifications-secret 固定のため、chart 由来の
+  # 空 Secret を作らせず ESO 管理に一本化する (二重管理だと sync のたびに上書き合戦になる)。
+  secret:
+    create: false
+
+  notifiers:
+    service.webhook.discord: |
+      url: $discord-webhook-url
+      headers:
+        - name: Content-Type
+          value: application/json
+
+  templates:
+    # body は手書き JSON。app 名と URL 以外 (operationState.message 等の自由テキスト) を
+    # 展開しないこと — 値に quote / 改行が入ると JSON が壊れ Discord が 400 を返す
+    template.discord-app-degraded: |
+      webhook:
+        discord:
+          method: POST
+          body: |
+            {"content": "ArgoCD: アプリ {{.app.metadata.name}} が Degraded になった {{.context.argocdUrl}}/applications/{{.app.metadata.name}}"}
+    template.discord-app-sync-failed: |
+      webhook:
+        discord:
+          method: POST
+          body: |
+            {"content": "ArgoCD: アプリ {{.app.metadata.name}} の sync が失敗した {{.context.argocdUrl}}/applications/{{.app.metadata.name}}"}
+
+  triggers:
+    # ノイズフィルタ: 器自身 (autopilot ns — autopilot / ops-dashboard / heart 関連) の
+    # Application 変化では鳴らさない。autopilot は毎時起動で Job の再試行を繰り返し、
+    # 一時的な Degraded / Failed が日常茶飯事なので除外しないと警報疲れになる。
+    # Application 全 14 本は argocd ns 在住のため app.metadata.namespace では判別できず、
+    # destination.namespace 側で判定する (ops-dashboard / autopilot が destination.namespace:
+    # autopilot であることは P-0139 initializer 実測)。
+    on-degraded: |
+      - when: app.status.health.status == 'Degraded' && app.spec.destination.namespace != 'autopilot'
+        send: [discord-app-degraded]
+    on-sync-failed: |
+      - when: app.status.operationState.phase in ['Error', 'Failed'] && app.spec.destination.namespace != 'autopilot'
+        send: [discord-app-sync-failed]
+
+  # 全 Application への一括購読 (per-app annotation を 14 本に撒かなくてよい)。
+  # 受取先は人間が見ている Discord 1 本のみ。recipient「discord」は service.webhook.discord
+  # の名前部分に対応し、webhook は recipient 文字列を使わないため空でよい
+  subscriptions:
+    - recipients:
+        - discord
+      triggers:
+        - on-degraded
+        - on-sync-failed

@@ -113,6 +113,7 @@ DECLARED_DOPPLER_KEYS = frozenset(
 DECLARED_SECRET_TARGETS = frozenset(
     {
         "argocd-dex-client-secret",
+        "argocd-notifications-secret",
         "autopilot-credentials",
         "coder-db-url",
         "coder-postgres-credentials",
