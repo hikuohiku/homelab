@@ -161,3 +161,38 @@ commit, push 無し) を再実行してレンダラ/配線側を切り分け →
 結論不変: コード完成・変更不要。verify(3) だけが merge 待ち (merge → 初回ビート ~120s で
 green)。レビュー指摘があればその解消が最優先。merge 後 red 継続時の切り分け順は
 セッション 3 末尾の (a)(b)(c) をそのまま使う。
+
+## worker セッション 5 (2026-08-23) — ops-state 先端 beat 25 でリハーサル再通過。台帳の日付経過による文面変化を確認。コード変更なし
+
+### やったこと
+
+レビュー指摘は無し。唯一の failing は verify(3) のまま (ブランチ未 merge を実測:
+`04553d313` は `origin/project/p-0231` のみ)。**main はセッション 4 から不動**
+(origin/main = 31a806191) なので衝突監査は省略 (セッション 4 の結論どおり)。新規価値は:
+
+1. **ops-state がさらに進んでいた** (667b796ef → f1224fec3, "heart: beat 25") ので
+   リハーサルを最新先端に対して実施し再通過: worktree 展開 → 実台帳 × 実時刻 (UTC now,
+   beat 同一条件) で `publish_reminders()` → add -A + commit (**push 無し**) →
+   `git show HEAD:briefing/reminders.txt` 通過 (= verify(3) と同じ判定式)、
+   レンダラ CLI 出力と完全一致。「今日 8/24 ゴミ収集…」の 1 行、差分は briefing/ のみ
+2. テスト再実測: unittest 28 本 (test_reminders 24 + test_reminders_beat 4) OK、
+   validate.py OK (0 error。warning 11 件は既存 backlog refs のもの、本件と無関係)
+
+### 分かったこと・罠
+
+- **台帳の日付が経過すると断片は空判定文面に変わる**: 仮置きの「ゴミ収集」は 8/24 の
+  単発 (repeat=none)。8/26 頃を過ぎると 48h 窓から外れ、防災の日 (year→毎年 9/1) の窓が
+  開く (~8/30) までは「今後 48 時間以内の予定はない」系の空文面になる。merge がそれ以後に
+  ずれても**仕様どおりの正常動作** (空でも節は消さない設計) だが、render-sample.txt と
+  live 断片の文面が一致しなくなるのは壊れではない — 将来のセッションが誤読しないこと
+- リハーサルスクリプトを /tmp から実行するときは `sys.path.insert(0, os.getcwd())`
+  が要る (script by path では cwd が sys.path に入らない)。`reminders.render()` は
+  now= の keyword-only 必須引数
+- heart pod 引き続き稼働中 (beat 25)。merge 後 green 化の前提は崩れていない
+
+### 次のセッションへの一言
+
+結論不変: コード完成・変更不要。verify(3) は merge → heart 初回ビート (~120s) で green。
+レビュー指摘があればその解消が最優先。merge 後 red 継続時はセッション 3 末尾の
+(a)(b)(c) で切り分け。断片の文面が空判定になっていても日付経過による正常系
+(上記の罠参照)。
