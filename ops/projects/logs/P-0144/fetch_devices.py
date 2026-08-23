@@ -16,6 +16,12 @@ credential (環境変数。上から順に採用):
 出力:
   -o で指定したパス (既定はこのスクリプトと同じディレクトリ) に devices.json と devices.md。
   devices.json は API 生応答を envelope に包んでそのまま保存する。
+
+復元モード (credential が無い環境で、外で実測した結果を原本として取り込む):
+  --from-md TABLE.md     render_table() が書き出した形式の表 (issue #56 に貼られたもの等) から復元
+  --from-json DATA.json  貼り付けられたデバイス一覧 JSON (API 生応答または devices.json) から復元
+  --fetched-at TS        実測された時刻が分かる場合に記録する
+  復元モードは一切通信しない。取り込んだデータが転写である旨を envelope に明記する。
 """
 
 import argparse
@@ -33,6 +39,8 @@ API_BASE = "https://api.tailscale.com/api/v2"
 TOKEN_PATH = "/oauth/token"
 DEVICES_PATH = "/tailnet/-/devices"
 TIMEOUT_SECONDS = 30
+SCHEMA = "p-0144.devices/1"
+UNKNOWN_CELL = "(不明)"
 
 CREDENTIAL_VARIANTS = (
     ("bearer", ("TAILSCALE_API_KEY",)),
@@ -166,7 +174,7 @@ def build_envelope(raw_response, fetched_at, tailnet):
     if not isinstance(raw_devices, list):
         die(f"応答に devices 配列がありません (keys={sorted(raw_response)})")
     return {
-        "schema": "p-0144.devices/1",
+        "schema": SCHEMA,
         "fetched_at": fetched_at,
         "source": "tailscale api v2 GET /tailnet/{tailnet}/devices (read-only; no changes made)",
         "tailnet": tailnet,
@@ -176,6 +184,103 @@ def build_envelope(raw_response, fetched_at, tailnet):
     }
 
 
+TRANSCRIPTION_NOTE = (
+    "このファイルは実測の転写 (transcription) であり API 生応答ではない。"
+    "元の実測はこのリポジトリ外で読み取り専用に行われた。"
+    "転写元に現れた項目のみを保持し、欠けている情報は捏造せず省略している"
+)
+
+
+def parse_markdown_table(text):
+    """render_table() が書き出した表をデバイス録へ戻す (--from-md 用)。
+
+    データ行の選別は「第 1 セルが数字」で判定する (ヘッダ・区切り行を確実に除外する。
+    セッション1 の実測: ヘッダ除外のインデックスずれで最初のデータ行を落とす罠があるため)。
+    捏造しない原則: 表に無い情報は補わず、(不明) セルはキーごと省略する。
+    """
+    devices = []
+    for line in text.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        if not cells or not cells[0].isdigit():
+            continue
+        if len(cells) < 8:
+            die(f"表の列数が足りません (8 列必要、{len(cells)} 列): {line}")
+        _num, expiry, setting, last_seen, os_name, who, _marks, name = cells[:8]
+        device = {"name": "" if name == "(名前なし)" else name}
+        if expiry != UNKNOWN_CELL:
+            device["expires"] = expiry
+        device["keyExpiryDisabled"] = setting.lower() == "disabled"
+        if last_seen != UNKNOWN_CELL:
+            device["lastSeen"] = last_seen
+        if os_name != UNKNOWN_CELL:
+            device["os"] = os_name
+        if who != UNKNOWN_CELL:
+            parts = [part.strip() for part in who.split(",") if part.strip()]
+            tags = [part for part in parts if part.startswith("tag:")]
+            users = [part for part in parts if not part.startswith("tag:")]
+            if users:
+                device["user"] = users[0]
+            if tags:
+                device["tags"] = tags
+        devices.append(device)
+    return devices
+
+
+def build_ingest_envelope(devices, origin, fetched_at=None, tailnet="-"):
+    """復元モード用の envelope。実測が転写であることを source/notes に明記する。"""
+    return {
+        "schema": SCHEMA,
+        "fetched_at": fetched_at
+        or datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "source": (
+            f"transcribed from {origin}; original read-only fetch was performed "
+            "outside this repository (no changes made)"
+        ),
+        "tailnet": tailnet,
+        "notes": dict(FIELD_NOTES, transcription=TRANSCRIPTION_NOTE),
+        "devices": devices,
+    }
+
+
+def ingest_from_json(payload, origin, fetched_at=None):
+    """貼り付け JSON を envelope へ整える (--from-json 用)。
+
+    受け付けるのは (1) API 生応答 {"devices":[...]} と (2) このツールが書き出した
+    envelope 全体。既存の実測フィールドは上書きせず保持し、転写経路である旨だけ
+    source / notes に足す。
+    """
+    if not isinstance(payload, dict) or not isinstance(payload.get("devices"), list):
+        keys = sorted(payload) if isinstance(payload, dict) else type(payload).__name__
+        die(f"JSON に devices 配列がありません (keys={keys})")
+    if not payload["devices"]:
+        die("devices 配列が空です (実測結果が入っているか確認してください)")
+    if payload.get("schema") == SCHEMA:
+        envelope = dict(payload)
+        if fetched_at:
+            envelope["fetched_at"] = fetched_at
+        elif not envelope.get("fetched_at"):
+            envelope["fetched_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        envelope["source"] = f"{payload.get('source')} ; saved via fetch_devices.py --from-json ({origin})"
+        notes = dict(FIELD_NOTES)
+        notes.update(payload.get("notes") or {})
+        notes.setdefault("transcription", TRANSCRIPTION_NOTE)
+        envelope["notes"] = notes
+        return envelope
+    return build_ingest_envelope(payload["devices"], origin, fetched_at=fetched_at)
+
+
+def write_outputs(envelope, out_path):
+    out_path = Path(out_path)
+    out_path.write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n")
+    md_path = out_path.with_suffix(".md")
+    md_path.write_text(render_table(envelope["devices"], str(envelope.get("fetched_at") or "")))
+    print(f"fetch_devices: {len(envelope['devices'])} devices -> {out_path}")
+    print(f"fetch_devices: table -> {md_path}")
+
+
 def main(argv=None, env=None):
     env = env if env is not None else dict(os.environ)
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
@@ -183,7 +288,35 @@ def main(argv=None, env=None):
         "-o", "--out", default=str(Path(__file__).resolve().parent / "devices.json"),
         help="devices.json の出力先 (devices.md も隣に書かれる)",
     )
+    parser.add_argument(
+        "--from-md", dest="from_md", metavar="TABLE.md",
+        help="API を叩かず、render_table() 形式の表 (issue #56 に貼られたもの等) から devices.json を復元する",
+    )
+    parser.add_argument(
+        "--from-json", dest="from_json", metavar="DATA.json",
+        help="API を叩かず、貼り付けられたデバイス一覧 JSON (API 生応答または devices.json) から復元する",
+    )
+    parser.add_argument(
+        "--fetched-at", dest="fetched_at", metavar="TIMESTAMP",
+        help="実測された時刻が分かる場合にその値を記録する (省略時は転写時刻を入れ、source に転写である旨を残す)",
+    )
     args = parser.parse_args(argv)
+
+    if args.from_md and args.from_json:
+        die("--from-md と --from-json は同時に指定できません")
+
+    if args.from_md or args.from_json:
+        if args.from_md:
+            origin = f"markdown table ({args.from_md})"
+            devices = parse_markdown_table(Path(args.from_md).read_text(encoding="utf-8"))
+            if not devices:
+                die(f"{args.from_md} からデータ行 (第 1 セルが数字の行) を見つけられませんでした")
+            envelope = build_ingest_envelope(devices, origin, fetched_at=args.fetched_at)
+        else:
+            payload = json.loads(Path(args.from_json).read_text(encoding="utf-8"))
+            envelope = ingest_from_json(payload, f"pasted device list JSON ({args.from_json})", fetched_at=args.fetched_at)
+        write_outputs(envelope, args.out)
+        return
 
     kind, values = pick_credentials(env)
     if kind == "bearer":
@@ -199,13 +332,7 @@ def main(argv=None, env=None):
     fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     envelope = build_envelope(raw, fetched_at, env.get("TAILSCALE_TAILNET") or "-")
 
-    out_path = Path(args.out)
-    out_path.write_text(json.dumps(envelope, ensure_ascii=False, indent=2) + "\n")
-    md_path = out_path.with_suffix(".md")
-    md_path.write_text(render_table(raw.get("devices", []), fetched_at))
-
-    print(f"fetch_devices: {len(envelope['devices'])} devices -> {out_path}")
-    print(f"fetch_devices: table -> {md_path}")
+    write_outputs(envelope, args.out)
 
 
 if __name__ == "__main__":

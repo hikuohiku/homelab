@@ -174,5 +174,145 @@ class FetchDevicesTest(ServerFixture):
                 fetch_devices.main(["-o", tmpdir + "/x.json"], env={})
 
 
+class IngestTest(unittest.TestCase):
+    """復元モード (--from-md / --from-json) の検査。
+
+    人間が外で実測して issue #56 に貼ったデータを原本として devices.json に
+    復元する経路。捏造しない原則のため、「表に無い情報を補わない」「通信しない」
+    「既存の実測フィールドを上書きしない」ことを機械的に確かめる。
+    """
+
+    def test_from_md_restores_rendered_table(self):
+        md = fetch_devices.render_table(FAKE_DEVICES["devices"], "2026-08-23T05:00:00Z")
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "pasted.md"
+            src.write_text(md, encoding="utf-8")
+            out = Path(tmpdir) / "devices.json"
+            fetch_devices.main(["--from-md", str(src), "-o", str(out)], env={})
+            data = json.loads(out.read_text(encoding="utf-8"))
+            # verify#1 と同じ条件: 各要素が name を持つ
+            self.assertTrue(data["devices"])
+            self.assertTrue(all("name" in device for device in data["devices"]))
+            # verify#3 が見る語が本文として含まれること
+            text = out.read_text(encoding="utf-8").lower()
+            self.assertIn("expiry", text)
+            # 転写である旨が envelope に明記されていること (実測と混同させない)
+            self.assertIn("transcri", json.dumps(data).lower())
+            by_name = {device["name"]: device for device in data["devices"]}
+            node01 = by_name["node01.tailXXXX.ts.net."]
+            self.assertEqual(node01["expires"], "2026-08-30T00:00:00Z")
+            self.assertFalse(node01["keyExpiryDisabled"])
+            k8s = by_name["k8s-argocd.tailXXXX.ts.net."]
+            self.assertTrue(k8s["keyExpiryDisabled"])
+            self.assertEqual(k8s.get("tags"), ["tag:k8s"])
+            laptop = by_name["laptop.tailXXXX.ts.net."]
+            self.assertEqual(laptop.get("user"), "hikuohiku@gmail.com")
+            # 復元した録から render_table を再生成しても同じ表になる (往復性)
+            self.assertEqual(
+                fetch_devices.render_table(data["devices"], "2026-08-23T05:00:00Z"), md
+            )
+
+    def test_from_md_never_touches_network(self):
+        md = fetch_devices.render_table(FAKE_DEVICES["devices"], "t")
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "pasted.md"
+            src.write_text(md, encoding="utf-8")
+            original_base = fetch_devices.API_BASE
+            # 接続を試みれば必ず即座に失敗するポートへ向けておく
+            fetch_devices.API_BASE = "http://127.0.0.1:1/api/v2"
+            try:
+                fetch_devices.main(["--from-md", str(src), "-o", tmpdir + "/d.json"], env={})
+            finally:
+                fetch_devices.API_BASE = original_base
+
+    def test_from_md_tolerates_code_fence_and_unknown_cells(self):
+        pasted = "\n".join(
+            [
+                "人間が実行しました。結果です:",
+                "```",
+                "| # | 期限 (expires) | 失効設定 | lastSeen | os | user/tags | 印 | name |",
+                "|---|----------------|----------|----------|----|-----------|----|------|",
+                "| 1 | (不明) | enabled | (不明) | (不明) | (不明) | - | mystery.tailXXXX.ts.net. |",
+                "| 2 | 2026-10-01T00:00:00Z | disabled | 2026-08-23T00:00:00Z | ios | alice@example.com, tag:prod | autopilot cluster-proxy | phone |",
+                "```",
+            ]
+        )
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "pasted.md"
+            src.write_text(pasted, encoding="utf-8")
+            out = Path(tmpdir) / "devices.json"
+            fetch_devices.main(
+                ["--from-md", str(src), "-o", str(out), "--fetched-at", "2026-08-23T09:00:00Z"],
+                env={},
+            )
+            data = json.loads(out.read_text(encoding="utf-8"))
+            mystery, phone = data["devices"]
+            # 捏造しない: (不明) セルはキーごと省略する
+            self.assertEqual(sorted(mystery.keys()), ["keyExpiryDisabled", "name"])
+            self.assertFalse(mystery["keyExpiryDisabled"])
+            self.assertEqual(phone["expires"], "2026-10-01T00:00:00Z")
+            self.assertTrue(phone["keyExpiryDisabled"])
+            self.assertEqual(phone.get("user"), "alice@example.com")
+            self.assertEqual(phone.get("tags"), ["tag:prod"])
+            self.assertEqual(data["fetched_at"], "2026-08-23T09:00:00Z")
+
+    def test_from_md_rejects_non_table_and_short_rows(self):
+        with TemporaryDirectory() as tmpdir:
+            bad = Path(tmpdir) / "bad.md"
+            bad.write_text("表ではありません\n", encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                fetch_devices.main(["--from-md", str(bad), "-o", tmpdir + "/x.json"], env={})
+            short = Path(tmpdir) / "short.md"
+            short.write_text("| 1 | 2026-09-01T00:00:00Z | enabled | x |\n", encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                fetch_devices.main(["--from-md", str(short), "-o", tmpdir + "/y.json"], env={})
+
+    def test_from_json_keeps_raw_response_verbatim(self):
+        raw = {"devices": [{"name": "x.example.", "expires": "2026-09-01T00:00:00Z"}]}
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "pasted.json"
+            src.write_text(json.dumps(raw), encoding="utf-8")
+            out = Path(tmpdir) / "devices.json"
+            fetch_devices.main(["--from-json", str(src), "-o", str(out)], env={})
+            data = json.loads(out.read_text(encoding="utf-8"))
+            # 生応答を再整形・欠損させず保持する (捏造しない原則)
+            self.assertEqual(data["devices"], raw["devices"])
+
+    def test_from_json_envelope_passthrough_preserves_fields(self):
+        envelope = {
+            "schema": "p-0144.devices/1",
+            "fetched_at": "2026-08-22T22:00:00Z",
+            "source": "original run on dev machine",
+            "tailnet": "hikuohiku@gmail.com",
+            "notes": {"expires": "独自の語義"},
+            "raw_response_keys": ["devices"],
+            "devices": FAKE_DEVICES["devices"],
+        }
+        with TemporaryDirectory() as tmpdir:
+            src = Path(tmpdir) / "pasted.json"
+            src.write_text(json.dumps(envelope, ensure_ascii=False), encoding="utf-8")
+            out = Path(tmpdir) / "devices.json"
+            fetch_devices.main(["--from-json", str(src), "-o", str(out)], env={})
+            data = json.loads(out.read_text(encoding="utf-8"))
+            # 既存の実測フィールドを上書きしない
+            self.assertEqual(data["fetched_at"], "2026-08-22T22:00:00Z")
+            self.assertEqual(data["tailnet"], "hikuohiku@gmail.com")
+            self.assertEqual(data["notes"]["expires"], "独自の語義")
+            self.assertEqual(data["devices"], FAKE_DEVICES["devices"])
+            self.assertIn("--from-json", data["source"])
+
+    def test_both_flags_rejected(self):
+        with TemporaryDirectory() as tmpdir:
+            with self.assertRaises(SystemExit):
+                fetch_devices.main(
+                    [
+                        "--from-md", tmpdir + "/a.md",
+                        "--from-json", tmpdir + "/b.json",
+                        "-o", tmpdir + "/x.json",
+                    ],
+                    env={},
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

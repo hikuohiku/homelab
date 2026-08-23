@@ -2,6 +2,60 @@
 
 ## セッション記録
 
+### worker #2 (2026-08-23) — 人間の返信はまだ無し。返信到着後の復元作業を機械化する復元モード (--from-md / --from-json) を fetch_devices.py に新設 (unit test 12 件全 green)
+
+**やったこと**:
+
+- issue #56 を確認: 依頼コメント (5384140771、2026-08-23T04:09:12Z) が **最終コメントのまま = 人間の返信はまだ無い**。
+  オープン PR も P-0118 の 1 本のみで、実測データが別経路 (PR/ブランチ) で届いていないことも確認
+  (`git fetch origin --prune` 済み、project/p-0144 に動き無し)。CHARTER §6 の確認事項
+  「依頼が issue 上に残っているか」は OK。verify#1/#3 は実データ待ちのまま変化なし (**捏造しない**)
+- フレッシュ起動で環境を再実測: TAILSCALE_* env 無し / doppler・direnv・sops バイナリ無し。
+  セッション1 実測と変わらず、worker サンドボックスから tailnet の直接実測は不可能
+- **fetch_devices.py に復元モードを新設**: `--from-md TABLE.md` (render_table 形式の表から復元) /
+  `--from-json DATA.json` (API 生応答または devices.json 全体から復元) / `--fetched-at TS`
+  (人間が実行時刻を報告してきたときに記録)。復元モードは一切通信しない。
+  次セッションの復元作業が「保存 → コマンド 1 発 → verify 実行」になる
+- 復元モードの unit test 7 件追加 (合計 12 件全 green 実測)。機械検査している内容:
+  - render_table 出力からの往復性 (parse → render で同一表)
+  - **(不明) セルはキーごと省略 = 捏造しない** (mystery デバイスが `name` + `keyExpiryDisabled` しか持たないこと)
+  - code fence で囲まれた貼り付けでも読める
+  - 復元モード中は API_BASE を接続必失敗ポートに向けても死なない = **通信しない**
+  - `--from-json` で既存 envelope を渡したとき schema/fetched_at/tailnet/notes/devices を**上書きしない**
+    (source への追記と transcription ノートの追加のみ)
+
+**verify 現状 (自分で実測)**: #1 failing (FileNotFoundError、実データ待ち) / **#2 GREEN** /
+#3 failing (同上)。変化なし。
+
+**分かったこと / 罠**:
+
+- **GitHub issues comments API は per_page=100 でも全件取れない**: #56 は 178 件あり、
+  page パラメータでのページネーションが必須。依頼コメントは page 2 の末尾にあった。
+  「返信が無い」と誤判定するリスクがあるので次回以降も全ページ取得すること
+  (#56 過去ログの run #5/#8 コメント取りこぼしと同型の罠)
+- tagged デバイスの expires はゼロ値 (`0001-01-01T00:00:00Z`) で返ることがある。
+  sort_key は keyExpiryDisabled 優先なので表の順序は崩れないが、生 JSON を目で読むときに混乱しないこと
+- user/tags セルの逆分割は "tag:" 接頭辞で判定 (user email にカンマは出ない前提。実測で壊れたら parse_markdown_table を直す)
+
+**次への引き継ぎ (次のセッションのあなたはここから)**:
+
+1. issue #56 のコメントを**全ページ取得** (`?per_page=100&page=1..N`) して依頼への返信を探す。
+   返っていたら:
+   - 表 (devices.md 形式) なら: mktemp ファイルに保存 →
+     `python3 ops/projects/logs/P-0144/fetch_devices.py --from-md <file> -o ops/projects/logs/P-0144/devices.json`
+     (人間が実行時刻を書いていたら `--fetched-at <時刻>` を足す)
+   - JSON (curl 出力や devices.json 中身) なら: 同じく `--from-json <file>`
+   - 生成物を確認して verify#1/#3 を自分で実行 → green 化して commit
+2. devices.json 復元後は前セッションからの引き継ぎそのまま: node01 名義デバイスの有無で
+   docs/tailscale-recovery.md ケース3の記述を確定させる
+3. 返っていない場合: 待機でよいが、依頼が issue 上に残っているかだけ再確認
+   (今回は 5384140771 が残置確認済み。消えていたら再投稿)
+
+**発見 (スコープ外。curriculum が拾う用)**:
+
+- (セッション1 からの繰り越し 2 件: headless worker に MCP 未接続 / tailnet 監視の常設化は別論点。
+  新規の発見は無し)
+
 ### worker #1 (2026-08-23) — verify#2 (再認証台本) を green 化。実測 (verify#1/#3) はサンドボックスに credential が無く不能を実測 → 実測ツールと人間への依頼を用意
 
 **やったこと**:
