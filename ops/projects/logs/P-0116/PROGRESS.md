@@ -490,3 +490,64 @@ open PR もまだ無い (wrapper が作る段階)。
 - PR 作成時は verify #1 が BusyBox 環境では文言どおりだと赤になる点を説明に必ず明記
   (session5 からの繰り返し依頼)
 - push 前に `git fetch && git log HEAD..origin/main --oneline` で main 先行を確認するのは継続
+
+## session8 (P-0116 worker, 2026-08-23)
+
+やったこと: issue #56 の回答再確認 (**なし**)・open PR の確認 (0 件)・受入全項目と
+validate.py の再実測。コード・manifest 側の変更は無し (session5→8 まで 4 回連続で
+同じ結論)。**wrapper 向けに PR 説明の貼り付け用文案を本節に用意した** — もう各セッションで
+書き直さなくてよい。
+
+### issue #56 / PR の確認結果
+
+- コメント全 **176 件** (API page 送り実測)。最新は 2026-08-23T00:24:16Z `ack P-0102`。
+  verify #1 文言判断への回答は**未着** (session7 から変化なし)
+- open PR: **0 件** (`GET /pulls?state=open` 実測。wrapper はまだ PR を作っていない)
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option`) — red のまま
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** / `find apps/ -name '*.yaml' | xargs grep -q 'restic-check'`: **rc=0**
+- #2: **28 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- main 先行: **なし** (`git log HEAD..origin/main` 空。rebase 不要)。
+  remote 分岐は `[ahead 70, behind 10]` (session7 の +1 = session7 コミット分。push は
+  引き続き **`--force-with-lease`**)
+
+### wrapper 向け: PR 説明 貼り付け用文案
+
+```markdown
+## P-0116 — restic 5 リポジトリの週次健康診断 (P-0102 継続)
+
+受入 verify の実測値:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `grep -rq 'restic-check' apps/ --include='*.yaml'` | **rc=2 — ただし偽陰性ではない** |
+| 2 | `python3 -m unittest ops.tests.test_restic_check_runner` | OK (28 tests) |
+| 3 | evidence check (`check_evidence.json` ≥5 repos, exit_code==0) | OK |
+
+verify #1 について: manifest 実体は `apps/restic-check/` に存在し
+(`grep -rq 'restic-check' apps/` → rc=0)、**赤の原因は検査環境が BusyBox grep
+で `--include` 非対応なことだけ** (オプション解釈段階で usage error、ファイルを
+見る前に死ぬ)。置換候補 2 案を PROGRESS.md session6 節に提示済み。
+issue #56 で判断を仰い中だが回答未着。等価性の実測は session5–8 の各記録参照。
+
+append-only 鍵での実機 check 完走の証拠は
+`ops/projects/logs/P-0102/check_evidence.json` (5 repos, 全 exit_code==0)。
+```
+
+### 環境メモ (次セッションの罠避け)
+
+- この runner には `gh` CLI が無い → GitHub API は python urllib で (User-Agent 必須、
+  無いと 403)。curl も疎通する
+- `/tmp/opencode` は読み取り専用マウントで書き込めない。`/tmp` 自体と `mktemp -d` は
+  使用可 — 一時ファイルは素直に `mktemp` で
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完全に完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら
+  文言判断に従うだけ。来ていなければ再実測して本節に上書き追記で足りる
+- push は **`--force-with-lease`** (session7 発見の継続)、push 前の main 先行確認は継続
+- PR 作成時は上の「貼り付け用文案」を使えば BusyBox 注記漏れはない
