@@ -5333,7 +5333,7 @@
     {
       "id": "P-0251",
       "title": "予行演習で決着した宿題を本番に返す — P-0035 が実測で確定した台本どおりに immich の vectorchord を 16.9-0.4.3 から 16.14-1.1.1 へ更新し、docs/immich-postgres-upgrade.md を本番で検証して棚から下ろす",
-      "state": "proposed",
+      "state": "stalled",
       "branch": "project/p-0251",
       "irreversible": true,
       "capabilities": [
@@ -5388,12 +5388,13 @@
           "kubectl get deploy -n immich -o json | python3 -c \"import json,sys;d=json.load(sys.stdin);imgs=[c['image'] for it in d['items'] for c in it['spec']['template']['spec'].get('containers',[]) if 'vectorchord' in c['image']];assert imgs and all('16.14-' in i for i in imgs),imgs\""
         ],
         "broken": []
-      }
+      },
+      "stalled_reason": "adopt_gate_some_pass"
     },
     {
       "id": "P-0254",
       "title": "段階 2 の完了条件「人間が満足した」を、数えられる数字に変える — 納品通知に 1 行返信の評点経路 (r <P-ID> 1〜5) を通し、ratings 台帳と平均の表示までを初めて繋ぐ",
-      "state": "proposed",
+      "state": "active",
       "branch": "project/p-0254",
       "irreversible": false,
       "capabilities": [],
@@ -5434,12 +5435,13 @@
         "verdict": "all_fail",
         "passed": [],
         "broken": []
-      }
+      },
+      "veto_deadline": "2026-08-23T22:22:33Z"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-23T22:19:32Z",
-  "last_activity_at": "2026-08-23T22:19:32Z",
+  "last_activity_at": "2026-08-23T22:22:33Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
