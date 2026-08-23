@@ -397,3 +397,28 @@ RESTARTS=0 (AGE 67m — 観察起点 16:40:08Z と整合)。CrashLoop の兆し�
 で同じく `immich-postgres-68d65f4b9d-jtbvz` が Running / Ready 1/1 /
 RESTARTS=0 (AGE 70m — 観察起点 16:40:08Z と整合)。CrashLoop の兆しは無し。
 やることは「次のセッションへの一言」から変わらない。
+
+## 2026-08-23T17:53Z (セッション 31、開始 2026-08-23T17:52:57Z)
+
+**観察継続中。** 窓の満了 (2026-08-24T16:40:08Z) まで約 22.8h。Pod 実測:
+`immich-postgres-68d65f4b9d-jtbvz` Running / Ready 1/1 / RESTARTS=0 / AGE 72m
+(観察起点 16:40:08Z と整合)。CrashLoop の兆し無し。
+
+**バックアップ観測 (新規データポイント)**: ウィンドウ内の restic 実行
+`immich-restic-backup-29791785` が 2026-08-23T17:45Z 頃に開始し、本セッション時点で
+Running (pod z4dzp、10m 経過)。実績では日次実行は毎日 ≒17:45Z に起きている
+(cron 文字列は `45 2 * * *` だが直近 3 日分の job 生成時刻はすべて 17:45Z)。
+この場合ウィンドウ内の restic 実行は**この 1 回だけ**かもしれない (次回は窓外)。
+cron 文字列どおりなら次回は 2026-08-24T02:45Z にあり得る。完成セッションは
+`kubectl get jobs -n immich | grep restic-backup` で **29791785 → Complete** を必ず確認。
+DB ダンプ本体は UPLOAD_LOCATION/backups/ (ライブラリ PVC 内) に落ちる設計なので、
+restic 1 本の成功が「ライブラリ+ダンプ」の担保になる (restic-backup-cronjob.yaml 冒頭注記)。
+
+**発見 (スコープ外・前日分)**: アップグレード前の 2026-08-22T17:45Z 実行
+(`immich-restic-backup-29790345`) は B2 の `b2_download_file_by_name: 403` で Failed。
+外部認証系の問題で本件 (DB エンジン更新) とは無関係だが、もし今日のウィンドウ内実行が
+同じ 403 で落ちたら DoD の「バックアップ成功」が窓内で満たせない。その場合は
+本番適用記録を書かず、この節に追記して人間へエスカレート。
+
+次のセッションへ: 観察継続のみ。`## 本番適用記録` は絶対に書かない。
+見るのは (1) postgres Pod の RESTARTS=0 維持、(2) job 29791785 の成否。
