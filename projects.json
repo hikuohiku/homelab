@@ -2457,7 +2457,7 @@
     {
       "id": "P-0111",
       "title": "鍵は登録されたのに Degraded が消えない — coder と immich を 16 日目に Healthy へ返し、「自然解消する」と言われていた根拠を root_cause.md で訂正または確認する",
-      "state": "soaking",
+      "state": "delivered",
       "branch": "project/p-0111",
       "irreversible": false,
       "capabilities": [
@@ -2768,11 +2768,52 @@
       ],
       "review_requested_at": "2026-08-23T01:28:30Z",
       "review_retries": 0
+    },
+    {
+      "id": "P-0126",
+      "title": "上流の新バージョンを誰も見ていない日が 17 日以上続いている — inventory 全対象の registry/release を毎晩機械で見にいく watcher を置き、#49 型の静放置を二度と成立させない",
+      "state": "proposed",
+      "branch": "project/p-0126",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "python3 -m unittest ops.tests.test_version_watch",
+        "test -f apps/version-watcher/cronjob.yaml && kubectl kustomize apps/version-watcher >/dev/null",
+        "grep -q 'version-watcher' apps/kustomization.yaml"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1500000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0128",
+      "title": "2 日前に backup を全滅させた犯人は B2 の download cap — cap を消費するのは誰かを帳簿につけ、上限近傍で鳴る計器を既存経路に植える",
+      "state": "proposed",
+      "branch": "project/p-0128",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "python3 -m unittest ops.tests.test_download_budget",
+        "grep -q 'download_budget' apps/ops-health-reporter/report.py"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1200000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T01:05:37Z",
-  "last_activity_at": "2026-08-23T01:30:45Z",
+  "last_curriculum_at": "2026-08-23T01:31:56Z",
+  "last_activity_at": "2026-08-23T01:31:56Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
