@@ -1791,3 +1791,42 @@ discover 全体の再実測。コード・manifest 側の変更は無し (sessio
 - **discover のサマリは grep で拾うこと**: stdout/stderr をそれぞれ mktemp ファイルに落とし
   `grep -E '^(Ran|OK|FAILED)'` で拾うのが確実 (session36 実踩)。`/tmp/opencode` 直書きは
   Permission denied になる環境があるので mktemp を使う (本セッション実踩)
+
+## session40 (P-0116 worker, 2026-08-23)
+
+やったこと: 冒頭チェック (fetch → main 先行 **なし**・自分の remote 分岐移動 **なし**。
+ops-state と project/p-0142 の更新は本プロジェクト無関係)・issue #56 の回答再確認
+(**なし**, 総数 177・最新 2026-08-23T01:23:30Z とも session39 と完全一致 = 新規コメント
+ゼロ。キーワードヒット 15 件はすべて既知の無関係コメント)・open PR の確認 (**2 件**:
+#515 P-0128 + #512 P-0118。いずれも本プロジェクト無関係)・受入全項目・validate.py・
+discover 全体の再実測。コード・manifest 側の変更は無し (session5→40 まで 36 回連続で
+同じ結論。session8 の「貼り付け用文案」「環境メモ」は引き続き有効)。
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option`) — red のまま
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** (apps/restic-check/ 配下)
+- #2: **28 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- `python3 -m unittest discover -s ops/tests`: **214 tests OK**
+- push 形態: **fast-forward push でよい** (remote tip は祖先。session28 結論どおり)
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完全に完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら
+  文言判断に従うだけ。来ていなければ再実測して追記で足りる (session8 の文案・環境メモ
+  もそのまま使える)
+- **冒頭チェックは毎回**: fetch → main 先行 (`HEAD..origin/main`) + 自分の分岐移動
+  (`HEAD..origin/project/p-0116`) の両方。main 先行・diverge いずれも **merge 一択**
+  (rebase 不可 — session28)
+- **GitHub API 走査は AUTOPILOT_GITHUB_TOKEN 付きで**: unauthenticated は 403 rate limit。
+  paging 走査 (per_page=100)、ページごと新規 mktemp ファイル保存→**渡したパスだけ**を
+  個別 json.load (session20 回避策 + session31 の glob 実踩の教訓)
+- **discover のサマリは grep で拾うこと**: stdout/stderr をそれぞれ mktemp ファイルに落とし
+  `grep -E '^(Ran|OK|FAILED)'` で拾うのが確実 (session36 実踩)
+- **mktemp テンプレは末尾 X しか使えない**: BusyBox mktemp は `mktemp /tmp/opencode/f.XXXXXX.json`
+  のように X が途中にあるテンプレを Invalid argument で拒否する。さらに `/tmp/opencode`
+  自体が書き込み不可の環境では `/tmp/opencode/...` テンプレも Permission denied になる
+  (本セッション実踩)。**素の `mktemp` (TMPDIR 既定) が唯一確実** — 拡張子が欲しければ
+  作成後に mv するか、拡張子なしで運用する
