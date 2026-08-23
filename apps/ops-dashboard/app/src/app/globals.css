@@ -320,3 +320,32 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
 @media (max-width: 640px) {
   .arch { padding: 18px 14px 50px; gap: 34px; }
 }
+
+/* ── プロジェクトへの介入ボタン (拒否 / 承認 / 既読化) ──
+   issue #56 へコメントしに行かずに画面から操作する経路。押し間違いが
+   取り返しのつかない操作になるので、押す → 確定の 2 段階にしている */
+.actions { margin-top: 10px; }
+.actions__row { display: flex; gap: 8px; flex-wrap: wrap; }
+.actions__btn, .actions__go, .actions__cancel {
+  font: inherit; font-size: 12px; font-weight: 700;
+  padding: 6px 12px; border-radius: 7px; cursor: pointer;
+  border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+}
+.actions__btn:hover, .actions__go:hover, .actions__cancel:hover { border-color: var(--muted); }
+.actions__btn:disabled { opacity: .5; cursor: not-allowed; }
+.actions__btn--veto { color: var(--danger); border-color: var(--danger); }
+.actions__btn--approve { color: var(--accent); border-color: var(--accent); }
+
+.actions--confirm { border: 1px solid var(--line); border-radius: 8px; padding: 10px; background: var(--paper); }
+.actions--confirm p { margin: 0 0 8px; font-size: 12px; color: var(--muted); line-height: 1.5; }
+.actions--confirm-veto { border-color: var(--danger); background: var(--danger-soft); }
+.actions--confirm-approve { border-color: var(--accent); background: var(--accent-soft); }
+.actions__go { color: #fff; }
+.actions__go--veto { background: var(--danger); border-color: var(--danger); }
+.actions__go--approve { background: var(--accent); border-color: var(--accent); }
+.actions__go--ack { background: var(--ink); border-color: var(--ink); }
+
+.actions--done { font-size: 12px; color: var(--accent); }
+.actions--done p { margin: 2px 0 0; color: var(--muted); }
+.actions__pending { margin: 6px 0 0; font-size: 12px; color: var(--muted); }
+.actions__err { margin: 6px 0 0; font-size: 12px; color: var(--danger); }

@@ -3,8 +3,17 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentRole, AgentSnapshot, Project, Snapshot, TranscriptEvent } from "@/lib/types";
 import { mergeTranscriptEvent } from "@/lib/transcript-client";
+import ProjectActions, { type ProjectAction } from "@/components/ProjectActions";
 
 type View = "live" | "projects" | "attention";
+
+// 要対応キューの種別ごとに出す介入ボタン。
+// veto = 予告中（窓待ち）なので承認と拒否、それ以外は既読化だけ
+const QUEUE_ACTIONS: Record<string, ProjectAction[]> = {
+  veto: ["approve", "veto"],
+  stalled: ["ack"],
+  question: ["ack"],
+};
 
 const STATE_LABEL: Record<string, string> = {
   proposed: "立案", announced: "予告", active: "実行", in_review: "レビュー",
@@ -258,6 +267,7 @@ function ProjectCard({ project, now }: { project: Project; now: number }) {
         <div className="project-card__deadline">拒否期限まで {countdown(project.veto_deadline, now)}</div>
       )}
       {project.stalled_reason && <div className="project-card__reason">{project.stalled_reason}</div>}
+      {project.state === "announced" && <ProjectActions projectId={project.id} actions={["approve", "veto"]} />}
       <div className="budget"><span style={{ width: `${ratio}%` }} /></div>
       <footer>
         <span>{compactNumber(used)} / {cap ? compactNumber(cap) : "—"} tokens</span>
@@ -300,7 +310,7 @@ function AttentionQueue({ snapshot, now }: { snapshot: Snapshot; now: number }) 
     <section className="attention" aria-labelledby="attention-title">
       <div className="section-heading">
         <div><span>OPERATOR QUEUE</span><h2 id="attention-title">要対応キュー</h2></div>
-        <p>画面からの操作はできません。手順を確認して外部で対応してください。</p>
+        <p>この画面から拒否・承認・既読化ができます。反映は heart の次のビート（最長 1 分）。</p>
       </div>
       {snapshot.heart.stale && (
         <div className="heart-alarm"><span>HEART SIGNAL LOST</span><strong>最終心拍から 5 分以上経過</strong><p>最終観測: {formatDate(snapshot.heart.at)}</p></div>
@@ -313,6 +323,7 @@ function AttentionQueue({ snapshot, now }: { snapshot: Snapshot; now: number }) 
               <div><strong>{item.id}</strong><h3>{item.title}</h3><p>{item.detail}</p></div>
               <div className="queue-item__deadline">{item.deadline ? <><span>残り</span><strong>{countdown(item.deadline, now)}</strong></> : <strong>要確認</strong>}</div>
               {item.irreversible && <span className="irreversible-flag">不可逆操作を含む</span>}
+              <ProjectActions projectId={item.id} actions={QUEUE_ACTIONS[item.kind] ?? ["ack"]} />
             </article>
           ))}
         </div>

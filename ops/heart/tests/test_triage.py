@@ -73,3 +73,31 @@ class TestTriage(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestApprove(unittest.TestCase):
+    """approve P-NNNN — 拒否権窓を人間の意思で畳む口 (2026-08-23)。"""
+
+    def test_approve_with_project_id(self):
+        v = triage.classify("approve P-0123", RULES)
+        self.assertEqual(v["kind"], "approve")
+        self.assertEqual(v["projects"], ["P-0123"])
+
+    def test_approve_case_insensitive_and_multiple(self):
+        v = triage.classify("APPROVE p-0001 と approve P-0002 で", RULES)
+        self.assertEqual(v["kind"], "approve")
+        self.assertEqual(v["projects"], ["P-0001", "P-0002"])
+
+    def test_stop_wins_over_approve(self):
+        # 同じ文に停止が混ざっていたら止める方に倒す。承認を最後に評価する理由
+        v = triage.classify("approve P-0123\n止めて", RULES)
+        self.assertEqual(v["kind"], "stop_all")
+
+    def test_veto_wins_over_approve(self):
+        v = triage.classify("approve P-0123 veto P-0124", RULES)
+        self.assertEqual(v["kind"], "veto")
+
+    def test_bare_word_is_not_approve(self):
+        # プロジェクト id の無い「承認」語だけでは効かせない (誤爆防止)
+        v = triage.classify("だいたい approve でいいと思う", RULES)
+        self.assertEqual(v["kind"], "review_needed")
