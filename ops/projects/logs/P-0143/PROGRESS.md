@@ -649,3 +649,64 @@ failing (外部データ待ち、期待どおり)。
 JSON が貼られていたら原本復元 (`generated_at` / `collection_notes` 原文維持) →
 docs §1 表転記と「草案」外し → 分類閾値 (50m/500m) の妥当性判断まで進む。
 レビュー指摘が来ていたら最優先。
+
+## checkpoint (予算上限)
+
+2026-08-23 セッション22 (= 最終セッション)。予算ソフト上限到達のため実装はせず
+状態を書き残すのみ。**この節が以後の唯一の入口。**
+
+### 受入チェックリストの消化状況
+
+| verify | 状態 | 内容 |
+|--------|------|------|
+| #1 `bash -n ops/tools/coder_idle_audit.sh` | **green** | スクリプト完成済み (セッション1で新設、3でバグ修正: 停止中 workspace PVC 計上 + self-test 上書きガード)。`--self-test -o $(mktemp)` も green |
+| #2 idle-audit.json | **failing (外部データ待ち)** | worker 環境にクラスタ credential 無し (7 回実測)。収集依頼を #56 に投稿済み ([issuecomment-5384240492](https://github.com/hikuohiku/homelab/issues/56#issuecomment-5384240492), 04:37) だが返答 0 件 |
+| #3 `docs/coder-idle-policy.md` | **green** | autostop 対処案 (`coder templates edit --default-ttl`) と器の除外条件は書き切り。(a) 実測表は「未計測」の空節 — JSON 入力後に転記する設計 |
+
+### 止まっている場所と次の一手
+
+**停止理由はただ一つ: 実データ (idle-audit.json) が無い。** 器では収集不可能で、
+人間への外注 (#56 投稿) が 18 セッション滞留している。再開されたら:
+
+1. **まず返答の有無を確認** (収集の再試行はしないこと。credential 無しは 7 回実測済み):
+   ```bash
+   git fetch origin && git log origin/project/p-0143 --oneline -3   # 直接 push の確認
+   python3 - <<'EOF'
+   import json, urllib.request, os
+   tok = os.environ["AUTOPILOT_GITHUB_TOKEN"]
+   for page in (1, 2, 3):
+       req = urllib.request.Request(
+           f"https://api.github.com/repos/hikuohiku/homelab/issues/56/comments?per_page=100&page={page}",
+           headers={"Authorization": f"Bearer {tok}"})
+       for c in json.load(urllib.request.urlopen(req)):
+           if int(c["id"]) > 5384240492:
+               print(c["id"], c["user"]["login"], c["created_at"])
+   EOF
+   ```
+2. **JSON が貼られていた場合**: 原本として `ops/projects/logs/P-0143/idle-audit.json`
+   へ復元 (`generated_at` / `collection_notes` は原文のまま。出所を消すのは捏造の一種)
+   → `docs/coder-idle-policy.md` §1 の表へ転記して「草案」を外す → 分類閾値
+   (50m/500m) の妥当性を samples で判断 → verify 全 green で PR 待ちになる
+3. **環境が変わって credential (kubeconfig or SA token) が生えていた場合**: 冒頭の
+   「人間への依頼」節のコマンドを自分で実行してよい:
+   `ops/tools/coder_idle_audit.sh -s 5 -i 10` → rc=0 を確認して commit
+4. **レビュー指摘が来ていたらそれを最優先** (#56 でも PR でも)
+
+### 残った不確実性
+
+- **metrics.k8s.io / pods/exec の権限**: coder SA・autopilot-reader のどちらでも通るか
+  未実測 (RBAC 定義上は両者とも無し)。通らなければスクリプトは `--no-exec` +
+  unknown 分類で正直に畳む設計済みなので収集は成立するが、PVC 実使用量とメモリ
+  使用量は欠損する
+- **分類閾値 50m/500m は暫定**: 実データの CPU 時系列を一度も見ていない。変えるなら
+  env 上書き (`CODER_AUDIT_IDLE_CPU_M` / `CODER_AUDIT_IDLE_CPU_MAX_M`) で根拠ごと記録
+- **docs §2 の推奨 autostop 閾値 8h も暫定**: 夜間アイドルの実パターンが出たら改訂
+- **外注 FIFO 自体の滞留**: #56 には同型の未回収依頼が P-0118 / P-0144 にもある。
+  本件の停滞は人間の回収待ちであり、器側にやれることが残っていない
+
+### 判断の要約 (継続する価値の評価用)
+
+器側の成果物 (収集スクリプト + 政策ドキュメント) は完成しており、残りは
+**1 回のデータ収集 (所要 1〜2 分) と転記のみ**。調査自体の価値 (node01 capacity
+差分の裏付け — メモリ limits 不付与規則や immich resources 判断の凍結解除) は
+変わっていない。再開の可否は「この外注を回収する気があるか」だけで決まる。
