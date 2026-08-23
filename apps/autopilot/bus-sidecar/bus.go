@@ -26,10 +26,10 @@ import (
 // 急がないが、繋がったことに気づかないまま何時間も片肺で走るほど間を空けない。
 const busRetryInterval = time.Minute
 
-// connectBusOrLog は connectBus の結果をログにして返す。繋げなければ nil。
+// connectBusOrLog は connect の結果をログにして返す。繋げなければ nil。
 // 「未設定 (意図した切り戻し)」と「繋げない (異常)」をログで区別する。
-func connectBusOrLog() *busConsumer {
-	bus, err := connectBus()
+func connectBusOrLog(connect func() (*busConsumer, error)) *busConsumer {
+	bus, err := connect()
 	if err != nil {
 		log.Printf("バスに繋げない (heart は GitHub 経路で動き続ける。%s 後に再試行): %v", busRetryInterval, err)
 		return nil
@@ -67,10 +67,31 @@ type busConsumer struct {
 	filter  string
 }
 
-// connectBus は NKey で NATS に繋ぎ、durable pull consumer を張る。
+// connectBus は人間の書き置き (events.raw.>) を読む consumer を張る。
+func connectBus() (*busConsumer, error) {
+	return connectConsumer(
+		envOr("NATS_DURABLE", "heart-feedback"),
+		envOr("NATS_FILTER_SUBJECT", "events.raw.>"),
+	)
+}
+
+// connectCommandBus はコア発の command (events.heart.>) を読む consumer を張る。
+//
+// 書き置きと同じ durable にまとめないのは 2 つの理由から:
+//   - 落とす先が別ディレクトリで、混ぜると heart の triage が誤分類する
+//   - 既存の durable (heart-feedback) の filter を広げると、server 側に残っている
+//     consumer の定義と食い違って張り直しが要る。別の durable なら移行が要らない
+func connectCommandBus() (*busConsumer, error) {
+	return connectConsumer(
+		envOr("NATS_COMMAND_DURABLE", "heart-command"),
+		envOr("NATS_COMMAND_FILTER_SUBJECT", "events.heart.>"),
+	)
+}
+
+// connectConsumer は NKey で NATS に繋ぎ、durable pull consumer を張る。
 // 設定が無ければ (nil, nil) を返す — バスを使わない構成 (切り戻し) でも
 // heart が GitHub 側だけで動けるようにしておく。
-func connectBus() (*busConsumer, error) {
+func connectConsumer(durable, filter string) (*busConsumer, error) {
 	url := strings.TrimSpace(os.Getenv("NATS_URL"))
 	seed := strings.TrimSpace(os.Getenv("NATS_NKEY_SEED"))
 	if url == "" || seed == "" {
@@ -111,10 +132,9 @@ func connectBus() (*busConsumer, error) {
 		return nil, fmt.Errorf("JetStream を使えない: %w", err)
 	}
 
+	// コア (core-driver) とは別の durable を呼び出し側が渡す。
+	// 同じイベントを両者が独立に読む
 	stream := envOr("NATS_STREAM", "EVENTS")
-	// コア (core-driver) とは別の durable。同じイベントを両者が独立に読む
-	durable := envOr("NATS_DURABLE", "heart-feedback")
-	filter := envOr("NATS_FILTER_SUBJECT", "events.raw.>")
 
 	// durable にするのは、再起動で位置が巻き戻らない/飛ばないようにするため。
 	// consumer の状態は server 側に残るので、Pod が入れ替わっても続きから読む。

@@ -36,6 +36,12 @@ class Config:
         self.feedback_bus_dir = Path(
             env.get("HEART_FEEDBACK_BUS_DIR") or (self.data_dir / "feedback-bus" / "inbox")
         )
+        # 常駐コア発の command (設計 D3/D21) が落ちてくる場所。書き置きと**別**の
+        # ディレクトリなのは、混ぜると triage が人間の発話として誤分類するため。
+        # 既定値はサイドカーの BUS_SIDECAR_COMMAND_DIR と揃えてある
+        self.command_bus_dir = Path(
+            env.get("HEART_COMMAND_BUS_DIR") or (self.data_dir / "command-bus" / "inbox")
+        )
         self.beat_seconds = int(env.get("HEART_BEAT_SECONDS", "120"))
         self.image = env.get("AUTOPILOT_IMAGE", "")
 

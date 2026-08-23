@@ -1,14 +1,19 @@
-// MCP stdio サーバ。コアに「homelab を見る目」を与える。
+// MCP stdio サーバ。コアに「homelab を見る目」と「heart に仕事を頼む口」を与える。
 //
 //	homelab_status — autopilot 自身の状態 (走行中エージェント / プロジェクト / 要対応 / 心拍 / 当日消費)
 //	homelab_health — ArgoCD Application / Pod / PVC / Node の健全性
+//	request_task   — 実装依頼を heart のパイプラインに載せる (bus へ publish)
 //
-// どちらも引数を取らない読み取り専用。汎用の HTTP fetch や kubectl を与えるのではなく
-// 用途を固定した窓を 2 つ開けるだけにしてあるのは、コアが到達できる先を設定ではなく
+// 読み取りの 2 つは引数を取らない。汎用の HTTP fetch や kubectl を与えるのではなく
+// 用途を固定した窓を開けるだけにしてあるのは、コアが到達できる先を設定ではなく
 // コードで縛るため。新しい credential も RBAC も要らない:
 //
 //   - status はクラスタ内の ops-dashboard (認証不要・read-only の API)
 //   - health は driver が既に持つ GitHub トークンで ops-health-report ブランチを読む
+//
+// request_task も同じ思想で、**依頼を出す以上のことはできない**。Job の種類も
+// モデルも優先度も引数に無く、採否・実行・納品の判断はすべて heart の領分のまま
+// (設計 D3/D7)。コアは git にも K8s にも触らない。
 //
 // 返すのは取得した JSON そのまま。要約はコアの仕事で、ここでは加工しない
 // (加工すると「取れなかった」と「空だった」の区別が消える)。
@@ -18,6 +23,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -94,6 +100,29 @@ func toolDefs() []toolDef {
 				"その旨を添えて答えること。",
 			InputSchema: noArgsSchema(),
 		},
+		{
+			Name: "request_task",
+			Description: "実装・変更の依頼を heart のタスク依頼キューに載せる。" +
+				"あなたはこれで起票できるが、実装するのは heart 配下の runner であり、" +
+				"採択されるとは限らない。「やっておきます」と約束しないこと。" +
+				"同じ内容の依頼を繰り返しても 1 件として扱われる。" +
+				"Job の種類・モデル・優先度は選べない (heart の判断領域)。",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title": map[string]any{
+						"type":        "string",
+						"description": "何の依頼かを 1 行で。プロジェクト一覧に載る題名。",
+					},
+					"body": map[string]any{
+						"type": "string",
+						"description": "何をどうしたいか、なぜ要るか。" +
+							"立案役が読む原料なので、所有者の言葉と観測した事実を残すこと。",
+					},
+				},
+				"required": []string{"title", "body"},
+			},
+		},
 	}
 }
 
@@ -147,6 +176,60 @@ func clip(s string) string {
 type mcpServer struct {
 	client *client
 	out    *json.Encoder
+	// dispatch は command を heart へ渡す経路。既定は NATS への JetStream publish で、
+	// テストでは差し替える。nil のときだけ遅延で接続する (バス未設定でも
+	// 読み取りツールは使えるようにするため)
+	dispatch func(commandEvent) error
+	pub      *busPublisher
+	now      func() time.Time
+}
+
+// publishCommand は command を 1 件流す。接続は最初の依頼まで張らない。
+func (s *mcpServer) publishCommand(e commandEvent) error {
+	if s.dispatch != nil {
+		return s.dispatch(e)
+	}
+	if s.pub == nil {
+		p, err := connectPublisher()
+		if err != nil {
+			return fmt.Errorf("バスに繋げない: %w", err)
+		}
+		if p == nil {
+			return errors.New("NATS_URL / NATS_NKEY_SEED が未設定で、heart への経路が無い")
+		}
+		s.pub = p
+	}
+	return s.pub.publish(e)
+}
+
+// requestTask は task-request を 1 件 heart へ渡す。
+// 検証に落ちた依頼も、流せなかった依頼も、成功と取り違えないよう error で返す。
+func (s *mcpServer) requestTask(args json.RawMessage) (string, error) {
+	var p struct {
+		Title string `json:"title"`
+		Body  string `json:"body"`
+	}
+	if len(args) > 0 {
+		if err := json.Unmarshal(args, &p); err != nil {
+			return "", fmt.Errorf("引数を解釈できない: %w", err)
+		}
+	}
+	now := time.Now
+	if s.now != nil {
+		now = s.now
+	}
+	ev, err := newTaskRequest(p.Title, p.Body, now())
+	if err != nil {
+		return "", err
+	}
+	if err := s.publishCommand(ev); err != nil {
+		return "", err
+	}
+	// 「起票した」だけを言う。着手も採択も約束しない
+	return fmt.Sprintf(
+		"タスク依頼を heart のキューに載せた (command_id=%s, title=%s)。"+
+			"採択するかどうかは heart が判断する。着手を約束しないこと。",
+		ev.CommandID, ev.Title), nil
 }
 
 func (s *mcpServer) respond(id json.RawMessage, result any) {
@@ -157,7 +240,7 @@ func (s *mcpServer) respondError(id json.RawMessage, code int, message string) {
 	_ = s.out.Encode(rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: message}})
 }
 
-func (s *mcpServer) callTool(ctx context.Context, name string) toolResult {
+func (s *mcpServer) callTool(ctx context.Context, name string, args json.RawMessage) toolResult {
 	var (
 		body string
 		err  error
@@ -167,6 +250,17 @@ func (s *mcpServer) callTool(ctx context.Context, name string) toolResult {
 		body, err = s.client.fetchStatus(ctx)
 	case "homelab_health":
 		body, err = s.client.fetchHealth(ctx)
+	case "request_task":
+		body, err = s.requestTask(args)
+		if err != nil {
+			// 送れなかったことを isError で返す。ここを握り潰すと、コアが
+			// 起票できていないのに「依頼しておきました」と人間に言う
+			return toolResult{
+				Content: []textContent{{Type: "text", Text: "依頼を出せなかった: " + err.Error()}},
+				IsError: true,
+			}
+		}
+		return toolResult{Content: []textContent{{Type: "text", Text: body}}}
 	default:
 		return toolResult{Content: []textContent{{Type: "text", Text: "未知のツール: " + name}}, IsError: true}
 	}
@@ -202,13 +296,14 @@ func (s *mcpServer) handle(ctx context.Context, req rpcRequest) {
 
 	case "tools/call":
 		var p struct {
-			Name string `json:"name"`
+			Name      string          `json:"name"`
+			Arguments json.RawMessage `json:"arguments"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			s.respondError(req.ID, -32602, "params を解釈できない: "+err.Error())
 			return
 		}
-		s.respond(req.ID, s.callTool(ctx, p.Name))
+		s.respond(req.ID, s.callTool(ctx, p.Name, p.Arguments))
 
 	case "ping":
 		s.respond(req.ID, map[string]any{})
@@ -254,6 +349,7 @@ func runMCP() {
 	c.http.Timeout = 30 * time.Second
 
 	server := &mcpServer{client: c, out: json.NewEncoder(os.Stdout)}
+	defer func() { server.pub.close() }()
 	if err := server.serve(context.Background(), os.Stdin); err != nil {
 		log.Fatalf("stdin の読み取りに失敗: %v", err)
 	}

@@ -40,7 +40,24 @@ func TestConnectBusOrLogSurvivesUnreachableServer(t *testing.T) {
 	}
 	t.Setenv("NATS_URL", "nats://127.0.0.1:1")
 	t.Setenv("NATS_NKEY_SEED", string(seed))
-	if bus := connectBusOrLog(); bus != nil {
+	if bus := connectBusOrLog(connectBus); bus != nil {
 		t.Fatal("繋がらないのに consumer が返っている")
+	}
+	if bus := connectBusOrLog(connectCommandBus); bus != nil {
+		t.Fatal("繋がらないのに command consumer が返っている")
+	}
+}
+
+func TestCommandBusUsesItsOwnDurable(t *testing.T) {
+	// 書き置きと同じ durable にすると、片方が読んだぶんをもう片方が読めなくなる
+	t.Setenv("NATS_URL", "")
+	t.Setenv("NATS_NKEY_SEED", "")
+	t.Setenv("NATS_DURABLE", "")
+	t.Setenv("NATS_COMMAND_DURABLE", "")
+	if envOr("NATS_DURABLE", "heart-feedback") == envOr("NATS_COMMAND_DURABLE", "heart-command") {
+		t.Fatal("durable が同じでは 2 経路にならない")
+	}
+	if envOr("NATS_FILTER_SUBJECT", "events.raw.>") == envOr("NATS_COMMAND_FILTER_SUBJECT", "events.heart.>") {
+		t.Fatal("filter が同じでは分流にならない")
 	}
 }
