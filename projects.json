@@ -4497,7 +4497,42 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T15:42:25Z",
+        "verify": [
+          {
+            "cmd": "kubectl -n syncthing get job p-0208-drill -o jsonpath='{.status.succeeded}' | grep -q 1",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Error from server (NotFound): jobs.batch \"p-0208-drill\" not found\n"
+          },
+          {
+            "cmd": "kubectl -n syncthing logs job/p-0208-drill | grep -q RESTORE_VERIFY_OK",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "error: error from server (NotFound): jobs.batch \"p-0208-drill\" not found in namespace \"syncthing\"\n"
+          },
+          {
+            "cmd": "test -f ops/projects/logs/P-0208/drill.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0210",
@@ -4518,7 +4553,42 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T15:42:25Z",
+        "verify": [
+          {
+            "cmd": "python3 -m unittest ops.tests.test_curriculum_feedback",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_curriculum_feedback (unittest.loader._FailedTest.test_curriculum_feedback)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_curriculum_feedback\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_curriculum_feedback'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "python3 ops/check_proposals.py ops/tests/fixtures/proposals/bad.json; test $? -eq 1",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-1jf2y2qz/repo/ops/check_proposals.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "python3 ops/check_proposals.py ops/tests/fixtures/proposals/good.json",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-1jf2y2qz/repo/ops/check_proposals.py': [Errno 2] No such file or directory\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0211",
@@ -4539,7 +4609,42 @@
         "soft_cap": 1500000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T15:42:25Z",
+        "verify": [
+          {
+            "cmd": "python3 -m unittest ops.tests.test_health_freshness",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_health_freshness (unittest.loader._FailedTest.test_health_freshness)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_health_freshness\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_health_freshness'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "python3 ops/check_health_freshness.py ops/tests/fixtures/health/stale-latest.json --max-age-hours 3; test $? -eq 3",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-y4yn__bi/repo/ops/check_health_freshness.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "grep -q check_health_freshness .github/workflows/watchdog.yml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
