@@ -6,6 +6,8 @@
 - 受入チェックリスト 4 項目とも failing を実測済み (PROJECT.md 参照)。
 - 2026-08-23 セッション2: **mechanism 実装完了**。verify 1〜3 が green (自己実測)。
   verify 4 (resume-evidence.json) のみ意図的に未達 — 下記「DoD (4) 証跡の取り方」参照。
+- 2026-08-23 セッション3: 監視セッション。**merge 未了・PR 未開を確認** (下記経過)。
+  証跡は merge 前なので原理的に発生不能。今日の予算死 3 件を特定したがすべて旧挙動。
 
 ## 経過
 
@@ -39,6 +41,27 @@ PROJECT.md「作り方 (遷移表)」どおりに実装し、一括 commit:
 verify 自己実測: 1 OK / 2 OK / 3 = 15 tests OK。全体回帰:
 ops/heart/tests 196 OK、ops/runner/tests 36 OK、ops/tests 270 OK、validate.py 0 error。
 
+### セッション3 (2026-08-23)
+
+ops-state 監視と観測レシピの実測検証。コード変更なし。
+
+- **merge 未了・PR 未開を実測**: origin/main 先頭は #531 (P-0185、10:13:59Z merge)。
+  `git ls-remote origin` の refs/pull/*/head (513 個) のいずれも本ブランチ head c353eca55
+  と一致しない → wrapper による PR はまだ開かれていない (全項目 green 待ち、と整合)。
+  heartbeat.json は beat 120 @ 10:13:59Z で heart 自体は生きている。
+- **merge 前の予算死が今日だけで 3 件発生し、すべて旧挙動で stalled 化** (証跡機会は失われた):
+  - P-0157 @ 08:07:33Z (commit b957419bb, beat 17 decide)
+  - P-0116 @ 08:32:11Z (commit a75f81a4c, beat 35 decide)
+  - P-0161 @ 09:35:24Z (commit ff300b0bf, beat 90 decide)
+  特に P-0116 は手動継続で soft_cap 4M まで積まれた三重奏の 1 つが**再び**予算死 —
+  spec の why (「手動継続を二度と起きなくさせる」) の追強実績。死の頻度は半日で 3 件+、
+  merge が間に合えば証跡はすぐ取れる水位。
+- **ビート実測**: ops-state への push は約 80 秒間隔の常時ループ (09:51〜10:14 で 20 ビート)。
+  CLAUDE.md の「毎時」は routines (curriculum 等) の話でビートではない。
+  **beat 番号は boot 単位でリセットされる** (06:02Z の "beat 118 decide" と 10:11Z の
+  "beat 118" は別インスタンスのものが線形履歴に混在)。監査照合は必ずコミット時刻で行う。
+- verify 1〜3 再実測 green (15 tests OK)。ブランチは origin/project/p-0182 と同期済み。
+
 ## 分かったこと (次のセッションへの罠と前提)
 
 - **runner の soft_cap は projects.json でなく main の archive.jsonl spec から来る**
@@ -58,6 +81,15 @@ ops/heart/tests 196 OK、ops/runner/tests 36 OK、ops/tests 270 OK、validate.py
   (jobs=None と同じ規約)。False (確定的に無い) だけが stalled 化する。
 - **既存 stalled (P-0080 等) は復活しない**: decide() は終端をスキップするので、
   本案件は「判定時に止めないようにした」だけ。証跡は今後の予算死で取る。
+- **監視セッションの罠 (セッション3 実測)**:
+  - `/tmp/opencode` は autopilot ユーザから書けない (permission denied)。
+    `mktemp -d` の戻りを直接使えばよい (「固定パス /tmp」罠の強化版)。
+  - runner 環境に `gh` CLI は無い。PR の有無は
+    `git ls-remote origin | grep refs/pull` をブランチ head SHA と照合して判定する。
+    PR コメント/レビュー状態はこの環境からは読めない (プロンプトの「レビュー指摘」節が情報源)。
+  - **証跡は遡及可能**: 遷移は ops-state の git 履歴と audit.jsonl に永久残る。
+    ライブ監視を逃しても後から履歴を漁って resume-evidence.json が書けるので、
+    監視のためにセッションを連打する必要はない。merge 後の最初の監視で十分。
 
 ## DoD (4) 証跡の取り方 (後続セッションへの引き継ぎ)
 
@@ -83,7 +115,37 @@ Pod 再作成は不要)。現在 active なプロジェクト (P-0164/0175/0181/
 wrapper は全項目 green でしかレビューに進めないので、後続セッションは
 「ops-state の監視」を主タスクにしてよい。
 
+### 観測レシピ (セッション3 で全コマンド実測済み)
+
+state_dir を探す必要はない。どの clone からでも `git show origin/ops-state:...` で読める:
+
+```bash
+# 現在の snapshot (state 別一覧)
+git show origin/ops-state:projects.json
+
+# 遷移検出: continuation_count の出現 (0 件なら未発火。セッション3時点で実測 0)
+git log origin/ops-state -p -- projects.json | grep continuation_count
+
+# 過去の予算死と PID の特定 (stalled_reason budget_exhausted を含むコミットを列挙)
+git log origin/ops-state --format="%H %at %s" -- projects.json | \
+  while read sha at rest; do
+    git diff "$sha^" "$sha" -- projects.json 2>/dev/null | grep -q budget_exhausted && \
+      echo "$sha $(date -u -d @$at +%FT%TZ)"
+  done
+# PID は同 diff で budget_exhausted より上に出る直近の "id" 行
+
+# 直近の heart アクションと生存確認
+git show origin/ops-state:audit.jsonl | tail
+git show origin/ops-state:heartbeat.json
+```
+
+merge 後に遷移が発火していれば、grep continuation_count がヒットした commit SHA と
+その 1 個前 (before) を sources に使う。audit.jsonl は append-only なので
+`git show <decide-commit>:audit.jsonl | grep <pid>` で該当行も取れる。
+
 ## 次の一手
 
-merge 後の本番ビートで実遷移 (active → proposed + continuation_count) を観測し、
-出典つきで resume-evidence.json に記録する。
+唯一のゲートは人間 merge。merge 済みになったら (refs/pull 照合 or main の log)、
+上のレシピで continuation_count 出現を探し、出典つきで resume-evidence.json に書く。
+actives は P-0164/0175/0181 (+ curriculum が随時新規採択)。死の頻度は半日 3 件+なので、
+merge から数時間以内の観測を期待してよい。
