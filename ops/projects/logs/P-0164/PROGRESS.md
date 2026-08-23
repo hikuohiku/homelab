@@ -1186,7 +1186,111 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   「4 件」に意味を持たせず 0 か否かだけを見ること。main が動いたら validate.py の
   archive.jsonl error → origin/main を merge
 
+### セッション 30 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking が 4→3 件に減少**
+  (P-0092 announced / P-0175・P-0182 active。checked=65、10:15Z 実測。
+  **ただし本セッション終盤に P-0181 が復帰し 4 件に戻る — 下記実イベントその 3**)。
+  固定指示どおり実演習は見送り。コード変更は無し
+- 本セッションの実イベントその 1 (**単一プロジェクトの完全ライフサイクルが
+  単一窓で完観測されたのは初**): **P-0185 が in_review→merging→delivered で完走**。
+  beat113 f12b56740 10:05:33Z in_review (セッション 29 記録) → **beat119 0d0f12ef1
+  10:12:56Z merging** (観測窓内では P-0163 に続き 2 例目) → beat120 879047a58
+  10:14:05Z merging 維持 → **beat121 e722bdcc2 10:15:19Z delivered**。
+  GitHub 側の実マージ (**PR #531**, merge commit 9a8562226) の author date は
+  **10:14:08Z** で merging 区間 (10:12:56–10:15:19) のちょうど中間に存在し、
+  delivered の台帳記録は実マージの **71 秒後**だった — 「merging = マージ済み・完了前」
+  (セッション 18) から一歩進んで **「merging は実マージイベントを挟む窓であり、
+  delivered 台帳化はマージ後数十秒遅延する」まで分解できた**。なお本例は
+  センサスにある merging→soaking を経由しない直接 delivered (センサスの
+  merging→delivered 2 例と同型)。なお active 化の時点を実測した
+  (proposed 入場が beat92 264c91b83 09:37:46Z、proposed→active が beat93 decide
+  d036724d8 09:41:14Z) ので、**active→delivered は 34 分 05 秒 / 台帳入場から完走まで
+  約 38 分 = 観測窓内最速の完全ライフサイクル**
+- 実イベントその 2 (**delivered の凍結が解けた**): delivered カウント 27→28 は
+  **セッション 11 の観測開始以来の初増加**。ただし完走した P-0185 は塞ぎ手ではなく
+  PR #530 採択の新入場組なので blocking 減少には直結せず、弁は閉じたまま。
+  セッション 25 の「delivered 待ちは非現実的」への最初の反例だが n=1 (新規プロジェクトの
+  高速完走サンプル) につき、塞ぎ手の完走経路が一般化できるかは未判定
+- 実イベントその 3 (**blocking メンバーの同一セッション内往復を初観測**):
+  beat121 e722bdcc2 10:15:19Z で **P-0181 が active→in_review** (active→in_review 方向は
+  4 例目。この version には P-0185 delivered との計 2 行の変更 — 複数変更 version 自体は
+  前例あり: PR #530 組の proposed 入場・active 化は各 3 行) → **8 分後の beat128 decide (999c464df, 10:23:30Z) で
+  in_review→active に復帰** (in_review→active 方向は P-0174 / P-0163 に続き 3 例目。
+  台帳差分はこの 1 行のみ)。**blocking 数の「減少」とその打ち消しが同じ worker セッション
+  (~8 分) の中で完結** — 減少を見ても数分後には戻りうるので、「減少 = 弁前進」どころか
+  「セッション内のスナップショット差分」すら安定した情報にならない。
+  判定は常に announced+active==0 の実測一択、の原則をさらに強めた。最終の台帳内訳:
+  delivered 28 / vetoed 2 / stalled 30 / announced 1 / active 4 (+自己 P-0164) /
+  in_review 0、総計 65。塞ぎ手は 3 件から **4 件に戻った**
+  (P-0092 announced / P-0175・P-0181・P-0182 active)
+- **main 史上 4 度目の前進**: 9b9470594 → 9a8562226 (**PR #531 = P-0185 の納品マージ**)。
+  差分は `ops/projects/logs/P-0185/*` と `ops/stage3/*` (readiness 台帳+unittest) のみで
+  **archive.jsonl は非変更 → validate.py の先頭一致検査は劣化せず (0 error)**。
+  セッション 20 型「main 前進 → 自ブランチの validate が赤」は
+  **curriculum/archive.jsonl を伸ばす前進でのみ発火する**ことが実測で確定
+  (発見節参照)。自ブランチは新 main 未包含だが merge 不要
+- **PR #524 材料耐久 9 例目**: GET /pulls/524 → open / draft=true /
+  mergeable_state=unknown 初手 → **14 秒待ちで clean 復帰** (罠 7 回目)。
+  head=5d24c8932 不変・check-runs で ci success・GitGuardian success 再確認。
+  head は新 main を包含しないが clean (vaultwarden/coder の application.yaml と
+  P-0185 領域はファイル集合が素) につき merge 不要
+- 方法論メモ (次回の罠): (a) GET /pulls/{n} の **base.sha は現在の base tip でなく
+  作成時点の値を返し続ける** (c5d6df255 表示のまま、現 tip は 9a8562226) —
+  「最新 main 包含判定」に base.sha を使わず git ls-remote + merge-base で取ること。
+  (b) 遷移トレースを process substitution の diff 一行スクリプトで書くと
+  パース失敗が黙って「写像不変」と誤報しうる (本セッション実測 — 実際には
+  P-0185 が動いていたのに全ペア不変と出た)。**遷移の特定は per-ID 直接照会**
+  (`git show <sha>:projects.json` から dict 引き) が確実
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 3 @10:15Z → 末尾再実測で 4 に復帰), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 294 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git ls-remote origin main                              # 9a8562226 に前進 (HEAD 未包含・validate green につき merge 不要)
+$ GET /pulls/524  → open / draft=true / unknown →(14s)→ clean / head=5d24c8932 不変
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順はセッション 3・4 の固定 + 当日健診: pod の
+  restartCount/lastState を custom-columns で pod 単位確認 + download-ledger 4 アプリの
+  常時同期ループを頭に入れてから計測)、開いていなければ再実測だけして軽く閉じてよい。
+  塞ぎ手は 4 件に戻った (P-0092 announced / P-0175・P-0181・P-0182 active)。
+  台帳が活発に動いている時間帯 (P-0185 完走・delivered 28・in_review 往復) なので、
+  dry-run の checked 数と blocking メンバーの変化だけでも必ず記録すること。
+  セッション途中でも台帳は動く — 冒頭 1 回だけでなく commit 前にもう一度 dry-run を
+  見てから締めること。validate.py が出す archive.jsonl error は curriculum 型の
+  main 前進でのみ発火する (通常の納品マージなら出ない — 出たら origin/main を merge)
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 30, ライフサイクル観測の続き) **merging の時間軸が分解された**。
+  P-0185 の完走で、merging 状態の開始 (10:12:56Z) と delivered 記録 (10:15:19Z) の
+  ちょうど中間に GitHub 側の実マージコミット (PR #531, 10:14:08Z) が存在することを
+  実測 — merging は「実マージイベントを挟む窓」であり、delivered の台帳化は
+  マージ後数十秒 (本例 71 秒) 遅れる。merging→soaking をスキップする直接完走型も
+  ある (センサスの merging→delivered と同型)。併せて **active 入場から完走までの
+  最短記録** (最大 33 分) と **delivered カウント凍結の解除** (27→28、観測開始以来初)
+  を得た。ただし完走したのは塞ぎ手でなく新入場プロジェクトなので、「弁塞ぎ手も
+  同速度で完走しうる」までは言えない
+
+- (セッション 30, 受入検証の保守) **validate.py の archive.jsonl 劣化は
+  「curriculum/archive.jsonl を伸ばす main 前進」でのみ発火する**。
+  main 4 度目の前進 (PR #531) は ops/projects/logs/P-0185/* と ops/stage3/* の追加のみ
+  (archive.jsonl 非変更、diff 実測) で、main 未包含の長寿命ブランチでも
+  validate は 0 error を維持した。セッション 20 型の対処 (origin/main merge) を
+  発火させる条件は「validate が実際に赤になったか」で判定してよく、
+  「main が動いたか」ではない
+
+- (セッション 30, ライフサイクル観測の続き) **blocking メンバーの同一セッション内往復を
+  初観測** — P-0181 が active→in_review (beat121, 10:15:19Z) になり、わずか 8 分後
+  (beat128 decide, 10:23:30Z) に in_review→active で塞ぎ手に戻った。in_review の
+  双方向性 (active→in_review 4 例 / in_review→active 3 例) が同一窓内で完結した初例で、
+  「blocking 減少」のスナップショット差分は数分で無効化されうる。弁判定は
+  announced+active==0 の実測一択、の原則をさらに強める
 
 - (セッション 28, クラスタ側の環境ノイズ) **download-ledger CronJob 導入以降、
   その 4 ns の Application が恒常 OutOfSync → 約 5 分周期の部分同期ループに乗っている**。
