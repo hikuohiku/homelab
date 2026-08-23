@@ -1,4 +1,3 @@
-{"at": "2026-08-22T09:52:58Z", "type": "deliver", "text": "P-0077: credential マップの CI 検査 (P-0071 の継続 v2 — 記録も引き継いだ再々採択) を納品しました", "digest": true}
 {"at": "2026-08-22T10:44:16Z", "type": "review", "text": "P-0076 がレビューを 3 回通らず停滞。指摘一覧を確認してください", "digest": true}
 {"at": "2026-08-22T10:48:58Z", "type": "announce", "text": "P-0078: heart の livenessProbe (P-0076 の継続 v3 — verify を pytest から unittest に修正)\n検証: grep -q 'livenessProbe' apps/autopilot/heart-deployment.yaml; python3 -m unittest ops.heart.tests.test_liveness\n不可逆: なし / 自信: confident\n着手予定: 2026-08-22T10:48:58Z (拒否権窓)\n拒否するには issue #56 に `veto P-0078` とコメント（ダッシュボードの書き置きでも可）。走行中でも veto は有効です。", "digest": true}
 {"at": "2026-08-22T11:48:51Z", "type": "deliver", "text": "P-0078: heart の livenessProbe (P-0076 の継続 v3 — verify を pytest から unittest に修正) を納品しました", "digest": true}
