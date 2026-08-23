@@ -515,3 +515,27 @@
   関数定義は bash 呼び出しごとにインラインで)。FailedMount の監視は Pod 名に対して
   行うこと (Job 名の events には出ない)。監視窓は最低 2 分確保すること。
   PROGRESS.md 追記は cat >> ヒアドキュメントで (file edit ツールは誤マッチ注意)
+
+## セッション 25 (2026-08-23 ~09:22Z)
+
+- **やったこと**: issue #56 再読 (page 3、count=20。最後のコメントは自分の依頼
+  06:30:10Z のまま返信無し — 依頼から ~172 分) → Secret 存在プローブ 24 回目を実施
+  (残骸なし確認 → NP → jobs apply @09:22:52Z → model **Pod 名**
+  `p0161-private-data-model-tshtc` の events を field-selector で監視) →
+  **`FailedMount: secret "p0161-mail-fixture" not found` (apply ~13 秒後、Pod は
+  Pending 滞留)** で未適用を再確定 → `delete -f job.yaml` (PVC 同時削除) →
+  `delete -f networkpolicy.yaml` で静かに撤収 (残骸 grep rc=1 = 0)
+- verify 1・2 green 再実測 (README trifecta 言及 OK / unittest 22 本 OK)。verify 3 は
+  demo.json 未存在のまま failing — Secret 待ち
+- 判断: 依頼から ~172 分。重複依頼・迂回はしない。プローブ→撤収は数分で終わり
+  クラスタに負荷も残骸も残していない (過去 24 プローブと同じ)
+- 次のセッションへの一言: 手順変更なし。「まず issue #56 とクラスタを確認する」ブロックの
+  1〜4 をそのまま実施 (issue 読みは page 3 — per_page=80 で依頼以降の返信は page 3 に現れる。
+  /tmp/opencode への curl -o は Permission denied なので mktemp 一択)。
+  Secret 適用を確認できたら README「実行手順」どおり完走 → demo.json 書き込みまで
+  一気に進めてよい。egress_denied は DENIED 行のみを証拠に判定 (ALLOWED が 1 本でも
+  出たら egress_denied=false の失敗記録)。apply 前 PVC 再作成必須。
+  in-cluster SA 経由 kubectl の方法はセッション 13 記録どおり (k() 関数。ただし
+  関数定義は bash 呼び出しごとにインラインで)。FailedMount の監視は Pod 名に対して
+  行うこと (Job 名の events には出ない)。監視窓は最低 2 分確保すること。
+  PROGRESS.md 追記は cat >> ヒアドキュメントで (file edit ツールは誤マッチ注意)
