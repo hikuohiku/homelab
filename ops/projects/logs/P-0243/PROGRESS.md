@@ -310,3 +310,41 @@
   到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
   test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
 - main が動いていれば追い越す (#578 時点の要領どおり)。動いていなければ merge 不要
+
+## セッション 9 (2026-08-23 23:26 UTC) — 現在地の再実測のみ。main 不動・census 未着・変更ゼロ
+
+### やったこと
+
+- **現在地を再実測**: /tmp/opencode は依然 root:root 755・uid 10001 で不変
+  → V2 は fail-fast rc=2 で red で正しい (書き込みプローブが main() 冒頭・
+  クラスタ接触前に走るので副作用ゼロで中断。セッション 8 記載どおり再確認)
+- **origin/main を fetch**: #578 以降の新着なし (`git log HEAD..origin/main` は空)。
+  動いたのは ops-state と新プロジェクトブランチ (p-0265/p-0270) のみ
+  → 今セッションに追い越すべきコミットは存在しなかった
+- **P-0203 census を再確認** (`git ls-tree -r origin/main | grep -c egress`):
+  まだ無い (rc=1)。NP は DNS-only fail-closed のままが正解
+- spec verify V1 green / V3 green を再確認。V2 は既知 fail-fast rc=2
+- **コード変更は今セッションもゼロ**。この記録の追記だけ。
+  unittest 全走は見送り: 最後の全 454 本 OK (セッション 7) 以降のコード差分が
+  コミット単位でゼロ (セッション 8 も本セッションも PROGRESS.md のみ) なので
+  退行の起きようがない
+
+### 分かったこと
+
+- 新着の有無は `git log HEAD..origin/main` 一発で判別できる。ops-state や他プロジェクトの
+  ブランチが動いても本 PR には無関係 — 追い越し対象は origin/main の進行だけ
+
+### 検証 (全部自分で実走済み)
+
+- spec verify V1 green / V3 green / V2 red (既知 fail-fast rc=2、クラスタ副作用ゼロ)
+- census 未着確認 (rc=1) / main 新着なし確認
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4〜8 から一歩も動いていない**: V2 は本 PR の merge+sync 後の
+  新 runner Pod で自動 green 化する。Pod 内での再走は無駄。やることは「PR merge を待つ」だけ。
+  main 新着がなければ、セッション 8/9 と同じ「再実測 + ログ追記のみ」でよい
+- census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+  到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+- main が動いていれば追い越す (#578 時点の要領どおり)。動いていなければ merge 不要
