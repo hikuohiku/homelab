@@ -128,6 +128,39 @@ green に揃える目的での docs/pbs-retirement.md 作成は verdict=keep と
 レビューへの説明には、PROJECT.md 受入チェックリスト直下の許容段落 + 本節の条件リスト +
 `pbs-inventory.json` の `reason` を使う。
 
+### 2026-08-23 セッション5 — 外部シグナルの最終確認 (main 差分・P-0115・issue #56)
+
+**やったこと**: spec DoD の追加実装は無し (セッション3 以降こちらは触らない)。セッション4 まで
+未確認だった外部情報源を潰した。結果はすべて「再開条件の成立なし」。
+
+1. **verify 再実測**: #1 rc=1 / #2 rc=0 / #3 rc=2。セッション3・4 記録から変化なし
+   (#1/#3 は意図通り failing、#2 green)
+2. **観測環境の再実測** (4 回目の独立実測、結果同じ): `mcp__proxmox__*` ツール無し /
+   `env | grep -iE 'proxmox|pve'` rc=1 / `tailscale` `pvesh` `qm` CLI 無し。
+   新たに `gh` も無いことを確認
+3. **origin/main の新着確認** (本セッションで初めて実施): `git fetch` 後、
+   merge-base `f4a7862b`..`origin/main` の docs/・terraform/proxmox/・README.md・CLAUDE.md
+   差分は **ゼロ**。main は分岐点から一切動いておらず、人的な PBS 関連更新の流入なし
+4. **project/p-0115 再確認**: リモートブランチ自体は更新されていたが (a2612b32..863c21fa)、
+   main 未 merge のまま。PROJECT.md 前提どおり docs/backup.md を根拠にした突き合わせで十分
+5. **issue #56 を webfetch で直接読んだ** (本セッションで初): 公開リポジトリのため
+   gh CLI 無しでも本文は読めた。**コメント無し** = 人間からの PBS 関連フィードバック
+   (条件 A/B の実施報告) はまだ届いていない
+
+→ セッション4 が集約した条件 A/B を成立させる新情報はどこにも無かった。verdict は
+`keep` のままが正しく、inventory への反映対象も生じていない。
+
+**分かったこと**: gh CLI が無い環境でも、公開リポジトリの issue は webfetch で読める。
+「人間の反応待ち」で止まっているプロジェクトの次セッションは、この経路を毎回確認するとよい
+(issue #56 に返信が付いたら条件 A/B の実施報告が来ている可能性がある)。
+
+**次のセッションへの一言**: セッション4 と同一 — **やることは残っていない。** 本プロジェクトが
+動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、結果がリポジトリ
+(docs/backup.md の更新や inventory 反映依頼) か issue #56 のコメントとして現れること。
+その兆候が無い起動では、verify 再実測 + 上記 5 点のうち変化したものがあるかの確認だけをして
+最小のログ追記で終えてよい。docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が
+`retire`/`partial` になった後だけ (セッション3 以降ずっと同じ)。
+
 ## 発見 (スコープ外。curriculum が拾うこと)
 
 - **worker 実行環境に `.mcp.json` の MCP サーバーが一切接続されていない**。CLAUDE.md の
