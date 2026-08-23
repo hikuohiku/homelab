@@ -227,3 +227,54 @@ webhook URL は autopilot-writer SA には読めない (RBAC 実測 Forbidden) �
    どおり。drill fixture (ops/projects/logs/P-0139/drill/) は本番安全設計のまま残置
 5. 本セッションの一時的な cluster 触り (preview patch・cm 注入) は全て復元済みだが、
    万一 review で気になる点があれば fired.json の cleanup_verification を突き合わせること
+
+### セッション 5 (2026-08-23) — merge 待ちの現在地確認 + sandbox 初の通し render 実証
+
+**やったこと**: コード変更ゼロ。前セッションの引き継ぎ項目の消化と、verify #2 の実質担保。
+
+1. **push/merge 状況**: fix commit 1a193e89 は origin/project/p-0139 まで push 済み (ローカルと
+   一致)。**未 merge** (main tip = 8c5cbd7d)。main 側は P-0126/0128/0141 が進んだが
+   `git log origin/main -15 -- apps/argocd/` で直近の触りなし、`diff origin/main...HEAD -- apps/`
+   は本企画の 3 ファイル (+103 行) のみ → **merge コンフリクト余地なし**
+2. **ローカル green 再実測**: verify #1 green、#3 13 tests OK、ops/tests 全体 162 tests OK
+3. **sandbox 初の通し render 実証 (= 本セッションの主成果)**: helm バイナリを
+   `curl -sfL https://get.helm.sh/helm-v3.16.4-linux-amd64.tar.gz` から mktemp ディレクトリに
+   展開し、`PATH=<その dir>:$PATH kubectl kustomize --enable-helm apps/argocd` を実行 →
+   **rc=0、27,222 行、stderr 空**。CI (`kustomize build --enable-helm`) と同等の処理系での
+   render 成功が sandbox 内で初めて実測できた。rendered 出力の検査結果:
+   - cm `argocd-notifications-cm` data は期待どおりちょうど 7 キー: context /
+     service.webhook.discord / subscriptions / template.discord-app-{degraded,sync-failed} /
+     trigger.on-{degraded,sync-failed}。trigger 2 本とも `when` に autopilot ns 除外フィルタ付き
+   - ExternalSecret argocd-notifications-discord-webhook (ns argocd) と controller Deployment
+     argocd-notifications-controller が render される
+   - Secret argocd-notifications-secret が render に**出ないのは設計どおり**: values の
+     `notifications.secret.create: false` で chart に作らせず、ESO が target name
+     argocd-notifications-secret に直接供給する (`$discord-webhook-url` の解決先。経緯は
+     discord-webhook-external-secret.yaml 冒頭コメント)
+   - 再現手順: `TD=$(mktemp -d) && cd $TD && curl -sfL -o h.tgz
+     https://get.helm.sh/helm-v3.16.4-linux-amd64.tar.gz && tar xzf h.tgz && mv linux-amd64/helm . &&
+     PATH=$TD:$PATH kubectl kustomize --enable-helm apps/argocd`
+4. **クラスタの merge 前状態が正しいことを確認**: cm data は ['context'] のみ (設定が降っていない
+   正しい姿)、externalsecret は dex 分のみ、argocd App は Synced/Healthy、drill 残骸ゼロ
+   (p0139-drill ns / p0139-drill App とも NotFound) → 前セッション teardown が生きている
+5. **message_id の追跡調査 (結果: 取得経路は原理的に存在しない)**: Discord webhook API は
+   message id を POST 時 `?wait=true` でしか返さない (webhook URL 単独ではメッセージ一覧不可)。
+   遡及取得は不可能で、取り直すには外部に新規通知を送るしかないが spec が許す注入は 1 回済み。
+   **#4 の裁定は「(a) 人間の実視認で id 補完」か「(b) 判定から外す」のまま変わりなし**
+
+**分かったこと**:
+
+- `/tmp/opencode` は root 所有 755 で autopilot から書けない。一時作業は素直に `mktemp -d`
+- kubectl v1.35 内蔵 kustomize (v5.7.1) は `--enable-helm` 時に PATH 上の helm を exec する。
+  helm を PATH に置くだけで CI 同等 render が sandbox でも通る (#2 のコマンド文字列自体は
+  flag 無しのままなので red 継続だが、「render が壊れている」可能性は消えた)
+
+**次のセッションへの一言 (= やることリスト)**:
+
+1. merge 済みか最初に確認 (`git branch -r --contains 1a193e89`)。merge 済みならクラスタ反映を
+   実測: cm data に trigger.on-* 等 6 キー追加 / `kubectl get externalsecret -n argocd` の
+   argocd-notifications-discord-webhook が SecretSynced / controller ログにエラー無し
+2. 未 merge ならやることは無い。コード・テスト・証跡は全て完成しており、残るはレビュー側の
+   裁定 2 件のみ: **#2** (sandbox では恒久 red。CI 通過と本セッションの render 実証で実質担保) と
+   **#4** (delivered:true は三点実測、message_id は原理的取得不能 → 人間視認 or 判定除外)
+3. fired.json 追記・再発火は不要。drill fixture も触らない
