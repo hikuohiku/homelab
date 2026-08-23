@@ -48,6 +48,12 @@ EXEMPT_PVCS = {
         "immich 内蔵の日次 DB ダンプが immich-library PVC 配下に出力され、そちらが "
         "immich-restic-backup の対象。DB 本体を別途取る必要が無い (docs/backup.md に明記)"
     ),
+    ("autopilot-core", "autopilot-core-state"): (
+        "常駐コアの opencode セッション storage。消えて失われるのは会話の文脈だけで、"
+        "所有者の発言の原本は ops-feedback ブランチに残る。コアは新しいセッションを"
+        "張り直して続行できる。v0 のコアは返事しかせず、ここにしか無いデータを"
+        "持たないため。コアが判断や記憶を蓄積する器になった時点で backup を足すこと"
+    ),
 }
 
 

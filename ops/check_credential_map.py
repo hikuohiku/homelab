@@ -123,6 +123,7 @@ DECLARED_SECRET_TARGETS = frozenset(
         "immich-restic-credentials",
         "operator-oauth",
         "ops-dashboard-github-token",
+        "autopilot-core-credentials",
         "syncthing-restic-backup-credentials",
         "telegram-adapter-credentials",
         "syncthing-restic-credentials",

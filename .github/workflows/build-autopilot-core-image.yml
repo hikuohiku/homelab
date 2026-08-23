@@ -1,0 +1,89 @@
+name: Build autopilot-core image
+
+# Initial release is intentionally two-stage: merge the application first, measure the
+# published SHA tag's OCI index digest, then pin that digest in
+# apps/autopilot-core/deployment.yaml (same as build-dashboard-image.yml).
+#
+# context は apps/ に取る。Dockerfile が autopilot-core と telegram-adapter の
+# 両方のソースをビルドするため (MCP 返信ツールをイメージ間 COPY せずソースから焼く)。
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/autopilot-core/app/**"
+      - "apps/telegram-adapter/app/**"
+      - ".github/workflows/build-autopilot-core-image.yml"
+  pull_request:
+    paths:
+      - "apps/autopilot-core/app/**"
+      - "apps/telegram-adapter/app/**"
+      - ".github/workflows/build-autopilot-core-image.yml"
+  workflow_dispatch:
+
+env:
+  IMAGE: ghcr.io/${{ github.repository_owner }}/homelab-autopilot-core
+
+jobs:
+  test:
+    name: go test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: apps/autopilot-core/app/go.mod
+          cache-dependency-path: apps/autopilot-core/app/go.mod
+
+      - name: gofmt
+        working-directory: apps/autopilot-core/app
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt が必要です: $unformatted"
+            exit 1
+          fi
+
+      - name: go vet
+        working-directory: apps/autopilot-core/app
+        run: go vet ./...
+
+      - name: go test
+        working-directory: apps/autopilot-core/app
+        run: go test ./...
+
+  build:
+    name: build and push
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build (and push on main)
+        uses: docker/build-push-action@v6
+        with:
+          context: apps
+          file: apps/autopilot-core/app/Dockerfile
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.IMAGE }}:latest
+            ${{ env.IMAGE }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Show image reference
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "::notice title=autopilot-core image::${{ env.IMAGE }}:${{ github.sha }}"
