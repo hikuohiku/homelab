@@ -3809,11 +3809,76 @@
       "spawn_count": 1,
       "job": "runner-p-0175-a1",
       "drift_count": 0
+    },
+    {
+      "id": "P-0181",
+      "title": "application-controller は今日も OOMKill された — 根拠のない 512Mi の壁を実測系列で引き直し、「limit の何%」を常に言える計器まで引っ張る",
+      "state": "proposed",
+      "branch": "project/p-0181",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "test -s ops/projects/logs/P-0181/memory-evidence.md && grep -qE 'ピーク|p95' ops/projects/logs/P-0181/memory-evidence.md",
+        "python3 -c \"import sys; s=open('apps/argocd/values.yaml').read(); b=s.split('repoServer')[0]; c=b[b.index('controller'):]; sys.exit(0 if ('resources' in c and '512Mi' not in c) else 1)\"",
+        "python3 -m unittest ops.tests.test_argocd_memory_series",
+        "python3 ops/tools/argocd_memory_series.py --check"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1200000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0182",
+      "title": "budget_exhausted は終端ではなく休憩にする — checkpoint のある停滞を heart が自分で再予告する継続レーンを作り、手動継続の三重奏 (P-0114/115/116) を二度と起きなくさせる",
+      "state": "proposed",
+      "branch": "project/p-0182",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "python3 -c \"import json,sys; r=json.load(open('ops/rules.json')); sys.exit(0 if r.get('runner',{}).get('continuation') else 1)\"",
+        "grep -q 'continuation' ops/heart/reconcile.py",
+        "python3 -m unittest ops.tests.test_budget_continuation",
+        "test -s ops/projects/logs/P-0182/resume-evidence.json"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1500000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0185",
+      "title": "段階 3 の開放を「その日の気分」にしない — 既存の実測物だけを採点する readiness 台帳を事前に作り、閾値を自分で宣言しておく",
+      "state": "proposed",
+      "branch": "project/p-0185",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "python3 -c \"import json,os; d=json.load(open('ops/stage3/readiness.json')); assert len(d['criteria'])>=5 and d.get('verdict') in ('blocked','ready_for_announce_draft'); assert all(os.path.exists(c['evidence_path']) for c in d['criteria']); assert all(set(('id','criterion','threshold','current_value','evidence_path','pass')) <= set(c) for c in d['criteria'])\"",
+        "test -s ops/stage3/README.md && grep -q 'verdict' ops/stage3/README.md",
+        "python3 -m unittest ops.tests.test_stage3_readiness"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 800000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T08:56:57Z",
-  "last_activity_at": "2026-08-23T09:36:29Z",
+  "last_curriculum_at": "2026-08-23T09:37:41Z",
+  "last_activity_at": "2026-08-23T09:37:41Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
