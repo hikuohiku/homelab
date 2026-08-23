@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - application.yaml
+  - job.yaml
+
+configMapGenerator:
+  - name: wish-seeds-script
+    namespace: autopilot
+    files:
+      - run_ask.py
+      # ops/tools/wish_seeds.py の同期コピー (version-watcher の version_watch.py と
+      # 同じ手動同期方式)。run_ask.py が sys.path で import する。本文 (ASK_TEXT)・
+      # 送信・証跡の形は元ファイルが単一ソース。同一内容であることを
+      # ops/tests/test_wish_seeds_job.py が機械検査するので、元を変えたら
+      # 必ずこちらへ反映すること
+      - wish_seeds.py
+
+generatorOptions:
+  disableNameSuffixHash: true

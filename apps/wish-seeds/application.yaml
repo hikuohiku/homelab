@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: wish-seeds
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/hikuohiku/homelab.git
+    targetRevision: HEAD
+    path: apps/wish-seeds
+
+  destination:
+    server: https://kubernetes.default.svc
+    # namespace 自体は apps/autopilot/namespace.yaml が管理 (telegram-adapter と同じ)
+    namespace: autopilot
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

@@ -1,0 +1,85 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: wish-seeds-ask
+  namespace: autopilot
+  # 同名 Job の再適用に備えて最初から付ける (CHARTER §4。.spec.template は immutable。
+  # PROJECT.md 作り方 1 の指示どおり)
+  annotations:
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
+spec:
+  backoffLimit: 2
+  activeDeadlineSeconds: 120
+  # ttlSecondsAfterFinished を付けない。付けると完了後に Job が消え、selfHeal が
+  # 再作成してまた走る (run_ask.py の二重送信歯止めが skip で返すとはいえ、
+  # 毎回 Pod を立てる無限ループになる)。Completed Job は監査証跡として残す
+  template:
+    spec:
+      # k8s API は一切読まない (Telegram Bot API と GitHub Contents API のみ)。
+      # version-watcher と同じく token を mount させない
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        runAsGroup: 65534
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: ask
+          image: python:3.14-alpine
+          terminationMessagePolicy: FallbackToLogsOnError
+          command: ["python", "/scripts/run_ask.py"]
+          env:
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-adapter-credentials
+                  key: TELEGRAM_BOT_TOKEN
+            - name: TELEGRAM_ALLOWED_USER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-adapter-credentials
+                  key: TELEGRAM_ALLOWED_USER_ID
+            - name: AUTOPILOT_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-adapter-credentials
+                  key: AUTOPILOT_GITHUB_TOKEN
+            - name: GITHUB_REPO
+              value: hikuohiku/homelab
+            - name: EVIDENCE_BRANCH
+              value: project/p-0192
+            - name: EVIDENCE_PATH_IN_REPO
+              value: ops/projects/logs/P-0192/ask-evidence.json
+            - name: PENDING_PATH_IN_REPO
+              value: ops/projects/logs/P-0192/ask-pending.json
+            - name: PYTHONDONTWRITEBYTECODE
+              value: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          # 実際に使うメモリは sendMessage 1 通 + Contents API 数回の JSON 組立程度で
+          # 数十MB。256Mi は実測ではなく「暴走しても他 Pod を巻き込まない」目的の緩い
+          # 上限 (CHARTER §4)。値の根拠は ops-health-reporter / morning-brief と同一判断
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          volumeMounts:
+            - name: script
+              mountPath: /scripts
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: script
+          configMap:
+            name: wish-seeds-script
+        - name: tmp
+          emptyDir: {}

@@ -53,3 +53,53 @@ worker セッションごとに追記する。書式は自由だが、証跡 (�
    (沈黙も観測。seeds.md への反映時に「締め時点」の日付を正直に書き換えること)
 3. 送信本文は spec 固定文言のみ (`compose_ask()`)。装飾を足さないこと
 
+
+## セッション 2 (worker, 2026-08-23)
+
+### やったこと: 送信を実行する器 (GitOps one-shot Job) を新設 — apps/wish-seeds/
+
+- **このサンドボックスからは送れないことを再実測** (env に TELEGRAM_* 無し /
+  SA token 未 mount / API server 10.43.0.1:443 に資格無し)。CHARTER §3 の
+  「manifest は先に書く」に従い、credential があるクラスタ側で実行される
+  1 回限りの Job を GitOps 経路で用意した (PROJECT.md 作り方 1・2 の実装)
+- `apps/wish-seeds/` 新設 (Application + Job + run_ask.py + wish_seeds.py 同期コピー)。
+  root apps/kustomization.yaml に登録。Job は Force=true,Replace=true 付き・
+  autopilot ns・Secret telegram-adapter-credentials 参照 (地図登録不要の既存宣言のみ)
+- `run_ask.py` (Job 本体): **追加送信なしの 3 層歯止め** —
+  (1) 証跡が main / project ブランチのどこかにある → skip (rc=0)、
+  (2) pending マーカーだけがある → 送らず abort (rc=1 で騒ぐ。証跡無しの黙認は隠蔽)、
+  (3) 書き込み先ブランチが無い → abort。送信直前に pending を Contents API で
+  書くので「送信後に死んだ」再実行でも二重送信しない (fail-safe 側に倒した)。
+  証跡は Telegram 応答の message_id を持って project ブランチへ書き戻される
+- `ops/tools/wish_seeds.py` の triage import を render_seeds_section() 内へ遅延化。
+  理由: Job コンテナは repo checkout 無しで run_ask.py → wish_seeds.py (ConfigMap コピー)
+  を import するため、module level の ops.* import があるとそこで死ぬ。
+  挙動変更なし (16 tests 全 green 再実測)。ConfigMap コピーとの同一性はテストが機械検査
+- unittest 22 本新設 (`ops.tests.test_wish_seeds_job`)。**OK 自己実測**。
+  全体退行も OK 実測: ops/tests (327) / ops/heart/tests (196) / ops/runner/tests
+- CI 相当を自力実測: validate.py 0 error / check_*.py 7 種全部 ok /
+  `kubectl kustomize apps/wish-seeds` rc=0・root は Application 16 個に増えたこと確認 /
+  py_compile ok。ruff F821 はサンドボックスに ruff 無しで未実行 (CI 任せ)
+
+### 分かったこと / 発見 (スコープ外なのでここに書くだけ)
+
+- **ブランチが main 遅れだと validate.py が落ちる**: archive.jsonl の追記検査は
+  「branch ⊇ main」を見る (#540 追分で先頭一致が崩れた)。rebase ではなく
+  merge origin/main で解消した (wrapper の push が非 force のため。
+  P-0107 worker #2 の rebase + force-with-lease は wrapper と噛み合わない恐れがある)
+- `kubectl kustomize --enable-helm` は helm binary を要求する。argocd/dex/
+  external-secrets/immich/tailscale-operator の 5 dir はサンドボックスでは
+  render 不能 (helm 無いだけで main 由来の既存状態。stash 実測で確認)
+
+### 次のセッションへ
+
+1. **verify 1・2 はまだ red (期待どおり)**。綱は引いたので、あとは Job を一度走らせる:
+   cluster アクセスのあるセッション / 人間が `just preview apps project/p-0192`
+   (新規アプリのためルートを向ける。justfile コメントの手順) → wish-seeds Job が走り、
+   送信 1 通 + 証跡がこのブランチへ書き戻される → `just preview-reset apps`。
+   以後 verify 1・2 は自動で green。merge 後に ArgoCD が Job を作り直しても、
+   証跡が main にあるので skip して二重送信しない
+2. ブランチに `ops/projects/logs/P-0192/ask-pending.json` が現れるのは正常
+   (送信開始マーカー。完了後も残すのが設計)。消さないこと
+3. 証跡が乗ったら返信待ち (セッション 1 の記載どおり。inbox 読み取り専用、
+   render_seeds_section → seeds.md、沈黙は締め日付を正直に書いて記録)
