@@ -1005,7 +1005,77 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   validate.py が archive.jsonl 先頭不一致 error を出したら origin/main を merge
   (セッション 20 の発見節参照)。unittest 件数は固定値でないので「OK か」で判断すること
 
+### セッション 26 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking が 2→5 に増加**
+  (P-0092 announced / P-0175・P-0181・P-0182・P-0185 active。checked=65)。
+  固定指示どおり実演習は見送り
+- 実イベントその 1 (**blocking 数の増加 2 例目**): main 史上 4 度目の前進
+  (curriculum 採択 PR #530、09:36:38Z マージ) の 3 案が台帳へ active 入場し
+  総計 62→65。内訳 delivered 27 / vetoed 2 / stalled 30 / announced 1 /
+  active 5 (P-0164 自己含む)。セッション 21 型の「新規入場による増加」であり、
+  流出型減少 (セッション 25 の 3→2) の直後に増加 — **blocking 数には単調性も
+  周期性も無い**ことが累積実測で確定。「減るまで待つ」以外の読みは不可能
+- 実イベントその 2 (**validate.py 劣化からの復旧**): main 前進により
+  archive.jsonl 先頭一致検査が error を発火 (セッション 20 型の 3 例目)。
+  前例どおり origin/main を自ブランチへ merge して復旧 (0 error)。
+  merge の差分は ops/projects/archive.jsonl への追記 6 行のみで本プロジェクト領域への影響なし
+- **新入場 3 件のうち P-0181 が argocd-application-controller の OOMKill 実測案**
+  — 本演習の scale 対象と同一コンポーネントを扱う初の他プロジェクト。
+  弁開放条件は「announced/active == 0」なので両方が同時に走ることは構造上有り得ないが、
+  順番の問題は残る (先に P-0181 が controller を落とす演習をやった直後だと
+  本演習の baseline 確認・catchup 計時に残滓が乗る恐れ。--run 冒頭の baseline
+  replicas=1 & ready=1 確認が防波堤になるはずだが、当日は dry-run の targets_seen を
+  念入りに見てから始めること)
+- main 動いた (→ 上記 merge 済み)。ドラフト PR #524 は head=5d24c8932 不変・
+  初手 mergeable_state=**clean**・ci/GitGuardian success。**base 移動済みなのに
+  unknown 罠が発火しなかった初例** (#530 マージから数分経過後の確認ではあるが、
+  セッション 18 は同程度の間隔で発火した) —   セッション 25 (base 移動無しで発火) と
+  本例で「unknown は base 移動と無関係に散発する」説が双方向から裏付けられた。
+  材料耐久 5 例目 (main 前進 × 4 回すべてで clean 維持)
+- 前置条件の再実測 (merge 後・劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 5), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover ops/tests                 # Ran 294 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git show origin/main..HEAD --stat                      # merge commit で archive.jsonl +6 行のみ
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932 不変
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。塞ぎ手は 5 件に増えた (P-0092 announced /
+  P-0175・P-0181・P-0182・P-0185 active) — 新入場の active 3 件も budget 枯渇 stalled
+  流出しうるので「delivered 待ち」より「budget 枯渇待ち」仮説は変わらず最有力。
+  main が動いたら validate.py の archive.jsonl error が出るので origin/main を merge
+  (セッション 20 の発見節参照。本セッションで 3 例目を実施済み)。
+  unittest 件数は固定値でないので「OK か」で判断すること
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 26, ライフサイクル観測の続き) **blocking 数の増加 2 例目** (2→5)。
+  curriculum 採択 (PR #530) の 3 案 P-0181/P-0182/P-0185 が active 入場したことによる
+  (総計 62→65)。これまでの方向は減少 (6→5→4→3→2) ・凍結・流出型減少・新規入場型増加と
+  全パターン出揃いで、**blocking 数から「弁への近さ」を読む試みは全方向の反例が揃った** —
+  判定は常に announced+active==0 の実測一択、という原則が全パターンで成立
+
+- (セッション 26, 他プロジェクトとの干渉リスクの特定) 新入場 P-0181 は
+  **argocd-application-controller の OOMKill 実測案**で、本演習 (P-0164) の scale 対象と
+  同一コンポーネント。安全弁 (announced/active==0) により同時実施は構造的に起きないが、
+  **時間的に近接した実施では互いの計測を汚しうる** (P-0181 の OOMKill 再現が controller を
+  落とした直後は pod 再作成・再 sync が本演習の baseline/catchup に乗る)。
+  弁開放時に P-0181 がまだ台帳に居る/居た直後の場合、dry-run の targets_seen で
+  ready=1・replicas=1 を確認してから --run すること (スクリプトの baseline チェックが
+  この防波堤)
+
+- (セッション 26, PR #524 罠の追加観測) **base 移動済みなのに unknown が発火しない初例**
+  (PR #530 マージ 09:36:38Z の数分後に初手 clean)。セッション 11「base 移動直後は必ず
+  unknown」→ セッション 25「base 移動無しでも発火しうる」→ 本例「base 移動があっても
+  発火しないことがある」と反例が双方向に揃い、**unknown は base 移動と無関係な散発現象**
+  と扱うのが正しい。「unknown = 待って再取得」運用は不変
 
 - (セッション 25, ライフサイクル観測の続き) **blocking 数の流出型減少が 2 例目** (3→2)。
   P-0161 が `stalled_reason: budget_exhausted` で active→stalled (beat90 decide,
