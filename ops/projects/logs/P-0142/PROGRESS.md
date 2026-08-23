@@ -318,3 +318,37 @@ P-0128/P-0141 分が毎回新着として出てくる)。判定は「docs/・ter
 本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
 リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
 docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
+
+### 2026-08-23 セッション11 — セッション10 手順どおりの兆候確認 (新ブランチ 2 本を検出したが無関係)
+
+**やったこと**: spec DoD の追加実装は無し。セッション5〜10 と同じく verify 再実測 +
+外部シグナル確認だけをした。変化は「新ブランチ `project/p-0143` / `project/p-0144` の出現」
+のみだが、下記 3 のとおり条件 A/B とは無関係だった。
+
+1. **verify 再実測**: #1 rc=1 / #2 rc=0 / #3 rc=2。セッション3 以降ずっと同一
+   (#1/#3 は verdict=keep ゆえ意図通り failing、#2 green)
+2. **観測環境の再実測** (10 回目の独立実測、結果同じ): `env` の proxmox/pve/tailscale 系無し
+   (rc=1) / `tailscale` `pvesh` `qm` `gh` CLI すべて absent。MCP ツール (`mcp__proxmox__*`) も無し
+3. **origin/main の新着確認**: `git fetch --prune` 後、`8c5cbd7d..origin/main` の commit は
+   **ゼロ** (セッション10 基準どおり)。ただし fetch で **新リモートブランチ
+   `project/p-0143` / `project/p-0144` を検出** — 構築セッションが条件 A/B を実施した可能性を
+   排除するため各々 merge-base (8c5cbd7d) からの diff を実測:
+   **docs/・terraform/・P-0142 logs への差分 0 行、PBS 言及 0 件、`qm shutdown 112` 言及 0 件**
+   → 無関係。動いた既存ブランチ `ops-state` / `project/p-0116` も同基準で実測し無関係
+4. **project/p-0115 再確認**: 更新なし (d8a67197 のまま)。累積 diff は真の merge-base
+   9b5c741d 基準で docs/backup.md +16 行のまま変化なし。なお log メッセージ grep の
+   「112」2 件のヒットは session #112/#162 という番号の誤マッチで、差分本文の PBS/112
+   言及は 0 件と実測 (grep の番号誤マッチに注意)
+5. **issue #56 を webfetch で直接読んだ**: コメント無し = 条件 A/B の実施報告は未着
+
+→ verdict は `keep` のまま、inventory への反映対象なし。docs/pbs-retirement.md は書かない。
+
+**次のセッションへの一言**: やり方はセッション5〜11 と同一。main 比較基準は引き続き
+`8c5cbd7d..origin/main` (今回は零新着)。**fetch で新ブランチ (project/p-XXXX) を見つけたら
+merge-base からの diff で「docs/・terraform/・P-0142 logs への差分」と「PBS/`qm shutdown 112`
+言及」の 2 点だけ確認すればよく、中身の精読は不要** (今回 p-0143/p-0144 で確立)。log メッセージの
+grep は「112」が session 番号に誤マッチするので、判定は diff 本文側で行うこと。verify 再実測 +
+上記確認 + 最小ログ追記で終えてよい。
+本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
+リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
+docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
