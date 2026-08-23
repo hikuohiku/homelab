@@ -104,6 +104,17 @@ spec:
                 secretKeyRef:
                   name: autopilot-core-credentials
                   key: AUTOPILOT_GITHUB_TOKEN
+            # MCP の子プロセス (core-driver mcp) が継承して使う。request_task が
+            # 依頼を events.heart.> へ流す経路 (設計 D3: コアは git に書かない)。
+            # この 2 つを消せば request_task だけが「経路が無い」と返り、
+            # 読み取りツールは動き続ける
+            - name: NATS_URL
+              value: nats://nats.autopilot.svc:4222
+            - name: NATS_NKEY_SEED
+              valueFrom:
+                secretKeyRef:
+                  name: autopilot-core-credentials
+                  key: NATS_CORE_NKEY_SEED
             - name: TZ
               value: Asia/Tokyo
           volumeMounts:
@@ -161,7 +172,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: autopilot-core-credentials
-                  key: NATS_CONSUMER_NKEY_SEED
+                  key: NATS_CORE_NKEY_SEED
             - name: TZ
               value: Asia/Tokyo
           volumeMounts:

@@ -82,6 +82,8 @@ DECLARED_DOPPLER_KEYS = frozenset(
         # NATS (apps/nats)。producer / consumer で鍵を分ける (設計 D13)。
         # NKey の seed。サーバは公開鍵しか持たず、これを使うのはクライアント側
         "NATS_CONSUMER_NKEY_SEED",
+        # コア専用 (events.heart.> への publish + events.raw.> の subscribe)
+        "NATS_CORE_NKEY_SEED",
         "NATS_PRODUCER_NKEY_SEED",
         # telegram-adapter (apps/telegram-adapter)。OpenClaw の置き換えで
         # OPENCLAW_GATEWAY_TOKEN は不要になった (control plane を持たない)

@@ -51,7 +51,39 @@ func msgFor(t *testing.T, dir string, e busEvent) *fakeMessage {
 }
 
 func testConfig(dir string) config {
-	return config{outDir: dir, pollSeconds: 1, retain: time.Hour, fetchMax: 16}
+	return config{
+		outDir: dir, commandDir: filepath.Join(dir, "commands"),
+		pollSeconds: 1, retain: time.Hour, fetchMax: 16,
+	}
+}
+
+func commandMsg(t *testing.T, cfg config, c commandEvent) *fakeMessage {
+	t.Helper()
+	raw, err := json.Marshal(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &fakeMessage{payload: raw, dir: cfg.commandDir, name: c.CommandID + ".json"}
+}
+
+func commandConfig(t *testing.T) config {
+	t.Helper()
+	cfg := testConfig(t.TempDir())
+	if err := os.MkdirAll(cfg.commandDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return cfg
+}
+
+func sampleCommand() commandEvent {
+	return commandEvent{
+		CommandID: "core-0123456789abcdef",
+		Type:      "task-request",
+		Source:    "core",
+		IssuedAt:  "2026-08-23T12:00:00Z",
+		Title:     "nats の掃除",
+		Body:      "ストリームが太っている",
+	}
 }
 
 func TestConsumeWritesNoteThenAcks(t *testing.T) {
@@ -230,5 +262,104 @@ func TestLoadConfigDefaultsMatchHeart(t *testing.T) {
 	cfg := loadConfig()
 	if cfg.outDir != "/data/feedback-bus/inbox" {
 		t.Fatalf("既定の書き出し先がずれている: %s", cfg.outDir)
+	}
+}
+
+// --- コア発の command (events.heart.>) ---
+
+func TestConsumeCommandsWritesToSeparateDirThenAcks(t *testing.T) {
+	// 書き置きと同じディレクトリに混ぜると heart の triage が誤分類する。
+	// ack は書き終えた後 (書き置き経路と同じ順序ルール)
+	cfg := commandConfig(t)
+	c := sampleCommand()
+	m := commandMsg(t, cfg, c)
+
+	consumeCommands(cfg, []busMessage{m})
+
+	if m.acked != 1 || !m.ackOrderOK {
+		t.Fatalf("書いてから ack すべき: acked=%d order=%v", m.acked, m.ackOrderOK)
+	}
+	raw, err := os.ReadFile(filepath.Join(cfg.commandDir, c.CommandID+".json"))
+	if err != nil {
+		t.Fatalf("command が落ちていない: %v", err)
+	}
+	var got commandEvent
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.CommandID != c.CommandID || got.Body != c.Body || got.Type != c.Type {
+		t.Fatalf("中身が変わっている: %+v", got)
+	}
+	entries, _ := os.ReadDir(cfg.outDir)
+	for _, e := range entries {
+		if !e.IsDir() {
+			t.Fatalf("書き置き側に混ざっている: %s", e.Name())
+		}
+	}
+}
+
+func TestConsumeCommandsIsIdempotent(t *testing.T) {
+	// 再配送されても 2 つプロジェクトが立ってはいけない。ファイル名が同じなら
+	// 上書きしない (heart 側の台帳と二重の守り)
+	cfg := commandConfig(t)
+	c := sampleCommand()
+	consumeCommands(cfg, []busMessage{commandMsg(t, cfg, c)})
+
+	changed := c
+	changed.Body = "後から来た別の本文"
+	consumeCommands(cfg, []busMessage{commandMsg(t, cfg, changed)})
+
+	raw, err := os.ReadFile(filepath.Join(cfg.commandDir, c.CommandID+".json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got commandEvent
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Body != c.Body {
+		t.Fatalf("同じ id を上書きしている: %q", got.Body)
+	}
+}
+
+func TestConsumeCommandsDropsUnusable(t *testing.T) {
+	cfg := commandConfig(t)
+	broken := &fakeMessage{payload: []byte("{壊れた"), dir: cfg.commandDir}
+	noID := commandMsg(t, cfg, commandEvent{Type: "task-request", Body: "本文"})
+	badID := commandMsg(t, cfg, commandEvent{CommandID: "../逃げる", Type: "task-request", Body: "本文"})
+	noType := commandMsg(t, cfg, commandEvent{CommandID: "core-1", Body: "本文"})
+	noBody := commandMsg(t, cfg, commandEvent{CommandID: "core-2", Type: "task-request", Body: "  "})
+
+	for _, m := range []*fakeMessage{broken, noID, badID, noType, noBody} {
+		consumeCommands(cfg, []busMessage{m})
+		if m.termed != 1 || m.acked != 0 {
+			t.Fatalf("直らないものは term で落とす: termed=%d acked=%d", m.termed, m.acked)
+		}
+	}
+	if entries, _ := os.ReadDir(cfg.commandDir); len(entries) != 0 {
+		t.Fatalf("何も書かないはず: %v", entries)
+	}
+}
+
+func TestConsumeCommandsDoesNotAckWhenWriteFails(t *testing.T) {
+	// 書けないまま ack すると依頼が誰にも渡らずに消える
+	cfg := testConfig(t.TempDir())
+	cfg.commandDir = filepath.Join(cfg.outDir, "存在しない", "深い場所")
+	m := commandMsg(t, cfg, sampleCommand())
+	consumeCommands(cfg, []busMessage{m})
+	if m.acked != 0 || m.termed != 0 {
+		t.Fatalf("再配送に任せるべき: acked=%d termed=%d", m.acked, m.termed)
+	}
+}
+
+func TestLoadConfigCommandDirDefaultMatchesHeart(t *testing.T) {
+	// 既定値が heart 側 (ops/heart/config.py の HEART_COMMAND_BUS_DIR) と揃うこと
+	t.Setenv("BUS_SIDECAR_COMMAND_DIR", "")
+	cfg := loadConfig()
+	if cfg.commandDir != "/data/command-bus/inbox" {
+		t.Fatalf("既定の command 置き場がずれている: %s", cfg.commandDir)
+	}
+	if cfg.commandDir == cfg.outDir {
+		t.Fatal("書き置きと同じ場所に落としてはいけない")
 	}
 }

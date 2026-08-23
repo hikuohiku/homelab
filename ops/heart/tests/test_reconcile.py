@@ -1191,3 +1191,112 @@ class TestApprove(unittest.TestCase):
         d = doc(project(id="P-0002", state="active", job="runner-p-0002"))
         out, _ = reconcile.decide(d, facts(approves=["P-0002", "P-9999"]), RULES, NOW)
         self.assertEqual(out["projects"][0]["state"], "active")
+
+
+class TestCoreCommands(unittest.TestCase):
+    """コア発の command (設計 D3/D7/D21) の遷移表。
+
+    常駐コアは git にも K8s にも書かない。実装依頼は bus に publish され、
+    サイドカーがファイルに落とし、heart がここで初めて仕事にする。
+
+    このテーブルが守るのは 4 つ:
+      - task-request は tasks キューへの取り込み (ingest_command) になる
+      - command_id の台帳で二重実行しない (同じ依頼で 2 つプロジェクトを立てない)
+      - 停止中は 1 件も実行しない。台帳にも刻まないので再開後に拾い直す
+      - 知らない種別は実行せず、しかし台帳には刻む (毎ビート通知が発振しない)
+    """
+
+    def command(self, **kw):
+        base = {
+            "command_id": "core-abc123",
+            "type": "task-request",
+            "source": "core",
+            "issued_at": "2026-08-23T12:00:00Z",
+            "title": "nats の掃除",
+            "body": "ストリームが太っている",
+        }
+        base.update(kw)
+        return base
+
+    def ingests(self, actions):
+        return [a for a in actions if a["type"] == "ingest_command"]
+
+    def test_task_request_becomes_ingest_action(self):
+        _, actions = reconcile.decide(
+            doc(), facts(commands=[self.command()]), RULES, NOW
+        )
+        got = self.ingests(actions)
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0]["command_id"], "core-abc123")
+        self.assertEqual(got[0]["status"], "accepted")
+        self.assertEqual(got[0]["command_type"], "task-request")
+        self.assertEqual(got[0]["title"], "nats の掃除")
+        self.assertEqual(got[0]["body"], "ストリームが太っている")
+
+    def test_known_command_is_not_ingested_twice(self):
+        """台帳に載っている id は二度と実行しない。ここが二重着手の唯一の歯止め。"""
+        _, actions = reconcile.decide(
+            doc(),
+            facts(commands=[self.command()], processed_commands=["core-abc123"]),
+            RULES, NOW,
+        )
+        self.assertEqual(self.ingests(actions), [])
+
+    def test_duplicate_in_same_beat_is_ingested_once(self):
+        _, actions = reconcile.decide(
+            doc(), facts(commands=[self.command(), self.command()]), RULES, NOW
+        )
+        self.assertEqual(len(self.ingests(actions)), 1)
+
+    def test_stop_engaged_blocks_execution(self):
+        """人間が止めているのに新しい仕事を始めない。"""
+        d = doc(stop_engaged=True)
+        _, actions = reconcile.decide(d, facts(commands=[self.command()]), RULES, NOW)
+        self.assertEqual(self.ingests(actions), [])
+
+    def test_stop_all_in_same_beat_blocks_execution(self):
+        _, actions = reconcile.decide(
+            doc(), facts(commands=[self.command()], stop_all=True), RULES, NOW
+        )
+        self.assertEqual(self.ingests(actions), [])
+
+    def test_command_survives_the_stop_and_runs_after_resume(self):
+        """停止中は台帳にも刻まないので、再開したビートで同じ command を拾う。"""
+        d = doc(stop_engaged=True)
+        d, actions = reconcile.decide(d, facts(commands=[self.command()]), RULES, NOW)
+        self.assertEqual(self.ingests(actions), [])
+
+        d, actions = reconcile.decide(
+            d, facts(commands=[self.command()], resume_all=True), RULES, NOW
+        )
+        self.assertEqual(len(self.ingests(actions)), 1)
+
+    def test_unknown_type_is_recorded_but_not_executed(self):
+        _, actions = reconcile.decide(
+            doc(), facts(commands=[self.command(type="spawn-investigation")]), RULES, NOW
+        )
+        got = self.ingests(actions)
+        self.assertEqual(len(got), 1)
+        self.assertEqual(got[0]["status"], "unsupported")
+        notes = [a for a in actions if a["type"] == "notify"]
+        self.assertEqual(len(notes), 1)
+        self.assertIn("spawn-investigation", notes[0]["text"])
+
+    def test_command_without_id_is_ignored(self):
+        """id が無いものは台帳の鍵にできない = 二重実行の芽。実行しない。"""
+        _, actions = reconcile.decide(
+            doc(), facts(commands=[self.command(command_id="")]), RULES, NOW
+        )
+        self.assertEqual(self.ingests(actions), [])
+
+    def test_breaker_does_not_block_ingestion(self):
+        """取り込みは仕事を作らない (立案・spawn 側が breaker を見る)。
+        ここで落とすと、遮断中に来た依頼が黙って消える。"""
+        _, actions = reconcile.decide(
+            doc(), facts(commands=[self.command()], breaker_tripped=True), RULES, NOW
+        )
+        self.assertEqual(len(self.ingests(actions)), 1)
+
+    def test_no_commands_is_a_quiet_beat(self):
+        _, actions = reconcile.decide(doc(), facts(), RULES, NOW)
+        self.assertEqual(self.ingests(actions), [])

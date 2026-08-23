@@ -171,6 +171,12 @@ spec:
             # 同じ場所。ずれると「書いているのに読まれない」無言の故障になる
             - name: BUS_SIDECAR_OUT_DIR
               value: /data/feedback-bus/inbox
+            # コア発の command (events.heart.>) の置き場。書き置きと**別**の
+            # ディレクトリにするのは、混ぜると triage が人間の発話として誤分類し、
+            # 依頼が briefing に埋もれるため。heart 側の既定
+            # (ops/heart/config.py の HEART_COMMAND_BUS_DIR) と同じ場所
+            - name: BUS_SIDECAR_COMMAND_DIR
+              value: /data/command-bus/inbox
             - name: TZ
               value: Asia/Tokyo
           volumeMounts:

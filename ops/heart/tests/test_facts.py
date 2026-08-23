@@ -206,3 +206,50 @@ class TestCollectFeedbackFromBus(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCollectCommands(unittest.TestCase):
+    """コア発の command (events.heart.>) の収集。
+
+    サイドカーが落とすのは書き置きとは別ディレクトリ。混ぜると triage が
+    「人間の発話」として誤分類するので、ここは triage を通さない別経路にする。
+    """
+
+    def setUp(self):
+        self.dir = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.dir, True)
+
+    def write(self, name, doc):
+        (self.dir / name).write_text(
+            doc if isinstance(doc, str) else json.dumps(doc, ensure_ascii=False)
+        )
+
+    def test_reads_commands_in_name_order(self):
+        self.write("core-b.json", {"command_id": "core-b", "type": "task-request",
+                                   "body": "後"})
+        self.write("core-a.json", {"command_id": "core-a", "type": "task-request",
+                                   "body": "先", "title": "題"})
+        got = facts.collect_commands(self.dir)
+        self.assertEqual([c["command_id"] for c in got], ["core-a", "core-b"])
+        self.assertEqual(got[0]["title"], "題")
+
+    def test_missing_dir_is_empty_not_an_error(self):
+        """バス経路が無くても heart は止まらない。"""
+        self.assertEqual(facts.collect_commands(self.dir / "無い"), [])
+        self.assertEqual(facts.collect_commands(None), [])
+
+    def test_partial_and_broken_files_are_skipped(self):
+        # サイドカーは rename で置くので書きかけは見えないはずだが、
+        # 壊れたものを読んで例外でビートを落とさない
+        self.write(".tmp-書きかけ.json", "{")
+        self.write("core-broken.json", "{壊れた")
+        self.write("core-ok.json", {"command_id": "core-ok", "type": "task-request",
+                                    "body": "本文"})
+        got = facts.collect_commands(self.dir)
+        self.assertEqual([c["command_id"] for c in got], ["core-ok"])
+
+    def test_entries_without_id_or_body_are_skipped(self):
+        self.write("a.json", {"type": "task-request", "body": "id が無い"})
+        self.write("b.json", {"command_id": "core-b", "type": "task-request"})
+        self.write("c.json", {"command_id": "core-c", "body": "type が無い"})
+        self.assertEqual(facts.collect_commands(self.dir), [])

@@ -384,6 +384,57 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
     return vetoes, acks, stop_all, review_needed, resume_all, task_requests, approves, new_cursors
 
 
+def collect_commands(command_dir):
+    """常駐コア発の command (設計 D3/D7/D21) を名前順に返す。
+
+    経路: コア (MCP の request_task) → NATS events.heart.> → 同居サイドカー
+    (apps/autopilot/bus-sidecar) → <command_dir>/<command_id>.json → ここ。
+
+    **書き置き (feedback) とは別ディレクトリ**にしてある。混ぜると triage が
+    「人間の発話」として分類し、依頼が briefing に埋もれる。ここは triage を
+    通さず、reconcile.decide() が種別で分岐する。
+
+    重複排除はここではやらない。台帳 (tasks.COMMAND_LEDGER_FILE) を facts として
+    decide に渡し、判断は純関数側に置く。
+
+    ディレクトリが無い / 読めないときは空を返す — バスの不調で heart を止めない。
+    壊れたファイル・必須項目 (command_id / type / body) を欠くものは黙って飛ばす。
+    サイドカーが入口で捨てているはずのものが届いたということなので、ここで
+    例外にしてビートを落とす方が害が大きい。
+    """
+    if command_dir is None:
+        return []
+    try:
+        paths = sorted(
+            p for p in Path(command_dir).iterdir()
+            if p.is_file() and p.name.endswith(".json") and not p.name.startswith(".")
+        )
+    except OSError:
+        return []
+    out = []
+    for path in paths:
+        try:
+            command = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(command, dict):
+            continue
+        cid = str(command.get("command_id") or "").strip()
+        ctype = str(command.get("type") or "").strip()
+        body = str(command.get("body") or "").strip()
+        if not cid or not ctype or not body:
+            continue
+        out.append({
+            "command_id": cid,
+            "type": ctype,
+            "source": str(command.get("source") or "core"),
+            "issued_at": str(command.get("issued_at") or ""),
+            "title": str(command.get("title") or "").strip(),
+            "body": body,
+        })
+    return out
+
+
 def load_adopted_specs(repo_dir):
     """main の archive.jsonl から採択済み spec を {id: spec} で返す (同 id は最後の行が有効)。"""
     specs = {}
