@@ -16,6 +16,13 @@ class GhError(Exception):
     def __init__(self, status, body):
         super().__init__(f"github API {status}: {body[:300]}")
         self.status = status
+        self.body = body
+        # 失敗の理由は呼び出し側 (heart) が状態に刻み、reconcile が判定に使う。
+        # JSON の message だけを取り出しておく (本文全体は body に残す)
+        try:
+            self.message = str(json.loads(body).get("message") or body)
+        except Exception:
+            self.message = body
 
 
 class Gh:

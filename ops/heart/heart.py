@@ -24,7 +24,7 @@ import traceback
 from datetime import datetime, timezone
 
 from . import adoptgate, config, facts, gitutil, metrics, reconcile, spawn, tasks
-from .gh import Gh
+from .gh import Gh, GhError
 from .notify import Notifier, veto_footer
 from .statefiles import StateFiles, now_iso
 
@@ -235,7 +235,22 @@ class Heart:
                     if shadow:
                         log(f"[shadow] merge PR #{a['pr']} for {pid}")
                     else:
-                        self.gh.merge_pr(a["pr"])
+                        # 失敗の事実だけを doc に刻む。「再試行してよい失敗か」の
+                        # 判断は次のビートの reconcile.merge_conflict() が下す
+                        # (adopt_gate と同じ分担: 実測は execute、判定は純関数)
+                        try:
+                            self.gh.merge_pr(a["pr"])
+                        except GhError as e:
+                            if p is not None:
+                                p["merge_error"] = {
+                                    "at": now_iso(now),
+                                    "pr": a["pr"],
+                                    "status": e.status,
+                                    "reason": e.message[:300],
+                                }
+                            raise
+                        if p is not None:
+                            p.pop("merge_error", None)
                 elif kind == "deliver":
                     text = f"{pid}: {p['title']} を納品しました"
                     if shadow:
