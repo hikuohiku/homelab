@@ -3759,7 +3759,51 @@
         "soft_cap": 1500000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T08:56:57Z",
+        "verify": [
+          {
+            "cmd": "test -f ops/projects/logs/P-0175/drill-report.json",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -c \"import json; d=json.load(open('ops/projects/logs/P-0175/drill-report.json')); assert d.get('blocked_minutes',0)>=30 and d.get('recovery_verified') is True and isinstance(d.get('pod_recreate_result'),str) and d.get('eso_error_first_seen_seconds') is not None\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json; d=json.load(open('ops/projects/logs/P-0175/drill-report.json')); assert d.get('blocked_minutes',0)>=30 and d.get('recovery_verified') is True and isinstance(d.get('pod_recreate_result'),str) and d.get('eso_error_first_seen_seconds') is not None\n                             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'ops/projects/logs/P-0175/drill-report.json'\n"
+          },
+          {
+            "cmd": "python3 -c \"c=open('apps/ops-health-reporter/report.py').read(); assert 'externalsecret' in c.lower() or 'secretsynced' in c.lower()\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    c=open('apps/ops-health-reporter/report.py').read(); assert 'externalsecret' in c.lower() or 'secretsynced' in c.lower()\n                                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n"
+          },
+          {
+            "cmd": "test -f docs/doppler-outage-runbook.md && grep -q '応急' docs/doppler-outage-runbook.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
