@@ -437,3 +437,34 @@ P-0193 1M / P-0196 4.5M — 既に全員着手済み) の長尺死待ちと P-00
 active 化。特に P-0196 (cap 4.5M, 解析系, ブランチ出現済み) が最有力。予算死の遡及列挙は
 `git log -S'"budget_exhausted"' origin/ops-state -- projects.json` で行うこと
 (セッション13 再実測。--since ループより速い)。
+
+## セッション14 の記録 (2026-08-23 12:53–13:06Z)
+
+**やったこと**: ops-state 監視のみ。冒頭 fetch → head f1640456c を refs/pull 照合
+(0 件 = PR 未開) → 実装コミット c353eca55 が origin/main 未含も確認 → 約 4.5 分待機 ×2 を
+挟んで 3 回確認したが merge 無し。verify 1〜3 を再実測 green (15 tests OK)。
+本ファイル追記 + commit して終了。
+
+**盤面の実測 (12:52Z / 12:59Z / 13:04Z の 3 回)**:
+
+- `continuation_count` の出現は projects.json 全 70 エントリで 0 のまま (merge 前なので当然)
+- heart は生存: beat 251 @ 12:52:18Z → beat 257 @ 12:59:42Z → beat 261 @ 13:04:39Z
+  (ビート約 70 秒間隔を維持)
+- **今日の予算死は増えていない**: `git log -S'"budget_exhausted"' origin/ops-state --
+  projects.json` の最終出現は ff300b0bf @ 09:35:24Z (= P-0161 の死) のまま、以後 3.5 時間超新規無し
+- states 実測: stalled 32 / delivered 29 / active 6 / vetoed 2 / announced 1。
+  actives = P-0182 (自枠, 1.5M) + P-0187 1.5M / P-0188 800k / P-0192 500k / P-0193 1M /
+  P-0196 4.5M。budget-dead stalled 集合も 9 件のまま不変
+  (P-0080/0102/0116/0139/0142/0143/0144/0157/0161)
+- fetch 時に project/p-0187 / p-0188 / p-0193 ブランチが前進 — 各 runner が作業中の実視。
+  P-0193 (cap 1M) は監視中に 2 回前進した
+- 人間の活動兆候: 変化なし (本 PR のレビューは未開。main も #540 のまま)
+
+**次のセッションへの一言**: 変更なし — merge 待ち。手順は一切変わらない:
+冒頭 fetch → refs/pull 照合 (ブランチ head SHA で) → merge 済みなら遡及レシピで
+continuation_count 出現を探す、未 merge なら待機 1〜2 回して観測事実だけ追記して終了。
+証跡機会の供給源は更新なし: active 5 案 (P-0187 1.5M / P-0188 800k / P-0192 500k /
+P-0193 1M / P-0196 4.5M — 全員着手済み・複数ブランチが動き続けている) の長尺死待ちと
+P-0092 (announced, 3M) の active 化。特に P-0196 (cap 4.5M, 解析系) が最有力。
+予算死の遡及列挙は `git log -S'"budget_exhausted"' origin/ops-state -- projects.json`
+で行うこと (セッション14 再実測。--since ループより速い)。
