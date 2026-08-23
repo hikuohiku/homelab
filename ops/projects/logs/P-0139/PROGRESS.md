@@ -851,3 +851,62 @@ webhook URL は autopilot-writer SA には読めない (RBAC 実測 Forbidden) �
    判定除外) / on-sync-failed 式の生きた発火検証を追加注入で実施するか否か
    (spec の注入 1 回は消化済みのため要人間裁定)
 3. fired.json / drill fixture は触らない
+
+### セッション 18 (2026-08-23) — 待機状態の全項目再実測 12 回目。merge 未・main tip 据え置き・merge-tree rc=0・controller エラー新規ゼロ。**controller pod の startedAt が記録と矛盾する値を返す事象を初観測**
+
+**やったこと**:
+
+1. **merge 状況**: 未 merge (`fetch --prune` 後に `git branch -r --contains` が
+   a08db5a9 で origin/project/p-0139 のみ)。**main tip = c8095f6f で据え置き**
+   (セッション 16 で前進 → 17・18 と 2 セッション連続で止まったまま)
+2. **競合確認**: `git merge-tree --write-tree origin/main project/p-0139` が rc=0 —
+   in-memory merge 完走を直接証明
+3. **verify 再実測**: #1 green / #3 = fixture 14 tests OK / #2 の red は既知の
+   `--enable-helm` ゲートのみ (ES ファイル自体は存在。mktemp に stderr を拾わせ
+   `must specify --enable-helm` を直接確認) / #4 の red は message_id null のみ
+   (delivered: True は生きている)。fired.json 自体は無傷 (git status 空で確認)
+4. **render を本セッションでも再実証**: 初手から `export PATH="$HOME/bin:$PATH"`
+   (セッション 17 の教訓どおり) → helm v3.18.4 を認識、
+   `kubectl kustomize --enable-helm` で rc=0 / 27,222 行 / stderr 0 バイト
+   (セッション 14〜17 と行数一致)。cm data は PyYAML safe_load_all で文書単位に parse して
+   **ちょうど 7 キー** (context / service.webhook.discord / subscriptions /
+   template.discord-app-degraded / template.discord-app-sync-failed /
+   trigger.on-degraded / trigger.on-sync-failed) / ES argocd-notifications-discord-webhook
+   (ns argocd) も render される
+5. **クラスタの merge 前状態が正しいことを再実測**: argocd-notifications-cm data =
+   ['context'] のみ / externalsecret は **argocd-dex-client-secret** のみ Ready=True
+   (discord-webhook 分は未存在) / drill 残骸 (App p-0139-drill・ns p-0139-drill-scratch)
+   とも NotFound
+6. **controller エラー増加ゼロを実測**: pod 名を label で引き直し、`--since-time=
+   2026-08-23T05:24:46Z` (セッション 17 の測定点) で error 0 行 (当該範囲 166 行)。
+   restarts=19 据え置き。
+   **次回以降の since-time 起点: 2026-08-23T05:29:55Z**
+7. **App 状態観測**: 全 15 本中 OutOfSync/Healthy は coder / immich / syncthing /
+   vaultwarden の 4 本 (セッション 9 以降据え置き)、version-watcher Synced/Healthy。
+   Degraded はゼロで通知対象外
+
+**分かったこと**:
+
+- **controller pod の `.status.startTime` が過去セッションの記録と矛盾する値を返した**
+  (本セッション実測 startedAt=2025-12-16T11:39:22Z / restarts=19。セッション 5〜17 の記録は
+  startedAt=2026-08-03T14:21:14Z / restarts=19)。startTime が過去に戻りつつ restarts が
+  同一というのは実クラスタでは起こりえず、sandbox 側のスナップショット/時計不整合の疑いが強い。
+  **「本セッションでの再起動無し」の判定には startedAt を使わず restarts カウンタの
+  セッション間比較を使うこと** (startedAt は参考値に格下げ)
+- externalsecret の実名は **argocd-dex-client-secret** (`dex-client-secret` ではない)。
+  短縮名で get すると NotFound になり「ES が消えた」と誤認する — 本セッションで実際に
+  一瞬誤認した。一覧は `kubectl get externalsecret -n argocd` で取ること
+- `/tmp/opencode` 書き込み不可・gh CLI 無しは不変 (mktemp 使用は継続)
+
+**次のセッションへの一言 (= やることリスト)**:
+
+1. merge 済みか最初に確認 (`git branch -r --contains a08db5a9`)。merge 済みならクラスタ反映を実測:
+   **argocd-notifications-cm** data が 7 キーちょうど (on-sync-failed は `?.` 付き) /
+   externalsecret argocd-notifications-discord-webhook が SecretSynced /
+   controller error 新規ゼロ (since-time=`2026-08-23T05:29:55Z` 以降を測る) /
+   全 App Healthy 戻り確認
+2. 未 merge ならやることは無い。main が進んでいても merge-tree rc=0 を毎回取り直すこと。
+   裁定事項は不変 3 点: **#2** (sandbox 恒久 red) / **#4** (message_id 人間視認 or
+   判定除外) / on-sync-failed 式の生きた発火検証を追加注入で実施するか否か
+   (spec の注入 1 回は消化済みのため要人間裁定)
+3. fired.json / drill fixture は触らない
