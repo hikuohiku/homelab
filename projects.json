@@ -2879,11 +2879,35 @@
       "spawn_count": 1,
       "job": "runner-p-0128-a1",
       "drift_count": 0
+    },
+    {
+      "id": "P-0139",
+      "title": "アプリが Degraded になっても誰の耳にも鳴らない — ArgoCD Notifications (既に稼働済み・設定ゼロ) を Discord に繋ぎ、合成障害で本当に鳴るところまで通す",
+      "state": "proposed",
+      "branch": "project/p-0139",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": true,
+      "verify": [
+        "grep -q 'on-degraded\\|on-sync-failed' apps/argocd/values.yaml",
+        "test -f apps/argocd/discord-webhook-external-secret.yaml && kubectl kustomize apps/argocd >/dev/null",
+        "python3 -m unittest ops.tests.test_argocd_notifications",
+        "python3 -c \"import json; f=json.load(open('ops/projects/logs/P-0139/fired.json')); assert f.get('delivered') and f.get('message_id')\""
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1200000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-23T01:31:56Z",
-  "last_activity_at": "2026-08-23T02:03:48Z",
+  "last_activity_at": "2026-08-23T02:05:00Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
