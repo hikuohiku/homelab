@@ -334,6 +334,9 @@ class Heart:
         # B2 download cap の帳簿の警報すべき状態 (P-0128)。warn/exceed のときだけ
         # 中身があり、それ以外は None (budget_alert_due が繰り返しを落とす)
         budget = facts.budget_alert(health_doc)
+        # restic backup の鮮度警報 (P-0157)。warn の経路が 1 つでもあるときだけ
+        # 中身があり、それ以外は None (backup_freshness_alert_due が繰り返しを落とす)
+        backup_fresh = facts.backup_freshness_alert(health_doc)
         try:
             jobs = facts.collect_jobs(self.k8s_client(), self.cfg.namespace)
         except Exception as e:
@@ -421,6 +424,27 @@ class Heart:
             )
             budget_queued = True
 
+        # restic backup の鮮度警報 (P-0157)。budget 警報と同じ流路 2 本に乗せる:
+        # briefing-queue.jsonl と incident 通知。鳴るのは warn の経路が 1 つでも
+        # あるときだけで、同じ stale_repos 集合の同一日内の再通知は cursors の
+        # 前回記録で落とす。cursors への書き込みは下の save_cursors(cursors) より
+        # **前** に行う (P-0128 レビュー指摘の順序契約。save 後書きは cursors.json
+        # に反映されず、次ビートが警報を積み直す)
+        bf_incident_text = None
+        bf_queued = False
+        if facts.backup_freshness_alert_due(
+            backup_fresh, cursors.get("backup_freshness_alert"), today
+        ):
+            # backup_freshness_alert_due が True を返すのは alert が実在するときだけ
+            cursors["backup_freshness_alert"] = {
+                "stale_repos": backup_fresh["stale_repos"],
+                "date": today,
+            }
+            bf_incident_text = (
+                f"restic backup の鮮度が warn 閾値を超えました: {backup_fresh['reason']}"
+            )
+            bf_queued = True
+
         # --- 一段目: 状態遷移を副作用より先に永続化する (レビュー指摘 [8])。
         # ここで落ちても副作用は未実行なので、次のビートが同じ判断をやり直すだけ。
         # 逆順 (実行→保存) だと、保存失敗の翌ビートが「実行済みの副作用」を知らずに
@@ -440,6 +464,19 @@ class Heart:
                 },
             )
             log(f"download_budget alert: {budget['status']} — queued to briefing")
+        if bf_queued:
+            sf.append_jsonl(
+                "briefing-queue.jsonl",
+                {
+                    "at": now_iso(now),
+                    "source": "backup-freshness (warn)",
+                    "body": backup_fresh["reason"],
+                },
+            )
+            log(
+                f"backup_freshness alert: {len(backup_fresh['stale_repos'])} repos stale "
+                f"— queued to briefing"
+            )
         # タスク依頼の受領 (P-0091)。id 重複は merge_new が落とすので、
         # カーソル巻き戻り等で同じ note を再取り込みしても積み直さない
         queue = sf.read_jsonl(tasks.QUEUE_FILE)
@@ -458,6 +495,11 @@ class Heart:
                 log(f"[shadow] notify[incident] {budget_incident_text[:80]}")
             else:
                 notifier.send("incident", budget_incident_text, now)
+        if bf_incident_text:
+            if self.cfg.shadow:
+                log(f"[shadow] notify[incident] {bf_incident_text[:80]}")
+            else:
+                notifier.send("incident", bf_incident_text, now)
 
         sf.append_jsonl(
             "metrics.jsonl",
@@ -471,6 +513,9 @@ class Heart:
                 "health_fresh": health_fresh,
                 "breaker": breaker_info,
                 "budget_status": budget["status"] if budget else None,
+                "backup_fresh_warn_count": (
+                    len(backup_fresh["stale_repos"]) if backup_fresh else None
+                ),
                 "vetoes": vetoes,
                 "stop_all": stop_all,
                 "actions": [a["type"] for a in actions],

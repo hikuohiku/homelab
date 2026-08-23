@@ -64,3 +64,61 @@ ops/heart/tests/test_budget_alert*.py を写す)、DoD(5) の初回実測表
 (merge 後に `git show origin/ops-health-report:ops/health/latest.json` から
 backup_freshness を拾って initial-freshness.md に取得時刻付きで書く)、そして
 #2 の merge 後確認。rules.json は人間レビュー必須パスなので auto-merge は期待しないこと。
+
+## 2026-08-23 session 3 (worker)
+
+### やったこと
+
+DoD(2) の heart 注記配線を実装した (budget_alert 同型、新規通知チャネルは作らない)。
+
+- `ops/heart/facts.py` に `backup_freshness_alert(doc)` と
+  `backup_freshness_alert_due(alert, prev, today)` を追加 (budget_alert /
+  budget_alert_due の直後に置いた)
+- `ops/heart/heart.py`: budget beat と同じ形で cursors キー
+  `backup_freshness_alert` を配線。流路は既存 2 本だけ:
+  briefing-queue.jsonl (`source="backup-freshness (warn)"`) と incident 通知。
+  cursors への書き込みは save_cursors より **前** (P-0128 レビュー指摘の順序契約)。
+  metrics.jsonl に `backup_fresh_warn_count` を追加
+- テスト: `ops/heart/tests/test_backup_freshness_alert.py` (12 tests) +
+  `test_backup_freshness_beat.py` (3 tests, 実物 Heart.beat() をパッチして回す
+  結合テスト。cursors の save 前書きを崩すと即落ちする断言を含む)
+
+### 設計判断 (記録)
+
+1. **no_data / error / unconfigured は鳴らさない** (warn のみ抽出)。DoD(2) が求めるのは
+   「閾値の超過」の注記であって「測定できていない」ことではない。特に CronJob 再作成直後は
+   lastSuccessfulTime が空になり no_data になる — これを即鳴きすると修復作業そのものが
+   誤報を出す。静停止 (#49 型) は lastSuccessfulTime が 72h を跨いだ時点で warn に
+   なるのでこの経路で捕まる
+2. **due() の抑制単位は stale_repos の集合**。budget は status 変化 (warn→exceed) で
+   再鳴するが、鮮度には段階が無いので「集合が変わったら」(warn 経路の増加・回復どちらでも)
+   同日でも再通知に倒した。「増えた」は新しい情報であり、「回復」も 1 回の追加通知として
+   可視性に寄与する (集合が戻る発振は日次周期では起きない想定)。日付が変われば同じ集合でも
+   再度鳴らす (毎日の確実な可視性。budget_alert_due 同型)
+3. reason 文 (`coder-restic-backup (80.5h)、…` 形) は facts 側で組み立てた。
+   reporter は warn 行に detail/reason を持たないため (error/no_data 専用)
+
+### verify 現状
+
+- [x] #1 `python3 -m unittest ops.tests.test_backup_freshness` — rc=0 実測 (34 tests)
+- [ ] #2 health ブランチ latest.json — merge → ArgoCD sync → reporter 次回実行後 gate。
+      ローカルでは永遠に green にならない (変化なし)
+- [x] #3 `grep -qE 'backup_fresh' ops/rules.json` — rc=0 実測
+- 追加実測: 新規 15 tests green / `ops/heart/tests` 全体 211 tests OK /
+  repo 全体 discover (`unittest discover -s ops -t .`) 523 tests OK /
+  `ops/validate.py` 0 error
+
+### 次のセッションへの一言
+
+実装系はすべて完了 (session 2 の測定パイプライン + 本 session の注記配線)。
+残りは **merge 後にしかできない 2 作業** だけ:
+
+1. verify #2 の gate 確認: merge → ArgoCD sync → reporter の次回実行 (30 分毎) を待ち、
+   `git show origin/ops-health-report:ops/health/latest.json` で backup_freshness が
+   >=5 要素載ったことを確認
+2. DoD(5): 同じ latest.json から 5 経路の現鮮度を拾い、取得時刻付きで
+   `ops/projects/logs/P-0157/initial-freshness.md` に初回実測表として書く
+
+どちらも merge 前には絶対に進めないので、それ以外の作業は無い。rules.json は人間レビュー
+必須パスなので auto-merge は期待しないこと (session 2 と同じ)。heart 注記の実環境での
+発報確認はしなくてよい (warn になるまで数日かかる。fixture で両方向固定済み)。

@@ -96,6 +96,82 @@ def budget_alert_due(alert, prev, today):
     return not (prev.get("status") == alert.get("status") and prev.get("date") == today)
 
 
+def backup_freshness_alert(doc):
+    """latest.json から restic backup 鮮度の警報すべき状態を抽出する (P-0157)。
+
+    report が作る backup_freshness リストのうち status == "warn" (rules.json の
+    warn_hours 以上「最後の成功」が古い経路) を拾う。ok は当然 quiet で、
+    no_data / unconfigured / error も鳴らさない: DoD(2) が求めるのは「閾値の
+    超過」の注記であって「測定できていない」ことではない。特に CronJob 再作成直後は
+    lastSuccessfulTime が空になり no_data になるが、これを即鳴きすると修復作業
+    自体が誤報を出すことになる。静停止 (#49 型) は lastSuccessfulTime が閾値を
+    超えた時点で warn になるので、この抽出で捕まる。
+    それ以外 (latest.json 無し・壊れ・backup_freshness キー無し) も None。
+
+    観測のみを行い判断しない (モジュール冒頭の原則)。繰り返し抑制は
+    backup_freshness_alert_due() が担う。
+    """
+    if not isinstance(doc, dict):
+        return None
+    rows = doc.get("backup_freshness")
+    if not isinstance(rows, list):
+        return None
+
+    def _num(value):
+        # bool は int の派生なので明示的に弾く (budget_alert._num と同じ)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return value
+
+    stale = []
+    for row in rows:
+        if isinstance(row, dict) and row.get("status") == "warn":
+            stale.append(
+                {
+                    "repo": row.get("repo"),
+                    "cronjob": row.get("cronjob"),
+                    "hours_since_success": _num(row.get("hours_since_success")),
+                }
+            )
+    if not stale:
+        return None
+
+    def _show(item):
+        label = item["cronjob"] or item["repo"]
+        hours = item["hours_since_success"]
+        return (
+            f"{label} ({hours:.1f}h)"
+            if hours is not None
+            else f"{label} (経過時間不明)"
+        )
+
+    return {
+        "status": "warn",
+        "stale_repos": sorted({str(item["repo"]) for item in stale}),
+        "reason": "、".join(_show(item) for item in stale),
+    }
+
+
+def backup_freshness_alert_due(alert, prev, today):
+    """警報を今日新規に積むべきか。(alert, cursors の前回記録, today=YYYY-MM-DD)。
+
+    同じ stale_repos 集合で同じ日内の再通知を落とす (heart は 120s ビートで
+    回るため、抑制しないと briefing-queue.jsonl と Discord incident を 1 日で
+    使い潰す)。集合が変わったら (新たな経路の超過・回復どちらでも) その日は
+    再度鳴らす — 「warn が増えた」は新しい情報で、status 悪化で再鳴する
+    budget_alert_due と同じ倒し方。日付が変われば同じ集合でも再度鳴らす
+    (毎日の確実な可視性を優先。budget_alert_due 同型)。alert=None は常に False。
+    """
+    if alert is None:
+        return False
+    if not isinstance(prev, dict):
+        return True
+    return not (
+        prev.get("date") == today
+        and prev.get("stale_repos") == alert.get("stale_repos")
+    )
+
+
 def collect_jobs(k8s, namespace):
     """heart が生んだ Job の実状態。{job_name: {"active":bool,"failed":bool,"succeeded":bool}}"""
     out = {}
