@@ -131,13 +131,84 @@
 - 受入チェックリスト #1–#4 はすべて green 済み。DoD 3 は verify コマンドの直接
   対象ではないが DoD 本体 (PROJECT.md「verify が直接見ないもの」(3))
 
+### セッション3 (2026-08-23) — 近接警報 (DoD 3) の実装。レビュー指摘の解消
+
+**やったこと**
+
+- `ops/rules.json` に **argocd_controller 節**を新設
+  (`memory_limit_warn_percent: 80` + `_comment`)。80 の根拠: 旧 limit では観測ピーク
+  時点で既に ~78% で OOMKill しており、上限ちょうどで鳴る計器は手遅れ
+  (download_budget の WARN_RATIO=0.8 と同じ倒し方)
+- `apps/ops-health-reporter/argocd-alerts.json` 新設 — rules.json 由来の**同期コピー**。
+  reporter は in-cluster で repo 全体を読めず、configMapGenerator も kustomization.yaml 外の
+  ファイルを読めない (version_watch.py 先例) ため。kustomization.yaml の files に追加し
+  /scripts に載る。CronJob なので CM 更新の rollout 追配は不要 (罠メモ 3 のとおり)
+- `apps/ops-health-reporter/argocd_memory.py` 新設 — 判定だけの純関数モジュール
+  (download_budget.py 分離と同じ思想)。`parse_quantity_bytes` (series ツールと同一 fixture 表)、
+  `coerce_warn_percent`、`judge` (ok/warn/exceed/no_data/unconfigured)、
+  `find_container_usage` / `find_container_limit` / `build_report`
+- `report.py` 配線: latest.json に **argocd キー**を新設。
+  usage は pod_metrics (metrics API 問い合わせは main() で 1 回にまとめ使い回し)、
+  limit は `/api/v1/namespaces/argocd/pods/argocd-application-controller-0` GET の
+  `spec.containers[].resources.limits.memory` — **values.yaml を引き直しても reporter 側に
+  追従作業が発生しない**形 (罠メモ 3 の調査済み前提どおり)。閾値は同期コピー経由。
+  notes にも argocd キーの説明を追記。RBAC 追加は不要 (pods get は既存 ClusterRole 済み)
+- `ops/check_argocd_alert_sync.py` 新設 + ci.yml consistency checks に 1 行追加。
+  rules.json ↔ 同期コピーの値一致・source ポインタ・範囲 (0<N<=100)・kustomization への
+  列挙を fail-closed で検査。drift 時に落ちることも実測 (片側 90 に変える → rc=1 → 復元)
+- `ops/tests/test_argocd_memory.py` 新設 (31 tests) — quantity パース / 閾値検査 /
+  judge 境界 (丸め後表示値 >= で鳴る側) / 合成 pod_metrics+pod GET fixture での
+  build_report 両方向 / checker 純関数
+
+**verify 実測**
+
+- #1–#4 受入コマンドすべて再実行 → **green** (21 tests + --check OK、証跡 JSON 不変)
+- 新規 `python3 -m unittest ops.tests.test_argocd_memory` → **31 tests OK**
+- 全 ops/tests discover → **307 tests OK**
+- report.py は cluster 外 import 不能 (SA token) のため、token/ssl 差し替えの煙試験を
+  1 回だけ実施 (コミットせず): load_alert_thresholds() が実ファイルから 80 を読むこと /
+  argocd セクションが ok・51.8% になること / pod_metrics error dict が RuntimeError になり
+  collect() 畳み込み対象になること / main() の report に argocd キーが乗ることを確認
+
+**判断の記録**
+
+- 判定語彙は download_budget.judge と揃えた (no_data/unconfigured/ok/warn/exceed)。
+  境界は「>= で鳴る側」。percent は小数 1 桁に丸め、**判定は丸め後の表示値**で行う
+  (79.99% は表示 80.0% で warn — 計器が言う数字と判定を一致させるため)
+- usage 読めない → no_data / limit 読めない → unconfigured。どちらも決め打ちで沈黙させない
+- 同期コピー破損 (非 int・範囲外) は no_data に畳まず例外 → collect() が error エントリとして
+  latest.json に見せる (設定事故の沈黙化防止)
+
+**分かったこと**
+
+- rules.json の source ポインタ表記は JSON Pointer (`ops/rules.json#/argocd_controller`) に統一。
+  checker の期待値も同じ式 (`"{}#/{}"` 形) で作ること — 片側を素朴な `/` 結合にすると
+  初回から drift で落ちる (実際にやった)
+- ruff/pip がこのサンドボックスに無く F821 相当の静的検査は未実施。compile + 実行系
+  (unittest/checker/煙試験) で代用した。CI 側の ruff が拾うものがあれば次セッションで修正
+
+**次のセッションへ**
+
+- 残作業なし (受入 #1–#4 + DoD 3 完了)。レビュー指摘への対応は本セッションで完了
+- マージ後の確認ポイント: (1) ArgoCD sync 後に reporter CronJob の次 run で
+  latest.json argocd キーが出ること (controller が OOM ループ中だと values.yaml 反映の
+  sync 自体が滞る可能性 — セッション2 記録参照)。(2) rules.json 触りなので PR は人間待ち。
+  レビュー依頼文面は PR 本文側に書くこと
+- 閾値 80% を変えるときは rules.json を正に argocd-alerts.json へ同値コピーする
+  (checker が不一致を落とす)。CI の kustomize build は apps/ 変更時に走るので
+  configMapGenerator の列挙漏れも checker とは別に落ちる
+
 ## 引き継ぎ事項
 
-- 受入チェックリスト #1–#4 **すべて green** (セッション2 終了時実測)。残作業は
-  近接警報 (DoD 3) のみ → セッション2 記録の「次のセッションへ」を参照
+- 受入チェックリスト #1–#4 + DoD 3 (近接警報) **すべて実装済み・green**
+  (セッション3 終了時実測)。残作業なし
 - ツールの既知死角は argocd_memory_series.py の docstring に記載済み
-  (観測ピークは下限 / 鋸歯状 leak は slope でしか拾えない / pod 名決め打ち)
+  (観測ピークは下限 / 鋸歯状 leak は slope でしか拾えない / pod 名決め打ち)。
+  近接警報側の死角: 観測対象 pod 名を StatefulSet 固定名で決め打ち
+  (argocd_memory.ARGOCD_NAMESPACE/CONTROLLER_POD/CONTROLLER_CONTAINER)、
+  metrics-server のサンプル間隔の尖りは見えない (pod_issues と併読のこと)
 
 ## 発見 (spec 外。curriculum の原料として記すだけ)
 
-- なし (今回の範囲では出なかった。近接警報の配線制約は上記 3 に実装前提として記録済み)
+- なし (近接警報の配線制約は PROGRESS セッション1 罠メモ 3 に記録済みで新たな発見は
+  出なかった。ruff 未実施の件は「分かったこと」に記載済み)

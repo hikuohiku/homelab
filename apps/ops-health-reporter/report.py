@@ -21,6 +21,7 @@ import urllib.request
 # cluster 外 (CI・検査スクリプト) が importlib でロードしたときの解決用フォールバック
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import download_budget
+import argocd_memory
 
 SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
 K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
@@ -285,6 +286,55 @@ def collect_nodes():
     return out
 
 
+# 近接警報 (P-0181) の閾値ファイル。ops/rules.json の argocd_controller 節が正で、
+# これはその同期コピー (reporter は in-cluster で repo の rules.json を読めず、
+# configMapGenerator も kustomization.yaml 外のファイルを読めない — version_watch.py
+# の二重管理先例)。drift は ops/check_argocd_alert_sync.py (CI) が落とす。
+# __file__ 基準なので cluster 内 (/scripts) でも cluster 外 (repo checkout) でも解決する
+ALERT_CONFIG_FILE = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "argocd-alerts.json"
+)
+
+
+def load_alert_thresholds():
+    """同期コピーから閾値 N (limit の何% 以上で warn 判定するか) を読む。
+
+    ファイルの不在・破損・値の不正は例外のまま呼び出し側 (collect()) へ返す —
+    設定事故を no_data に畳んで沈黙させないため。
+    """
+    with open(ALERT_CONFIG_FILE, encoding="utf-8") as f:
+        cfg = json.load(f)
+    return argocd_memory.coerce_warn_percent(cfg.get("memory_limit_warn_percent"))
+
+
+def collect_argocd_controller_memory(pod_metrics=None):
+    """latest.json の `argocd` セクション (P-0181)。
+
+    usage は pod_metrics (metrics-server)、limit は実機 pod GET の
+    spec.containers[].resources.limits.memory。limit をここに持たないのが要点で、
+    values.yaml を引き直しても reporter 側の追従作業は発生しない。
+    pod_metrics は main() で既に取得したものを受け回す (metrics API への 2 度目の
+    問い合わせを避ける)。取得自体が失敗した回 ({"error": ...}) は例外として
+    collect() に畳ませ、セクションごと error エントリにする — usage 無しの
+    半端なセクションを出すより正直。
+    """
+    warn_percent = load_alert_thresholds()
+    if pod_metrics is None:
+        pod_metrics = collect_pod_metrics()
+    if isinstance(pod_metrics, dict) and "error" in pod_metrics:
+        raise RuntimeError("pod_metrics の取得に失敗: {}".format(pod_metrics["error"]))
+    if not isinstance(pod_metrics, list):
+        raise RuntimeError(
+            "pod_metrics がリストでない: {!r}".format(type(pod_metrics).__name__)
+        )
+    pod = k8s_get(
+        "/api/v1/namespaces/{}/pods/{}".format(
+            argocd_memory.ARGOCD_NAMESPACE, argocd_memory.CONTROLLER_POD
+        )
+    )
+    return argocd_memory.build_report(pod_metrics, pod, warn_percent)
+
+
 # heart (ops/heart/heart.py) の log() が書く心拍行だけを抜き出す正規表現。
 # 産出側は `[autopilot] <ts> iteration #N start` /
 # `[autopilot] <ts> iteration #N end exit=<rc> elapsed=<n>s` を出す（旧 loop.sh と
@@ -523,16 +573,20 @@ def main():
     base_branch = os.environ.get("BASE_BRANCH", "main")
 
     generated_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    pod_metrics = collect(collect_pod_metrics)
     report = {
         "generated_at": generated_at,
         "applications": collect(collect_applications),
         "pod_issues": collect(collect_pod_issues),
         "pvcs": collect(collect_pvcs),
         "nodes": collect(collect_nodes),
-        "pod_metrics": collect(collect_pod_metrics),
+        "pod_metrics": pod_metrics,
         "node_metrics": collect(collect_node_metrics),
         "pvc_usage": collect(collect_pvc_usage),
         "download_budget": collect(collect_download_budget),
+        # 近接警報 (P-0181)。pod_metrics と同じ metrics 値を使い回すため、
+        # 取得は 1 回だけ (collect_argocd_controller_memory 参照)
+        "argocd": collect(lambda: collect_argocd_controller_memory(pod_metrics)),
         "autopilot": collect(collect_autopilot_health),
         "notes": (
             "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 "
@@ -559,6 +613,16 @@ def main():
             "推定モデル（産出側 CronJob の LEDGER_RULES）による推定量。"
             "cap の実値は B2 コンソールにしか無いため既定は unconfigured（決め打ちしない）。"
             "産出側がまだ稼働していない namespace は error エントリになる。"
+            " argocd キーは argocd application-controller のメモリ近接警報（P-0181）。"
+            "usage は pod_metrics と同じ metrics-server 値、limit は実機 pod "
+            "argocd-application-controller-0 の spec.containers[].resources.limits.memory を"
+            "その都度取得する（values.yaml 由来の値をハードコードしない。limit 引き直しの"
+            "根拠は ops/projects/logs/P-0181/memory-evidence.md）。閾値 N（usage が limit の"
+            "何% 以上で warn 判定するか）は ops/rules.json の argocd_controller 節が正で、"
+            "reporter はその同期コピー argocd-alerts.json を読む（CI の "
+            "ops/check_argocd_alert_sync.py が一致を検査）。status は ok/warn/exceed/"
+            "no_data/unconfigured。pod_issues が「死んだ後」を語るのに対しこちらは常に"
+            "「limit の何%」を言えるのが役割。"
         ),
     }
 
