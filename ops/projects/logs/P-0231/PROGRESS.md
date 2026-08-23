@@ -237,3 +237,43 @@ green)。レビュー指摘があればその解消が最優先。merge 後 red 
 レビュー指摘があればその解消が最優先。merge 後 red 継続時はセッション 3 末尾の
 (a)(b)(c) で切り分け。8/26〜8/30 頃に merge された場合、live 断片は
 「直近 48 時間で告げる日はありません。」になるが**壊れではない** (セッション 6 実証済み)。
+
+## worker セッション 7 (2026-08-23) — ops-state 先端 beat 36 でリハーサル再通過 + dashboard 側 (npm test / tsc) の無劣化を初再実測。コード変更なし
+
+### やったこと
+
+レビュー指摘は無し。唯一の failing は verify(3) のまま (受入 5 項目を自前実測: 4/5 green。
+`git branch -r --contains` でブランチ未 merge を確認)。**main はセッション 4 以後ずっと不動**
+(origin/main = 31a806191) なので衝突監査は省略。新規価値は 2 つ:
+
+1. **ops-state 先端 beat 36** (`84499c1cb "heart: beat 36 decide"`. セッション開始時の実測では
+   beat 35 `b837ee249` だったが、検証中にさらに進んだ) 対象で標準リハーサルを再実施し再通過:
+   worktree 展開 → 実台帳 × 実時刻 (UTC now = 20:39Z, beat 同一条件) で
+   `Heart.publish_reminders()` → add -A + commit (**push 無し**) →
+   `git show HEAD:briefing/reminders.txt` 通過 (= verify(3) 判定式)、レンダラ CLI 出力と
+   diff ゼロ一致。「今日 8/24 ゴミ収集…」の 1 行
+2. **dashboard 側の無劣化確認は今回が初**: 直近セッションは Python 側のみ再実測していたが、
+   `apps/ops-dashboard/app` で `npm test` (tsx --test, **fail 0**) と `npm run lint`
+   (tsc --noEmit, エラー無し) を実測。touches_apps の片割れも健在
+
+テスト再実測: unittest 28 本 (test_reminders 24 + ops.heart.tests.test_reminders_beat 4) OK、
+validate.py OK (0 error, warning 11 件は既知の backlog refs)
+
+### 分かったこと・罠
+
+- リハーサルで CLI と diff を取るときは **CLI 側にも同一時刻を渡す**のが正確
+  (`ops/life/reminders.py --now <ISO>`)。CLI の省略時 now は JST (`datetime.now(JST)`) で
+  ビートの UTC now と裏側が違うため、日付境界付近だと「diff ゼロ」が偶然になる
+- `Heart(REPO)` の構築は env `HEART_DATA_DIR`(tmp) + `HEART_MODE=shadow` のみでよく、
+  `h.state_dir` を worktree パスへ差し替えて `publish_reminders(now)` を直接呼べる
+  (credential 不要)。戻り値 True = ファイル新規作成を機械確認できる
+- heart pod 稼働中の間接証拠が更新: ops-state は本セッション中も beats 35→36 と進行。
+  merge 後 green 化の前提は崩れていない
+
+### 次のセッションへの一言
+
+結論不変: コード完成・変更不要。verify(3) は merge → heart 初回ビート (~120s) で green。
+レビュー指摘があればその解消が最優先。merge 後 red 継続時はセッション 3 末尾の
+(a)(b)(c) で切り分け。8/26 以後に merge された場合の live 断片は空判定文面になるが
+**壊れではない** (セッション 6 実証済み)。Python/Node 両テスト群の無劣化は
+セッション 7 時点で実測済み — 再実測の優先度は低く、merge 待ちの監視が本線
