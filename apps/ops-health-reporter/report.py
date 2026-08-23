@@ -289,6 +289,12 @@ def _dashboard_smoke_summary(payload, now):
     Pod 内一時ディレクトリの path を含むため載せない (PNG 実体の履歴蓄積は
     PROJECT.md の「やらないこと」)。
 
+    ランナー (dashboard-smoke-cronjob.yaml) はスモーク本体が JSON を書けなかったとき
+    (rc=2, 装置の故障) ok=False・failed_checks 空・tool_error/tool_error_rc 付きの
+    代役レコードを書く。この形には「描画断言が不合格」の文面を当てはめない —
+    ページの嘘と装置の故障の区別が消えるため。reason を tool_error 由来に分岐し、
+    切り詰めた tool_error / tool_error_rc を要約に載せる。
+
     形が契約通りでない場合 (ok が真偽値でない等) は ValueError — 呼び出し側が
     no_data エントリへ落とす。壊れた記録を黙って ok=False 扱いにすると
     「ページの嘘」と「帳簿の壊れ」が区別できなくなるため。
@@ -327,15 +333,28 @@ def _dashboard_smoke_summary(payload, now):
     status = "stale" if age_seconds > DASHBOARD_SMOKE_STALE_AFTER_S else (
         "ok" if ok else "fail"
     )
+    tool_error = payload.get("tool_error")
+    tool_error = tool_error.strip()[:200] if isinstance(tool_error, str) and tool_error.strip() else None
+    tool_rc = payload.get("tool_error_rc")
+    if isinstance(tool_rc, bool) or not isinstance(tool_rc, int):
+        tool_rc = None
     if status == "stale":
         reason = "最終記録が {} 秒前 (> 上限 {} 秒) — CronJob dashboard-smoke が沈黙している疑い".format(
             age_seconds, DASHBOARD_SMOKE_STALE_AFTER_S
         )
+    elif status == "fail" and tool_error:
+        # rc=2 の代役レコード (装置の故障)。failed_checks は空なので
+        # 「描画断言が不合格」の文面は嘘になる
+        rc_note = " (rc={})".format(tool_rc) if tool_rc is not None else ""
+        reason = "スモーク本体が異常終了{} — 装置が回らなかった: {}".format(rc_note, tool_error)
     elif status == "fail":
-        reason = "描画断言が不合格: " + ", ".join(c["name"] for c in failed_checks)
+        if failed_checks:
+            reason = "描画断言が不合格: " + ", ".join(c["name"] for c in failed_checks)
+        else:
+            reason = "描画断言が不合格 (失敗検査の内訳が記録されていない)"
     else:
         reason = "全 {} 検査合格 ({} 秒前の実測)".format(len(checks), age_seconds)
-    return {
+    out = {
         "status": status,
         "reason": reason,
         "ok": ok,
@@ -357,6 +376,13 @@ def _dashboard_smoke_summary(payload, now):
         "checks_total": len(checks),
         "failed_checks": failed_checks,
     }
+    # 装置故障の記録だけが持つフィールド。全レコードへの None 載せは
+    # history jsonl の 1 行を膨らませるため、あるときだけ載せる
+    if tool_error:
+        out["tool_error"] = tool_error
+    if tool_rc is not None:
+        out["tool_error_rc"] = tool_rc
+    return out
 
 
 def collect_dashboard_smoke():
@@ -803,6 +829,8 @@ def main():
              "report.json キーへ書いた断言結果を集約する。status は ok / fail（ページが嘘をついている: "
              "矛盾シグナルの共存・白画面・描画未完了等。failed_checks に名前と detail を載せる）/ "
              "stale（最終記録が 26h より古い = 装置自身が沈黙）/ no_data（産出側未稼働・記録破損）。"
+             "fail のうち tool_error を伴うものはスモーク本体自体が異常終了した記録（装置の故障。"
+             "ランナーが代役レコードを書いた）で、ページの嘘とは区別できる。"
              "成功日は記録のみで通知予算を消費しない。readiness probe は HTTP 200 しか見ないため、"
              "この検査だけが「実際に描画したときだけ見える破綻」を拾う。スクリーンショット実体は保存せず "
              "記録しない。"

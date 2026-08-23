@@ -334,6 +334,9 @@ class Heart:
         # B2 download cap の帳簿の警報すべき状態 (P-0128)。warn/exceed のときだけ
         # 中身があり、それ以外は None (budget_alert_due が繰り返しを落とす)
         budget = facts.budget_alert(health_doc)
+        # Mission Control 描画スモークの警報すべき状態 (P-0193)。fail/stale のとき
+        # だけ中身があり、ok/no_data は None (成功は通知予算を消費しない)
+        smoke = facts.dashboard_smoke_alert(health_doc)
         try:
             jobs = facts.collect_jobs(self.k8s_client(), self.cfg.namespace)
         except Exception as e:
@@ -420,6 +423,21 @@ class Heart:
                 f"B2 download cap の帳簿が {budget['status']} です: {budget['reason']}"
             )
             budget_queued = True
+        # 描画スモークの警報 (P-0193)。流儀は上の budget 警報と同じ:
+        # briefing-queue.jsonl への追記と incident 通知。同じ status の同一日内の
+        # 再通知は cursors の前回記録で落とす。budget_alert_due は status/date の
+        # 一般判定なので budget と流用する (名前は budget だが中身は汎用)
+        smoke_incident_text = None
+        smoke_queued = False
+        if facts.budget_alert_due(smoke, cursors.get("dashboard_smoke_alert"), today):
+            cursors["dashboard_smoke_alert"] = {
+                "status": smoke["status"],
+                "date": today,
+            }
+            smoke_incident_text = (
+                f"Mission Control の描画断言が {smoke['status']} です: {smoke['reason']}"
+            )
+            smoke_queued = True
 
         # --- 一段目: 状態遷移を副作用より先に永続化する (レビュー指摘 [8])。
         # ここで落ちても副作用は未実行なので、次のビートが同じ判断をやり直すだけ。
@@ -440,6 +458,16 @@ class Heart:
                 },
             )
             log(f"download_budget alert: {budget['status']} — queued to briefing")
+        if smoke_queued:
+            sf.append_jsonl(
+                "briefing-queue.jsonl",
+                {
+                    "at": now_iso(now),
+                    "source": f"dashboard-smoke ({smoke['status']})",
+                    "body": smoke["reason"],
+                },
+            )
+            log(f"dashboard_smoke alert: {smoke['status']} — queued to briefing")
         # タスク依頼の受領 (P-0091)。id 重複は merge_new が落とすので、
         # カーソル巻き戻り等で同じ note を再取り込みしても積み直さない
         queue = sf.read_jsonl(tasks.QUEUE_FILE)
@@ -458,6 +486,11 @@ class Heart:
                 log(f"[shadow] notify[incident] {budget_incident_text[:80]}")
             else:
                 notifier.send("incident", budget_incident_text, now)
+        if smoke_incident_text:
+            if self.cfg.shadow:
+                log(f"[shadow] notify[incident] {smoke_incident_text[:80]}")
+            else:
+                notifier.send("incident", smoke_incident_text, now)
 
         sf.append_jsonl(
             "metrics.jsonl",
@@ -471,6 +504,7 @@ class Heart:
                 "health_fresh": health_fresh,
                 "breaker": breaker_info,
                 "budget_status": budget["status"] if budget else None,
+                "dashboard_smoke_status": smoke["status"] if smoke else None,
                 "vetoes": vetoes,
                 "stop_all": stop_all,
                 "actions": [a["type"] for a in actions],

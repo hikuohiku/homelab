@@ -11,6 +11,10 @@ report.py 自身は import 時に ServiceAccount token を読むため cluster �
   detail は 200 文字で切り詰める (collect_externalsecrets の message と同じ上限)
 - 鮮度を最優先で判定する: 古い fail より「装置の沈黙」を先に報せる。
   境界は > STALE_AFTER_S でのみ stale (ちょうどは沈黙扱いにしない)
+- ランナーの代役レコード (rc=2, 装置故障。ok=False・failed_checks 空・
+  tool_error/tool_error_rc 付き) には「描画断言が不合格」の文面を当てはめず、
+  reason を tool_error 由来に分岐して切り詰めた tool_error も載せる。
+  「ページの嘘」と「装置が回らなかった」を区別可能なまま保つ
 - 形が壊れた記録 (ok が真偽値でない等) は例外 → no_data。「ページの嘘」と
   「帳簿の壊れ」を区別可能なまま、他の収集を止めない
 """
@@ -86,6 +90,23 @@ def smoke_result(**overrides):
             "sha256": "6f60dc65",
             "view": "live",
         },
+    }
+    payload.update(overrides)
+    return payload
+
+
+def fallback_result(rc=2, stderr_tail="chromium を起動できない: [Errno 2]", **overrides):
+    """ランナー (dashboard-smoke-cronjob.yaml) の代役レコードの実測形。"""
+    payload = {
+        "schema": 1,
+        "tool": "dashboard_smoke",
+        "project": "P-0193",
+        "generated_at": stamp_ago(600),
+        "ok": False,
+        "tool_error_rc": rc,
+        "tool_error": stderr_tail,
+        "checks": [],
+        "failed_checks": [],
     }
     payload.update(overrides)
     return payload
@@ -172,6 +193,51 @@ class SummaryFailTest(unittest.TestCase):
         self.assertEqual(out["status"], "ok")  # fail 判定できる検査が無いため沈黙しない
         self.assertEqual(out["failed_checks"], [])
         self.assertEqual(out["checks_total"], 2)
+
+
+class SummaryToolErrorTest(unittest.TestCase):
+    """rc=2 の代役レコード (装置故障) と「ページの嘘」の区別を固定する。"""
+
+    def test_fallback_record_reason_branches_on_tool_error(self):
+        out = summarize(fallback_result())
+        self.assertEqual(out["status"], "fail")
+        self.assertIn("異常終了", out["reason"])
+        self.assertIn("装置が回らなかった", out["reason"])
+        self.assertNotIn("描画断言が不合格", out["reason"])
+        self.assertEqual(out["tool_error"], "chromium を起動できない: [Errno 2]")
+        self.assertEqual(out["tool_error_rc"], 2)
+        self.assertEqual(out["checks_total"], 0)
+        self.assertEqual(out["failed_checks"], [])
+
+    def test_tool_error_is_truncated(self):
+        out = summarize(fallback_result(stderr_tail="e" * 500))
+        self.assertEqual(len(out["tool_error"]), 200)
+
+    def test_non_string_tool_error_is_ignored(self):
+        # tool_error が文字列でない記録は代役とは断定できない。
+        # 通常の fail 経路に落とし、内訳が空であることは正直に出す
+        out = summarize(smoke_result(ok=False, failed_checks=[], checks=[]))
+        self.assertEqual(out["status"], "fail")
+        self.assertNotIn("tool_error", out)
+        self.assertNotIn("tool_error_rc", out)
+        self.assertIn("内訳が記録されていない", out["reason"])
+
+    def test_blank_tool_error_is_ignored(self):
+        out = summarize(fallback_result(tool_error="   ", tool_error_rc=None))
+        self.assertNotIn("tool_error", out)
+        self.assertNotIn("tool_error_rc", out)
+
+    def test_stale_still_beats_tool_error(self):
+        # 鮮度最優先は代役レコードでも変わらない: 古い記録の原因よりも
+        # 「装置が沈黙していること」を先に報せる
+        out = summarize(fallback_result(generated_at=stamp_ago(27 * 3600)))
+        self.assertEqual(out["status"], "stale")
+        self.assertIn("沈黙", out["reason"])
+
+    def test_collect_passes_fields_through(self):
+        out, _ = collect(fallback_result())
+        self.assertEqual(out["status"], "fail")
+        self.assertEqual(out["tool_error_rc"], 2)
 
 
 class SummaryMalformedTest(unittest.TestCase):
