@@ -230,3 +230,31 @@ docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `r
 手順1 (PVE 側 vzdump job 一覧と PBS 内部 job の確認) を実施した場合は、inventory の
 `restic_targets[].pbs_protects` 列を置き換えて突き合わせを完成させ、verdict を再判断する —
 それがこのプロジェクトを再開する唯一の条件。
+
+### 2026-08-23 セッション8 — セッション7 手順どおりの兆候確認 (変化なし)
+
+**やったこと**: spec DoD の追加実装は無し。セッション5〜7 と同じく verify 再実測 +
+外部シグナル 5 点の変化確認だけをした。結果はすべて変化なし。
+
+1. **verify 再実測**: #1 rc=1 / #2 rc=0 / #3 rc=2。セッション3 以降ずっと同一
+   (#1/#3 は verdict=keep ゆえ意図通り failing、#2 green)
+2. **観測環境の再実測** (7 回目の独立実測、結果同じ): `env` に proxmox/pve 系無し (rc=1) /
+   `tailscale` `pvesh` `qm` `gh` CLI すべて absent。MCP ツール (`mcp__proxmox__*`) も無し
+3. **origin/main の新着確認**: `git fetch --prune` 後、merge-base `f4a7862b..origin/main`
+   の commit は **ゼロ**。main は分岐点から一度も動いていない。動いたリモートブランチは
+   `ops-state`/`project/p-0116` のみ (autopilot 帳簿と他プロジェクト) で PBS 関連なし
+4. **project/p-0115 再確認**: 今回は **更新なし** (50111f58 のまま)。ついでに真の merge-base を
+   実測したところ **9b5c741d** だった (セッション7 まで f4a7862b 基準で語っていたのは不正確)。
+   累積 diff の docs/backup.md +16 行を中身確認した: P-0080 の RTO 台帳で既知の内容、
+   PBS/112 言及ゼロ。条件 A/B とは無関係
+5. **issue #56 を webfetch で直接読んだ**: コメント無し = 条件 A/B の実施報告は未着
+
+→ verdict は `keep` のまま、inventory への反映対象なし。docs/pbs-retirement.md は書かない。
+
+**次のセッションへの一言**: セッション5〜7 と完全に同一 — **やることは残っていない。**
+兆候が無い起動では今回と同じく verify 再実測 + 5 点確認 + 最小ログ追記で終えてよい。
+p-0115 の差分を見るときは merge-base が 9b5c741d である点に注意 (f4a7862b 基準の diff は
+main 側追加分が見かけ上の削除として混ざる。docs/backup.md +16 行は RTO 台帳で無害と実測済み)。
+本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
+リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
+docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
