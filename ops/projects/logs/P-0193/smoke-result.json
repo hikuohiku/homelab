@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "tool": "dashboard_smoke",
+  "project": "P-0193",
+  "generated_at": "2026-08-23T12:51:40Z",
+  "url": "https://ops-dashboard.tailae6c2.ts.net/",
+  "http_status": 200,
+  "checks": [
+    {
+      "name": "http-status",
+      "status": "pass",
+      "detail": "HTTP 200"
+    },
+    {
+      "name": "render-complete-flow",
+      "status": "pass",
+      "detail": ".loading が消えた"
+    },
+    {
+      "name": "rendered-masthead",
+      "status": "pass",
+      "detail": "masthead の MISSION CONTROL 表示"
+    },
+    {
+      "name": "render-complete",
+      "status": "pass",
+      "detail": ".loading スピナ消滅 (snapshot fetch 後の描画完了)"
+    },
+    {
+      "name": "non-blank",
+      "status": "pass",
+      "detail": "可視テキスト 1368 文字 (>= 200)"
+    },
+    {
+      "name": "section-heartbeat",
+      "status": "pass",
+      "detail": "鼓動チップ x1"
+    },
+    {
+      "name": "section-live-area",
+      "status": "pass",
+      "detail": "ライブ領域 (transcript または静穏表示)"
+    },
+    {
+      "name": "no-lie-coexistence",
+      "status": "pass",
+      "detail": "正常チップ単独"
+    },
+    {
+      "name": "no-mixed-heart-signals",
+      "status": "pass",
+      "detail": "チップは一貫した状態 (1 個)"
+    },
+    {
+      "name": "no-unobserved-pulse",
+      "status": "pass",
+      "detail": "LAST HEART='08/23 21:51:08'"
+    },
+    {
+      "name": "heartbeat-fresh",
+      "status": "pass",
+      "detail": "LAST HEART 08/23 21:51:08 JST (37 秒前)"
+    },
+    {
+      "name": "section-project-board",
+      "status": "pass",
+      "detail": "プロジェクトボードが描画された"
+    }
+  ],
+  "failed_checks": [],
+  "ok": true,
+  "dom_bytes": 10418,
+  "dom_project_board_bytes": 30569,
+  "screenshot": {
+    "path": "ops/projects/logs/P-0193/smoke-result.png",
+    "bytes": 66089,
+    "sha256": "6f60dc65b27e91580b55ad82d1a9425bf96403b763fe4d74686faeda390b5c02",
+    "view": "live"
+  },
+  "elapsed_s": 5.43
+}
