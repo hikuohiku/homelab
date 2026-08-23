@@ -102,3 +102,11 @@
 - 万一 18:00Z レポートでも OutOfSync の場合: `kubectl get applications coder syncthing vaultwarden -n argocd`
   で sync 状態を再確認 (ブリッジが消えていないか)。消えていたら root sync 挙動の変化を疑い、
   パッチを再適用せずまず ArgoCD コントローラログ相当 (status.conditions) を見ること
+
+### verify(1) green 実測 (セッション 2)
+
+- **18:00:41Z に origin/ops-health-report の latest.json が generated_at=2026-08-23T18:00:05Z に更新され、
+  verify(1) を自分で実行して rc=0 (green) を実測。** coder / syncthing / vaultwarden が全て Synced。
+  immich は OutOfSync のまま (接触していないので正しい)。クラスタ側の Synced 化は 17:51Z 実測済み
+- これで受入 2 項目とも green。残りは wrapper の再 verify → ready_for_review → reviewer →
+  merge (#561) → soak (30 分) の自動フロー。worker の作業は完了
