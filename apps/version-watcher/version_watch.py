@@ -33,10 +33,13 @@ status=error として記録し、全体は止めない (部分的な観測も�
 読めないときだけ rc!=0。「エラー 0 件」を見せかけて沈黙しない。
 
 既知の死角 (伏せずに書き残る):
-  - Releases の latest を持たない repo (安定リリースを切っていない) は 404 になり
-    error 記録になる。tags 直参照での補完はやっていない
-  - dockerhub は page_size=100 の先頭ページのみ。タグ総数が非常に多いイメージで
-    目的の variant の最新が 100 件に入らないと取りこぼしうる (過小検出方向)
+  - Releases の latest を持たない repo (安定リリースを切っていない) は 404 に、
+    release_prefix 指定対象は先頭 100 件に一致が無いと None になり error 記録
+    になる。tags 直参照での補完はやっていない
+  - dockerhub は「current の数字頭部で絞った家族ページ」と「絞り込み無しの最近更新
+    順ページ」の 2 リクエスト。pin 自身の家族の patch 追従と、push されて間もない
+    新系列は確実に見えるが、push から時間が経ちすぎて全体ページの 100 件から
+    漏れた minor/major 更新は取りこぼしうる
   - 上流が current より古い安定版を latest にした場合も drift 扱いになる
     (方向付き比較はしない。上げ下げどちらでも「動いた」ことだけを計器に載せる)
 
@@ -145,48 +148,124 @@ def http_get(url, timeout=30):
 
 
 def github_latest(fetch, repo, release_prefix=None):
-    """GitHub Releases の latest タグ (prerelease/draft 除く) を剥がして返す。
+    """GitHub Releases の安定版のうち最新のタグを剥がして返す。
 
-    安定リリースが 1 つも無い repo は 404 になる -> None (呼び出し側で error 記録)。
+    release_prefix が無い対象は Releases API の latest (prerelease/draft を除いた
+    安定版) をそのまま使う。ある対象は「prefix 一致の安定リリースのうち最初のもの」
+    を使う。1 repo に複数チャートのリリースが混在する argo-helm では repo 全体の
+    latest が別チャートのものになり、接頭辞を後から剥がしても比較にならないため
+    (2026-08-23 実測: argocd-chart の latest 欄に argo-workflows-2.0.2 が載った)。
+    安定リリースが 1 つも無い repo、prefix 一致が先頭 100 件に見つからない repo は
+    404/None -> None (呼び出し側で error 記録)。
     """
-    status, body = fetch(
+    if release_prefix:
+        # /releases は新しい順。prerelease は一覧に含まれるので自分で除く
+        # (draft は未認証では返らない)
+        status, body_bytes = fetch(
+            "https://api.github.com/repos/{}/releases?per_page=100".format(repo)
+        )
+        if status == 404:
+            return None
+        if status != 200:
+            raise RuntimeError("GitHub API が {} を返した ({})".format(status, repo))
+        for rel in json.loads(body_bytes):
+            if rel.get("draft") or rel.get("prerelease"):
+                continue
+            tag = rel.get("tag_name", "")
+            if tag.startswith(release_prefix):
+                return strip_version_prefixes(tag, release_prefix)
+        return None
+
+    status, body_bytes = fetch(
         "https://api.github.com/repos/{}/releases/latest".format(repo)
     )
     if status == 404:
         return None
     if status != 200:
         raise RuntimeError("GitHub API が {} を返した ({})".format(status, repo))
-    tag = json.loads(body)["tag_name"]
+    tag = json.loads(body_bytes)["tag_name"]
     return strip_version_prefixes(tag, release_prefix)
 
 
-def dockerhub_latest(fetch, path, want_variant):
-    """Docker Hub のタグ一覧から current と同じ variant の最新を返す。
+def hub_tags_url(path, name=None):
+    """Docker Hub タグ一覧の URL。name を付けるとタグ名の部分一致でサーバ側絞り込み。
 
-    path は upstream 接頭辞を剥がしたレジストリパス ("library/postgres" 等 —
-    target.name は表示名でレジストリパスと一致しない ("busybox (initContainer)") ので
-    upstream から取る)。数字を 1 つも含まないタグ (latest / edge 等) は候補外。
-    見つからなければ None。
+    タグ総数が数千あるイメージ (library/python は実測 3911) でも目的の家族だけを
+    1 ページ (100 件) で受け取れるようにするための絞り込み。
     """
     url = (
         "https://hub.docker.com/v2/repositories/{}/tags"
         "?page_size=100&ordering=-last_updated".format(path)
     )
-    status, body = fetch(url)
-    if status != 200:
-        raise RuntimeError("Docker Hub API が {} を返した ({})".format(status, path))
-    names = [r.get("name", "") for r in json.loads(body).get("results", [])]
-    best = None
-    best_core = ()
-    for name in names:
-        core = parse_core(name)
-        if not core:
-            continue
-        if variant_of(name) != want_variant:
-            continue
-        if best is None or core > best_core:
-            best, best_core = name, core
-    return best
+    if name:
+        url += "&name={}".format(urllib.parse.quote(name, safe=""))
+    return url
+
+
+def numeric_head(tag):
+    """タグ先頭の連続する数字とドットを抜き出す。"3.14-alpine" -> "3.14" /
+    "17.10" -> "17.10" / "9.1.1-alpine" -> "9.1.1"。数字で始まらないタグは ""。"""
+    m = re.match(r"\d[\d.]*", tag)
+    return m.group(0).rstrip(".") if m else ""
+
+
+def dockerhub_latest(fetch, path, want_variant, current):
+    """Docker Hub のタグ一覧から current と同じ variant の最新を返す。
+
+    path は upstream 接頭辞を剥がしたレジストリパス ("library/postgres" 等 —
+    target.name は表示名でレジストリパスと一致しない ("busybox (initContainer)") ので
+    upstream から取る)。current は比較基準になる現在の pin。見つからなければ None。
+
+    単純な「最近更新順の先頭 100 件」では足りない。2026-08-23 の初回実測で、
+    library/python (3911 タグ) 等では alpine 家族が 100 件にほぼ入らず、古代タグ
+    ("3.6.0a4-alpine") が最大 core を取って「3.14-alpine -> 3.6.0a4-alpine」という
+    偽 drift を報告することが分かった。そこで 2 ページ構成にした:
+
+    - 家族アンカー: numeric_head(current) で name 絞り込みした頁から、さらに
+      「head で始まる」候補だけを見る。pin 自身の家族は必ずここに現れるので下限が
+      保証され、古い系列への誤降下が起きない (部分一致の "19.1" が head "9.1" に
+      引っかかる事故は startswith で弾く)
+    - 全体ページ: 絞り込み無しの最近更新順。新系列 (minor/major 更新) は push された
+      直後なら必ずここに現れるので、家族アンカーが原理的に見えない線の更新を拾う
+
+    どちらの頁でも「数字で始まり数字を含む・variant 一致」の候補に絞って最大 core を
+    取る。数字始まり制限は "buildroot-2014.02" 型の別系統タグが (2014, 2) という巨大
+    core で全体を汚染するのを防ぐ (実測で busybox がこれで誤報した)。両頁の結果を
+    比べ大きい方を返す — 全体ページが勝ったときだけ「新系列あり」という意味になる。
+    """
+    def best_from(names):
+        best, best_core = None, ()
+        for name in names:
+            if not name[:1].isdigit():
+                continue
+            core = parse_core(name)
+            if not core:
+                continue
+            if variant_of(name) != want_variant:
+                continue
+            if best is None or core > best_core:
+                best, best_core = name, core
+        return best
+
+    def fetch_names(url):
+        status, body_bytes = fetch(url)
+        if status != 200:
+            raise RuntimeError("Docker Hub API が {} を返した ({})".format(status, path))
+        return [r.get("name", "") for r in json.loads(body_bytes).get("results", [])]
+
+    head = numeric_head(current)
+    anchor_best = None
+    if head:
+        anchor_best = best_from(
+            n for n in fetch_names(hub_tags_url(path, head)) if n.startswith(head)
+        )
+    global_best = best_from(fetch_names(hub_tags_url(path)))
+
+    if anchor_best is None:
+        return global_best
+    if global_best is None:
+        return anchor_best
+    return global_best if parse_core(global_best) > parse_core(anchor_best) else anchor_best
 
 
 def npm_latest(fetch, package):
@@ -239,7 +318,12 @@ def check_target(target, fetch):
             if latest_raw is None:
                 return dict(base, status="error", error="安定リリースが 1 つも無い (404)")
         elif scheme == "dockerhub:":
-            latest_raw = dockerhub_latest(fetch, upstream[len("dockerhub:"):], variant_of(current))
+            latest_raw = dockerhub_latest(
+                fetch,
+                upstream[len("dockerhub:"):],
+                variant_of(current),
+                current,
+            )
             if latest_raw is None:
                 return dict(base, status="error", error="同一 variant の版数タグが見つからなかった")
         elif scheme == "npm:":

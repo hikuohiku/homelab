@@ -32,7 +32,8 @@ LATEST_PATH = "ops/health/latest.json"
 HISTORY_DIR = "ops/health/history"
 INVENTORY_PATH = "ops/inventory.json"
 # 1 リクエストあたりの上限。version_watch.http_get の既定 (30s) より短くして
-# 全対象 × timeout が CronJob の activeDeadlineSeconds (600s) に収まるようにする
+# 全対象 × timeout (dockerhub は対象あたり 2 リクエスト。合計 49) が CronJob の
+# activeDeadlineSeconds (900s) に収まるようにする
 PER_REQUEST_TIMEOUT = 15
 # SHA 衝突時のリトライ上限と待ち。衝突相手の書き込み周期は最短 30 分なので
 # 数回の再取得で必ず抜けられるはず

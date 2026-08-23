@@ -350,6 +350,18 @@
       "observability_impact": "壊れると coder workspace home の backup Job が新規に作られなくなり、workspace データの復元手段が失われうる。ただし backup 自体は restic/restic イメージの子 Job が担うため、オーケストレータの一時的な不調が既存バックアップを壊すことはない"
     },
     {
+      "id": "version-watcher-image",
+      "kind": "image",
+      "name": "python (version-watcher CronJob)",
+      "current": "3.14-alpine",
+      "file": "apps/version-watcher/cronjob.yaml",
+      "match": "image: python:",
+      "upstream": "dockerhub:library/python",
+      "policy": "auto",
+      "note": "P-0126 で新設。inventory 全対象の上流最新版を毎晩観測して latest.json の version_drift に載せる version watcher 自身の image（dogfooding: watcher が自分の image も観測対象にする）。標準ライブラリのみで動くスクリプトのため minor/patch 更新はほぼ無害（ops-health-reporter-image と同型の根拠）。mirrors に入れず単独エントリ",
+      "observability_impact": "壊れると version_drift の観測が止まり、上流の新版が誰にも見られない状態に戻る（#49 型の静放置の再発）。ただし観測専用 CronJob であり、壊れても homelab 本体の到達性・稼働には影響しない"
+    },
+    {
       "id": "gha-setup-helm-version",
       "kind": "binary",
       "name": "helm (azure/setup-helm version input)",

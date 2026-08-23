@@ -94,82 +94,245 @@ class TestStripPrefixes(unittest.TestCase):
 
 
 class TestGithubLatest(unittest.TestCase):
-    def url(self, repo="argoproj/argo-helm"):
+    def latest_url(self, repo="argoproj/argo-helm"):
         return "https://api.github.com/repos/{}/releases/latest".format(repo)
 
-    def test_strips_release_prefix(self):
-        fetch = FakeFetcher({self.url(): (200, body({"tag_name": "argo-cd-9.1.7"}))})
-        self.assertEqual(
-            vw.github_latest(fetch, "argoproj/argo-helm", "argo-cd-"), "9.1.7"
-        )
+    def list_url(self, repo="argoproj/argo-helm"):
+        return "https://api.github.com/repos/{}/releases?per_page=100".format(repo)
 
-    def test_no_stable_release_is_none(self):
-        fetch = FakeFetcher({self.url("octo/no-releases"): (404, b"{}")})
-        self.assertIsNone(vw.github_latest(fetch, "octo/no-releases"))
+    def rel(self, tag, **over):
+        r = {"tag_name": tag, "draft": False, "prerelease": False}
+        r.update(over)
+        return r
 
-    def test_http_error_raises(self):
+    def test_unprefixed_uses_releases_latest(self):
         fetch = FakeFetcher(
-            {self.url("octo/broken"): (403, b'{"message": "rate limit"}')}
+            {self.latest_url("octo/repo"): (200, body({"tag_name": "v1.2.3"}))}
         )
-        with self.assertRaises(RuntimeError):
-            vw.github_latest(fetch, "octo/broken")
+        self.assertEqual(vw.github_latest(fetch, "octo/repo"), "1.2.3")
 
-
-class TestDockerhubLatest(unittest.TestCase):
-    def url(self, path="library/postgres"):
-        return (
-            "https://hub.docker.com/v2/repositories/{}/tags"
-            "?page_size=100&ordering=-last_updated".format(path)
-        )
-
-    def results(self, names):
-        return {"results": [{"name": n} for n in names]}
-
-    def test_picks_newest_same_variant(self):
+    def test_prefixed_picks_first_stable_matching_release(self):
+        """repo 全体の最新が別チャートのリリースでも、prefix 一致の安定版を拾う。
+        argo-helm の初回実測 (2026-08-23): repo latest は argo-workflows-2.0.2 で、
+        これを argocd-chart の「上流最新」として載せてしまう誤報を固定する。"""
         fetch = FakeFetcher(
             {
-                self.url(): (
+                self.list_url(): (
                     200,
                     body(
-                        self.results(
-                            ["18.2-alpine3.22", "17.11-alpine", "17.10", "latest"]
-                        )
+                        [
+                            self.rel("argo-workflows-2.0.2"),
+                            self.rel("argo-cd-9.1.6"),
+                            self.rel("argo-workflows-1.9.9"),
+                        ]
                     ),
                 )
             }
         )
         self.assertEqual(
-            vw.dockerhub_latest(fetch, "library/postgres", "alpine"), "17.11-alpine"
+            vw.github_latest(fetch, "argoproj/argo-helm", "argo-cd-"), "9.1.6"
+        )
+
+    def test_prefixed_skips_prerelease(self):
+        """/releases の一覧には prerelease が含まれるので自分で除く。"""
+        fetch = FakeFetcher(
+            {
+                self.list_url(): (
+                    200,
+                    body(
+                        [
+                            self.rel("argo-cd-9.2.0", prerelease=True),
+                            self.rel("argo-cd-9.1.6"),
+                        ]
+                    ),
+                )
+            }
+        )
+        self.assertEqual(
+            vw.github_latest(fetch, "argoproj/argo-helm", "argo-cd-"), "9.1.6"
+        )
+
+    def test_prefixed_no_match_is_none(self):
+        fetch = FakeFetcher(
+            {self.list_url("octo/repo"): (200, body([self.rel("other-1.0")]))}
+        )
+        self.assertIsNone(vw.github_latest(fetch, "octo/repo", "argo-cd-"))
+
+    def test_no_stable_release_is_none(self):
+        fetch = FakeFetcher({self.latest_url("octo/no-releases"): (404, b"{}")})
+        self.assertIsNone(vw.github_latest(fetch, "octo/no-releases"))
+
+    def test_http_error_raises(self):
+        fetch = FakeFetcher(
+            {self.latest_url("octo/broken"): (403, b'{"message": "rate limit"}')}
+        )
+        with self.assertRaises(RuntimeError):
+            vw.github_latest(fetch, "octo/broken")
+
+
+class TestHubTagsUrl(unittest.TestCase):
+    def test_plain_and_filtered_urls(self):
+        """FakeFetcher が URL 完全一致で照合するため、URL 形式自体を契約として固定する。"""
+        self.assertEqual(
+            vw.hub_tags_url("library/python"),
+            "https://hub.docker.com/v2/repositories/library/python/tags"
+            "?page_size=100&ordering=-last_updated",
+        )
+        self.assertEqual(
+            vw.hub_tags_url("library/python", "3.14"),
+            "https://hub.docker.com/v2/repositories/library/python/tags"
+            "?page_size=100&ordering=-last_updated&name=3.14",
+        )
+
+
+class TestNumericHead(unittest.TestCase):
+    def test_examples(self):
+        cases = {
+            "3.14-alpine": "3.14",
+            "17.10": "17.10",
+            "9.1.1-alpine": "9.1.1",
+            # 別系統タグ (数字始まりでない) は空。dockerhub 候補のフィルタに使う
+            "buildroot-2014.02": "",
+            "latest": "",
+            "v1.2.0": "",
+        }
+        for raw, want in cases.items():
+            self.assertEqual(vw.numeric_head(raw), want, raw)
+
+
+class TestDockerhubLatest(unittest.TestCase):
+    def url(self, path="library/postgres", name=None):
+        return vw.hub_tags_url(path, name)
+
+    def results(self, names):
+        return {"results": [{"name": n} for n in names]}
+
+    def test_anchored_family_wins_over_stale_global_garbage(self):
+        """python の初回実測 (2026-08-23): 最近更新順の先頭 100 件には古代タグ
+        (3.6.0a4-alpine 等) しか居ないことがある。家族ページの新しい patch が勝って
+        「3.14-alpine -> 3.6.0a4-alpine」という偽 drift を二度と報告しないこと。"""
+        fetch = FakeFetcher(
+            {
+                self.url("library/python", "3.14"): (
+                    200,
+                    body(
+                        self.results(
+                            ["3.14.7-alpine", "3.14-alpine", "3.13.9-alpine"]
+                        )
+                    ),
+                ),
+                self.url("library/python"): (
+                    200,
+                    body(self.results(["2.7.12-alpine", "3.6.0a4-alpine", "latest"])),
+                ),
+            }
+        )
+        self.assertEqual(
+            vw.dockerhub_latest(fetch, "library/python", "alpine", "3.14-alpine"),
+            "3.14.7-alpine",
+        )
+
+    def test_new_series_in_global_page_wins(self):
+        """新系列 (major/minor 更新) は家族ページには原理的に現れない。
+        全体ページの方が大きいときだけ「上がった」という意味になる。"""
+        fetch = FakeFetcher(
+            {
+                self.url(name="17.10"): (200, body(self.results(["17.10"]))),
+                self.url(): (200, body(self.results(["18.2", "9.6.3", "latest"]))),
+            }
+        )
+        self.assertEqual(
+            vw.dockerhub_latest(fetch, "library/postgres", None, "17.10"), "18.2"
+        )
+
+    def test_partial_match_of_other_series_does_not_pollute_anchor(self):
+        """Hub API の name 絞り込みは部分一致なので head "9.1" が "19.1" 系にも
+        引っかかる。startswith で弾くことを固定する (汚染されると偽 drift になる)。"""
+        fetch = FakeFetcher(
+            {
+                self.url("library/valkey", "9.1.1"): (
+                    200,
+                    body(self.results(["19.1.5", "9.1.1"])),
+                ),
+                self.url("library/valkey"): (200, body(self.results(["9.1.1"]))),
+            }
+        )
+        self.assertEqual(
+            vw.dockerhub_latest(fetch, "library/valkey", None, "9.1.1"), "9.1.1"
+        )
+
+    def test_prefixed_tags_are_never_candidates(self):
+        """busybox の初回実測: "buildroot-2014.02" が (2014, 2) という巨大 core で
+        誤報した。数字始まりでないタグはどちらの頁でも候補外。"""
+        fetch = FakeFetcher(
+            {
+                self.url("library/busybox", "1.38.0"): (
+                    200,
+                    body(self.results(["1.38.0"])),
+                ),
+                self.url("library/busybox"): (
+                    200,
+                    body(self.results(["buildroot-2014.02", "latest", "1.36.1"])),
+                ),
+            }
+        )
+        self.assertEqual(
+            vw.dockerhub_latest(fetch, "library/busybox", None, "1.38.0"), "1.38.0"
         )
 
     def test_plain_current_ignores_variant_tags(self):
         """plain 運用の対象が alpine 版の新番に引きずられないこと。"""
         fetch = FakeFetcher(
-            {self.url(): (200, body(self.results(["18.2-alpine", "17.11", "17.10"])))}
+            {
+                self.url(name="17.10"): (200, body(self.results(["17.10"]))),
+                self.url(): (
+                    200,
+                    body(self.results(["18.2-alpine", "17.10", "17.9"])),
+                ),
+            }
         )
-        self.assertEqual(vw.dockerhub_latest(fetch, "library/postgres", None), "17.11")
+        self.assertEqual(
+            vw.dockerhub_latest(fetch, "library/postgres", None, "17.10"), "17.10"
+        )
 
     def test_numeric_dash_tag_counts_as_plain(self):
         fetch = FakeFetcher(
             {
+                self.url("library/vectorchord", "16.9"): (
+                    200,
+                    body(self.results(["16.9-0.4.3"])),
+                ),
                 self.url("library/vectorchord"): (
                     200,
                     body(self.results(["16.14-1.1.1", "16.9-0.4.3", "latest"])),
-                )
+                ),
             }
         )
         self.assertEqual(
-            vw.dockerhub_latest(fetch, "library/vectorchord", None), "16.14-1.1.1"
+            vw.dockerhub_latest(fetch, "library/vectorchord", None, "16.9-0.4.3"),
+            "16.14-1.1.1",
         )
 
     def test_no_matching_tag_returns_none(self):
-        fetch = FakeFetcher({self.url(): (200, body(self.results(["latest", "edge"])))})
-        self.assertIsNone(vw.dockerhub_latest(fetch, "library/postgres", "alpine"))
+        fetch = FakeFetcher(
+            {
+                self.url(name="1.37"): (200, body(self.results(["latest", "edge"]))),
+                self.url(): (200, body(self.results(["latest", "edge"]))),
+            }
+        )
+        self.assertIsNone(
+            vw.dockerhub_latest(fetch, "library/postgres", "alpine", "1.37-alpine")
+        )
 
     def test_http_error_raises(self):
-        fetch = FakeFetcher({self.url(): (503, b"unavailable")})
+        fetch = FakeFetcher(
+            {
+                self.url(name="17.10"): (503, b"unavailable"),
+                self.url(): (503, b"unavailable"),
+            }
+        )
         with self.assertRaises(RuntimeError):
-            vw.dockerhub_latest(fetch, "library/postgres", None)
+            vw.dockerhub_latest(fetch, "library/postgres", None, "17.10")
 
 
 class TestNpmLatest(unittest.TestCase):
@@ -253,10 +416,8 @@ class TestCheckTarget(unittest.TestCase):
 class TestCheckAllAndSummarize(unittest.TestCase):
     def test_order_preserved_and_summary_correct(self):
         gh = "https://api.github.com/repos/o/r/releases/latest"
-        hub = (
-            "https://hub.docker.com/v2/repositories/library/busybox/tags"
-            "?page_size=100&ordering=-last_updated"
-        )
+        hub = vw.hub_tags_url("library/busybox")
+        hub_anchor = vw.hub_tags_url("library/busybox", "2.0.0")
         targets = [
             {"id": "a", "kind": "image", "current": "1.0.0", "upstream": "github:o/r"},
             {
@@ -276,6 +437,7 @@ class TestCheckAllAndSummarize(unittest.TestCase):
             {
                 gh: (200, body({"tag_name": "v2.0.0"})),
                 hub: (200, body({"results": [{"name": "2.0.0"}, {"name": "latest"}]})),
+                hub_anchor: (200, body({"results": [{"name": "2.0.0"}]})),
             }
         )
         results = vw.check_all(targets, fetch)
