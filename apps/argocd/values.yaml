@@ -54,13 +54,22 @@ server:
       memory: 64Mi
 
 controller:
+  # memory の根拠 (P-0181): origin/ops-health-report 履歴 867 サンプル
+  # (2026-08-05..23, 30 分間隔) の実測系列より
+  #   ピーク 398.0Mi @ 2026-08-23T04:30:08Z / p95 314.9Mi / 中央値 261.4Mi
+  # 観測ピークはサンプリングの下限で、同日に旧 limit (0.5Gi) で OOMKill
+  # 4 回 (exit_code 137) の実績があるため真のピークは 0.5Gi 以上と確定する。
+  #   requests = p95 (314.9Mi) 切り上げの 320Mi
+  #   limits = max(観測ピーク 398Mi, OOMKill 実績 0.5Gi) x 1.5 マージンの 768Mi
+  # 成長率 +15.9Ki/day は有意でなく leak 疑いも無し。詳細は
+  # ops/projects/logs/P-0181/memory-evidence.md
   resources:
     limits:
       cpu: 500m
-      memory: 512Mi
+      memory: 768Mi
     requests:
       cpu: 250m
-      memory: 256Mi
+      memory: 320Mi
 
 repoServer:
   resources:
