@@ -49,6 +49,21 @@ health は既存の GitHub トークンで `ops-health-report` ブランチを�
 遅延の上限はレポートを書く CronJob の周期（30 分）で決まる。ここを詰めるには常駐
 watcher が要る（設計 D15）。
 
+## 反応の速さはどこで決まるか
+
+所有者の DM が届いてから返事が来るまでの内訳（2026-08-23 時点）:
+
+| 区間 | 時間 | 律速か |
+|---|---|---|
+| Telegram → adapter | ほぼ 0 | long poll なので即返る |
+| adapter → ops-feedback | 約 1 秒 | GitHub Contents API |
+| ops-feedback → driver | **0〜5 秒** | `CORE_POLL_SECONDS` |
+| driver → コアの返事 | **十数秒〜** | LLM の思考時間。**ここが最大** |
+
+イベントバスを入れて縮むのは 3 段目だけで、最大でも数秒。**支配項は LLM の思考時間**
+なので、体感を変えたいならモデル選択かプロンプトの短さの方が効く。
+driver は「コアへ渡した」ログに `受信から Ns` を出すので、実測で確かめられる。
+
 イベントバス（設計 D16）はまだ無い。ポーリングで代用しており、バスを入れるときは
 driver の入力側だけを差し替えられるようにしてある。
 
@@ -96,7 +111,8 @@ autopilot イメージを流用しているのは opencode-ai が入っている
 | `OPENCODE_URL` | `http://127.0.0.1:4096` | コア本体 |
 | `CORE_MODEL` | （未設定なら opencode の既定） | `provider/model` |
 | `CORE_STATE_DIR` | `/data` | session id と cursor |
-| `CORE_POLL_SECONDS` | `30` | inbox の確認間隔 |
+| `CORE_POLL_SECONDS` | `5` | inbox の確認間隔。**人間を待たせる時間はここで決まる** |
+| `CORE_HEALTH_SECONDS` | `120` | 健全性レポートの確認間隔（レポート自体が 30 分周期なので速く見ても無駄） |
 | `CORE_FEEDBACK_BRANCH` | `ops-feedback` | 監視ブランチ |
 
 ## 開発

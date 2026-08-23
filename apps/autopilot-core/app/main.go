@@ -45,15 +45,16 @@ import (
 )
 
 type config struct {
-	opencodeURL string
-	model       string
-	stateDir    string
-	githubToken string
-	githubAPI   string
-	repo        string
-	branch      string
-	inboxDir    string
-	pollSeconds int
+	opencodeURL   string
+	model         string
+	stateDir      string
+	githubToken   string
+	githubAPI     string
+	repo          string
+	branch        string
+	inboxDir      string
+	pollSeconds   int
+	healthSeconds int
 }
 
 // 覚えておく既読ファイル名の上限。inbox は消えないので、無制限に持つと
@@ -76,11 +77,26 @@ func loadConfig() (*config, error) {
 		repo:        envOr("CORE_REPO", "hikuohiku/homelab"),
 		branch:      envOr("CORE_FEEDBACK_BRANCH", "ops-feedback"),
 		inboxDir:    envOr("CORE_INBOX_DIR", "ops/feedback/inbox"),
-		pollSeconds: 30,
+		// 人間を待たせる時間はここで決まる。所有者の DM が inbox に載ってから
+		// コアが読むまでの遅延が、そのまま体感の「反応の悪さ」になる。
+		// 5 秒なら GitHub API の消費は 720 req/h で、共有トークンの上限
+		// (5000 req/h) に対して十分収まる
+		pollSeconds: 5,
+		// 健全性レポートは 30 分周期の CronJob が書くので、速く見ても意味が無い。
+		// inbox と同じ速さで叩くと API を無駄に食うだけなので分ける
+		healthSeconds: 120,
 	}
-	if raw := os.Getenv("CORE_POLL_SECONDS"); raw != "" {
-		if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 3600 {
-			c.pollSeconds = n
+	for _, spec := range []struct {
+		env string
+		dst *int
+	}{
+		{"CORE_POLL_SECONDS", &c.pollSeconds},
+		{"CORE_HEALTH_SECONDS", &c.healthSeconds},
+	} {
+		if raw := os.Getenv(spec.env); raw != "" {
+			if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 3600 {
+				*spec.dst = n
+			}
 		}
 	}
 	c.githubToken = strings.TrimSpace(os.Getenv("AUTOPILOT_GITHUB_TOKEN"))
@@ -402,15 +418,17 @@ func main() {
 }
 
 func runDriver() {
-	log.SetFlags(0)
+	// 時刻を出す。無いと「書き置きが載ってから読むまで何秒か」を後から測れない
+	// (2026-08-23: 反応が遅いという指摘を受けて、まず測れるようにした)
+	log.SetFlags(log.LstdFlags | log.LUTC)
 	log.SetPrefix("[core-driver] ")
 
 	cfg, err := loadConfig()
 	if err != nil {
 		log.Fatalf("起動できません: %v", err)
 	}
-	log.Printf("開始 (repo=%s branch=%s poll=%ds model=%s)",
-		cfg.repo, cfg.branch, cfg.pollSeconds, orDash(cfg.model))
+	log.Printf("開始 (repo=%s branch=%s poll=%ds health=%ds model=%s)",
+		cfg.repo, cfg.branch, cfg.pollSeconds, cfg.healthSeconds, orDash(cfg.model))
 
 	c := newClient(cfg)
 	ctx := context.Background()
@@ -421,6 +439,7 @@ func runDriver() {
 	seen, hadCursor := loadSeen(cursorPath)
 
 	sessionID := ""
+	var lastHealthCheck time.Time
 	for {
 		if sessionID == "" {
 			id, err := c.ensureSession(ctx)
@@ -476,15 +495,32 @@ func runDriver() {
 			if err := saveSeen(cursorPath, pruneSeen(seen, maxSeen)); err != nil {
 				log.Printf("cursor を保存できない: %v", err)
 			}
-			log.Printf("コアへ渡した: %s (%s, %d chars)", name, n.Source, len(n.Body))
+			log.Printf("コアへ渡した: %s (%s, %d chars%s)", name, n.Source, len(n.Body), lagSuffix(n.Received))
 		}
 
 		// 人間の書き置きを捌いてから、自発的な気づきを見る。
-		// 順序は「人を待たせない」を優先 (健全性の変化は 30 分周期の話なので急がない)
-		c.watchHealth(ctx, sessionID, healthCursorPath)
+		// 順序は「人を待たせない」を優先。健全性は 30 分周期のレポートを見ているので
+		// inbox と同じ速さで叩く意味が無く、独自の間隔で間引く
+		if time.Since(lastHealthCheck) >= time.Duration(cfg.healthSeconds)*time.Second {
+			c.watchHealth(ctx, sessionID, healthCursorPath)
+			lastHealthCheck = time.Now()
+		}
 
 		time.Sleep(time.Duration(cfg.pollSeconds) * time.Second)
 	}
+}
+
+// lagSuffix は書き置きの受信時刻から今までの遅れを返す。
+// 「反応が遅い」を体感でなく数字で見るための計測点。
+func lagSuffix(received string) string {
+	if received == "" {
+		return ""
+	}
+	at, err := time.Parse("2006-01-02T15:04:05Z", received)
+	if err != nil {
+		return ""
+	}
+	return fmt.Sprintf(", 受信から %.0fs", time.Since(at).Seconds())
 }
 
 func orDash(s string) string {

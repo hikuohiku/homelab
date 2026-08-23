@@ -145,6 +145,13 @@ spec:
               value: opencode-go/ox-alpha-free
             - name: CORE_STATE_DIR
               value: /data
+            # 人間を待たせる時間はここで決まる (inbox に載ってからコアが読むまで)。
+            # 5s * 720 req/h で共有トークンの上限 5000 req/h に十分収まる
+            - name: CORE_POLL_SECONDS
+              value: "5"
+            # 健全性レポートは 30 分周期の CronJob が書くので速く見ても意味が無い
+            - name: CORE_HEALTH_SECONDS
+              value: "120"
             - name: TZ
               value: Asia/Tokyo
           volumeMounts:
