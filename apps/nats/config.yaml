@@ -1,0 +1,54 @@
+# NATS JetStream の設定。イベント経路の実体 (設計 docs/design/event-driven-core D16)。
+#
+# 何を解いているか: これまで「人間が何か言った」を運ぶ経路が GitHub の ops-feedback
+# ブランチだった。自宅クラスタの内部イベントが外部 SaaS を経由する構造で、GitHub が
+# 落ちるかトークンが切れると所有者の「止めて」が heart に届かない。ここを閉じる。
+#
+# 秘密はこのファイルに書かない。認証情報は Deployment が env で渡し、
+# NATS が $VAR 形式で展開する (include ではなく env 展開を使うのはそのため)。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nats-config
+  namespace: autopilot
+data:
+  nats.conf: |
+    # cluster 内からのみ。Service も ClusterIP で、Ingress は作らない
+    listen: 0.0.0.0:4222
+    # /healthz と /varz を出す。liveness/readiness probe が使う
+    http: 0.0.0.0:8222
+
+    server_name: ops-bus
+
+    jetstream {
+      store_dir: /data/jetstream
+      # 単一ノードなので実ディスクを予約しない local-path PVC に載る。
+      # PVC の要求量 (5Gi) より小さく取って、PVC を食い潰す前に NATS 側で断る
+      max_file_store: 3GB
+      max_memory_store: 64MB
+    }
+
+    # 設計 D13: 誰がどの subject に触れるかをコードではなく設定で縛る。
+    # producer は publish だけ、consumer は subscribe だけ。
+    # 事故 (producer が consumer の subject を消す等) を権限で塞ぐ
+    authorization {
+      users: [
+        {
+          user: producer
+          password: $NATS_PRODUCER_PASSWORD
+          permissions: {
+            publish: { allow: ["events.>"] }
+            subscribe: { allow: ["_INBOX.>"] }
+          }
+        },
+        {
+          user: consumer
+          password: $NATS_CONSUMER_PASSWORD
+          permissions: {
+            # JetStream の consumer は $JS.API 経由で読む。pull consumer に必要な分だけ許す
+            publish: { allow: ["$JS.API.>", "_INBOX.>"] }
+            subscribe: { allow: ["events.>", "_INBOX.>"] }
+          }
+        },
+      ]
+    }

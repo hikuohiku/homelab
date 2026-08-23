@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: nats-jetstream
+  namespace: autopilot
+  annotations:
+    # 未消費のイベントが入る。Application ごと消すと finalizer で道連れになるため、
+    # 畳むときは中身を確認してから (openclaw 撤去で実際にそうなった)
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      # 人間の書き置きと health の遷移が主で、1 日数件〜数十件の規模。
+      # nats.conf の max_file_store (3GB) より大きく取り、NATS 側が先に断るようにする
+      storage: 5Gi

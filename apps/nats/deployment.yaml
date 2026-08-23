@@ -1,0 +1,93 @@
+# NATS JetStream サーバ。cluster 内のイベント経路 (設計 D16)。
+#
+# Ingress は作らず Service も ClusterIP。外からは触れない。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nats
+  namespace: autopilot
+  labels:
+    app: nats
+spec:
+  replicas: 1
+  # JetStream の store を単一 PVC に持つので、rolling 中の二重起動を避ける
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: nats
+  template:
+    metadata:
+      labels:
+        app: nats
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: nats
+          # nats:2.14.5-alpine の index digest (2026-08-23 に registry API で実測)
+          image: nats@sha256:d4ac35882ac65aff236cd65b9d3fa4d24332c681e1a85f94eedccd3cdd65b1da
+          terminationMessagePolicy: FallbackToLogsOnError
+          args: ["--config", "/etc/nats/nats.conf"]
+          env:
+            # nats.conf が $VAR で展開する。設定ファイルに秘密を書かずに済ませる経路
+            - name: NATS_PRODUCER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nats-credentials
+                  key: NATS_PRODUCER_PASSWORD
+            - name: NATS_CONSUMER_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: nats-credentials
+                  key: NATS_CONSUMER_PASSWORD
+          ports:
+            - name: client
+              containerPort: 4222
+            - name: monitor
+              containerPort: 8222
+          volumeMounts:
+            - name: config
+              mountPath: /etc/nats
+              readOnly: true
+            - name: data
+              mountPath: /data
+          # NATS の監視ポートが出す健全性エンドポイント。
+          # /healthz は JetStream の準備完了も見る (公式 docs の推奨)
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: monitor
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: monitor
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            # memory の limits は付けない（substrate の規則: 実測の裏付けなしに付けない。
+            # 超過が回復不能な OOMKill になる。CPU limits は throttle で回復するため設定する）
+            limits:
+              cpu: 500m
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: config
+          configMap:
+            name: nats-config
+        - name: data
+          persistentVolumeClaim:
+            claimName: nats-jetstream

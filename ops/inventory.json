@@ -471,6 +471,18 @@
       "note": "T-0138 で新設。タグに v プレフィックスは無い（Docker Hub 実測、2026-08-06）。2.x 系は v1 系から DB を LevelDB→SQLite に変更しているが新規インストールはマイグレーション対象外（GitHub Releases v2.0.0 実測）"
     },
     {
+      "id": "nats",
+      "kind": "image",
+      "name": "nats (JetStream。cluster 内のイベント経路)",
+      "current": "sha256:d4ac35882ac65aff236cd65b9d3fa4d24332c681e1a85f94eedccd3cdd65b1da",
+      "file": "apps/nats/deployment.yaml",
+      "match": "image: nats@sha256:",
+      "upstream": "github:nats-io/nats-server",
+      "policy": "manual",
+      "note": "2026-08-23 新設 (設計 D16)。所有者の書き置きを運ぶ経路なので、上げるときは JetStream のストリーム互換性 (API Level) をリリースノートで確認する。タグは 2.14.5-alpine の index digest。更新手順は registry API の docker-content-digest ヘッダを読む (telegram-adapter-builder-image と同じ)",
+      "observability_impact": "壊れると人間の書き置き (停止・veto を含む) が heart とコアに届かなくなる。GitHub 経由の archive には残るので消失はしないが、緊急停止の到達性が落ちる"
+    },
+    {
       "id": "telegram-adapter-builder-image",
       "kind": "image",
       "name": "golang:1.25-alpine (telegram-adapter のビルド段)",
