@@ -368,3 +368,41 @@ continuation_count 出現を探す、未 merge なら待機 1〜2 回して観�
 P-0092 の active 化。actives が自分しかいない状態が続くため、次の予算死は
 新規採択が active 化してから数十分钟後になる見込み。遡及列挙時は
 `--since="2026-08-23T00:00:00Z"` で絞ること (セッション10 実測)。
+
+## セッション12 の記録 (2026-08-23 12:26–12:40Z)
+
+**やったこと**: ops-state 監視のみ。冒頭 fetch → head d032ecbd4 を refs/pull 照合
+(0 件 = PR 未開) → 実装コミット c353eca55 が origin/main 未含も確認 → 約 4.5 分待機 ×2 を
+挟んで 3 回確認したが merge 無し。verify 1〜3 を再実測 green (15 tests OK)。
+本ファイル追記 + commit して終了。
+
+**盤面の実測 (12:24Z / 12:32Z / 12:38Z の 3 回)**:
+
+- `continuation_count` の出現は 0 のまま (merge 前なので当然)
+- heart は生存: beat 230 @ 12:24:04Z → beat 236 @ 12:32:02Z → beat 239 @ 12:37:26Z
+  (ビート約 70 秒間隔を維持)
+- **観測候補が大幅補充 — curriculum 採択 4 案が active 化**: P-0187/0188/0192/0193 が
+  12:09:09Z run_adopt_gate → 12:13:20Z announce + spawn_runner を audit で実視。
+  actives 実測は自枠含め 5 に増加
+- **さらに P-0196 が新規 active 化**: 監視中の 12:33:14Z merge_pr (PR #540「curriculum: 8 案
+  (採択 1)」) の後、12:34:28Z adopt_gate → 12:37:26Z announce + spawn_runner を実視。
+  「application-controller の OOMKill 解析」cap **4.5M** — 大型長尺 Job で将来の予算死候補筆頭。
+  これで actives は 6 (自枠 + 5)
+- **今日の予算死は増えていない**: 遡及列挙を `git log -S'"budget_exhausted"' origin/ops-state --
+  projects.json` で実施 (全履歴ループより速く確実。**この方法が現レシピ**)。最終出現は
+  ff300b0bf @ 09:35:24Z (= P-0161 の死、audit consume_result 09:35:18Z と整合) で、
+  以後 3 時間以上新規無し。なお現行 projects.json の stalled_reason=budget_exhausted は
+  9 件 (P-0080/0102/0116/0139/0142/0143/0144/0157/0161) — 手動継続済みの P-0114/0115 は
+  stalled 集合から抜けているため、セッション9 までの「11 件」という今日分カウントとは
+  総数の取り方が異なる (遡及は git 履歴ベースで行うこと)
+- 人間の活動兆候: 監視中に #539 chore/repin-core、#540 curriculum が merge (#527〜#540)。
+  ただし本 PR のレビューは未開のまま
+
+**次のセッションへの一言**: 変更なし — merge 待ち。手順は一切変わらない:
+冒頭 fetch → refs/pull 照合 (ブランチ head SHA で) → merge 済みなら遡及レシピで
+continuation_count 出現を探す、未 merge なら待機 1〜2 回して観測事実だけ追記して終了。
+証跡機会の供給源は更新: active 5 案 (P-0187 1.5M / P-0188 800k / P-0192 500k /
+P-0193 1M / **P-0196 4.5M**) の長尺死待ちと P-0092 (announced, 3M) の active 化。
+特に P-0196 は cap が大きく解析系なので最有力候補。予算死の遡及列挙は
+`git log -S'"budget_exhausted"' origin/ops-state -- projects.json` で行うこと
+(セッション12 実測。--since ループより速い)。
