@@ -259,11 +259,20 @@ def incident_message(evaluation):
 
 
 def post_discord(url, text, timeout=10):
-    """webhook 一方向 POST。heart/notify.py と同じ payload 形 ({"content": ...})。"""
+    """webhook 一方向 POST。heart/notify.py と同じ payload 形 ({"content": ...})。
+
+    User-Agent を必ず上書きする: python-urllib 既定の UA (`Python-urllib/3.x`) だと
+    Discord 前面の Cloudflare に error 1010 でブロックされ HTTP 403 になる
+    (2026-08-23 実機で発覚。webhook 自体は正常で、UA を明示すると 204 が返る)。
+    403 になっても呼び出し側は握り潰さず stderr へ出して非ゼロ終了する。
+    """
     req = urllib.request.Request(
         url,
         data=json.dumps({"content": text[:1900]}).encode(),
-        headers={"Content-Type": "application/json"},
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "restic-check/0.1 (homelab)",
+        },
     )
     with urllib.request.urlopen(req, timeout=timeout) as resp:
         resp.read()

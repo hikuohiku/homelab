@@ -14,6 +14,7 @@ import json
 import os
 import tempfile
 import unittest
+import urllib.error
 from contextlib import redirect_stdout
 from datetime import datetime, timedelta, timezone
 from io import StringIO
@@ -223,6 +224,49 @@ class TestIncidentMessage(unittest.TestCase):
         self.assertIn("immich", msg)
         self.assertIn("docs/backup.md", msg)
         self.assertLessEqual(len(msg), 1900)
+
+
+class TestPostDiscord(unittest.TestCase):
+    """webhook POST の形。2026-08-23 実機障害 (Cloudflare が python-urllib 既定 UA を
+    error 1010 で 403 ブロック) を契約に昇格させたもの — UA 上書きを忘れると
+    incident 通知だけが静かに消えるので、ここで機械的に守る。"""
+
+    def post(self):
+        sent = {}
+
+        def fake_urlopen(req, timeout=None):
+            sent["url"] = req.full_url
+            sent["headers"] = {k.lower(): v for k, v in req.header_items()}
+            sent["data"] = req.data
+            return mock.MagicMock(__enter__=lambda s: mock.MagicMock(
+                read=lambda: b"", status=204))
+
+        with mock.patch("urllib.request.urlopen", side_effect=fake_urlopen):
+            rcr.post_discord("https://example.invalid/hook", "本文")
+        return sent
+
+    def test_user_agent_is_overridden(self):
+        """既定 UA (`Python-urllib/...`) で出ていかないこと。"""
+        sent = self.post()
+        ua = sent["headers"].get("user-agent", "")
+        self.assertTrue(ua)
+        self.assertNotIn("python-urllib", ua.lower())
+
+    def test_payload_shape_matches_heart(self):
+        """payload は heart/notify.py と同じ {"content": ...} 形。"""
+        sent = self.post()
+        self.assertEqual(sent["url"], "https://example.invalid/hook")
+        self.assertEqual(
+            json.loads(sent["data"].decode()), {"content": "本文"})
+
+    def test_http_error_propagates_to_caller(self):
+        """403 等の HTTPError は握り潰さず main() 側の stderr 報告に委ねる。"""
+        err = urllib.error.HTTPError(
+            "https://example.invalid/hook", 403, "blocked",
+            hdrs=None, fp=None)
+        with mock.patch("urllib.request.urlopen", side_effect=err):
+            with self.assertRaises(urllib.error.HTTPError):
+                rcr.post_discord("https://example.invalid/hook", "x")
 
 
 class TestMain(unittest.TestCase):
