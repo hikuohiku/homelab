@@ -4479,7 +4479,7 @@
     {
       "id": "P-0208",
       "title": "sync フォルダの誤削除を実際に演じ、restic から掘り返せることを証明する",
-      "state": "active",
+      "state": "stalled",
       "branch": "project/p-0208",
       "irreversible": false,
       "capabilities": [
@@ -4536,7 +4536,8 @@
       "veto_deadline": "2026-08-23T15:46:13Z",
       "spawn_count": 1,
       "job": "runner-p-0208-a1",
-      "drift_count": 0
+      "drift_count": 0,
+      "stalled_reason": "error"
     },
     {
       "id": "P-0210",
@@ -4661,7 +4662,7 @@
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-23T15:42:25Z",
-  "last_activity_at": "2026-08-23T15:46:13Z",
+  "last_activity_at": "2026-08-23T15:51:29Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
