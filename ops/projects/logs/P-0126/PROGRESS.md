@@ -55,3 +55,70 @@ inventory への自身の image pin 登録 (ops-health-reporter-image と同型�
 単独エントリ)、dod(4) の初回実測 (sandbox から外向き HTTP が通るか未確認 —
 通らなければ CronJob デプロイ後の初回実行で取り、その旨を logs に残す)。
 
+### 2026-08-23 セッション2 — 受入2項目目 (apps/version-watcher CronJob) を green に
+
+**やったこと**: `apps/version-watcher/` を新設 (commit 6376ca23)。verify 2項目目
+`test -f apps/version-watcher/cronjob.yaml && kubectl kustomize apps/version-watcher >/dev/null`
+が green (kubectl v1.35 / kustomize v5.7.1 で実測)。構成: namespace.yaml /
+external-secret.yaml / cronjob.yaml / kustomization.yaml / watch.py / version_watch.py。
+verify 3 は未着手。リポジトリ全体の discover も 178 tests OK。
+
+**設計で決めたこと (次セッションはこの前提の上に立つこと)**:
+
+- `watch.py` は report.py 鋳型どおり GET→merge→PUT。共通ヘルパー
+  `put_with_retry(token, repo, branch, path, compose, message)` が SHA 衝突
+  (409/422) を最大 4 回 (10s 待ち) リトライする。latest.json への merge と
+  history jsonl への追記の両方がこれを使う。衝突時に再取得した相手側の内容は
+  消さない (smoke test で確認済み)。リトライしきったら raise → Job 失敗で可視化。
+- **inventory は実行時に GitHub raw (BASE_BRANCH=main) から取る**。ConfigMap に
+  スナップショットを焼くと陳腐化するのを避けるため。単一情報源は main。
+- **version_watch.py は apps/version-watcher/ に手動同期コピーを置いた**。
+  kustomize の configMapGenerator は root-only 制限で kustomization.yaml の外の
+  ファイルを参照できないため (これが理由で inventory の同梱も不可だった)。
+  正本とコピーの差分は「コピー先頭の 6 行ヘッダー」と「正本 docstring 末尾の
+  コピー存在注記」のみで、ロジックは byte 等価 (diff 実測)。**コピー側には
+  単体テストが無い** — watch.py も CI テスト対象外 (spec がテストを要求するのは
+  version_watch.py のみ)。動作確認は throwaway のモック smoke test で実施済み:
+  observe() の summary/drifted、同期コピー側モジュールを import していること、
+  衝突リトライ、壊れた latest.json の復旧、リトライ枯渇時の raise。
+- latest.json が JSON として壊れていた場合は version_drift 単独の新ファイルで
+  上書きする (health 部分は health-reporter が 30 分以内に全体上書きして復元)。
+- history jsonl には health-reporter のレポート行に混ぜて version_drift 観測オブジェクト
+  ({generated_at, summary, drifted, errors}) を 1 行追記する。スキーマ混在だが
+  キー自己記述なので読む側で判別可能 (PROJECT.md「history jsonl への追記も
+  health-reporter に倣う」の解釈)。
+- rbac.yaml は省略し cronjob pod に `automountServiceAccountToken: false`。
+  k8s API を一切使わないため (セッション1 での決済どおり。cronjob.yaml にコメント済み)。
+- schedule `"37 2 * * *"` (JST 毎晩 02:37)。health-reporter の :00/:30 側とずらした。
+  activeDeadlineSeconds 600 / backoffLimit 1。1 リクエスト timeout 15s
+  (`watch.py` PER_REQUEST_TIMEOUT) × 対象約39件 = 585s < 600s の積算根拠をコメントに書いた。
+  token は ExternalSecret で Doppler key GITHUB_HEALTH_REPORTER_TOKEN を再利用
+  (PROJECT.md 既定。namespace が違うので Secret 実体は複製される)。
+
+**分かったこと / 罠**:
+
+- observe() が import するのは**同期コピー側**の version_watch モジュール。
+  正本を直してもコピーへ反映しないとクラスタでは古いロジックが走り続ける
+  (テストは正本しか見ないので CI では絶対落ちない = 沈黙的なズレが起こりうる)。
+  発見: 「正本と apps 側コピーの一致を機械検査する CI step」があると事故らない
+  (curriculum が拾うべき候補として発見節に相当。ここに記録しておく)
+- mock で fetch を差し替えるとき partial(timeout=15) 経由になるので、
+  fake_fetch(url) だけだと TypeError→status=error に化ける (**kwargs を受けること)。
+  smoke test で一度引っかかった
+- sandbox からクラスタ/GitHub への書き込み検証は未実施 (dod(4) の初回実測は
+  デプロイ後の初回 CronJob 実行で取るのが確実)
+
+**次のセッションへの一言**: verify 3項目目
+(`grep -q 'version-watcher' apps/kustomization.yaml`) に着手。やること:
+(1) `apps/version-watcher/application.yaml` を ops-health-reporter/application.yaml の
+同型で作る (name: version-watcher, path: apps/version-watcher, namespace:
+version-watcher)。(2) apps/kustomization.yaml の resources に 1 行追加。(3) dod(3) の
+inventory 自己登録: `ops/inventory.json` に image エントリを足す。前例
+ops-health-reporter-image の entry 形状 (file/match/mirrors 有無) を必ず先に読んでから
+真似すること。current は "3.14-alpine" (cronjob.yaml の image pin と一致させること —
+check_version_sync.py が manifest↔inventory の一致を CI で見ている)。upstream は
+dockerhub:library/python。watcher 自身が自分の image も観測対象にする形になる
+(dogfooding)。(4) dod(4): 初回 drift 実測。sandbox から外向き HTTP が通るなら
+`python3 ops/tools/version_watch.py` を手で回して件数を logs に残す (通らなければ
+デプロイ後の初回 CronJob 実行結果を待ち、その旨を書く)。全部通ったら wrapper が
+verify 全 green を実測してレビューへ進む。
