@@ -3736,11 +3736,35 @@
       "review_retries": 0,
       "review_cycles": 3,
       "stalled_reason": "review_rejected"
+    },
+    {
+      "id": "P-0175",
+      "title": "秘密の給水塔が止まった日を先に演じる — External Secrets の唯一の上流 (Doppler) を一時遮断し、既存の Secret とアプリが何時間持つかを秒で実測する",
+      "state": "proposed",
+      "branch": "project/p-0175",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": true,
+      "verify": [
+        "test -f ops/projects/logs/P-0175/drill-report.json",
+        "python3 -c \"import json; d=json.load(open('ops/projects/logs/P-0175/drill-report.json')); assert d.get('blocked_minutes',0)>=30 and d.get('recovery_verified') is True and isinstance(d.get('pod_recreate_result'),str) and d.get('eso_error_first_seen_seconds') is not None\"",
+        "python3 -c \"c=open('apps/ops-health-reporter/report.py').read(); assert 'externalsecret' in c.lower() or 'secretsynced' in c.lower()\"",
+        "test -f docs/doppler-outage-runbook.md && grep -q '応急' docs/doppler-outage-runbook.md"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1500000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T08:07:24Z",
-  "last_activity_at": "2026-08-23T08:55:45Z",
+  "last_curriculum_at": "2026-08-23T08:56:57Z",
+  "last_activity_at": "2026-08-23T08:56:57Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
