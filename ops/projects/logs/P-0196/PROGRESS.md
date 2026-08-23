@@ -303,3 +303,13 @@ verify 第 1 項 (--plan) も rc=0 で green 継続。**人間の一手
 (`kubectl apply -f ops/projects/logs/argocd-oom-lab/proposed-rbac-for-human.yaml`) はまだ来ていない**。
 
 次セッションへの引き継ぎ: セッション 4 の「次セッションへの引き継ぎ」をそのまま丸ごと引き継ぐ (変更点なし)。
+
+## セッション 8 — 2026-08-23: up 再実行 → RBAC 未適用のまま (セッション 5〜7 と同じく変化なし)
+
+冒頭で `up` を実行 → admission probe が未適用を検出 → 自力掃除で rc=1。
+`argocd-lab-916` / `argocd-lab-1040` とも NotFound、lab-state.json / rss_series.csv 未存在、
+working tree 無変更で残置ゼロを自分でも確認、verify 第 1 項 (--plan) も rc=0 で green 継続。
+**人間の一手 (`kubectl apply -f ops/projects/logs/argocd-oom-lab/proposed-rbac-for-human.yaml`)
+はまだ来ていない**。
+
+次セッションへの引き継ぎ: セッション 4 の「次セッションへの引き継ぎ」をそのまま丸ごと引き継ぐ (変更点なし)。
