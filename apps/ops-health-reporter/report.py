@@ -20,6 +20,7 @@ import urllib.request
 # `python /scripts/report.py` 起動時は sys.path[0]=/scripts で解決済み。この append は
 # cluster 外 (CI・検査スクリプト) が importlib でロードしたときの解決用フォールバック
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import backup_freshness
 import download_budget
 
 SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
@@ -263,6 +264,50 @@ def collect_download_budget():
         except Exception as e:  # noqa: BLE001 — 他 namespace の収集を止めない
             entries.append({"namespace": ns, "error": "{}: {}".format(type(e).__name__, e)})
     return download_budget.build_report(entries)
+
+
+def _backup_warn_hours(token, repo, base_branch):
+    """backup 鮮度 (P-0157) の warn 閾値。単一情報源は base ブランチ (main) の
+    ops/rules.json (backup_freshness.warn_hours) を GitHub Contents API で読む。
+    reporter Pod には rules.json の置き場が無く、ConfigMap への embed は
+    kustomize 標準の load restrictor が拒むためこの経路にした
+    (backup_freshness.py 冒頭の節参照)。ops-health-report ブランチ側の rules.json は
+    分岐時点で凍結されるので使わない。読めないとき (ネットワーク断・404・壊れた
+    JSON 等) はモジュール既定値にフォールバックする — 値は rules.json と揃えて管理
+    (backup_freshness.py 冒頭参照)。閾値取得の失敗で測定自体を落とさない。
+    """
+    if not isinstance(token, str) or not token:
+        return backup_freshness.DEFAULT_WARN_HOURS
+    try:
+        status, raw = get_raw_content(token, repo, "ops/rules.json", base_branch)
+        if status == 200 and raw:
+            doc = json.loads(raw.decode("utf-8"))
+            return backup_freshness.coerce_warn_hours(
+                doc.get("backup_freshness", {}).get("warn_hours")
+            )
+    except Exception:  # noqa: BLE001 — 何があっても測定を止めない
+        pass
+    return backup_freshness.DEFAULT_WARN_HOURS
+
+
+def collect_backup_freshness():
+    """5 restic backup 経路の鮮度 (P-0157)。batch API の CronJob/Job 一覧を
+    backup_freshness.build_report() に渡し、{repo, namespace, cronjob,
+    last_success_at, hours_since_success, status} のリストを作る。
+
+    #49 型の静停止は「新しい Job が生まれない」ため失敗も Degraded も起きない。
+    失敗を見るのではなく最後の成功からの経過時間で見る。CronJob / Job の一覧取得が
+    片方でも失敗したら全経路の判定が偽になるので、ここでは握りつぶさず collect()
+    側の error として全体を出す (個別経路の欠落は error エントリで載せる)。
+    """
+    cronjob_items = k8s_get("/apis/batch/v1/cronjobs").get("items") or []
+    job_items = k8s_get("/apis/batch/v1/jobs").get("items") or []
+    warn_hours = _backup_warn_hours(
+        os.environ.get("GITHUB_TOKEN"),
+        os.environ.get("GITHUB_REPO", "hikuohiku/homelab"),
+        os.environ.get("BASE_BRANCH", "main"),
+    )
+    return backup_freshness.build_report(cronjob_items, job_items, warn_hours=warn_hours)
 
 
 def collect_nodes():
@@ -533,6 +578,7 @@ def main():
         "node_metrics": collect(collect_node_metrics),
         "pvc_usage": collect(collect_pvc_usage),
         "download_budget": collect(collect_download_budget),
+        "backup_freshness": collect(collect_backup_freshness),
         "autopilot": collect(collect_autopilot_health),
         "notes": (
             "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 "
@@ -559,6 +605,16 @@ def main():
             "推定モデル（産出側 CronJob の LEDGER_RULES）による推定量。"
             "cap の実値は B2 コンソールにしか無いため既定は unconfigured（決め打ちしない）。"
             "産出側がまだ稼働していない namespace は error エントリになる。"
+            " backup_freshness キーは restic backup の鮮度計（P-0157）。5 経路"
+            "（vaultwarden/coder-postgres/immich/coder-workspace-home/syncthing、"
+            "すべて日次 CronJob）について最後の成功からの経過時間（hours_since_success）を"
+            "測り、rules.json backup_freshness.warn_hours（通常周期 24h の 3 倍 = 72h）以上で"
+            " warn。「新しい Job が生まれない」静停止（#49 同型）は失敗も Degraded も起きないため、"
+            "成功時刻の鮮度で見る。成功時刻は CronJob status.lastSuccessfulTime を主とし、"
+            "読めなければ Complete=True の子 Job completionTime の max で代用する。"
+            "coder-workspace-home は実体 PVC が動的生成のため個々には見ず、オーケストレータ"
+            " CronJob 自身の最終成功で代用（T-0078/T-0117 同型）。収集できない経路は黙って落とさず "
+            "status=error のエントリとして載る。自動修復はしない。"
         ),
     }
 

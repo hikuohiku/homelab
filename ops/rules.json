@@ -44,6 +44,10 @@
     "stale_seconds": 7200,
     "_comment": "watchdog (外部) が ops-state の heartbeat をこの時間以上 stale と見たら通知。report.py の sinceSeconds=7200 と同じ値に揃えている"
   },
+  "backup_freshness": {
+    "warn_hours": 72,
+    "_comment": "5 restic backup 経路 (vaultwarden/coder-postgres/immich/coder-workspace-home/syncthing、いずれも日次 CronJob = 通常周期 24h) の『最後の成功から何時間』の warn 閾値 (P-0157)。通常周期の 3 倍。「オーケストレータ CronJob 自身が死んで新しい Job が生まれない」静停止 (#49 同型) は失敗も Degraded も起きないため、失敗ではなく鮮度で見る。reporter はこの値だけを読む (configMapGenerator で rules.json ごと /scripts へ載せる)。apps/ops-health-reporter/backup_freshness.py の DEFAULT_WARN_HOURS は読み込み失敗時のフォールバックなので、値を変えたら同時に変えること"
+  },
   "transcripts": {
     "retention_days": 30,
     "max_total_gb": 10,

@@ -31,6 +31,16 @@ rules:
   - apiGroups: ["apps"]
     resources: ["deployments"]
     verbs: ["get", "list"]
+  - apiGroups: ["batch"]
+    resources: ["cronjobs", "jobs"]
+    verbs: ["get", "list"]
+# batch の get/list は backup 鮮度計 (P-0157) 用。「既存 reporter の拡張」を選んだ
+# (DoD(1) の選定記録): 独立 CronJob (P-0128 型) は新 SA + 4 namespace 分の Role +
+# latest.json への別 writer (P-0126 実測の衝突リトライ・壊れ JSON 復旧の負担) が必要で、
+# 変更面積が大きい。reporter は既に 30 分毎にクラスタを読んで latest.json を上書きして
+# いるので、観測の器に鮮度計を足すだけで閉じる。増える権限は読み取り専用の
+# cronjobs/jobs get/list のみ (write 系 verb なし)。既存の pods/pvcs も cluster 全体を
+# list しているため、権限の性質は既存と同水準
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

@@ -12,10 +12,11 @@ configMapGenerator:
     namespace: ops-health-reporter
     files:
       - report.py
-      # report.py から `import download_budget` される (P-0128)。CronJob は
-      # `python /scripts/report.py` で起動するため sys.path[0]=/scripts となり、
-      # 追加マウント無しで解決する
+      # report.py から `import download_budget` / `import backup_freshness` される
+      # (P-0128/P-0157)。CronJob は `python /scripts/report.py` で起動するため
+      # sys.path[0]=/scripts となり、追加マウント無しで解決する
       - download_budget.py
+      - backup_freshness.py
 
 generatorOptions:
   disableNameSuffixHash: true
