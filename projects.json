@@ -4739,11 +4739,33 @@
       ],
       "review_requested_at": "2026-08-23T16:50:30Z",
       "review_retries": 0
+    },
+    {
+      "id": "P-0222",
+      "title": "「ずれているのが普通」の座を奪還する — coder・syncthing・vaultwarden の OutOfSync を今日ゼロにし、immich は P-0092 に譲って二度と手を出さない",
+      "state": "proposed",
+      "branch": "project/p-0222",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": true,
+      "verify": [
+        "git fetch origin ops-health-report -q && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); bad={a['name'] for a in d['applications'] if a.get('sync')!='Synced'}; sys.exit(0 if not (bad & {'coder','syncthing','vaultwarden'}) else 1)\"",
+        "test -s ops/projects/logs/P-0222/dispositions.md && python3 -c \"import sys; t=open('ops/projects/logs/P-0222/dispositions.md').read(); apps=['coder','syncthing','vaultwarden']; kinds=['[i]','[ii]','[iii]']; sys.exit(0 if all(a in t for a in apps) and any(k in t for k in kinds) else 1)\""
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2000000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T16:21:01Z",
-  "last_activity_at": "2026-08-23T16:52:50Z",
+  "last_curriculum_at": "2026-08-23T16:54:05Z",
+  "last_activity_at": "2026-08-23T16:54:05Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
