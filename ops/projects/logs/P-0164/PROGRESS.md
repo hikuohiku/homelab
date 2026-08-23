@@ -1054,7 +1054,66 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   (セッション 20 の発見節参照。本セッションで 3 例目を実施済み)。
   unittest 件数は固定値でないので「OK か」で判断すること
 
+### セッション 27 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking 5 件でメンバー不変**
+  (P-0092 announced / P-0175・P-0181・P-0182・P-0185 active。checked=65、
+  09:51:48Z 実測)。固定指示どおり実演習は見送り。台帳内訳の再確認も同一
+  (delivered 27 / vetoed 2 / stalled 30 / announced 1 / active 5)
+- **PR #524 材料耐久 6 例目**: GET /pulls/524 → open / draft=true /
+  mergeable_state=**clean** / head=5d24c8932 不変。head commit の check-runs で
+  ci success・GitGuardian success も再確認 (main 前進 #530 以降そのまま)。
+  main は 9b9470594 で不動・自ブランチ包含済みにつき validate 劣化なし・merge 不要
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 5), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 294 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+```
+
+- **当日健診の材料を実測**: `kubectl get pods -n argocd` で
+  `argocd-application-controller-0` が **ready=true かつ restartCount=4・
+  lastState.reason=OOMKilled** であることを確認 — P-0181 の題材 (controller の
+  OOMKill) は台帳上 active でなくても過去に実際に起きている状態であり、
+  「replicas=1 & ready=1」だけでは OOM ループ直後の残滓を検出できない。
+  --run 当日は dry-run の targets_seen に加えて pod の restartCount/lastState を
+  目視してから始めること (発見節に追記済み)。なお他コンポーネントの pod は
+  5 種類すべて RESTARTS=19・lastState.reason=Unknown で一様だった (ノード級の
+  イベント痕跡の可能性。本プロジェクト領域外につき発見節に記録のみ)
+- コード変更なし
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順はセッション 3・4 の固定どおり + 当日健診として pod の
+  restartCount/lastState 目視)、開いていなければ再実測だけして軽く閉じてよい。
+  塞ぎ手 5 件 (P-0092 announced / P-0175・P-0181・P-0182・P-0185 active)。
+  P-0092 は irreversible な immich-postgres メジャー更新で、active 化すれば長期滞在が
+  濃厚。P-0182 が落地すると stalled 復活レーンで弁はさらに遠のく (発見節参照)。
+  main が動いたら validate.py の archive.jsonl error → origin/main を merge。
+  unittest 件数は固定値でないので「OK か」で判断すること
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 27, P-0182 落地時の構造リスク) blocking の新入場 3 案のうち
+  **P-0182 が「stalled からの復活レーン」そのものを提案している** (verify に
+  `ops/rules.json` の `runner.continuation` と `ops/heart/reconcile.py` への
+  `continuation` 実装を要求)。セッション 25 で「stalled は吸収状態 (200 version
+  全走査で出口ゼロ)」と結論したが、これが落地すると停滞 30 件が heart の手で
+  再 announced されうる — **「塞ぎ手脱落は恒久的」という前提が壊れ、blocking
+  プールが復活可能な非単調集合になる**。本演習の弁 (announced+active==0) にとって
+  「待てば減る」モデルすら崩れるため、開放予測はさらに不可能側へ寄る。
+  P-0182 が delivered/stalled になった時点で rules.json を見て、continuation が
+  実装済みなら「吸収状態」結論を撤回すること
+
+- (セッション 27, 干渉健診の具体化 + 周辺健康の実測) P-0181 干渉メモ
+  (セッション 26) の当日手順を具体化: dry-run の targets_seen (replicas/ready)
+  に加え **`kubectl get pods -n argocd` の restartCount と lastState を見てから
+  --run する**。2026-08-23 09:52Z 実測で application-controller-0 は
+  ready=1・restartCount=4・lastState=OOMKilled — OOMKill は仮説でなく過去に
+  起きた事実であり、「直前まで OOM ループだった」状態は baseline チェックでは
+  検出できない。併せて周辺 pod 5 種が一様に RESTARTS=19・lastState=Unknown だった
+  のを記録 (原因未調査。ノード/kubelet 級のイベントを疑う根拠だが本プロジェクト
+  領域外)
 
 - (セッション 26, ライフサイクル観測の続き) **blocking 数の増加 2 例目** (2→5)。
   curriculum 採択 (PR #530) の 3 案 P-0181/P-0182/P-0185 が active 入場したことによる
