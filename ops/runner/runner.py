@@ -26,6 +26,8 @@ import subprocess
 import sys
 import threading
 import time
+import urllib.error
+import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -132,26 +134,171 @@ def classify_session_failure(stderr_tail):
     return "unknown"
 
 
-def parse_usage_limit_reset(text):
-    """上限メッセージから reset 時刻 (aware datetime) を取り出す。取れなければ None。
-
-    claude CLI は `Claude AI usage limit reached|<epoch 秒>` の形で付けることがある。
-    分類 (classify_session_failure) と時刻抽出は混ぜない。
-    opencode の reset 時刻の出力形は未観測 (P-0101, v1.18.21) — 観測できたら
-    fixture を証拠にここへ足す。
-    """
-    if not text:
-        return None
-    m = re.search(r"limit reached\s*\|\s*(\d{9,13})", text, re.IGNORECASE)
-    if not m:
-        return None
-    value = int(m.group(1))
+def _epoch_to_utc(value):
+    """epoch 秒 / ミリ秒を aware datetime (UTC) へ。壊れた値は None。"""
     if value > 10_000_000_000:  # ミリ秒表記
         value //= 1000
     try:
         return datetime.fromtimestamp(value, tz=timezone.utc)
     except (OverflowError, OSError, ValueError):
         return None
+
+
+# opencode 形の best-effort 解析 (P-0141) のキーワード。本物の上限メッセージの
+# 出力形はまだ未観測 (substrate.md, P-0101) — 「reset / retry の語の近くにある
+# 時刻」だけを拾う。キーワードなしの数字を拾うと本文中の無関係な数値に誤爆する
+_RESET_KEYWORD_RE = r"(?:resets?|retry\s+(?:after|at))"
+
+
+def parse_usage_limit_reset(text):
+    """上限メッセージから reset 時刻 (aware datetime) を取り出す。取れなければ None。
+
+    claude CLI は `Claude AI usage limit reached|<epoch 秒>` の形で付けることがある。
+    分類 (classify_session_failure) と時刻抽出は混ぜない。
+    opencode 形は未観測のため best-effort (P-0141): reset / retry 語の近くの
+    ISO 8601 か epoch を拾う。合致しなければ None を正直に返す (捏造しない)。
+    """
+    if not text:
+        return None
+    m = re.search(r"limit reached\s*\|\s*(\d{9,13})", text, re.IGNORECASE)
+    if m:
+        return _epoch_to_utc(int(m.group(1)))
+    # opencode 形 (best-effort・未観測)。ISO 8601 → epoch の順
+    m = re.search(
+        _RESET_KEYWORD_RE + r"\D{0,24}"
+        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})?)",
+        text,
+        re.IGNORECASE,
+    )
+    if m:
+        try:
+            dt = datetime.fromisoformat(m.group(1).replace("Z", "+00:00"))
+        except ValueError:
+            dt = None
+        if dt:
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=timezone.utc)
+            return dt.astimezone(timezone.utc)
+    m = re.search(
+        _RESET_KEYWORD_RE + r"\D{0,24}(\d{9,13})", text, re.IGNORECASE
+    )
+    if m:
+        return _epoch_to_utc(int(m.group(1)))
+    return None
+
+
+# --- unknown 死の直後の死因プローブ (P-0141) ---
+# opencode は HTTP 429 / 鍵未設定をどちらも UnknownError に潰すため、
+# 「上限死が unknown に落ちる」経路が実在する (substrate.md 2026-08-22 実測)。
+# unknown 死の直後に推論 API へ軽量プローブ (1 リクエスト) を打ち、真の死因を
+# 機械的に確定する。endpoint の導出元は models.json 流の model 文字列
+# (provider 部) と既存 env OPENCODE_API_KEY のみ — 新しい設定は増やさない。
+PROBE_TIMEOUT_SECONDS = 15
+
+# 出典: ops/tests/fixtures/engine_stderr/*.txt の error.data.metadata.url 実測
+# (2026-08-22, opencode CLI v1.18.21)。知らない provider の endpoint は捏造せず、
+# プローブを打たず unknown を維持する (claude ロールバック経路もここに落ちる)
+PROVIDER_PROBE_ENDPOINTS = {
+    "opencode-go": "https://opencode.ai/zen/go/v1/chat/completions",
+}
+
+
+def probe_endpoint(model):
+    """model 文字列 (provider/model) からプローブ先 URL を導出する純関数。
+
+    知らない provider・provider 部を持たない (claude 形) model は None。
+    """
+    if not model or "/" not in model:
+        return None
+    return PROVIDER_PROBE_ENDPOINTS.get(model.split("/", 1)[0])
+
+
+def probe_failure_kind(http_status):
+    """プローブの HTTP status → 既知死因への写像。確定できなければ None (純関数)。
+
+    401 → auth / 429 → usage_limit。それ以外 (200・400・5xx 等) は「API には
+    届いたが死因とは言えない」なので None — 呼び出し側は unknown を維持する。
+    """
+    if http_status == 401:
+        return "auth"
+    if http_status == 429:
+        return "usage_limit"
+    return None
+
+
+def probe_inference_api(model=None, env=None, urlopen=None):
+    """推論 API へ 1 リクエスト打って真の死因を確定する。
+
+    戻り値は `(http_status or None, 'auth'|'usage_limit'|'network'|None)`:
+      - HTTP 401 → ("auth"), 429 → ("usage_limit") — API からの応答が返った
+      - 接続不可 (URLError / OSError) → network
+      - それ以外の応答・予期しない例外は `(status, None)`: プローブが死因を
+        確定できなかったということしか言えないので unknown を維持する
+    リトライ無し・1 リクエスト (spec)。HTTP 層は urlopen 引数で注入可能で、
+    テストは network フリーで通る。Authorization ヘッダに実鍵を載せるため、
+    この関数は鍵やリクエストをログに出さない。
+    """
+    env = os.environ if env is None else env
+    endpoint = probe_endpoint(model or "")
+    key = (env.get("OPENCODE_API_KEY") or "").strip()
+    if not endpoint or not key:
+        return None, None
+    opener = urlopen or urllib.request.urlopen
+    req = urllib.request.Request(
+        endpoint,
+        data=json.dumps(
+            {"model": model, "messages": [], "max_tokens": 1}
+        ).encode(),
+        headers={
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {key}",
+            "User-Agent": (
+                "homelab-runner-probe/1 "
+                "(+https://github.com/hikuohiku/homelab)"
+            ),
+        },
+        method="POST",
+    )
+    try:
+        with opener(req, timeout=PROBE_TIMEOUT_SECONDS) as resp:
+            status = getattr(resp, "status", None) or resp.getcode()
+    except urllib.error.HTTPError as e:
+        status = e.code  # 4xx/5xx も「API から応答が返った」証拠
+    except (urllib.error.URLError, OSError):
+        return None, "network"
+    except Exception:
+        return None, None
+    return status, probe_failure_kind(status)
+
+
+def build_failure_info(blob, model=None, outcome="error", prober=None):
+    """非 completed 終了の死因情報を組み立てる (Session.run から抽出・P-0141)。
+
+    分類が unknown だった回だけプローブを打つ (`outcome="error"` のみ —
+    timeout / 無活動 kill はエンジンの報告した死ではないので数えない)。
+    プローブが既知死因に寄せられた場合は failure_kind を差し替える。
+    **プローブ自体も失敗した場合のみ unknown を維持する** — 捏造しない原則の延長。
+    プローブを打った回だけ `probe_status` / `probe_http_status` を載せる
+    (キーが無い = プローブ未実施)。
+    """
+    blob = blob or ""
+    info = {"failure_kind": None, "stderr_tail": "", "reset_at": None}
+    kind = classify_session_failure(blob)
+    if kind == "unknown" and outcome == "error":
+        probe_http, probe_kind = (prober or probe_inference_api)(model)
+        info["probe_http_status"] = probe_http
+        info["probe_status"] = probe_kind
+        if probe_kind:
+            kind = probe_kind
+    info["failure_kind"] = kind
+    # マスクは 2000 文字に切る「前」に掛ける (切ってから掛けると
+    # 途中で切れた秘密が生き残る)
+    info["stderr_tail"] = mask_secrets(blob)[-STDERR_TAIL_CHARS:]
+    if kind == "usage_limit":
+        reset = parse_usage_limit_reset(blob)
+        if reset:
+            info["reset_at"] = reset.strftime("%Y-%m-%dT%H:%M:%SZ")
+    return info
 
 
 def should_withhold_review(failure_kind, review_exists):
@@ -360,14 +507,7 @@ class Session:
         info = {"failure_kind": None, "stderr_tail": "", "reset_at": None}
         if outcome != "completed":
             blob = "".join(err_tail) + "\n" + "\n".join(result_errors)
-            info["failure_kind"] = classify_session_failure(blob)
-            # マスクは 2000 文字に切る「前」に掛ける (切ってから掛けると
-            # 途中で切れた秘密が生き残る)
-            info["stderr_tail"] = mask_secrets(blob)[-STDERR_TAIL_CHARS:]
-            if info["failure_kind"] == "usage_limit":
-                reset = parse_usage_limit_reset(blob)
-                if reset:
-                    info["reset_at"] = reset.strftime("%Y-%m-%dT%H:%M:%SZ")
+            info = build_failure_info(blob, self.model, outcome=outcome)
         # usage が取れない CLI バージョンでも予算が空回りしないよう、
         # トークン不明のセッションは概算で数える (コスト非ゼロなら換算、ゼロなら定数)。
         # ただし上限で即死した回は実消費ゼロなので概算を付けない — 付けると
@@ -510,12 +650,18 @@ class Runner:
         return outcome
 
     def failure_fields(self):
-        """異常終了系の write_result に載せる死因。"""
+        """異常終了系の write_result に載せる死因。プローブを打った回は
+        その結果 (`probe_status` / `probe_http_status`) も証跡として載せる
+        (キーが無い = プローブ未実施)。"""
         info = self.last_session or {}
-        return {
+        fields = {
             "failure_kind": info.get("failure_kind"),
             "stderr_tail": info.get("stderr_tail", ""),
         }
+        if "probe_status" in info:
+            fields["probe_status"] = info.get("probe_status")
+            fields["probe_http_status"] = info.get("probe_http_status")
+        return fields
 
     def hit_usage_limit(self):
         return (self.last_session or {}).get("failure_kind") == "usage_limit"
@@ -696,6 +842,11 @@ class Runner:
 
         consecutive_inactive = 0
         consecutive_error = 0
+        # unknown のまま残った死 (プローブでも死因を確定できなかった回) は、
+        # 既知死因の consecutive_error とは別のカウンタで数える (P-0141)。
+        # 閾値は rules.json runner.unknown_error_max_rounds (単一情報源)
+        consecutive_unknown = 0
+        unknown_max = self.rules["runner"]["unknown_error_max_rounds"]
         # レビュー差し戻し (findings) 付きで起動された場合、verify が全 green のままでも
         # 最低 1 セッションは findings 対応を回す。これが無いと品質理由の fail
         # (verify green のまま) に一度も対処せず即 ready_for_review を再宣言してしまう
@@ -743,20 +894,42 @@ class Runner:
                     self.write_result("stalled_inactive", **self.failure_fields())
                     return 1
             elif outcome == "error":
-                consecutive_error += 1
-                if consecutive_error >= 3:
-                    self.write_result(
-                        "error",
-                        error=(
-                            "claude セッションが 3 回連続で異常終了 "
-                            f"(failure_kind={self.failure_fields()['failure_kind']})"
-                        ),
-                        **self.failure_fields(),
-                    )
-                    return 1
+                if (self.last_session or {}).get("failure_kind") == "unknown":
+                    # 上限疑いはプローブが usage_limit に寄せているので、ここに
+                    # 来るのは「上限か実装詰まりか本当に分からない死」だけ。
+                    # 停滞 (stalled) ではなく障害報告の対象 — 閾値を超えたら
+                    # heart の既存配線 (result state "error" → incident 型通知)
+                    # で人間に渡す。送信経路は新設しない
+                    consecutive_unknown += 1
+                    if consecutive_unknown >= unknown_max:
+                        self.write_result(
+                            "error",
+                            error=(
+                                f"セッションが {consecutive_unknown} 回連続で "
+                                "unknown 死 (直後の API プローブでも死因を確定"
+                                "できず)。上限か実装詰まりか不明 — 確認してください"
+                            ),
+                            **self.failure_fields(),
+                        )
+                        return 1
+                else:
+                    # 既知の死因に寄せられた回は unknown 連続を数え直す
+                    consecutive_unknown = 0
+                    consecutive_error += 1
+                    if consecutive_error >= 3:
+                        self.write_result(
+                            "error",
+                            error=(
+                                "claude セッションが 3 回連続で異常終了 "
+                                f"(failure_kind={self.failure_fields()['failure_kind']})"
+                            ),
+                            **self.failure_fields(),
+                        )
+                        return 1
             else:
                 consecutive_inactive = 0
                 consecutive_error = 0
+                consecutive_unknown = 0
 
     # --- review ---
     def mode_review(self):
