@@ -379,3 +379,12 @@ RESTARTS=0 (AGE 61m — 観察起点 16:40:08Z と整合)。CrashLoop の兆し�
 で同じく `immich-postgres-68d65f4b9d-jtbvz` が Running / Ready 1/1 /
 RESTARTS=0 (AGE 62m — 観察起点 16:40:08Z と整合)。CrashLoop の兆しは無し。
 やることは「次のセッションへの一言」から変わらない。
+
+## 2026-08-23T17:47Z (セッション 29、開始 2026-08-23T17:47:11Z)
+
+**観察継続中。** `date -u` で 2026-08-23T17:47:11Z を確認、窓の満了
+(2026-08-24T16:40:08Z) まで約 22.9h 残っているため、最小工数で終える。
+読み取りのみのデータポイント: `kubectl get po -n immich -l app=immich-postgres`
+で同じく `immich-postgres-68d65f4b9d-jtbvz` が Running / Ready 1/1 /
+RESTARTS=0 (AGE 67m — 観察起点 16:40:08Z と整合)。CrashLoop の兆しは無し。
+やることは「次のセッションへの一言」から変わらない。
