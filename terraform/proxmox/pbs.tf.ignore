@@ -39,9 +39,16 @@
 # Sys.Modify 権限を実測済み）が実行する。
 #
 # 確認できていないこと（手順1で埋める）: PBS 自身が保持している backup job 設定・保存済み
-# バックアップの一覧。autopilot はこの in-cluster 実行環境から PBS/Proxmox のどちらにも到達
-# できないため確認できない。issue #56 で構築セッションに確認を依頼した
-# （https://github.com/hikuohiku/homelab/issues/56, T-0116 参照）。
+# バックアップの一覧。P-0142 (2026-08-23) でこの in-cluster 実行環境からの到達性を再実測したが、
+# 改めて「どこからも届かない」ことを確認したのみだった: mcp__proxmox__* ツールが存在しない、
+# 環境変数に PROXMOX_* / PVE_* 系が無い（2026-08-07 実測と同じ結果）、tailscale CLI も無く
+# node01 管理面への経路が無い。よって PVE 側 vzdump backup job も PBS 内部の sync/prune/verify
+# job も一切観測できていない。「無かった」ではなく「見えなかった」。退役可否の verdict は
+# 保守側の keep（実測不能ゆえのデフォルト）とし、再判断条件つきで
+# ops/projects/logs/P-0142/pbs-inventory.json に記録済み（restic 対象との突き合わせ表も同梱、
+# 全行 unobserved）。人間または構築セッション（Coder workspace、T-0107 で PROXMOX_API_TOKEN の
+# Sys.Modify 権限を実測済み）が手順1の確認をした時点で再判断できる。確認依頼は issue #56
+# （https://github.com/hikuohiku/homelab/issues/56, T-0116/P-0142 参照）。
 
 resource "proxmox_virtual_environment_vm" "pbs" {
   name        = "pbs"
