@@ -798,3 +798,56 @@ webhook URL は autopilot-writer SA には読めない (RBAC 実測 Forbidden) �
    判定除外) / on-sync-failed 式の生きた発火検証を追加注入で実施するか否か
    (spec の注入 1 回は消化済みのため要人間裁定)
 3. fired.json / drill fixture は触らない
+
+### セッション 17 (2026-08-23) — 待機状態の全項目再実測 11 回目。merge 未・main tip 据え置き・merge-tree rc=0・controller エラー新規ゼロ。**helm は $HOME/bin に永続していたが PATH 毎回通し直しが必要**
+
+**やったこと**:
+
+1. **merge 状況**: 未 merge (`fetch --prune` 後に `git branch -r --contains` が
+   a08db5a9 で origin/project/p-0139 のみ)。**main tip = c8095f6f で据え置き**
+   (セッション 16 で観測した前進はここで止まった)
+2. **競合確認**: `git merge-tree --write-tree origin/main project/p-0139` が rc=0 —
+   in-memory merge 完走を直接証明
+3. **verify 再実測**: #1 green / #3 = fixture 14 tests OK / #2 の red は既知の
+   `--enable-helm` ゲートのみ (ES ファイル自体は存在) / #4 の red は message_id null のみ
+   (delivered: True は生きている)。fired.json 自体は無傷 (git status でも触っていないことを確認)
+4. **render を本セッションでも再実証**: ただし初手は **rc=1 だった** — 理由は helm バイナリが
+   無いことではなく **`$HOME/bin` がこのセッションの PATH に入っていなかっただけ**
+   (`exec: "helm": executable file not found in $PATH`)。
+   `export PATH="$HOME/bin:$PATH"` で v3.18.4 を拾い、`kubectl kustomize --enable-helm` で
+   rc=0 / 27,222 行 / stderr 0 バイト (セッション 14〜16 と行数一致)。
+   cm data は PyYAML safe_load_all で文書単位に parse して **ちょうど 7 キー** を再確認
+   (context / service.webhook.discord / subscriptions / template.discord-app-degraded /
+   template.discord-app-sync-failed / trigger.on-degraded / trigger.on-sync-failed) /
+   ES discord-webhook render される
+5. **クラスタの merge 前状態が正しいことを再実測**: argocd-notifications-cm data =
+   ['context'] のみ / externalsecret は dex 分のみ Ready=True (discord-webhook 分は未存在) /
+   drill 残骸 (App p-0139-drill・ns p-0139-drill-scratch) とも NotFound
+6. **controller エラー増加ゼロを実測**: pod 名を label で引き直し、`--since-time=
+   2026-08-23T05:20:55Z` (セッション 16 の測定点) で error 0 行 (当該範囲 212 行)。
+   pod restarts=19 据え置き / startedAt=2026-08-03T14:21:14Z で本セッションでの再起動は無し。
+   **次回以降の since-time 起点: 2026-08-23T05:24:46Z**
+7. **App 状態観測**: 全 15 本中 OutOfSync/Healthy は coder / immich / syncthing /
+   vaultwarden の 4 本 (セッション 9 以降据え置き)、version-watcher Synced/Healthy。
+   Degraded はゼロで通知対象外
+
+**分かったこと**:
+
+- **`$HOME/bin/helm` バイナリ自体は sandbox を跨いで永続している** (セッション 5 で置いた
+  v3.18.4 が生きている) が、**PATH はセッションごとに通し直す必要がある**
+  (`export PATH="$HOME/bin:$PATH"`)。PATH を通さずに render すると「helm 無し」エラーになり、
+  「render 不可能になった」と誤認するので注意。まず `ls $HOME/bin` してから諦めること
+- `/tmp/opencode` 書き込み不可・gh CLI 無しは不変 (mktemp 使用は継続)
+
+**次のセッションへの一言 (= やることリスト)**:
+
+1. merge 済みか最初に確認 (`git branch -r --contains a08db5a9`)。merge 済みならクラスタ反映を実測:
+   **argocd-notifications-cm** data が 7 キーちょうど (on-sync-failed は `?.` 付き) /
+   externalsecret argocd-notifications-discord-webhook が SecretSynced /
+   controller error 新規ゼロ (since-time=`2026-08-23T05:24:46Z` 以降を測る) /
+   全 App Healthy 戻り確認
+2. 未 merge ならやることは無い。main が進んでいても merge-tree rc=0 を毎回取り直すこと。
+   裁定事項は不変 3 点: **#2** (sandbox 恒久 red) / **#4** (message_id 人間視認 or
+   判定除外) / on-sync-failed 式の生きた発火検証を追加注入で実施するか否か
+   (spec の注入 1 回は消化済みのため要人間裁定)
+3. fired.json / drill fixture は触らない
