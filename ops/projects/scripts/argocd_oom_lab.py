@@ -27,6 +27,16 @@ P-0196 — argocd OOM lab の構築・計測・判定ツール。
   (values 実測)、post-render フィルタで Deployment と Service を落とした manifest を
   rendered/ 配下にコミットして使う。ランタイムに helm は不要。
 - NetworkPolicy は新チャートのみ 4 個付属するため非対称。公平性のため両系統で適用しない。
+- chart 由来の ServiceAccount/Role/RoleBinding (rendered 各 27 docs 中 15 docs) は
+  autopilot-writer に作れないため、人間が proposed-rbac-for-human.yaml を適用する前提。
+  up 冒頭で admission probe (SA 参照 Pod を 1 個建てる) により適用済みかを検証する —
+  writer は serviceaccounts の get も不可なので直接確認できない (Forbidden ≠ 不存在。
+  セッション 2 の CRD 誤検知と同型の罠)。未適用なら up は即中断し適用コマンドを出す。
+  controller の workload が参照する SA 名は提案 YAML 側 (argocd-lab-application-controller)
+  に apply 時に書き換えて合わせる (提案ファイル自体は既に「提案済み」なので触らない)。
+- AppProject default は chart が作らないため up が各 ns に作る (destinations 自 ns 限定、
+  clusterResourceWhitelist 空 = cluster-scoped 拒否)。無いと reconcile が project 検証で
+  短路する恐れがある (PROGRESS.md セッション 2)。
 
 判定基準 (cmd_verdict):
 - leak            : いずれかの系統で傾き > LEAK_SLOPE_MIB_PER_H が持続、または計測窓内に
@@ -143,9 +153,21 @@ CLUSTER_SCOPED_DROP = {"CustomResourceDefinition", "ClusterRole", "ClusterRoleBi
 DROP_WORKLOAD_LABELS = {"argocd-server", "argocd-applicationset-controller"}
 LABEL_RE = re.compile(r"app\.kubernetes\.io/name:\s*(\S+)")
 
+# writer が作れないため人間適用 (proposed-rbac-for-human.yaml) に外部化する kinds。
+# apply 時に除去しないと kubectl apply の GET で Forbidden になり部分適用が残る
+# (セッション 2 実測)。適用可能なのは 27 docs 中 12 docs。
+EXTERNAL_RBAC_KINDS = {"ServiceAccount", "Role", "RoleBinding"}
 
-def run(cmd, check=True, capture=True):
-    p = subprocess.run(cmd, capture_output=capture, text=True)
+# 人間適用 RBAC が供給する SA 名。workload からの参照はこの集合に正規化して assert する
+SA_CONTROLLER = "argocd-lab-application-controller"
+SA_REPO_SERVER = "argocd-lab-repo-server"
+ALLOWED_SA_REFS = {"default", SA_CONTROLLER, SA_REPO_SERVER}
+SAREF_RE = re.compile(r"serviceAccountName:\s*(\S+)")
+PROBE_POD_NAME = "p0196-rbac-probe"
+
+
+def run(cmd, check=True, capture=True, input=None):
+    p = subprocess.run(cmd, capture_output=capture, text=True, input=input)
     if check and p.returncode != 0:
         raise RuntimeError(f"command failed rc={p.returncode}: {' '.join(cmd)}\n{p.stderr}")
     return p
@@ -171,13 +193,19 @@ def doc_meta(doc):
 
 
 def filter_manifest(text, system_ns):
-    """レンダリング済み manifest からクラスタスコープ物・Secret・無効化 workload を落とす。"""
+    """レンダリング済み manifest から適用対象外を落とす。
+
+    クラスタスコープ物・Secret・無効化 workload に加え、SA/Role/RoleBinding は
+    人間適用の RBAC (proposed-rbac-for-human.yaml) が供給するため除外する。
+    """
     kept, dropped = [], []
     for doc in split_docs(text):
         kind, name, ns = doc_meta(doc)
         drop = False
         if kind in CLUSTER_SCOPED_DROP or kind == "Secret":
             drop = True
+        elif kind in EXTERNAL_RBAC_KINDS:
+            drop = True  # 人間適用分と重複。apply の GET Forbidden を避けるため落とす
         elif kind == "Job":
             drop = True  # redis-secret-init (helm hook) — Secret は ExternalSecret で供給
         elif kind == "NetworkPolicy":
@@ -190,6 +218,104 @@ def filter_manifest(text, system_ns):
         else:
             kept.append(doc.rstrip() + "\n")
     return kept, dropped
+
+
+def align_sa_refs(docs):
+    """workload の serviceAccountName を人間適用 RBAC の SA 名に揃える。
+
+    chart 由来 STS は argocd-application-controller を参照するが提案 YAML は
+    argocd-lab-application-controller を作る (repo-server 提案名は chart 名と一致済み)。
+    提案ファイルは既に「提案済み」のためコード側で合わせる。
+    戻り値: 書換後 docs, 書換リスト [(old, new)]
+    """
+    old2new = {"argocd-application-controller": SA_CONTROLLER}
+    rewritten = []
+    out = []
+    for doc in docs:
+        m = SAREF_RE.search(doc)
+        if m and m.group(1) in old2new and m.group(1) not in ALLOWED_SA_REFS:
+            new = old2new[m.group(1)]
+            doc = SAREF_RE.sub(f"serviceAccountName: {new}", doc, count=1)
+            rewritten.append((m.group(1), new))
+        out.append(doc)
+    return out, rewritten
+
+
+def assert_sa_refs(docs):
+    bad = []
+    for doc in docs:
+        for m in SAREF_RE.finditer(doc):
+            if m.group(1) not in ALLOWED_SA_REFS:
+                kind, name, _ = doc_meta(doc)
+                bad.append(f"{kind}/{name}: serviceAccountName={m.group(1)}")
+    if bad:
+        raise SystemExit("人間適用 RBAC に無い SA への参照が残っている:\n  " + "\n  ".join(bad))
+
+
+def gen_appproject(ns):
+    """chart は default project を作らない。destinations を自 ns に限定した
+    AppProject default を置く (提案 YAML 冒頭コメントの「別レイヤーで塞ぐ」の実装)。"""
+    return f"""apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: default
+  namespace: {ns}
+  labels:
+    app.kubernetes.io/part-of: p0196-argocd-oom-lab
+spec:
+  sourceRepos: ["*"]
+  sourceNamespaces: ["{ns}"]
+  destinations:
+    - server: https://kubernetes.default.svc
+      namespace: {ns}
+  clusterResourceWhitelist: []
+"""
+
+
+def probe_rbac(ns):
+    """lab 用 SA/Role が効いているかを writer の権限内で確かめる。
+
+    serviceaccounts の get ができないため、SA 参照 Pod を 1 個作って admission
+    (ServiceAccount プラグイン) に存在判定を委ねる。SA が無ければ create 自体が
+    拒否され 'serviceaccount ... not found' が返る。戻り値: (ok, message)。
+    ok 時に生成した probe pod は呼び出し側が削除する。
+    """
+    probe = f"""apiVersion: v1
+kind: Pod
+metadata:
+  name: {PROBE_POD_NAME}
+  namespace: {ns}
+  labels:
+    app.kubernetes.io/part-of: p0196-argocd-oom-lab
+spec:
+  serviceAccountName: {SA_CONTROLLER}
+  restartPolicy: Never
+  containers:
+  - name: pause
+    image: registry.k8s.io/pause:3.10
+"""
+    r = run(["kubectl", "create", "-f", "-", "--dry-run=client"],
+            check=False, input=probe)  # まず構文確認 (クラスタ非接触)
+    if r.returncode != 0:
+        return False, f"probe manifest が不正: {r.stderr}"
+    r = run(["kubectl", "create", "-f", "-"], check=False, input=probe)
+    if r.returncode != 0:
+        err = r.stderr.strip()
+        if "serviceaccount" in err.lower() and "not found" in err.lower():
+            return False, f"{ns}: SA '{SA_CONTROLLER}' が無い — lab 用 RBAC 未適用"
+        return False, f"{ns}: probe pod の作成に失敗 (想定外): {err}"
+    kubectl("delete", "pod", PROBE_POD_NAME, "-n", ns,
+            "--ignore-not-found=true", "--wait=true")
+    return True, f"{ns}: admission probe 通過 — RBAC 適用済み"
+
+
+def wait_ns_gone(ns, timeout_s=60):
+    deadline = datetime.datetime.now() + datetime.timedelta(seconds=timeout_s)
+    while datetime.datetime.now() < deadline:
+        if kubectl("get", "namespace", ns, check=False).returncode != 0:
+            return True
+        run(["sleep", "3"])
+    return False
 
 
 def load_rendered(system):
@@ -316,6 +442,11 @@ def cmd_plan(_args):
     for s in SYSTEMS:
         a(f"  {s['key']:<5} {s['ns']:<16} {s['chart']:<8} {s['app']:<8} cpu 500m / mem 1Gi")
     a("")
+    a("## 前提 (人間の一手)")
+    a("  - proposed-rbac-for-human.yaml の適用 (lab ns x2 + SA x2/ns + Role/RoleBinding)。")
+    a("    writer は RBAC を作れない (設計)。up 冒頭で admission probe により適用済みかを")
+    a("    自動判定し、未適用なら中断して適用コマンドを出す")
+    a("")
     a("## 作成するオブジェクト")
     a(f"  - Namespace x2            : {NS_OLD}, {NS_NEW}")
     a("  - ExternalSecret x4       : 各系統 2 本。ESO (既存 ClusterSecretStore doppler 参照)")
@@ -324,16 +455,24 @@ def cmd_plan(_args):
     a("                              実 credential は使わない (template 固定値)")
     for s in SYSTEMS:
         try:
-            _, n = load_rendered(s)
-            a(f"  - rendered objects x{n:<3} : {s['ns']} ({s['file']} — post-filter済み・helm不要)")
+            path, n = load_rendered(s)
+            kept, dropped = filter_manifest(path.read_text(), s["ns"])
+            n_ext = sum(1 for d in dropped if d.split("/")[0] in EXTERNAL_RBAC_KINDS)
+            a(f"  - rendered objects x{len(kept):<3}: {s['ns']} ({s['file']} — 全 {n} docs 中")
+            a(f"                              SA/Role/RoleBinding {n_ext} は人間適用分のため除外)")
         except SystemExit as e:
             a(f"  - rendered objects      : {e}")
+    a("  - AppProject default x2   : 各系統 1 本。destinations を自 ns に限定、")
+    a("                              clusterResourceWhitelist 空 = cluster-scoped 拒否")
     a(f"  - Application x{APPS_PER_SYSTEM * 2:<3}: 各系統 {APPS_PER_SYSTEM} 本 (両系統同一定義)")
     a("")
     a("## 意図的に作らないもの (実測に基づく除外)")
     a("  - Secret 直適用           : autopilot-writer に create secrets 不可 (can-i 実測 no)")
     a("  - CRD                     : クラスタスコープ。本番の applications.argoproj.io 等を流用")
     a("  - ClusterRole/Binding     : 同上。名前空間 Role のみで運用できる設計にする")
+    a("  - SA/Role/RoleBinding     : writer に作れない (rbac.authorization.k8s.io 不付与 =")
+    a("                              「自分の権限を自分で広げる経路を作らない」)。人間適用の")
+    a("                              proposed-rbac-for-human.yaml が供給するため除外")
     a("  - server/appset Deployment: chart 9.1.6 に enabled スイッチ無し (values 実測) につき")
     a("                              post-render フィルタで除去済み")
     a("  - NetworkPolicy           : 新チャートのみ付属 (4 個)。非対称なので両系統で不使用")
@@ -361,9 +500,10 @@ def cmd_plan(_args):
     a("  - 不判定               : verdict.json を書かず非 0 終了 (無理な分類をしない)")
     a("")
     a("## up の前段チェック (up 実行時に確認)")
-    a("  - kubectl auth can-i create/delete namespaces")
+    a("  - kubectl auth can-i create/delete namespaces, create appprojects")
     a("  - node01 の空き (top nodes): MEM 使用率 90% 超で警告、95% 超で中断")
     a("  - CRD 存在確認 (applications/appprojects/applicationsets.argoproj.io)")
+    a("  - lab 用 RBAC 適用済み確認 (admission probe — get sa 不可のため直接確認は不可能)")
     a("  - rendered manifest の禁止オブジェクト混入チェック (load_rendered)")
     a("")
     a("## 削除計画 (down)")
@@ -377,6 +517,9 @@ def preflight():
         problems.append("namespace の作成権限がない")
     if kubectl("auth", "can-i", "delete", "namespaces").stdout.strip() != "yes":
         problems.append("namespace の削除権限がない (lab の掃除ができない)")
+    if kubectl("auth", "can-i", "create",
+               "appprojects.argoproj.io").stdout.strip() != "yes":
+        problems.append("appproject の作成権限がない (project 検証を通せない)")
     # CRD の get/list は autopilot-writer に許可されていない (Forbidden = 存在しない
     # ではない)。discovery API 経由なら全認証済み主体が見えるので api-resources で確認する
     api_res = run(["kubectl", "api-resources", "--api-group=argoproj.io"],
@@ -403,13 +546,26 @@ def cmd_up(_args):
     sha, paths = resolve_source_paths()
     state = {"source_sha": sha, "paths": paths,
              "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
-    (LAB_ROOT / "lab-state.json").write_text(json.dumps(state, indent=2))
     print(f"[source] sha={sha[:12]} paths={len(paths)}: {', '.join(paths)}")
 
+    # lab-state.json は RBAC probe 通過後まで書かない (未適用のまま中断したとき
+    # verdict の source_sha 参照が汚れる — セッション 2 の後始末で判明)
     with tempfile.TemporaryDirectory(prefix="p0196-up.") as td:
         for s in SYSTEMS:
             ns = s["ns"]
-            run(["kubectl", "create", "namespace", ns], check=False)  # 既存なら無視
+            created_here = kubectl("create", "namespace", ns, check=False).returncode == 0
+            ok, msg = probe_rbac(ns)
+            if not ok:
+                if created_here:
+                    kubectl("delete", "namespace", ns, "--ignore-not-found=true")
+                    wait_ns_gone(ns)
+                    print(f"[cleanup] 自分が今作った空 namespace {ns} を削除")
+                raise SystemExit(msg + "\n"
+                                 "  人間が次を適用するのを待つ (トークン複製等の自動回避はしない):\n"
+                                 "    kubectl apply -f ops/projects/logs/argocd-oom-lab/"
+                                 "proposed-rbac-for-human.yaml")
+            print(f"[rbac] {msg}")
+
             es_path = Path(td) / f"es-{ns}.yaml"
             es_path.write_text(
                 external_secret_yaml(ns, "argocd-secret",
@@ -420,6 +576,8 @@ def cmd_up(_args):
                 external_secret_yaml(ns, "argocd-redis",
                                      [("auth", REDIS_PASSWORD_DUMMY)]))
             run(["kubectl", "apply", "-f", str(es2_path)])
+
+    (LAB_ROOT / "lab-state.json").write_text(json.dumps(state, indent=2))
 
     print("[secrets] ExternalSecret 適用済み — Ready 待ち...")
     for s in SYSTEMS:
@@ -436,9 +594,30 @@ def cmd_up(_args):
                 raise SystemExit(f"{s['ns']}/{target} が synced にならない")
 
     for s in SYSTEMS:
-        path, n = load_rendered(s)
-        run(["kubectl", "apply", "-n", s["ns"], "-f", str(path)])
-        print(f"[apply] {s['ns']}: {n} objects")
+        ns = s["ns"]
+        path, n_total = load_rendered(s)
+        kept, dropped = filter_manifest(path.read_text(), ns)
+        kept, rewritten = align_sa_refs(kept)
+        assert_sa_refs(kept)
+        filtered = Path(tempfile.mkstemp(prefix=f"p0196-filtered-{ns}.")[1])
+        try:
+            filtered.write_text("\n---\n".join(kept))
+            run(["kubectl", "apply", "-n", ns, "-f", str(filtered)])
+        finally:
+            filtered.unlink()
+        n_ext = sum(1 for d in dropped if d.split("/")[0] in EXTERNAL_RBAC_KINDS)
+        print(f"[apply] {ns}: {len(kept)} objects "
+              f"(SA/Role/RoleBinding {n_ext} は人間適用分のため除外"
+              + (f"、SA 参照を書換: {', '.join(f'{a}->{b}' for a, b in rewritten)}"
+                 if rewritten else "") + ")")
+
+    for s in SYSTEMS:
+        ns = s["ns"]
+        with tempfile.TemporaryDirectory(prefix="p0196-proj.") as td:
+            p = Path(td) / "appproject.yaml"
+            p.write_text(gen_appproject(ns))
+            run(["kubectl", "apply", "-f", str(p)])
+        print(f"[project] {ns}: AppProject default (destinations 自 ns 限定)")
 
     apps = gen_applications(sha, paths)
     with tempfile.TemporaryDirectory(prefix="p0196-apps.") as td:
@@ -635,6 +814,9 @@ def cmd_verdict(_args):
 
 
 def cmd_status(_args):
+    r = kubectl("get", "namespaces", "-o", "name", check=False).stdout
+    labs = [l.strip() for l in r.splitlines() if "argocd-lab" in l]
+    print("lab namespaces: " + (", ".join(labs) if labs else "無し (down 済み or 未構築)"))
     try:
         series = read_series()
     except SystemExit as e:

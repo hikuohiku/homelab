@@ -159,3 +159,63 @@ verbs:* 済み。chart は default project を作らないため、無いと rec
 3. サンプリング期間中は lab namespace を消さない (人間権限の SA/RBAC も一緒に消えるので
    再適用が必要になる)。down は全サンプル収集後のみ。
 4. verify 第 1 項 (--plan) は本セッション終了時点でも green (preflight 修正後に再実行済み)。
+
+## セッション 3 — 2026-08-23: 人間適用の有無を権限内で自動判定できるようにし、up を「適用された瞬間に一本通る」状態まで完成させた
+
+### やったこと
+
+1. 引き継ぎどおり RBAC 適用状況を確認したところ、**前セッションの引き継ぎに書かれた検出方法
+   (`kubectl get sa ...` が通れば適用済み) は原理的に不可能だった**: autopilot-writer は
+   serviceaccounts の get 自体を持たないため、**適用済みでも常に Forbidden になる**。
+   実際の適用判定は `kubectl get ns argocd-lab-916` (writer は namespaces verbs:*) で行い、
+   **未適用 (lab ns 非存在) を確認**。ついでに can-i を全域で実測し直した:
+   serviceaccounts / roles / rolebindings / secrets の create・get がすべて no、さらに
+   localsubjectaccessreviews の create も impersonate も no。→ SA 存在の直接・間接確認は
+   ほぼ全手段が閉じている。
+2. そこで **admission probe** を実装: SA 参照の Pod を 1 個作らせ、存在判定を ServiceAccount
+   admission プラグインに委ねる (SA 無ければ create 自体が拒否され 'serviceaccount ...
+   not found' が返る)。これを `up` 冒頭に組み込み、未適用なら自分が今作った空 ns を掃除して
+   適用コマンド付きで即中断するようになった。
+3. 前セッションの残課題 (1)(2)(3) をすべてスクリプト側に実装:
+   - rendered 27 docs 中 writer が適用できるのは **12 docs** (ConfigMap7/Service2/
+     Deployment2/STS1)。SA5/Role5/RoleBinding5 は人間適用分と重複するため **apply 時に除外**
+     (除外しないと apply の GET Forbidden で部分適用が残る — セッション 2 実測の再発防止)。
+   - chart 由来 STS の `serviceAccountName: argocd-application-controller` を提案 YAML の
+     SA 名 (`argocd-lab-application-controller`) に apply 時に書換。逆 (提案ファイルを直す)
+     にしなかったのは提案が既に「提案済み」だから。残存参照が許可集合
+     {default, argocd-lab-application-controller, argocd-lab-repo-server} 外なら assert で落とす。
+   - AppProject default x2 を up が生成 (destinations 自 ns 限定 + clusterResourceWhitelist 空
+     = cluster-scoped 拒否)。preflight に appprojects 作成権限チェックも追加。
+   - lab-state.json の書き込みを probe 通過後へ移動 (未適用中断時に state が残って verdict の
+     source_sha 参照を汚す — セッション 2 の後始末で判明した問題の構造的解消)。
+4. 自己テストを実機で実施: --plan オフライン green (rc=0) / probe 負例 (SA 無し ns で期待
+   メッセージどおり拒否・pod 残置なし) / **up 本番経路の中断動作** (ns 作成→probe 失敗→空 ns
+   掃除→rc=1、lab-state.json 未書込、残置ゼロ)。テスト用 temp ns (p0196-probe-selftest) は
+   削除済み。
+
+### 分かったこと
+
+- **Forbidden ≠ 不存在の罠は CRD (セッション 2) だけではなかった**。「get できない資源の
+  存在確認」が必要になったら discovery か admission など、別の面から当たるしかない。
+  存在確認手段を持たないチェック項目を引き継ぎに書くのは次セッションの時間を溶かす。
+- kubectl create は apply と違って GET を要しない。ただし今回の壁 (RBAC リソース群) は
+  create 権限自体がないのでこの差は救いにならず。権限不足の切り分けでは
+  「apply 失敗 = get 不足かもしれない」「create 失敗 = 真に create 不可」と分解して考える。
+- pause イメージ等の Pod を 1 個建てる admission probe は「リソース X の存在確認権限がない」
+  問題の汎用解になりうる (X を参照するオブジェクトを作れるなら)。
+
+### 次セッションへの引き継ぎ
+
+1. **RBAC 適用の有無は自分で判定しない。そのまま `python3 ops/projects/scripts/argocd_oom_lab.py up` を叩く。**
+   適用済みなら ESO 待ちまで進んで Application 投入まで完了する。未適用なら空 ns を自力で
+   掃除して rc=1 で中断し、人間への適用依頼メッセージを出す (残置ゼロ確認済みなので
+   後片付け不要)。回避策は打たないこと (セッション 2 の決定を引き継ぐ)。
+2. up 成功後はセッション 1 の手順に戻る: sample (--note 付き) → CSV commit の繰り返し。
+   15 分間隔 × 4 時間窓、各系統 ≥8 サンプルで verdict。**セッション跨ぎ前提**で、
+   各セッション冒頭で sample 1 回叩いて commit すること (長時間 sleep での待ち合わせ禁止)。
+3. sample の phase 列が Running 以外続きなら `kubectl describe pod -n argocd-lab-916` で原因確認。
+   controller が CrashLoop する場合、まず RoleBinding の subjects と workload の
+   serviceAccountName の不一致を疑う (本セッションで書換済みだが、chart 再 render 時は要再確認)。
+4. verify 第 1 項 (--plan) は本セッション終了時点でも green。第 2 項 (verdict.json) は
+   サンプリング完了まで failing のままで正常。
+5. status サブコマンドが lab ns の有無も表示するようになった (CSV 無しでも診断に使える)。
