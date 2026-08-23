@@ -500,3 +500,67 @@ P-0187 1.5M / P-0192 500k / P-0193 1M / P-0196 4.5M の長尺死待ちと P-0092
 P-0188 がレビュー差し戻しで active に戻る経路もある。予算死の遡及列挙は
 `git log -S'"budget_exhausted"' origin/ops-state -- projects.json` で行うこと
 (セッション15 再実測。--since ループより速い)。
+
+## セッション16 の記録 (2026-08-23 13:31–13:47Z)
+
+**やったこと**: ops-state 監視 + **構造的デッドロックの発見と解析** (下記「発見」)。
+冒頭 fetch → head a8bd542de を refs/pull 照合 (0 件) → c353eca55 が origin/main 未含も確認
+(main は #540 のまま) → 約 4.5 分待機 ×2 を挟んで 3 回確認したが変化無し。
+verify 1〜3 を再実測 green (15 tests OK)。runner.py の PR 作成ゲートを実読し、
+「なぜ PR が開かないのか」を構造で確定させた。本ファイル追記 + commit して終了。
+
+### 発見: 本プロジェクトは verify 4 が wrapper 経由では永遠に green にならない (デッドロック)
+
+- runner.py:861-865 — worker ループは `verify が全項目 ok` のときだけ `ensure_pr()` を呼ぶ。
+  未達なら次の worker セッションを spawn する。つまり **PR 未開は「人間がまだ見ていない」ではなく
+  「wrapper が作れない」を意味する**
+- 一方 verify 4 (`test -s resume-evidence.json`) の中身は「この経路 (継続レーン) を通った実遷移」。
+  継続コードは project/p-0182 ブランチ上にのみ存在し、本番 heart は main で稼働するので、
+  **merge 前にこの遷移は原理的に発生しない**
+- よって三重拘束: 証跡 ← merge 後のみ / merge ← 人間レビュー後のみ / 人間レビュー ← PR 後のみ /
+  PR ← 証跡込みで全 green 後のみ。**循環が閉じていて、何もしない限り 1 ステップも進まない**
+- 前例対比: P-0026 / P-0027 / P-0047 も「merge 後に確認」項目を持ったが、それらは PROGRESS への
+  引き継ぎメモとして残し verify コマンドには含めなかった → ready_for_review に到達できた。
+  本案は DoD (4) がそのまま verify 配列に入っている点が構造的に異なる (spec 作成時の混入と推定)
+- 解消オプション (いずれも worker 権限外。curriculum / 人間の判断に委ねる):
+  (a) 人間が project/p-0182 から手動で PR を開きレビュー・merge → merge 後の自然予算死を
+  後続セッションが観測して resume-evidence.json を書く (ensure_pr は open PR 再利用 +
+  差分は証跡コミットのみになる)
+  (b) 手動再採択 (P-0114/115/116 と同じ三重奏) で verify 4 を前例型
+  「merge 後確認を PROGRESS 引き継ぎに落とす」形式へ修正
+  (c) wrapper 側変更 (残り failing が「merge 後証跡」型の場合のみ PR 作成を許可) — 器の改修なので最重量
+- リスク共有: 待機を続ける本プロジェクト自身が soft_cap 1.5M の予算死を起こすと、
+  merge 前の旧挙動で stalled 化し、本案が直したがっている集合の新規メンバーになる。
+  checkpoint セッションでの PROGRESS 退避は常に最新に保つこと
+- issue #56 への直接コメントは検討したが採らない: 外部サービスへの書き込みで spec が明示していない
+  (worker 規約「疑わしければやらずに PROGRESS に書く」)
+
+**盤面の実測 (13:31Z / 13:37Z / 13:43Z の 3 回)**:
+
+- `continuation_count` の出現は projects.json 全 70 エントリで 0 のまま (上記デッドロックにより
+  merge が構造的に来ないため当然。以後この行は「merge 検知」ではなく「main 取り込み検知」の補助に格下げ)
+- heart は生存: beat 280 @ 13:28:51Z → beat 287 @ 13:37:45Z → beat 291 @ 13:42:57Z
+  (ビート約 70 秒間隔を維持)
+- **今日の予算死は増えていない**: 遡及の最終出現は ff300b0bf @ 09:35:24Z (= P-0161 の死) のまま、
+  以後 4 時間超新規無し
+- states 実測: stalled 33 / delivered 29 / active 5 / vetoed 2 / announced 1。
+  **P-0188 が review_rejected で stalled 化** (13:17:33Z consume_result→spawn_reviewer、
+  13:28:51Z consume_review、review_cycles 3、stalled_reason=review_rejected を projects.json で実読)。
+  **予算死では無いので証跡候補から脱落**。同ビートで notify + spawn_curriculum を audit 実視
+- actives = P-0182 (自枠, 1.5M) + P-0187 1.5M / P-0192 500k / P-0193 1M / P-0196 4.5M
+  (全員ブランチ出現済み)。budget-dead stalled 集合は 9 件のまま不変
+  (P-0080/0102/0116/0139/0142/0143/0144/0157/0161)
+- 人間の活動兆候: 変化なし (main は #540 のまま)
+
+**次のセッションへの一言**: 監視対象を読み替えること — **merge 信号は「c353eca55 が
+origin/main に含まれる」または「refs/pull に自ブランチ head SHA 出現」(人間の手動 PR)** の
+2 つだけ。wrapper からの PR は構造的に来ない (上記「発見」参照。毎セッションこの節を読むこと)。
+merge 済みを検知したら遡及レシピ
+(`git log -S'"budget_exhausted"' origin/ops-state -- projects.json` で予算死を列挙 →
+各死の時刻が merge 時刻より後なら continuation_count / proposed 戻しを
+`git show origin/ops-state:projects.json` で確認 → 実遷移 1 件以上を
+resume-evidence.json に出典 commit SHA つきで記録) に切り替える。
+未 merge の間は待機 1〜2 回 + 観測事実の追記のみで終えてよいが、**自枠の予算残量が尽きる
+方向にいることを前提に、毎セッション確実に PROGRESS を push して終わること**。
+証跡機会の供給源: actives 4 案 (P-0187 1.5M / P-0192 500k / P-0193 1M / P-0196 4.5M) の
+長尺死と P-0092 (announced, 3M) の active 化。最有力は P-0196 のまま。
