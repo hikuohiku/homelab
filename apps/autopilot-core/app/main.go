@@ -383,7 +383,21 @@ func (c *client) waitForOpencode(ctx context.Context) {
 	}
 }
 
+// main は 2 つのモードを持つ。
+//
+//	(引数なし) — driver: inbox を見張ってコアに話しかける常駐ループ
+//	mcp        — コアの「目」。homelab_status / homelab_health を MCP で提供する
+//
+// 同じバイナリに同居させるのは、GitHub の読み方と設定の解釈を一箇所に保つため。
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		runMCP()
+		return
+	}
+	runDriver()
+}
+
+func runDriver() {
 	log.SetFlags(0)
 	log.SetPrefix("[core-driver] ")
 

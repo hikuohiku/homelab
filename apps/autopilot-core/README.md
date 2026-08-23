@@ -5,10 +5,27 @@
 
 ## v0 の範囲
 
-**所有者の書き置きに、文脈を保ったまま Telegram で直接返事をする。それだけ。**
+**所有者の書き置きに、文脈を保ったまま Telegram で直接返事をする。**
+状態を聞かれたら実際に見て答える（読み取りのみ）。
 
 実装・merge・Job の起動はしない（heart の担当のまま）。opencode の `permission` で
 `edit` と `bash` を拒否しているので、器のレベルで着手できない。
+
+## コアの持ちもの
+
+| MCP ツール | 提供 | できること |
+|---|---|---|
+| `telegram_reply` | `telegram-adapter mcp` | 所有者へ DM を送る（宛先は固定） |
+| `homelab_status` | `core-driver mcp` | autopilot 自身の状態（走行中エージェント / プロジェクト / 要対応 / 心拍 / 当日消費） |
+| `homelab_health` | `core-driver mcp` | ArgoCD Application / Pod / PVC / Node の健全性 |
+
+観測ツールは**どちらも引数を取らない**。汎用の HTTP fetch や kubectl を与えるのではなく、
+用途を固定した窓を開けるだけにしてある。到達先を設定ではなくコードで縛るため。
+新しい credential も RBAC も要らない（status はクラスタ内の ops-dashboard、
+health は既存の GitHub トークンで `ops-health-report` ブランチを読む）。
+
+取得に失敗したときは `isError` で返す。握り潰すと、コアが「取れなかった」を
+「異常なし」と取り違えるため。
 
 ```
 telegram-adapter / ダッシュボード → ops-feedback の inbox
