@@ -171,3 +171,62 @@ worker セッションごとに追記する。書式は自由だが、証跡 (�
    render_seeds_section() の沈黙文には送信日「2026-08-23」が固定で焼かれている
    (`ops/tools/wish_seeds.py`)。実際の送信日と違う場合は seeds.md 反映時に
    その場で正直に書き換えること (コードは触らない)
+
+## セッション 4 (worker, 2026-08-23)
+
+### やったこと: 送信手順を読解から裏付けに格上げ (justfile 実装 + 全 manifest 照合) と、残る送信経路の完全否定
+
+- **環境再実測**: hostname `runner-p-0192-a1-jfgr8` でセッション 3 と同一 pod 構成。
+  AUTOPILOT_GITHUB_TOKEN のみ在り / TELEGRAM 系無し / SA token 未 mount に加え、
+  **kubeconfig・doppler CLI・tailscale・ARGOCD_* env も全て無い**ことを追加実測。
+  `.github/workflows` 9 本すべて `runs-on: ubuntu-latest` (GitHub ホスト型) で
+  in-cluster のセルフホストランナーは存在しない → **Actions 経由の送信経路も否定**。
+  送信不可が 3 セッション連続で確定し、可能性の列挙はこれで尽きた
+- リモート再実測: origin/project/p-0192 = local HEAD (`bfc7bc551`)、evidence /
+  pending 未着 = **Job はまだ一度も走っていない**。main 遅れ 0
+  (merge-base = origin/main 先頭 `98202cea5`、merge 不要)。inbox 基準線不変 (note 4 件)
+- 本セッションの本体: セッション 3 が「読解に過ぎない」と自認していた 2 段階 preview 手順を、
+  **実 manifest の全照合**で検証した (クラスタ実行は依然不可だが、根拠は全部ファイルになった):
+  - ルート `apps/apps.yaml` 実読: `syncPolicy.automated {prune:true, selfHeal:true}` 確定。
+    → 手順 2 (`just preview wish-seeds`) 冒頭で justfile がルート auto-sync を**明示削除**
+    しているのは必須動作 (無いと selfHeal が子への patch を即座に打ち消す)。
+    順序設計は justfile 実装と一致しており正しい
+  - 子 `apps/wish-seeds/application.yaml` 実読: **子自身も
+    `automated {prune:true, selfHeal:true}` を持つ** → 手順 2 の targetRevision 差し替え後、
+    **手動 sync は不要**。向き替えだけで子が自動 sync し Job が走る。
+    「Pod 起動を目視」は ArgoCD UI で良く、待ちは数秒〜数十秒のはず
+  - 副作用の予告 (正常・驚かないこと): 手順 1〜2 の間、子 wish-seeds は HEAD=main の
+    path 未存在を掴むため degraded/error 表示になる (子の自動 sync が空を叩くだけ)。
+    一時的で害なし
+  - reset 収束の正確な機構: `preview-reset apps` 単独では root auto-sync を復元**しない**
+    (justfile 実装どおり)。復元するのは `preview-reset wish-seeds` (= 子リセット) の方。
+    両方実行すればどちらの順でも収束するが、セッション 3 推奨順 (子→root) を守れば
+    各ステップ後の中間状態が常に宣言通りで安全
+  - job.yaml 再確認: Force=true,Replace=true あり / ttlSecondsAfterFinished 意図的に無し /
+    automountServiceAccountToken:false / Secret 3 キー — PROJECT.md 作り方 1・2 の要件を
+    manifest で充足確認。run_ask.py は HEAD から未変更、ConfigMap コピーは ops/tools と
+    diff 一致を再実測
+- unittest 再実測 (全 green): test_wish_seeds 16 / test_wish_seeds_job 22 /
+  validate.py 0 error (warning 11 は既存分)。コードは本セッション 1 行も触っていない
+
+### 分かったこと / 発見
+
+- **wrapper の verify 測定罠 (重要)**: wrapper はローカル working tree を測る。
+  Job が証跡を書く先は Contents API 経由の **origin/project/p-0192 ブランチ**なので、
+  次セッションが `git fetch` + merge するまで verify 1・2 は red のまま。
+  「Job は走ったのに wrapper が green にならない」状態は正常。fetch+merge を最優先でやる
+- P-0175 の頃は worker セッションがクラスタ実測できていた (dd45ceb46) が、今の runner pod
+  には SA token も kubeconfig も無い。ランナー環境は時期により異なるようなので、
+  次セッションでも最初に 30 秒かけて再実測すること (固定観念で「不可能」と決めつけない)
+
+### 次のセッションへ
+
+1. 冒頭で `git fetch && git ls-tree origin/project/p-0192 -- ops/projects/logs/P-0192/`。
+   ask-evidence.json が乗っていれば merge/fast-forward して verify 1・2 を green 化
+   (上記の wrapper 測定罠参照)。pending だけ乗って evidence 無しの場合は Job 失敗の可能性 →
+   `kubectl logs -n autopilot job/wish-seeds-ask` 相当の確認を人間に依頼 (rc=1 で騒ぐ設計。
+   黙って pending だけ残るのは「送信したが証跡前死」なので二重送信歯止めが働き送られない)
+2. evidence 到着後は返信待ち → seed 化 (セッション 1・3 記載どおり。triage 後
+   review_needed のみ昇格、沈黙は実際の送信日を正直に書いて記録)
+3. 人間への依頼文面はセッション 3 の 3 ステップで確定済み (本セッションで裏付け完了)。
+   PROGRESS を読んだ人はそれを実行すれば良い。worker 側に残された作業はなし
