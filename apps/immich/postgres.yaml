@@ -36,18 +36,132 @@ spec:
       securityContext:
         fsGroup: 999
       initContainers:
+        # 16.14 系は ENTRYPOINT を持たない (CMD ["bash"]) ので、command: ["postgres"]
+        # を明示した時点で docker-entrypoint.sh の chmod 00700 が経路ごと消える
+        # (docs/immich-postgres-upgrade.md 原因 A)。fsGroup 999 は Pod が作り直される
+        # たびに PGDATA を 2770 に戻す (fsGroupChangePolicy 既定 Always) ので、chmod は
+        # 毎回必要。**chown と chmod を && で 1 本に繋がないこと** — PVC 新規作成直後
+        # (= 災害復旧そのもの) は PGDATA がまだ無く chmod が exit 1 し、後続の
+        # init-bootstrap が一度も走らないまま Init:CrashLoopBackOff から自然回復しない
+        # (空 PVC で実測、Job p-0035-rehearsal-bootstrap)。
         - name: init-permissions
           image: busybox:1.38.0
           terminationMessagePolicy: FallbackToLogsOnError
-          command: ["sh", "-c", "chown -R 26:999 /var/lib/postgresql/data"]
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              chown -R 26:999 /var/lib/postgresql/data
+              if [ -d /var/lib/postgresql/data/pgdata ]; then
+                chmod 0700 /var/lib/postgresql/data/pgdata
+              else
+                echo "PGDATA does not exist yet; leaving chmod to the bootstrap path"
+              fi
           securityContext:
             runAsUser: 0
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+        # 災害復旧経路 (#257 / P-0035 Job 4 で実測済みの形)。16.14 系イメージには
+        # initdb ブートストラップが無いので、PGDATA が空 (PG_VERSION が無い) ときだけ
+        # initdb → createdb → CREATE EXTENSION vchord をここで行う。既存 PVC なら即 skip。
+        # このイメージ自身で初期化するのでカタログは最初から vchord 1.1.1 になる。
+        - name: init-bootstrap
+          image: ghcr.io/tensorchord/cloudnative-vectorchord:16.14-1.1.1
+          terminationMessagePolicy: FallbackToLogsOnError
+          command:
+            - bash
+            - -c
+            - |
+              set -u
+              if [ -s "$PGDATA/PG_VERSION" ]; then
+                echo "PGDATA already initialized, skip bootstrap"
+                exit 0
+              fi
+
+              LOGFILE=/tmp/pg-bootstrap.log
+              : > "$LOGFILE"
+              T0=$(date +%s)
+
+              initdb --username="$POSTGRES_USER" --pwfile=<(printf '%s\n' "$POSTGRES_PASSWORD") $POSTGRES_INITDB_ARGS -D "$PGDATA" >>"$LOGFILE" 2>&1
+              INITDB_RC=$?
+              if [ "$INITDB_RC" -ne 0 ]; then
+                echo "bootstrap failed: initdb_rc=$INITDB_RC"; cat "$LOGFILE"
+                exit 1
+              fi
+
+              echo "host all all all scram-sha-256" >> "$PGDATA/pg_hba.conf"
+
+              pg_ctl -D "$PGDATA" -o "-c listen_addresses='' -c unix_socket_directories=/tmp -p 5432" -w start >>"$LOGFILE" 2>&1
+              BOOT_START_RC=$?
+              if [ "$BOOT_START_RC" -ne 0 ]; then
+                echo "bootstrap failed: boot_start_rc=$BOOT_START_RC"; cat "$LOGFILE"
+                exit 1
+              fi
+
+              CREATEDB_RC=0
+              if [ "$POSTGRES_DB" != "postgres" ]; then
+                createdb --username="$POSTGRES_USER" --host=/tmp "$POSTGRES_DB" >>"$LOGFILE" 2>&1
+                CREATEDB_RC=$?
+              fi
+              pg_ctl -D "$PGDATA" -w stop >>"$LOGFILE" 2>&1
+              if [ "$CREATEDB_RC" -ne 0 ]; then
+                echo "bootstrap failed: createdb_rc=$CREATEDB_RC"; cat "$LOGFILE"
+                exit 1
+              fi
+
+              pg_ctl -D "$PGDATA" -o "-c listen_addresses=* -c unix_socket_directories=/tmp -c shared_preload_libraries=vchord.so -p 5432" -w start >>"$LOGFILE" 2>&1
+              START_RC=$?
+              if [ "$START_RC" -ne 0 ]; then
+                echo "bootstrap failed: start_rc=$START_RC"; cat "$LOGFILE"
+                exit 1
+              fi
+
+              PGPASSWORD="$POSTGRES_PASSWORD" psql -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB" -c "CREATE EXTENSION IF NOT EXISTS vchord CASCADE;" >>"$LOGFILE" 2>&1
+              EXT_RC=$?
+              pg_ctl -D "$PGDATA" -w stop >>"$LOGFILE" 2>&1
+              if [ "$EXT_RC" -ne 0 ]; then
+                echo "bootstrap failed: extension_rc=$EXT_RC"; cat "$LOGFILE"
+                exit 1
+              fi
+
+              echo "bootstrap succeeded in $(( $(date +%s) - T0 ))s"
+              echo "--- pg-bootstrap.log ---"; cat "$LOGFILE"
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 26
+            runAsGroup: 999
+            allowPrivilegeEscalation: false
+            seccompProfile:
+              type: RuntimeDefault
+          env:
+            - name: POSTGRES_USER
+              value: immich
+            - name: POSTGRES_DB
+              value: immich
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: immich-postgres-credentials
+                  key: password
+            - name: POSTGRES_INITDB_ARGS
+              value: "--data-checksums"
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
       containers:
         - name: postgres
-          image: ghcr.io/tensorchord/cloudnative-vectorchord:16.9-0.4.3
+          image: ghcr.io/tensorchord/cloudnative-vectorchord:16.14-1.1.1
           terminationMessagePolicy: FallbackToLogsOnError
           # このイメージは CloudNativePG operand イメージ (postgres-containers)
           # を継承しており、ベースの Debian postgres ユーザー (UID/GID 999) に
@@ -60,6 +174,9 @@ spec:
             allowPrivilegeEscalation: false
             seccompProfile:
               type: RuntimeDefault
+          # 16.14-1.1.1 には ENTRYPOINT が無い。command を明示しないと args の先頭 -c が
+          # コマンド名に解釈され exec: "-c": executable file not found で落ちる (#244)。
+          command: ["postgres"]
           args:
             - -c
             - shared_preload_libraries=vchord.so
@@ -82,6 +199,10 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+            # イメージ内の /var/run/postgresql は mode 2775 owner 100:102 で uid 26 から
+            # 書けず、unix socket の lock file が作れない (docs 原因 B)。
+            - name: postgres-run
+              mountPath: /var/run/postgresql
           resources:
             requests:
               cpu: 100m
@@ -109,6 +230,11 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: immich-postgres-data
+        # unix_socket_directories=/tmp に逃がす案は livenessProbe / readinessProbe の
+        # pg_isready が既定パス (/var/run/postgresql) を見て失敗するため不採用
+        # (docs「本番に適用するときの手順」4)。
+        - name: postgres-run
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
