@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-23T17:30:04Z",
+  "generated_at": "2026-08-23T18:00:05Z",
   "applications": [
     {
       "name": "agent-rbac",
@@ -34,7 +34,7 @@
     {
       "name": "coder",
       "namespace": "argocd",
-      "sync": "OutOfSync",
+      "sync": "Synced",
       "health": "Healthy"
     },
     {
@@ -70,7 +70,7 @@
     {
       "name": "syncthing",
       "namespace": "argocd",
-      "sync": "OutOfSync",
+      "sync": "Synced",
       "health": "Healthy"
     },
     {
@@ -88,7 +88,7 @@
     {
       "name": "vaultwarden",
       "namespace": "argocd",
-      "sync": "OutOfSync",
+      "sync": "Synced",
       "health": "Healthy"
     },
     {
@@ -533,8 +533,8 @@
       "containers": [
         {
           "name": "application-controller",
-          "cpu": "12238122n",
-          "memory": "298200Ki"
+          "cpu": "8522031n",
+          "memory": "263604Ki"
         }
       ]
     },
@@ -544,8 +544,8 @@
       "containers": [
         {
           "name": "applicationset-controller",
-          "cpu": "588547n",
-          "memory": "27808Ki"
+          "cpu": "277980n",
+          "memory": "27312Ki"
         }
       ]
     },
@@ -555,8 +555,8 @@
       "containers": [
         {
           "name": "dex-server",
-          "cpu": "23946n",
-          "memory": "26188Ki"
+          "cpu": "639894n",
+          "memory": "27580Ki"
         }
       ]
     },
@@ -566,8 +566,8 @@
       "containers": [
         {
           "name": "notifications-controller",
-          "cpu": "101756n",
-          "memory": "25824Ki"
+          "cpu": "61885n",
+          "memory": "26848Ki"
         }
       ]
     },
@@ -577,8 +577,8 @@
       "containers": [
         {
           "name": "redis",
-          "cpu": "4922947n",
-          "memory": "26036Ki"
+          "cpu": "4903795n",
+          "memory": "25156Ki"
         }
       ]
     },
@@ -588,8 +588,8 @@
       "containers": [
         {
           "name": "repo-server",
-          "cpu": "3671978n",
-          "memory": "124524Ki"
+          "cpu": "959333n",
+          "memory": "79868Ki"
         }
       ]
     },
@@ -599,8 +599,8 @@
       "containers": [
         {
           "name": "server",
-          "cpu": "820661n",
-          "memory": "30112Ki"
+          "cpu": "539151n",
+          "memory": "29856Ki"
         }
       ]
     },
@@ -609,14 +609,14 @@
       "name": "autopilot-core-6cfc69c867-kmndw",
       "containers": [
         {
-          "name": "opencode",
-          "cpu": "1554380n",
-          "memory": "258820Ki"
+          "name": "driver",
+          "cpu": "230493n",
+          "memory": "5436Ki"
         },
         {
-          "name": "driver",
-          "cpu": "189392n",
-          "memory": "5280Ki"
+          "name": "opencode",
+          "cpu": "768159n",
+          "memory": "258128Ki"
         }
       ]
     },
@@ -626,8 +626,19 @@
       "containers": [
         {
           "name": "heart",
-          "cpu": "5944561n",
-          "memory": "58900Ki"
+          "cpu": "8779724n",
+          "memory": "50336Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "autopilot",
+      "name": "curriculum-system-a791795-8t2fh",
+      "containers": [
+        {
+          "name": "curriculum",
+          "cpu": "628230321n",
+          "memory": "499940Ki"
         }
       ]
     },
@@ -637,8 +648,8 @@
       "containers": [
         {
           "name": "web",
-          "cpu": "24616756n",
-          "memory": "74692Ki"
+          "cpu": "15697296n",
+          "memory": "52644Ki"
         }
       ]
     },
@@ -648,8 +659,8 @@
       "containers": [
         {
           "name": "runner",
-          "cpu": "557574327n",
-          "memory": "297392Ki"
+          "cpu": "514186441n",
+          "memory": "493928Ki"
         }
       ]
     },
@@ -659,8 +670,8 @@
       "containers": [
         {
           "name": "runner",
-          "cpu": "296135220n",
-          "memory": "539756Ki"
+          "cpu": "17957320n",
+          "memory": "417328Ki"
         }
       ]
     },
@@ -670,8 +681,8 @@
       "containers": [
         {
           "name": "adapter",
-          "cpu": "118866n",
-          "memory": "6864Ki"
+          "cpu": "0",
+          "memory": "7948Ki"
         }
       ]
     },
@@ -681,8 +692,8 @@
       "containers": [
         {
           "name": "dev",
-          "cpu": "56905836n",
-          "memory": "2258628Ki"
+          "cpu": "63786396n",
+          "memory": "2068772Ki"
         }
       ]
     },
@@ -692,8 +703,8 @@
       "containers": [
         {
           "name": "coder",
-          "cpu": "2317679n",
-          "memory": "62160Ki"
+          "cpu": "2771165n",
+          "memory": "69148Ki"
         }
       ]
     },
@@ -703,8 +714,8 @@
       "containers": [
         {
           "name": "postgres",
-          "cpu": "29859057n",
-          "memory": "64688Ki"
+          "cpu": "31181530n",
+          "memory": "71712Ki"
         }
       ]
     },
@@ -714,8 +725,8 @@
       "containers": [
         {
           "name": "dex",
-          "cpu": "157487n",
-          "memory": "14500Ki"
+          "cpu": "264732n",
+          "memory": "20188Ki"
         }
       ]
     },
@@ -725,8 +736,8 @@
       "containers": [
         {
           "name": "external-secrets",
-          "cpu": "1228502n",
-          "memory": "42412Ki"
+          "cpu": "1505901n",
+          "memory": "43860Ki"
         }
       ]
     },
@@ -736,8 +747,8 @@
       "containers": [
         {
           "name": "cert-controller",
-          "cpu": "4262351n",
-          "memory": "55680Ki"
+          "cpu": "710467n",
+          "memory": "54448Ki"
         }
       ]
     },
@@ -747,8 +758,8 @@
       "containers": [
         {
           "name": "webhook",
-          "cpu": "482129n",
-          "memory": "30820Ki"
+          "cpu": "925828n",
+          "memory": "31512Ki"
         }
       ]
     },
@@ -758,8 +769,8 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "2284360n",
-          "memory": "245364Ki"
+          "cpu": "2163174n",
+          "memory": "245360Ki"
         }
       ]
     },
@@ -769,8 +780,19 @@
       "containers": [
         {
           "name": "postgres",
-          "cpu": "28902696n",
-          "memory": "28344Ki"
+          "cpu": "23563851n",
+          "memory": "54852Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "immich",
+      "name": "immich-restic-backup-29791785-z4dzp",
+      "containers": [
+        {
+          "name": "restic-backup",
+          "cpu": "383980n",
+          "memory": "11880Ki"
         }
       ]
     },
@@ -780,8 +802,8 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "2257398n",
-          "memory": "723532Ki"
+          "cpu": "2313650n",
+          "memory": "732328Ki"
         }
       ]
     },
@@ -791,8 +813,8 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "5954925n",
-          "memory": "8832Ki"
+          "cpu": "5865741n",
+          "memory": "8872Ki"
         }
       ]
     },
@@ -802,8 +824,8 @@
       "containers": [
         {
           "name": "coredns",
-          "cpu": "1982266n",
-          "memory": "23852Ki"
+          "cpu": "2979151n",
+          "memory": "23440Ki"
         }
       ]
     },
@@ -813,8 +835,8 @@
       "containers": [
         {
           "name": "local-path-provisioner",
-          "cpu": "41633n",
-          "memory": "14120Ki"
+          "cpu": "61130n",
+          "memory": "13376Ki"
         }
       ]
     },
@@ -824,8 +846,8 @@
       "containers": [
         {
           "name": "metrics-server",
-          "cpu": "4551892n",
-          "memory": "34324Ki"
+          "cpu": "4306549n",
+          "memory": "35000Ki"
         }
       ]
     },
@@ -835,8 +857,8 @@
       "containers": [
         {
           "name": "syncthing",
-          "cpu": "543022n",
-          "memory": "28124Ki"
+          "cpu": "530041n",
+          "memory": "28964Ki"
         }
       ]
     },
@@ -846,8 +868,8 @@
       "containers": [
         {
           "name": "nameserver",
-          "cpu": "74897n",
-          "memory": "7388Ki"
+          "cpu": "70011n",
+          "memory": "7444Ki"
         }
       ]
     },
@@ -857,8 +879,8 @@
       "containers": [
         {
           "name": "operator",
-          "cpu": "841047n",
-          "memory": "39672Ki"
+          "cpu": "1078543n",
+          "memory": "46428Ki"
         }
       ]
     },
@@ -868,8 +890,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2144599n",
-          "memory": "29952Ki"
+          "cpu": "2539406n",
+          "memory": "30184Ki"
         }
       ]
     },
@@ -879,8 +901,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2533634n",
-          "memory": "42984Ki"
+          "cpu": "3966070n",
+          "memory": "43220Ki"
         }
       ]
     },
@@ -890,8 +912,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2186675n",
-          "memory": "31120Ki"
+          "cpu": "2329300n",
+          "memory": "31560Ki"
         }
       ]
     },
@@ -901,8 +923,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2266589n",
-          "memory": "34364Ki"
+          "cpu": "2452152n",
+          "memory": "33844Ki"
         }
       ]
     },
@@ -912,8 +934,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "4805248n",
-          "memory": "48404Ki"
+          "cpu": "4361134n",
+          "memory": "48936Ki"
         }
       ]
     },
@@ -923,8 +945,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2240102n",
-          "memory": "30160Ki"
+          "cpu": "3162532n",
+          "memory": "30264Ki"
         }
       ]
     },
@@ -934,8 +956,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "2757768n",
-          "memory": "29240Ki"
+          "cpu": "2478952n",
+          "memory": "29368Ki"
         }
       ]
     },
@@ -945,8 +967,8 @@
       "containers": [
         {
           "name": "tailscale",
-          "cpu": "3007041n",
-          "memory": "40628Ki"
+          "cpu": "3182465n",
+          "memory": "39548Ki"
         }
       ]
     },
@@ -956,8 +978,8 @@
       "containers": [
         {
           "name": "vaultwarden",
-          "cpu": "204741n",
-          "memory": "35436Ki"
+          "cpu": "141760n",
+          "memory": "35424Ki"
         }
       ]
     }
@@ -965,8 +987,8 @@
   "node_metrics": [
     {
       "name": "nixos",
-      "cpu": "2126857866n",
-      "memory": "7531944Ki"
+      "cpu": "2358954142n",
+      "memory": "8306944Ki"
     }
   ],
   "pvc_usage": [
@@ -1188,7 +1210,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 837,
+        "last_sync_age_seconds": 2638,
         "message": null
       },
       {
@@ -1197,7 +1219,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 1800,
-        "last_sync_age_seconds": 1408,
+        "last_sync_age_seconds": 1409,
         "message": null
       },
       {
@@ -1206,7 +1228,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 576,
+        "last_sync_age_seconds": 2377,
         "message": null
       },
       {
@@ -1215,7 +1237,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 15,
+        "last_sync_age_seconds": 1816,
         "message": null
       },
       {
@@ -1224,7 +1246,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 1800,
-        "last_sync_age_seconds": 844,
+        "last_sync_age_seconds": 845,
         "message": null
       },
       {
@@ -1233,7 +1255,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 616,
+        "last_sync_age_seconds": 2417,
         "message": null
       },
       {
@@ -1242,7 +1264,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 599,
+        "last_sync_age_seconds": 2400,
         "message": null
       },
       {
@@ -1251,7 +1273,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 613,
+        "last_sync_age_seconds": 2414,
         "message": null
       },
       {
@@ -1260,7 +1282,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 596,
+        "last_sync_age_seconds": 2397,
         "message": null
       },
       {
@@ -1269,7 +1291,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 3555,
+        "last_sync_age_seconds": 1756,
         "message": null
       },
       {
@@ -1278,7 +1300,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 571,
+        "last_sync_age_seconds": 2372,
         "message": null
       },
       {
@@ -1287,7 +1309,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 565,
+        "last_sync_age_seconds": 2366,
         "message": null
       },
       {
@@ -1296,7 +1318,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 570,
+        "last_sync_age_seconds": 2371,
         "message": null
       },
       {
@@ -1305,7 +1327,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 593,
+        "last_sync_age_seconds": 2394,
         "message": null
       },
       {
@@ -1323,7 +1345,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 821,
+        "last_sync_age_seconds": 2622,
         "message": null
       },
       {
@@ -1332,7 +1354,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 805,
+        "last_sync_age_seconds": 2606,
         "message": null
       },
       {
@@ -1341,7 +1363,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 577,
+        "last_sync_age_seconds": 2378,
         "message": null
       },
       {
@@ -1350,7 +1372,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 609,
+        "last_sync_age_seconds": 2410,
         "message": null
       },
       {
@@ -1359,7 +1381,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 605,
+        "last_sync_age_seconds": 2406,
         "message": null
       },
       {
@@ -1368,7 +1390,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 598,
+        "last_sync_age_seconds": 2399,
         "message": null
       },
       {
@@ -1377,7 +1399,7 @@
         "ready": "True",
         "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 504,
+        "last_sync_age_seconds": 2305,
         "message": null
       }
     ]
@@ -1397,12 +1419,12 @@
     ],
     "heartbeat": {
       "last_start": {
-        "timestamp": "2026-08-23T17:29:06Z",
-        "iteration": 58
+        "timestamp": "2026-08-23T17:59:59Z",
+        "iteration": 84
       },
       "last_end": {
-        "timestamp": "2026-08-23T17:29:17Z",
-        "iteration": 58,
+        "timestamp": "2026-08-23T17:58:59Z",
+        "iteration": 83,
         "exit_code": 0,
         "elapsed_seconds": 10
       }
@@ -1413,59 +1435,5 @@
     "reason": "configmap dashboard-smoke を読めない",
     "error": "HTTPError: HTTP Error 404: Not Found"
   },
-  "notes": "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 (pod_metrics/node_metrics)。PVC の実ディスク使用量は namespace ごとの pvc-usage-reporter CronJob が ConfigMap に書いた値を pvc_usage として集約（immich/vaultwarden/coder のみ。Coder workspace ごとの動的 PVC は対象外、T-0078 参照）。RBAC は get/list/(configmaps のみ get) で、write 系の verb は含まない。このファイルは最新1点のみで上書きされる。ピーク値の傾向を見るには ops/health/history/YYYY-MM-DD.jsonl（1行1回分、このレポートと同じ内容）を辿ること（T-0083）。 nodes[].allocatable/capacity の ephemeral-storage は kubelet が一時ストレージ 監視用に計算する値であり、ルートファイルシステムの全体サイズとは別物（node01 の root ファイルシステムは実際には約252GiBあるが、この値は約48.9GiBしか出ない）。ディスク容量の 確認にこの値を使わないこと（T-0079, issue #56 2026-08-05 15:45:04 参照）。 autopilot キーは autopilot 自身の健全性で、対象は namespace autopilot の Deployment autopilot-heart（heart, ops/heart/heart.py）。旧ループの Deployment autopilot は退役済み（replicas 0）。heartbeat.last_end が無い/古い、または exit_code が非 0 なら前回のイテレーションが異常終了またはハング中の疑い（T-0110）。pods/log は autopilot namespace に閉じたRole でのみ許可し、心拍行だけを正規表現で抽出している。生ログはここに含まれない。 download_budget キーは B2 download cap の帳簿（P-0128）。restic バックアップのある namespace（immich/vaultwarden/coder/syncthing）の専用 ConfigMap download-budget の report.json キーに、download-ledger CronJob が書いた run 記録（{date, job, bytes}、UTC 日付）を集計し、直近7日の日次内訳・月次見積もり・cap 判定（ok/warn/exceed/unconfigured/no_data）を載せる。bytes は restic の転送統計からではなく操作種別ごとの 推定モデル（産出側 CronJob の LEDGER_RULES）による推定量。cap の実値は B2 コンソールにしか無いため既定は unconfigured（決め打ちしない）。産出側がまだ稼働していない namespace は error エントリになる。 externalsecrets キーは ExternalSecret 全件の状態（P-0175）。Doppler が唯一の上流で refreshInterval は概ね 1h のため、上流が死んでも refresh が巡るまで何も表面化しない。secret_synced_errors / errored は SecretSyncedError の件数と対象、items[].last_sync_age_seconds は status.refreshTime（最終成功同期）からの経過秒。「Ready=True のまま last_sync_age_seconds が refresh_interval_seconds を大きく超え続ける」場合は上流への同期が静かに滞留しているサイン。Secret 本体の値は取得・記録しない（RBAC も external-secrets.io/externalsecrets の get/list のみ）。 dashboard_smoke キーは Mission Control の headless 描画スモーク（P-0193）。autopilot namespace の CronJob dashboard-smoke が毎日 headless chromium で実際に描画し、専用 ConfigMap dashboard-smoke の report.json キーへ書いた断言結果を集約する。status は ok / fail（ページが嘘をついている: 矛盾シグナルの共存・白画面・描画未完了等。failed_checks に名前と detail を載せる）/ stale（最終記録が 26h より古い = 装置自身が沈黙）/ no_data（産出側未稼働・記録破損）。fail のうち tool_error を伴うものはスモーク本体自体が異常終了した記録（装置の故障。ランナーが代役レコードを書いた）で、ページの嘘とは区別できる。成功日は記録のみで通知予算を消費しない。readiness probe は HTTP 200 しか見ないため、この検査だけが「実際に描画したときだけ見える破綻」を拾う。スクリーンショット実体は保存せず 記録しない。",
-  "version_drift": {
-    "generated_at": "2026-08-23T17:37:05Z",
-    "summary": {
-      "total": 42,
-      "ok": 37,
-      "drifted": 6,
-      "errors": 1,
-      "uncomparable": 4
-    },
-    "drifted": [
-      {
-        "id": "argocd-chart",
-        "current": "9.1.6",
-        "latest": "10.4.0",
-        "upstream": "github:argoproj/argo-helm"
-      },
-      {
-        "id": "tailscale-operator-chart",
-        "current": "1.98.9",
-        "latest": "1.102.3",
-        "upstream": "github:tailscale/tailscale"
-      },
-      {
-        "id": "k8s-nameserver",
-        "current": "v1.98.9",
-        "latest": "1.102.3",
-        "upstream": "github:tailscale/tailscale"
-      },
-      {
-        "id": "gha-setup-helm-version",
-        "current": "v3.21.3",
-        "latest": "4.2.4",
-        "upstream": "github:helm/helm"
-      },
-      {
-        "id": "terraform-binary",
-        "current": "1.15.8",
-        "latest": "1.15.9",
-        "upstream": "github:hashicorp/terraform"
-      },
-      {
-        "id": "claude-code-cli",
-        "current": "2.1.223",
-        "latest": "2.1.241",
-        "upstream": "npm:@anthropic-ai/claude-code"
-      }
-    ],
-    "errors": [
-      {
-        "id": "immich-postgres",
-        "error": "安定リリースが 1 つも無い (404)"
-      }
-    ]
-  }
+  "notes": "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 (pod_metrics/node_metrics)。PVC の実ディスク使用量は namespace ごとの pvc-usage-reporter CronJob が ConfigMap に書いた値を pvc_usage として集約（immich/vaultwarden/coder のみ。Coder workspace ごとの動的 PVC は対象外、T-0078 参照）。RBAC は get/list/(configmaps のみ get) で、write 系の verb は含まない。このファイルは最新1点のみで上書きされる。ピーク値の傾向を見るには ops/health/history/YYYY-MM-DD.jsonl（1行1回分、このレポートと同じ内容）を辿ること（T-0083）。 nodes[].allocatable/capacity の ephemeral-storage は kubelet が一時ストレージ 監視用に計算する値であり、ルートファイルシステムの全体サイズとは別物（node01 の root ファイルシステムは実際には約252GiBあるが、この値は約48.9GiBしか出ない）。ディスク容量の 確認にこの値を使わないこと（T-0079, issue #56 2026-08-05 15:45:04 参照）。 autopilot キーは autopilot 自身の健全性で、対象は namespace autopilot の Deployment autopilot-heart（heart, ops/heart/heart.py）。旧ループの Deployment autopilot は退役済み（replicas 0）。heartbeat.last_end が無い/古い、または exit_code が非 0 なら前回のイテレーションが異常終了またはハング中の疑い（T-0110）。pods/log は autopilot namespace に閉じたRole でのみ許可し、心拍行だけを正規表現で抽出している。生ログはここに含まれない。 download_budget キーは B2 download cap の帳簿（P-0128）。restic バックアップのある namespace（immich/vaultwarden/coder/syncthing）の専用 ConfigMap download-budget の report.json キーに、download-ledger CronJob が書いた run 記録（{date, job, bytes}、UTC 日付）を集計し、直近7日の日次内訳・月次見積もり・cap 判定（ok/warn/exceed/unconfigured/no_data）を載せる。bytes は restic の転送統計からではなく操作種別ごとの 推定モデル（産出側 CronJob の LEDGER_RULES）による推定量。cap の実値は B2 コンソールにしか無いため既定は unconfigured（決め打ちしない）。産出側がまだ稼働していない namespace は error エントリになる。 externalsecrets キーは ExternalSecret 全件の状態（P-0175）。Doppler が唯一の上流で refreshInterval は概ね 1h のため、上流が死んでも refresh が巡るまで何も表面化しない。secret_synced_errors / errored は SecretSyncedError の件数と対象、items[].last_sync_age_seconds は status.refreshTime（最終成功同期）からの経過秒。「Ready=True のまま last_sync_age_seconds が refresh_interval_seconds を大きく超え続ける」場合は上流への同期が静かに滞留しているサイン。Secret 本体の値は取得・記録しない（RBAC も external-secrets.io/externalsecrets の get/list のみ）。 dashboard_smoke キーは Mission Control の headless 描画スモーク（P-0193）。autopilot namespace の CronJob dashboard-smoke が毎日 headless chromium で実際に描画し、専用 ConfigMap dashboard-smoke の report.json キーへ書いた断言結果を集約する。status は ok / fail（ページが嘘をついている: 矛盾シグナルの共存・白画面・描画未完了等。failed_checks に名前と detail を載せる）/ stale（最終記録が 26h より古い = 装置自身が沈黙）/ no_data（産出側未稼働・記録破損）。fail のうち tool_error を伴うものはスモーク本体自体が異常終了した記録（装置の故障。ランナーが代役レコードを書いた）で、ページの嘘とは区別できる。成功日は記録のみで通知予算を消費しない。readiness probe は HTTP 200 しか見ないため、この検査だけが「実際に描画したときだけ見える破綻」を拾う。スクリーンショット実体は保存せず 記録しない。"
 }
