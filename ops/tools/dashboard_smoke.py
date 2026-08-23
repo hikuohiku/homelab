@@ -45,7 +45,8 @@
     (JS chunk 等) の 404 は見えない — それで壊れるなら .loading が消えず
     render-complete が鳴る
 
-判定ロジックの固定テスト: ops/tests/test_dashboard_smoke.py (別 PR で足す)
+判定ロジックの固定テスト: ops/tests/test_dashboard_smoke.py
+(`python3 -m unittest ops.tests.test_dashboard_smoke`)
 """
 
 from __future__ import annotations
