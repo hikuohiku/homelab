@@ -5528,7 +5528,42 @@
         "soft_cap": 2000000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T23:14:59Z",
+        "verify": [
+          {
+            "cmd": "python3 -c \"import json;m=json.load(open('ops/models.json'))['roles'];assert m and all(r.get('model') and r.get('fallback') and r['fallback'][0]==r['model'] for r in m.values()), 'models.json に role ごとの fallback が無い'\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json;m=json.load(open('ops/models.json'))['roles'];assert m and all(r.get('model') and r.get('fallback') and r['fallback'][0]==r['model'] for r in m.values()), 'models.json に role ごとの fallback が無い'\n                                                                           ^^^\n  File \"<string>\", line 1, in <genexpr>\n    import json;m=json.load(open('ops/models.json'))['roles'];assert m and all(r.get('model') and r.get('fallback') and r['fallback'][0]==r['model'] for r in m.values()), 'models.json に role ごとの fallback が無い'\n                                                                               ^^^^^\nAttributeError: 'str' object has no attribute 'get'\n"
+          },
+          {
+            "cmd": "python3 ops/validate.py >/dev/null && python3 -m unittest ops.tests.test_model_fallback -v",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "test_model_fallback (unittest.loader._FailedTest.test_model_fallback) ... ERROR\n\n======================================================================\nERROR: test_model_fallback (unittest.loader._FailedTest.test_model_fallback)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_model_fallback\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_model_fallback'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.001s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "test -s ops/projects/logs/P-0265/judge_shadow.json && python3 -c \"import json;d=json.load(open('ops/projects/logs/P-0265/judge_shadow.json'));assert d.get('role')=='curriculum_judge' and d.get('verdicts',0)>=1 and d.get('engine') not in (None,'opencode-go/ox-alpha-free'),d\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0270",
@@ -5551,7 +5586,42 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T23:14:59Z",
+        "verify": [
+          {
+            "cmd": "test -f apps/adguard/kustomization.yaml && kubectl kustomize apps/adguard >/dev/null",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_adguard_manifest -v",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "test_adguard_manifest (unittest.loader._FailedTest.test_adguard_manifest) ... ERROR\n\n======================================================================\nERROR: test_adguard_manifest (unittest.loader._FailedTest.test_adguard_manifest)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_adguard_manifest\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_adguard_manifest'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "python3 -c \"import json;i=json.load(open('ops/inventory.json'))['targets'];assert any('adguard' in t['id'] for t in i), 'inventory に未登録'\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json;i=json.load(open('ops/inventory.json'))['targets'];assert any('adguard' in t['id'] for t in i), 'inventory に未登録'\n                                                                          ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: inventory に未登録\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
