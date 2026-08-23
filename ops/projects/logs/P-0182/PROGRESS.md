@@ -202,3 +202,28 @@ PR 未開・origin/main 未含を再確認 (セッション3/4 と同状態)。5
 入れ替わったが手順は一切変わらない。冒頭で fetch → refs/pull 照合 → merge 済みなら
 遡及レシピ (上記) で continuation_count 出現を探す。未 merge なら待機 1〜2 回して
 観測事実だけ追記して終了でよい。
+
+## セッション6 の記録 (2026-08-23 10:56–11:08Z)
+
+**やったこと**: ops-state 監視のみ。冒頭 fetch → head 6039fa980 を refs/pull 照合
+(0 件 = PR 未開) → origin/main 未含も確認 → 4〜4.5 分待機 ×2 を挟んで 3 回確認したが
+merge 無し。本ファイル追記 + commit して終了。
+
+**盤面の実測 (10:57Z / 11:03Z / 11:08Z の 3 回)**:
+
+- `continuation_count` の出現は 0 のまま (merge 前なので当然)
+- heart は生存: beat 157 @ 10:57:45Z → beat 162 @ 11:03:30Z → beat 166 @ 11:07:58Z
+  (ビート約 70 秒間隔を維持)
+- **P-0164 が active を外れた**: 11:01:13Z の `notify` (P-0164) を audit で実視。
+  セッション5 の観測候補筆頭だったが in_review へ遷移した模様。review reject で
+  active に戻れば再び候補になりうる (P-0181 と同じパターン)
+- **P-0175 はレビュー往復後に再走中**: 11:02:22Z に consume_review + spawn_runner を
+  audit で実視。actives 実測は **P-0175 (1.5M)** と自プロジェクト P-0182 のみ —
+  現時点で「死にうる」active プロジェクトが 1 つしかない水位。curriculum の新規採択
+  (spawn_curriculum) が観測候補の補充線になる
+- 人間の活動兆候: 変化なし (今日の merge は #527〜#532 のまま、本 PR のレビューは未開)
+
+**次のセッションへの一言**: 変更なし — merge 待ち。actives は P-0175 のみに減ったが
+手順は一切変わらない。merge 済み判定 → 遡及レシピで continuation_count 出現を探す、
+未 merge なら待機 1〜2 回して観測事実だけ追記して終了。監視対象の薄まりは
+curriculum 新規採択と review-reject 復帰 (P-0164/0181) で自然に補われる想定。
