@@ -7,6 +7,7 @@ fixture に無いコマンドは即座に失敗する。特に kubectl は既定
 安全弁拒否の経路にクラスタ操作が混入したら、このテストが落として気づける。
 """
 
+import argparse
 import io
 import json
 import tempfile
@@ -475,6 +476,187 @@ class TestRestoreScaleOne(unittest.TestCase):
         self.assertFalse(state["ready"])
         self.assertEqual(self.names(runner),
                          ["deployment/argocd-repo-server"])
+
+
+class IsoNow:
+    """呼ぶたびに 1 分進む偽時計 (ISO 文字列)。report 内の時刻整合に使う。"""
+
+    def __init__(self):
+        self.n = 0
+
+    def __call__(self):
+        self.n += 1
+        return "2026-08-23T06:{:02d}:00+00:00".format(self.n)
+
+
+class ScriptedRunner:
+    """時系列に沿って応答を消費する runner (--run の統合試験用)。
+
+    rules は (部分文字列, 応答列[, fallback]) の列。同じコマンドでも段階ごとに
+    別の応答を返せる (baseline 1/1 → 停止後 0/0 → 復帰後 1/1 など)。応答列を
+    尽くしたら fallback (省略時 rc=0/stdout 空)。どこにも一致しないコマンドは
+    rc=1 で落ちる — 想定外の呼び出しを黙って通さないのは FakeRunner 同じ。
+    """
+
+    def __init__(self, rules):
+        self.rules = [[r[0], list(r[1]), r[2] if len(r) > 2 else {}] for r in rules]
+        self.calls = []
+
+    def __call__(self, cmd, cwd=None, timeout=None):
+        joined = " ".join(cmd)
+        self.calls.append(list(cmd))
+        for match, outs, fallback in self.rules:
+            if match in joined:
+                resp = outs.pop(0) if outs else fallback
+                return CompletedProcess(cmd, resp.get("rc", 0),
+                                        stdout=resp.get("stdout", ""), stderr="")
+        return CompletedProcess(cmd, 1, stdout="", stderr="no rule: " + joined)
+
+
+NEW1 = "d" * 40
+NEW2 = "e" * 40
+
+
+def application_list(revision, labelled):
+    """Application 一覧の JSON。labelled=False は停止中 (ラベル未到達) の姿。"""
+
+    def item(name, value):
+        return {
+            "metadata": {"name": name,
+                         "labels": {dc.LABEL_KEY: value} if labelled else {}},
+            "status": {"sync": {"revision": revision,
+                                "status": "Synced" if labelled else "OutOfSync"},
+                       "health": {"status": "Healthy" if labelled else "Unknown"}},
+        }
+
+    return json.dumps({"items": [item("vaultwarden", "1"), item("coder", "2")]})
+
+
+def exercise_runner(ls_outs, ls_fallback, final_revision, body=None):
+    """--run happy path の外部コマンド列を時系列で演じる runner。
+
+    各対象の get は [baseline 1/1, 停止確認 0/0, 復帰直前 0/0] を消費した後、
+    scale 復帰の ready 確認と finally の restore 読みのためにずっと 1/1 を返す。
+    """
+    body = body if body is not None else projects_json(p("P-0164", "active"))
+    rules = [
+        ("git fetch", [{}]),
+        ("git show", [{"stdout": body}]),
+        ("ls-remote",
+         [{"stdout": "{}\trefs/heads/main\n".format(s)} for s in ls_outs],
+         {"stdout": "{}\trefs/heads/main\n".format(ls_fallback)}),
+        ("kubectl scale", []),
+        ("applications.argoproj.io",
+         [{"stdout": application_list(SHA_BASE, False)},
+          {"stdout": application_list(final_revision, True)}],
+         {"stdout": application_list(final_revision, True)}),
+    ]
+    healthy = {"stdout": status_json(1, 1)}
+    downed = {"stdout": status_json(0, 0)}
+    for t in dc.TARGETS:
+        rules.append(("get {} {}".format(t["kind"], t["name"]),
+                      [healthy, downed, downed], healthy))
+    return ScriptedRunner(rules)
+
+
+def run_args(out_path, **over):
+    defaults = dict(out=out_path, notes_file=None, poll=0.0, dwell=0.0,
+                    settle=0.0, max_wait=10000.0, down_timeout=300.0,
+                    up_timeout=300.0, catchup_timeout=600.0)
+    defaults.update(over)
+    return argparse.Namespace(**defaults)
+
+
+def invoke_run(args, runner, clock):
+    buf, err = io.StringIO(), io.StringIO()
+    with redirect_stdout(buf), redirect_stderr(err):
+        rc = dc.cmd_run(args, runner=runner, clock=clock,
+                        sleep=TickClock.sleep, now=IsoNow())
+    return rc, buf.getvalue(), err.getvalue()
+
+
+class TestRunExerciseEndToEnd(unittest.TestCase):
+    """--run 本体を FakeRunner で通し切る。弁が開いた日の手順を事前に固定する。
+
+    特に 1 本目: 準備済みの手順 (PR #524 = 1 PR 2 commit を単発 merge) では
+    main HEAD の移動が 1 回しか起きない。旧実装は「2 commit 分の移動」を要求
+    していたため、この形状では当日 rc=3 で確実に転けて計測が失われたはず
+    (2026-08-23 セッション 4 で発見・修正)。両形状と安全側をここで固定する。
+    """
+
+    def scales(self, runner):
+        return [c for c in runner.calls if c[:2] == ["kubectl", "scale"]]
+
+    def assert_scale_discipline(self, runner):
+        """kubectl write は TARGETS への scale 0×3 → 1×3 のみ (spec 制約)。"""
+        scaled = self.scales(runner)
+        self.assertEqual(len(scaled), 6)
+        allowed = {"{}/{}".format(t["kind"], t["name"]) for t in dc.TARGETS}
+        flags = []
+        for c in scaled:
+            self.assertIn(c[2], allowed)
+            flags.extend(a for a in c if a.startswith("--replicas="))
+        self.assertEqual(flags, ["--replicas=0"] * 3 + ["--replicas=1"] * 3)
+
+    def test_single_merge_commit_advances_and_writes_report(self):
+        """1 PR 2 commit 形状: HEAD 移動 1 回で完走し report が書けること。"""
+        runner = exercise_runner([SHA_BASE, SHA_BASE, NEW1], NEW1, NEW1)
+        with tempfile.TemporaryDirectory() as d:
+            out_path = str(Path(d) / "report.json")
+            rc, out, err = invoke_run(run_args(out_path), runner, TickClock())
+            self.assertEqual(rc, 0, err)
+            report = json.loads(Path(out_path).read_text(encoding="utf-8"))
+        data = json.loads(out)
+        self.assertEqual(data["mode"], "run")
+        # 準備済み形状の核心: 移動は 1 回。それで完走できること
+        self.assertEqual(report["new_main_shas"], [NEW1])
+        self.assertEqual(report["base_main_sha"], SHA_BASE)
+        self.assertEqual(data["catchup_seconds"], 240.0)
+        self.assertEqual(report["downtime_seconds"], 120.0)
+        self.assertEqual(report["refresh_seconds"], 180.0)
+        self.assertFalse(report["missed_changes"])
+        self.assertFalse(report["self_heal_restored"])
+        self.assertEqual(report["sync_order"], ["vaultwarden", "coder"])
+        self.assertEqual([a["name"] for a in report["apps"]], ["vaultwarden", "coder"])
+        self.assertEqual(dc.validate_report(report), [])
+        self.assert_scale_discipline(runner)
+        self.assertIn("final restore", err)
+        self.assertIn('"ready": true', err)
+
+    def test_two_head_movements_still_accepted(self):
+        """PR 2 本形状: 移動 2 回でも従来どおり最終 SHA を待てること。"""
+        runner = exercise_runner([SHA_BASE, SHA_BASE, NEW1, NEW2], NEW2, NEW2)
+        with tempfile.TemporaryDirectory() as d:
+            out_path = str(Path(d) / "report.json")
+            rc, _, err = invoke_run(run_args(out_path, settle=20.0),
+                                    runner, TickClock())
+            self.assertEqual(rc, 0, err)
+            report = json.loads(Path(out_path).read_text(encoding="utf-8"))
+        self.assertEqual(report["new_main_shas"], [NEW1, NEW2])
+        self.assertEqual(report["catchup_seconds"], 240.0)
+        self.assertEqual(dc.validate_report(report), [])
+        self.assert_scale_discipline(runner)
+
+    def test_no_movement_aborts_without_report_but_restores(self):
+        """main が動かなければ rc=3・report 無し。finally の復帰だけは走る。"""
+        runner = exercise_runner([SHA_BASE], SHA_BASE, NEW1,
+                                 body=projects_json(p("P-0004", "delivered")))
+        with tempfile.TemporaryDirectory() as d:
+            out_path = str(Path(d) / "report.json")
+            rc, _, err = invoke_run(
+                run_args(out_path, max_wait=100.0), runner, TickClock(step=30.0))
+            self.assertEqual(rc, 3)
+            self.assertFalse(Path(out_path).exists())
+        self.assertIn("exercise aborted", err)
+        self.assertIn("main が一度も動かないまま --max-wait=100.0s", err)
+        # abort 時も復帰は発行される: 演習側の scale 0×3 のあと、finally の
+        # restore が停止中 (fixture の 2 本目の 0/0 応答を読む) を検出して
+        # scale 1×3 を発行する。異常系でも最終状態が「全員 1」に寄せられる証拠
+        scaled = self.scales(runner)
+        self.assertEqual(len(scaled), 6)
+        flags = [a for c in scaled for a in c if a.startswith("--replicas=")]
+        self.assertEqual(flags, ["--replicas=0"] * 3 + ["--replicas=1"] * 3)
+        self.assertIn("final restore", err)
 
 
 if __name__ == "__main__":

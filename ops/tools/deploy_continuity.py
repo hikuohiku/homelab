@@ -19,7 +19,9 @@ P-0094 canary 自壊) はすべて「ArgoCD が生きていてアプリが死ぬ
   2. ArgoCD 3 コンポーネントを一斉 scale 0 (下記 TARGETS。controller は StatefulSet)
   3. main へ可逆な小変更 2 commit を積んでもらう (ruleset で直 push 不可のため PR
      経由。演習アプリ vaultwarden/coder の application.yaml へのラベル追加を想定。
-     スクリプト自身は Git 書き込みをしない。ls-remote で main の前進を見るだけ)
+     スクリプト自身は Git 書き込みをしない。ls-remote で main の前進を見るだけ。
+     受容するのは HEAD の移動 1 回以上 — 「1 PR 2 commit」の merge では移動は
+     merge commit の 1 回、「PR 2 本」なら 2 回。どちらも PROJECT.md が許す経路)
   4. 所定時間 (--dwell) 後に scale 1 へ復帰
   5. 各 Application の status.sync.revision が新 main を指すまで (refresh)、さらに
      ラベルが live の Application CR に乗るまで (sync) の壁時計を秒で計測
@@ -493,12 +495,14 @@ def cmd_run(args, runner=default_runner, clock=time.monotonic, sleep=time.sleep,
                 "main が一度も動かないまま --max-wait={}s に達した".format(args.max_wait)
             )
         new_shas, commits_landed_at = watched
-        if len(new_shas) < 2:
-            raise CommandError(
-                "main の前進が {} commit しか観測できなかった (要 2): {}".format(
-                    len(new_shas), new_shas
-                )
-            )
+        # PROJECT.md は「PR 2 本または 1 PR 2 commit」の両方を許す。1 PR の merge
+        # では main HEAD の移動は merge commit の 1 回だけだが、2 commit は履歴に
+        # 積まれている。よって要求するのは前進 1 回以上で、観測した移動回数は
+        # new_main_shas の長さとしてそのまま report に残る。構造上 watched が
+        # None 以外なら必ず 1 以上 (watch_main_advance は seen が空のまま返らない)
+        # ので通常ここは通らない — 将来の改変に対する不変条件として残す
+        if len(new_shas) < 1:
+            raise CommandError("main の前進が観測できなかった: {}".format(new_shas))
 
         sleep(args.dwell)
         outage_view = applications_view(runner)
@@ -509,7 +513,8 @@ def cmd_run(args, runner=default_runner, clock=time.monotonic, sleep=time.sleep,
         for s, t in zip(pre_up, TARGETS):
             if (s["replicas"] or 0) == 0:
                 k_scale(runner, t["kind"], t["name"], 1)
-        wait_until(all_ready, args.up_timeout, args.poll, clock, sleep)
+        wait_until(lambda: all_ready(runner), args.up_timeout,
+                   poll_interval=args.poll, clock=clock, sleep=sleep)
 
         results = wait_catchup(
             runner, new_shas[-1], EXERCISE_APPS, deadline_s=args.catchup_timeout,

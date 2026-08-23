@@ -213,6 +213,51 @@ valve ok: False | blocking: ['P-0092','P-0116','P-0157','P-0161','P-0163','P-017
 - unittest 36 件 + dry-run rc=0 はセッション 3 冒頭でも再実測ずみ (変更加えていない
   ため省略なしで同一結果)
 
+### セッション 4 (2026-08-23, 当日確転バグの除去。project/p-0164 checkout, リポジトリルートで実行)
+
+- 弁は閉じたまま (blocking 6 件: P-0092 / P-0116 / P-0157 / P-0161 / P-0163 / P-0174、
+  セッション 3 から不変)。targets は 3 件とも 1/1、PR #524 は open / draft /
+  mergeable_state=clean、head 5d24c8932 の `ci` は本日時点で success を再実測、main も
+  不動 (c5d6df255)。実演習は今回も見送り
+- **当日に確実に転ける欠陥を 2 件発見・修正** (本セッションの本体):
+
+  1. `cmd_run` が main HEAD の移動を「**2 回**」観測することを要求していた
+     (`len(new_shas) < 2` で raise)。しかし固定手順は PR #524 = **1 PR 2 commit の単発
+     merge** であり、merge_method=merge での HEAD 移動は merge commit 分の **1 回**しか
+     ない → 弁が開いた日に `--run` すると確実に rc=3 で abort し計測が失われた。
+     PROJECT.md が許す「PR 2 本または 1 PR 2 commit」の片方しか実装していなかった。
+     要求を「前進 ≥1 回」へ緩和し、観測した移動回数は report の `new_main_shas` の長さと
+     してそのまま残る (PR 2 本形状も従来どおり通る。watch_main_advance 自体は無変更)
+  2. scale 1 復帰後の ready 確認 `wait_until(all_ready, ...)` が引数無しで
+     `all_ready(runner)` を呼んでいた → **復帰直後に TypeError で必ず abort**
+     (report 書き出し直前。scale 復帰は finally で守られるが計測は消える)。
+     `lambda: all_ready(runner)` へ修正
+
+  共通原因は「--run happy path を通すテストが存在しなかった」こと。
+  `ScriptedRunner` (同一コマンドに段階ごとの別応答を返せる runner) を新設し e2e 3 本を
+  追加した: (a) 単発 merge 形状で完走・report 検算まで (b) PR 2 本形状 (移動 2 回) も
+  受容 (c) main 不動なら rc=3・report 無し・finally が scale 1×3 を再発行することまで
+  実測。これで (1)(2) は両方ともテストが落として発見できた型のバグだった
+
+- 検証実測 (全て自力):
+
+```
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests (36→39) OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 281 tests OK
+$ python3 ops/validate.py                                # 0 error (既存 warning 11 件のみ)
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0
+  valve blocking: 上記 6 件 / targets_seen 3 件とも replicas==ready==1
+$ test -f ops/projects/logs/P-0164/report.json && ...    # rc=1 (弁開放待ち。唯一の failing)
+```
+
+- 当日の手順はセッション 3 固定のまま**変更なし** (--run を背景起動 → 全 zero 確認後に
+  PATCH ready 解除 → PUT merge の 2 API 呼び出し。既定値のまま: settle 20s / dwell 60s /
+  max-wait 900s / catchup-timeout 600s)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: コード側の残作業はもう無い。残りは「弁が開いている日の
+  実演習 + report.json の observations 追記」「ラベル撤去 PR (exercise/p-0164-labels の
+  打ち消し)」のみ。冒頭で dry-run の弁を見て、開いていれば即日実施してよい。開いて
+  いなければ dry-run 確認だけして軽く閉じてよい
+
 ## 発見 (スコープ外。curriculum が拾うもの)
 
 - なし (今回の範囲では)。強いて挙げれば「projects.json の state ライフサイクルに
