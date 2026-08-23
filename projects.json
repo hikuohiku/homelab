@@ -4354,7 +4354,7 @@
     {
       "id": "P-0196",
       "title": "application-controller は今日も OOMKill される — 「512Mi が足りない」のか「リーク」なのかを隣室の ArgoCD で負荷をかけ分けて切り分け、メジャー更新判断の材料を同時に産む",
-      "state": "active",
+      "state": "stalled",
       "branch": "project/p-0196",
       "irreversible": false,
       "capabilities": [
@@ -4401,7 +4401,8 @@
       "veto_deadline": "2026-08-23T12:37:26Z",
       "spawn_count": 1,
       "job": "runner-p-0196-a1",
-      "drift_count": 0
+      "drift_count": 0,
+      "stalled_reason": "error"
     },
     {
       "id": "P-0203",
@@ -4737,7 +4738,7 @@
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-23T16:21:01Z",
-  "last_activity_at": "2026-08-23T16:22:19Z",
+  "last_activity_at": "2026-08-23T16:35:38Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
