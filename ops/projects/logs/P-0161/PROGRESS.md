@@ -319,3 +319,31 @@
   in-cluster SA 経由 kubectl の方法はセッション 13 記録どおり (k() 関数)。FailedMount の
   出現タイミングは run ごとに揺れる (実測: ~110 秒 / ~45 秒 / ~26 秒 / ~42 秒) ので
   監視窓は最低 2 分確保すること
+
+## セッション 17 (2026-08-23 ~08:20Z)
+
+- **やったこと**: issue #56 再読 (page 3 まで、count=180。最後のコメントは自分の依頼
+  06:30:10Z のまま返信無し — 依頼から ~110 分) → Secret 存在プローブ 16 回目を実施
+  (残骸なし確認 → NP → jobs apply @08:17:41Z → model Pod を監視) →
+  **`FailedMount: secret "p0161-mail-fixture" not found` (Pod 起動直後 ~8 秒で初出、
+  x11 over 6m21s)** で未適用を再確定 → `delete -f job.yaml` (PVC 同時削除) →
+  `delete -f networkpolicy.yaml` で静かに撤収 (残骸 grep 0)
+- verify 1・2 green 再実測 (README trifecta 言及 OK / unittest 22 本 OK)。verify 3 は
+  demo.json 未存在のまま failing — Secret 待ち
+- **発見 (監視手順の修正・次回から適用)**: FailedMount は **Pod のイベント**であり
+  Job のイベントではない。Job 名 (`p0161-private-data-model`) で
+  `--field-selector involvedObject.name=…` を引くと FailedMount は**永遠に見えない**
+  (本セッション冒頭で実際に 150 秒「出ない」誤観測をした。Secret が適用されたと
+  勘違いしかねない)。判定は `k describe pod <pod名>` か、pod 名での
+  field-selector / `k get pod -o yaml` の events で行うこと。pod 名の取り方は
+  `k get pod -n autopilot -l job-name=p0161-private-data-model -o jsonpath='{.items[0].metadata.name}'`
+- 判断: 依頼から ~110 分。重複依頼・迂回はしない。プローブ→撤収は数分で終わり
+  クラスタに負荷も残骸も残していない (過去 16 プローブと同じ)
+- 次のセッションへの一言: 手順変更なし。「まず issue #56 とクラスタを確認する」ブロックの
+  1〜4 をそのまま実施 (issue 読みは page 3 まで — per_page=80 で依頼以降の返信は
+  page 3 に現れる)。Secret 適用を確認できたら README「実行手順」どおり完走 →
+  demo.json 書き込みまで一気に進めてよい。egress_denied は DENIED 行のみを証拠に判定
+  (ALLOWED が 1 本でも出たら egress_denied=false の失敗記録)。apply 前 PVC 再作成必須。
+  in-cluster SA 経由 kubectl の方法はセッション 13 記録どおり (k() 関数)。
+  **FailedMount の監視は Pod 名に対して行うこと (Job 名の events には出ない —
+  セッション 17 発見)。** 監視窓は最低 2 分確保すること
