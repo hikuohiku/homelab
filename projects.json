@@ -4388,11 +4388,33 @@
       "spawn_count": 1,
       "job": "runner-p-0196-a1",
       "drift_count": 0
+    },
+    {
+      "id": "P-0203",
+      "title": "NetworkPolicy 案が 4 回死んでいるのは「開けるべき穴の実測一覧」が一度も作られていないからだ — クラスタ全体の外向き通信 (egress) の全数台帳を作る",
+      "state": "proposed",
+      "branch": "project/p-0203",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "python3 ops/security/egress_census.py --check",
+        "python3 -c \"import json; d=json.load(open('docs/security/egress-census.json')); eps=d.get('endpoints',[]); hosts={e['endpoint'].split(':')[0] for e in eps}; need={'api.doppler.com','api.backblazeb2.com','api.github.com','api.telegram.org'}; assert len(eps)>=8 and need <= hosts and all(e.get('reason') and e.get('workload') for e in eps)\"",
+        "test -s docs/security/egress-census.md && grep -qE 'Doppler|Backblaze' docs/security/egress-census.md && grep -qE '既定拒否|default-deny' docs/security/egress-census.md",
+        "python3 -m unittest ops.tests.test_egress_census"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1200000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T13:28:51Z",
-  "last_activity_at": "2026-08-23T14:05:32Z",
+  "last_curriculum_at": "2026-08-23T14:06:47Z",
+  "last_activity_at": "2026-08-23T14:06:47Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
