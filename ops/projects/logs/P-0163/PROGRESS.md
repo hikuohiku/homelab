@@ -196,3 +196,73 @@ $ python3 -m unittest discover -s ops/tests -t .              # Ran 281 tests ..
 罠: `/tmp/opencode` は書けない (Permission denied)、ruff 無し (py_compile 代用)、
 一時ファイルは mktemp。RecordingApi を継承した fake を作るときは request() の
 オーバーライドで super() を必ず呼ぶこと (calls 記録が途切れる)。
+
+## セッション 4 — 2026-08-23: 台本 doc を CI で固定する契約テスト (レビュー verdict 無しにつき、runner から届く残課題を消化)
+
+### やったこと
+
+レビューは「verdict を書かなかった」だったため指摘無し。verify 3 項目とも green 済みで、
+残る持ち越し 2 件はいずれも runner からは届かない (下記 実測) なので、**手が届く範囲で一番の
+リスク減 = セッション 2 が手作業でやった「doc 内スクリプト/YAML の抽出と構文検査」を恒久化する**
+ことを選んだ:
+
+1. `ops/tests/test_syncthing_acceptance.py` に契約テスト 10 本追加 (39→49):
+   - bash ブロック全件 (9 個) と SCRIPT heredoc 全件 (配置/ロールバック) を `sh -n` に付す
+   - EOF heredoc (4 個) は K8s マニフェストとして safe_load して kind/metadata.name を要求。
+     ロールバック節の「手順 B の YAML をここに貼る」だけは意図的な非 YAML なので、
+     プレースホルダはちょうど 1 個で「手順 B」文言を含む、という形で判別
+   - acceptance Job の構造: backoffLimit 0 / restartPolicy Never / token 無効化 /
+     **uid/gid 1000** (pvc-rw を本番同等判定にする核) / ConfigMap `syncthing-acceptance` を
+     /work へ・PVC を /var/syncthing へ mount / args スクリプト自体も sh -n /
+     「check --strict を通ったときだけ exercise」の順序 / --gui-url・--sync-addr の上書き無し
+     (ツール既定値=Service DNS に頼る設計の固定)
+   - migrate Pod: cap は CHOWN/FOWNER/DAC_OVERRIDE の最小限、**mountPath を実物の
+     apps/syncthing/deployment.yaml から読んで突き合わせ** (doc 単体で整合していても
+     本体とズレたら配置先が PVC 外に出るため)
+   - 配置/ロールバック台本の要: `.pristine` + LAYOUT 目印、GUI バインド sed、chown 1000:1000、
+     ロールバックの「.pristine 残して全消し→戻す→rmdir」「未配置なら exit 0」
+   - ConfigMap の --from-file 元 2 ファイルが repo に実在すること
+   - DoD 3 文言: tar 1 コマンド (`pct exec 101 -- tar -C /var/lib/syncthing ...`)、
+     ロールバック節、所有権 1000:1000、「停止しない」
+   - ツール既定値 3 つが in-cluster 値であることの固定 (既定値変更時に doc/Job 追従を強制)
+2. **壊れ方の再現も実測** (red→green): SCRIPT heredoc に `fi` 単独行を差し込むと
+   3 テスト落ち、Job の backoffLimit: 0→1 で job contract が落ちる。元に戻して green
+
+### verify 自己実測
+
+```
+$ test -f ops/tools/syncthing_acceptance.py                                          # rc=0
+$ python3 -m unittest ops.tests.test_syncthing_acceptance     # Ran 49 tests ... OK
+$ test -f docs/syncthing-migration.md && grep -q 'LXC 101' docs/syncthing-migration.md  # rc=0
+$ python3 -m unittest discover -s ops/tests -t .              # Ran 291 tests ... OK (CI 相当)
+```
+
+### 分かったこと / 実測
+
+1. **この runner から k8s API には届かない** (2026-08-23 再実測): `kubectl auth can-i` →
+   localhost:8080 refused (kubeconfig 無し)。一方クラスタ Service へはネットワーク経由で届く
+   (`syncthing.syncthing.svc` が解け、/rest/noauth/health が {"status": "OK"})。
+   つまり持ち越し (1) の台本 YAML 実機空回しは runner セッションでは永久にできない —
+   人間の端末か k8s API に届く構築セッションでやるしかない
+2. runner から見える GUI 宛てでも exercise は回せない (API key は config.xml = PVC 内で
+   読めない + マーカ書き込み先も PVC)。**受け入れ検証フローは in-cluster Job 前提で必然** —
+   手順 C の設計 (port-forward 不採用) の裏付けになる
+3. doc 内の heredoc 構成は現在 9 bash ブロック / SCRIPT×2 / EOF×4 (YAML 3 + プレースホルダ 1)。
+   片付け用 Pod も capabilities.add=[DAC_OVERRIDE] を持つので、「共通の migrate Pod」を
+   YAML 形状で特定したいときは add の完全一致 (3 cap) で選ぶ (any add だと 2 本引っかかる)
+4. PyYAML はこの環境にもあり既存テスト (test_backup_coverage.py) も使うが、新規テストは
+   ImportError 時 skipTest にしてある — verify 2 の unittest が stdlib-only 環境でも死なない
+
+### 発見 (スコープ外)
+
+- なし。持ち越し 2 件の性質が確定したのみ (どちらも runner 到達範囲外)
+
+### 次のセッションへの一言
+
+verify 3 項目とも green のはず (wrapper 実測を優先)。残る未確定は従来どおり 2 件だが
+**両方 runner からは不可能と実測済み**: (1) 台本 YAML の実機空回し — k8s API に届く位置で。
+doc の構文/構造は今回の契約テストで固定済みなので、初回実機適用時に残るリスクは
+「実行時の振る舞い」だけ (ImagePull, local-path の同時 mount 等)。(2) tar パス確認 —
+人間の preflight。レビューで何か出たらそちら最優先。罠: `/tmp/opencode` 書けない、
+`mktemp /tmp/hogeXXXX.py` 形式は Invalid argument で失敗 (素の mktemp+リダイレクト)、
+ruff 無し (py_compile 代用)、一時ファイルは mktemp。
