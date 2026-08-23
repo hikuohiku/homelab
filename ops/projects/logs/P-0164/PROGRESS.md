@@ -1265,7 +1265,72 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   見てから締めること。validate.py が出す archive.jsonl error は curriculum 型の
   main 前進でのみ発火する (通常の納品マージなら出ない — 出たら origin/main を merge)
 
+### セッション 31 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking 4 件でメンバー不変**
+  (P-0092 announced / P-0175・P-0181・P-0182 active、checked=65、10:36Z 実測。
+  セッション 30 終了時と完全同一)。固定指示どおり実演習は見送り。コード変更は無し
+- 本セッションの実イベント (**main 史上 5 度目の前進を後追い実観測**):
+  9a8562226 → **5354a42d2** (**PR #532**, `feat/telegram-reply-tool` のマージ、
+  author date 10:21:56Z)。差分は apps/telegram-adapter/* (mcp.go 新規等、
+  5 files changed +589/-3 実測) と docs/design/event-driven-core/architecture.md のみ。
+  **main 前進の型センサスに新タイプ**: 従来 4 前進は project 納品マージ (#527/#531) と
+  curriculum (#529) の 2 型だったが、本例は**人間による feature branch 直接マージが初例**。
+  archive.jsonl 非変更につき validate 劣化なし (= セッション 30 確定の
+  「劣化は curriculum/archive.jsonl 型限定」が人間型前進でも成立)、
+  演習材料ファイル (vaultwarden/coder application.yaml) も非変更で conflict リスク無し
+- 方法論メモ (次回の罠): **セッション 30 はこの前進を見逃している** — 同セッションの
+  ls-remote 記録は「9a8562226 に前進」なのに、実際には同セッション締め (10:32Z) 前の
+  10:21:56Z に PR #532 が着地していた。「main 史上 N 度目」カウントは前セッションの
+  記録を信じず **git log origin/main から毎回再導出**すること (前進の最終確認と
+  commit の間にも窓は開く)
+- 台帳は様態 b 完全凍結の継続: projects.json 最終 version は beat128 decide
+  (666e7fb9c, 10:23:33Z) のまま beats 129→139 まで新 version ゼロ (~13 分実測)。
+  併せて **人間型 main 前進は台帳に一切反応しない**ことを確認 (台帳は project
+  ライフサイクルのみを追い、任意 commit を追わない)
+- 当日健診 (pod 単位 custom-columns、セッション 28 確定様式): application-controller-0
+  ready / restartCount=4 / lastState=OOMKilled (08-05 以来不変 = P-0181 題材のまま) /
+  repo-server・server restartCount=1 lastState=Completed / applicationset・dex・
+  notifications・redis は restartCount=19 Unknown (2025-12-16 由来の古参)。
+  劣化なし
+- --run 当日コード点検: セッション 28 発見「catchup 計測は revision+label 判定で
+  環境ノイズ分離」が **collect_catchup (deploy_continuity.py:384–397) に実装済み**である
+  ことを確認 (refresh = status.sync.revision 到達 / sync = label 到達をアプリ単位で
+  別計測し、sync_order も記録する)。追加実装の要なし — --run 日にコードを触る予定は無い
+- **PR #524 材料耐久 10 例目**: GET /pulls/524 → open / draft=true /
+  mergeable_state=unknown 初手 → **15 秒待ちで clean 復帰** (罠 8 回目。
+  base 不動での unknown 発火はセッション 25 型の再現 = 双方向散発確定)。
+  head=5d24c8932 不変・check-runs で ci success / GitGuardian success 再確認。
+  head は新 main (5354a42d2) 未包含だが clean につき merge 不要
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 4 @10:36Z), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 294 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git log origin/main                                    # 5354a42d2 = PR #532 前進 (archive.jsonl 非変更につき validate green、merge 不要)
+$ GET /pulls/524  → open / draft=true / unknown →(15s)→ clean / head=5d24c8932 不変
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順はセッション 3・4 の固定 + 当日健診)、開いていなければ
+  再実測だけして軽く閉じてよい。塞ぎ手は 4 件不変 (P-0092 announced /
+  P-0175・P-0181・P-0182 active)。**git log origin/main の再導出を忘れないこと**
+  (セッション 30→31 で PR #532 見落としが実証済み)。台帳が様態 b 凍結中でも
+  main 側は人間の手で動く — 演習材料の conflict 有無は diff --name-only で
+  毎回素通り確認してよい
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 31, main 前進観測の続き) **main 前進の型センサスに「人間 feature 直接
+  マージ」型が初登場** (PR #532, feat/telegram-reply-tool)。従来の project 納品マージ /
+  curriculum 型に対し、本型は archive.jsonl も演習材料も触らず validate 劣化も
+  台帳反応も無い — 「main が動いた」単独では何の含意も持たない型の存在が確定。
+  併せて **前進観測のセッション境界盲区を実証**: セッション 30 は締め 10 分前の着地
+  (10:21:56Z) を見逃し「史上 4 度目」と記録したが実際は 5 度目まで進んでいた。
+  カウント系の主張は常に git log からの再導出で上書きすべき
 
 - (セッション 30, ライフサイクル観測の続き) **merging の時間軸が分解された**。
   P-0185 の完走で、merging 状態の開始 (10:12:56Z) と delivered 記録 (10:15:19Z) の
