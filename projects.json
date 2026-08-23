@@ -4039,12 +4039,102 @@
       "review_requested_at": "2026-08-23T10:05:27Z",
       "review_retries": 0,
       "merging_since": "2026-08-23T10:12:48Z"
+    },
+    {
+      "id": "P-0187",
+      "title": "新鮮で腐っているかもしれない — 全 restic リポジトリの実データを --read-data-subset で数ヶ月回転読みし、黙った bit rot を取り出す当日ではなく最初の月で捕まえる",
+      "state": "proposed",
+      "branch": "project/p-0187",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": true,
+      "verify": [
+        "test -f ops/tools/restic_integrity.py",
+        "python3 -m unittest ops.tests.test_restic_integrity",
+        "test \"$(grep -rl 'read-data-subset' apps --include='*.yaml' | wc -l)\" -ge 4",
+        "grep -qiE 'integrity' apps/ops-health-reporter/report.py"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1500000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0188",
+      "title": "証明書の死は当日まで誰にも見えない — クラスタ内 TLS Secret と Proxmox pveproxy 証明書の残り日数を台帳にし、30 日前から鳴らす",
+      "state": "proposed",
+      "branch": "project/p-0188",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "test -f ops/tools/check_cert_expiry.py",
+        "python3 -m unittest ops.tests.test_cert_expiry",
+        "python3 ops/tools/check_cert_expiry.py --fixture ops/tests/fixtures/cert_expiry/sample.json > /dev/null",
+        "grep -q 'cert' apps/ops-health-reporter/report.py"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 800000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0192",
+      "title": "朝の挨拶に返事が来たら、秘書は初めて会話になる — Telegram で「次に作ってほしいもの上位 3 つ」を聞き、返信を seed に変換して次回立案の原料を人間本人から調達する",
+      "state": "proposed",
+      "branch": "project/p-0192",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "test -f ops/projects/logs/P-0192/ask-evidence.json",
+        "python3 -c \"import json; d=json.load(open('ops/projects/logs/P-0192/ask-evidence.json')); assert d.get('message_id') and d.get('sent_at')\"",
+        "grep -q '人間の要望' ops/projects/seeds.md",
+        "python3 -m unittest ops.tests.test_wish_seeds"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 500000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0193",
+      "title": "人間が見る画面は、壊れたことを画面が報告しない — headless chromium で Mission Control を毎日実際に描画させ、タイルの嘘 (矛盾シグナル・白画面・古さ) を器が先に見つける常設検眼にする",
+      "state": "proposed",
+      "branch": "project/p-0193",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "test -f ops/tools/dashboard_smoke.py && python3 -m py_compile ops/tools/dashboard_smoke.py",
+        "python3 -m unittest ops.tests.test_dashboard_smoke",
+        "grep -q 'dashboard_smoke' apps/ops-health-reporter/report.py",
+        "test -s ops/projects/logs/P-0193/smoke-result.json"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1000000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T11:39:07Z",
-  "last_activity_at": "2026-08-23T12:07:58Z",
+  "last_curriculum_at": "2026-08-23T12:09:09Z",
+  "last_activity_at": "2026-08-23T12:09:09Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
-  "last_curriculum_dry": true,
+  "last_curriculum_dry": false,
   "stop_engaged": false
 }
