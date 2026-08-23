@@ -845,7 +845,51 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   なお validate.py が archive.jsonl 先頭不一致 error を出したら origin/main を
   merge すれば消える (curriculum 採択のたび。セッション 20 の発見節参照)
 
+### セッション 22 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking メンバーは 3 件で不変**
+  (P-0092 / P-0161 / P-0175。checked=62)。固定指示どおり実演習は見送り
+- 本セッションの実イベントその 1: **台帳完全凍結 4 例目** (21→22)。
+  全 62 件の id+state 写像が完全一致。P-0175 の active 入場時点
+  (ops-state beat58, 2026-08-23T08:59:10Z) から beat71 (09:13:58Z)・本セッション
+  fetch 時点まで projects.json の全 version を直接 trace し、id+state の遷移ゼロを
+  実測 (台帳内訳も不変: delivered 27 / vetoed 2 / stalled 29 / announced 1 /
+  active 3)。ops-state ブランチ自体は beat 更新で進行中 — 「ブランチ進行 ≠ 台帳遷移」
+  の定常形
+- 実イベントその 2 (**小ネタだが判定方法の実例**): 同期間の raw diff には
+  state 以外の成長がある — beat58→beat71 の間に P-0175 へ `drift_count: 0`
+  フィールドが追加されていた。「完全凍結」の判定は id+state 写像で行うのが正しく、
+  raw diff の一致を条件にすると非 state の churn で誤判定しかねない
+- main 不動 (`git merge-base --is-ancestor origin/main HEAD` が真。merge 不要)。
+  ドラフト PR #524 は初手から mergeable_state=clean・ci/GitGuardian success
+  (head=5d24c8932 不変。base が動いていないので unknown 罠も発火せず)
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 3), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 294 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git merge-base --is-ancestor origin/main HEAD          # 真 = main 不動・merge 不要
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932 不変
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。「0 か否か」だけを見る原則は維持。
+  validate.py が archive.jsonl 先頭不一致 error を出したら origin/main を merge
+  (セッション 20 の発見節参照)。unittest 件数は固定値でないので「OK か」で判断すること
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 22, ライフサイクル観測の続き) **台帳完全凍結 4 例目** (21→22、
+  id+state 写像 62/62 一致)。P-0175 の active 入場 (ops-state beat58,
+  08:59:10Z) 以降の state 遷移ゼロを projects.json 全 version の直接 trace で
+  確認。併せて **「凍結」判定は id+state 写像ですべき** ことの実例: 同期間の
+  raw diff には P-0175 への `drift_count` フィールド追加という非 state churn が
+  含まれており、raw diff 一致を条件にすると台帳が育っているのに「凍結」と誤判定する。
+  自タスク unittest 39 / 全体 294 green、targets 3/3 ready、前置条件の劣化無し
 
 - (セッション 21, ライフサイクル観測の続き) **blocking 数の増加を初観測** (2→3)。
   新規 P-0175 の台帳 active 入場による (総計 61→62、ops-state のみで伸び main 不動)。
