@@ -4321,11 +4321,33 @@
       "spawn_count": 1,
       "job": "runner-p-0193-a1",
       "drift_count": 0
+    },
+    {
+      "id": "P-0196",
+      "title": "application-controller は今日も OOMKill される — 「512Mi が足りない」のか「リーク」なのかを隣室の ArgoCD で負荷をかけ分けて切り分け、メジャー更新判断の材料を同時に産む",
+      "state": "proposed",
+      "branch": "project/p-0196",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "python3 ops/projects/scripts/argocd_oom_lab.py --plan",
+        "python3 -c \"import json;d=json.load(open('ops/projects/logs/argocd-oom-lab/verdict.json'));assert d.get('conclusion') in ('insufficient-request','leak','chart-regression') and d.get('rss_series_csv')\""
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 4500000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-23T12:09:09Z",
-  "last_activity_at": "2026-08-23T12:33:14Z",
+  "last_activity_at": "2026-08-23T12:34:28Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
