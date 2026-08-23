@@ -383,3 +383,28 @@ descope 判断のどちらかのみ** — 次セッション以降も `up` が�
 
 次セッションへの引き継ぎ: セッション 4 の「次セッションへの引き継ぎ」をそのまま丸ごと引き継ぐ (変更点なし)。
 加えて上記「追加記録」を参照 — RBAC 状態に変化がない限り調査の再実施は不要。
+
+## セッション 15 — 2026-08-23: up を実行せず停滞の可視化に充てた (**連続 11 セッション目**・判定は直接確認)
+
+冒頭で `up` の代わりに `kubectl get ns argocd-lab-916 argocd-lab-1040` を直接実行 →
+両方 NotFound = 提案 YAML 未適用を確定 (提案 YAML は Namespace 自身を含むため、ns 存在判定だけで
+適用有無が分かる。probe を動かすより安く、情報量は同じ)。`up` 再実行は行わなかった —
+セッション 14 記載の「再実行は情報を増やさない」方針の適用。verify 第 1 項 (`--plan`) は
+rc=0 で green 継続を再確認。
+
+本セッションの仕事は**可視化**: `ops/projects/logs/argocd-oom-lab/README.md` を新設し、
+必要な人間の一手 (`kubectl apply -f .../proposed-rbac-for-human.yaml`) をファイル冒頭の
+1 コマンドとして提示した。YAML が置いてあるディレクトリ自体に README を置くことで、
+その dir を開いた人間が transcript を漁らずとも手順を掴めるようにしたのが狙い。
+内容は現状表 (何が green で何が未実施か) + 適用後の人間の作業は無いこと + descope という
+代替選択肢の明示。コード側の変更はゼロ (完了済みにつき触るべき箇所が無い)。
+
+打ち手は不変で 2 択: **(a) 人間が README 冒頭のコマンドを実行 (b) curriculum による descope 判断**。
+
+次セッションへの引き継ぎ (セッション 4 引き継ぎを置き換える新プロトコル):
+冒頭で `kubectl get ns argocd-lab-916 argocd-lab-1040` を実行。
+- **両方存在する場合** = 人間が適用済み → 通常フローへ進む: `python3 ops/projects/scripts/argocd_oom_lab.py up`
+  → up 完了後は数時間おきに `sample --note "..."` を実行して CSV 追記・逐次 commit、
+  計画窓 (15 分間隔 × 4 時間) を満たしたら `verdict`。詳細は同 dir の README と PROJECT.md
+- **どちらかでも NotFound の場合** = 未適用のまま → `up` を実行せず 1 行記録して終えてよい
+  (README が可視化を担うようになったので、以降のセッションに追加の可視化作業は不要)
