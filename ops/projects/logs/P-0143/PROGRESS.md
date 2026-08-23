@@ -167,3 +167,46 @@ rc=2 以上の情報は出ない (3 セッション実測済み)。基本はレ�
 JSON を貼った場合は実成果物パスへ転記してよいが、generated_at と collection_notes は
 原文のまま維持すること (出所を消すのは捏造の一種)。実測 JSON が入ったら docs §1 の表
 転記と「草案」外し、分類閾値 (50m/500m) の妥当性判断までが次の仕事。
+
+### 2026-08-23 セッション4 — 人間への依頼を #56 へ投稿 (PR が無くて依頼が見えていなかった)
+
+**やったこと**: レビュー指摘は空、verify#2 は外部データ待ち。まず環境の credential を
+env・パスの確認のみで再確認 (無し。収集の再試行はしていない)。そのうえで
+(1) `AUTOPILOT_GITHUB_TOKEN` (worker 環境の env) + curl/python3 で GitHub API が叩ける
+ことを実測し、#56 のコメント全 178 件を取得 → **P-0143 の JSON 投稿はまだ無い**ことを確認、
+(2) `project/p-0143` の PR が**まだ 1 本も存在しない**ことを API で実測
+(wrapper は verify 全 green まで PR を作らない)、(3) 投稿前に self-test を
+`-o $(mktemp)` で再実行し green を確認、(4) P-0144 同型の**収集依頼を #56 へ自己投稿**した:
+https://github.com/hikuohiku/homelab/issues/56#issuecomment-5384240492
+
+verify は v1/v3 green 維持、v2 は idle-audit.json 未存在で failing のまま (期待どおり)。
+
+**分かったこと / 罠**:
+
+- **PR は verify 全 green まで作られない = ブランチ上の「人間への依頼」節は人間に見えない。**
+  セッション3 が P-0027 型の依頼を PROGRESS 冒頭に置いたとき、「PR 冒頭」と思っていた場所は
+  実際には誰も見ないブランチだった。外注が必要なプロジェクトは **#56 への自己投稿が必須**
+  (P-0027 の型を真似るなら PR 経由で見える形まで含めて真似ること)
+- **gh CLI は無くても GitHub API は叩ける。** worker 環境の `AUTOPILOT_GITHUB_TOKEN` は
+  Issues/PR/Contents の write 持ち (#56 の過去コメントでの実測記載あり)。
+  次セッションから人間の返答を自分で確認できる (wrapper の渡してくれる文脈を待たない)
+- #56 の直近は同型の外注 2 件が未回収 (P-0118 Telegram 送信依頼 01:23、P-0144
+  tailscale devices.json 依頼 04:09)。人間がまとめて処理する可能性があるので急かさない。
+  自分の投稿は 04:37
+
+**次のセッションへの一言**: 収集の再試行はしないこと (credential 無しは 4 セッション実測)。
+**最初に #56 を API で見ること**:
+
+```bash
+curl -s -H "Authorization: Bearer $AUTOPILOT_GITHUB_TOKEN" \
+  "https://api.github.com/repos/hikuohiku/homelab/issues/56/comments?per_page=100&page=2" 
+```
+
+(page 1 が最古 100 件、page 2 に 2026-08-11 以降の最近分。自分の投稿
+issuecomment-5384240492 以降に idle-audit.json の JSON 貼りがあるか探す)
+JSON が貼られていたら原本として `ops/projects/logs/P-0143/idle-audit.json` へ復元
+(generated_at / collection_notes は原文のまま。出所を消すのは捏造の一種) →
+docs §1 の表へ転記し「草案」を外す → 分類閾値 (50m/500m) の妥当性を samples で判断。
+ブランチ直接 push の場合もあるので `git fetch origin && git log origin/project/p-0143
+--oneline -3` も併せて確認。返答が無ければ何もしないで終わってよい (待ちは正当な状態)。
+レビュー指摘が来ていたらそれを最優先。
