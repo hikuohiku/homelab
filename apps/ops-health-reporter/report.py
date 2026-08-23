@@ -225,10 +225,15 @@ def collect_pvc_usage():
 
 # B2 download cap の帳簿 (P-0128) の集約対象。restic リポジトリのある namespace。
 # coder は postgres / workspace-homes の 2 リポジトリが同じ namespace にあり、
-# syncthing は pvc_usage の対象外だが backup は存在する。産出側 (各 ns の backup
-# 周辺の CronJob) が pvc-usage-report ConfigMap に追加キー download_budget.json で
+# syncthing は pvc_usage の対象外だが backup は存在する。産出側 (各 ns の
+# download-ledger CronJob) が専用 ConfigMap `download-budget` の report.json キーに
 # run 記録 ({date: "YYYY-MM-DD", job: 名前, bytes: N} のリスト、UTC 日付) を書く契約。
-# 別名 ConfigMap にすると RBAC の resourceNames 変更が要るため、既存名に乗せる
+# 契約先を pvc-usage-report にしない理由: 既存 pvc-usage-reporter は PUT で data を
+# 全体置換する (apps/*/pvc-usage-cronjob.yaml の put_configmap)。「別 CronJob が同じ
+# ConfigMap に追加キーで書く」設計だと reporter run のたびに帳簿が消え、逆に素朴な
+# PUT で産出側が report.json を吹き飛ばす。専用名にして RBAC の resourceNames に
+# 追加する 1 行で済ませる (configmaps get の resourceNames 追加は T-0110 の
+# pods/log 閉じ込みとは無関係なので整合問題も無い)
 DOWNLOAD_BUDGET_NAMESPACES = ["immich", "vaultwarden", "coder", "syncthing"]
 
 
@@ -243,11 +248,11 @@ def collect_download_budget():
     entries = []
     for ns in DOWNLOAD_BUDGET_NAMESPACES:
         try:
-            data = k8s_get("/api/v1/namespaces/{}/configmaps/pvc-usage-report".format(ns))
-            raw = data.get("data", {}).get("download_budget.json")
+            data = k8s_get("/api/v1/namespaces/{}/configmaps/download-budget".format(ns))
+            raw = data.get("data", {}).get("report.json")
             if not raw:
                 raise KeyError(
-                    "configmap pvc-usage-report に download_budget.json キーが無い"
+                    "configmap download-budget に report.json キーが無い"
                     "(産出側がまだ稼働していない)"
                 )
             payload = json.loads(raw)
@@ -547,9 +552,11 @@ def main():
             "異常終了またはハング中の疑い（T-0110）。pods/log は autopilot namespace に閉じた"
             "Role でのみ許可し、心拍行だけを正規表現で抽出している。生ログはここに含まれない。"
             " download_budget キーは B2 download cap の帳簿（P-0128）。restic バックアップのある "
-            "namespace（immich/vaultwarden/coder/syncthing）が pvc-usage-report ConfigMap の "
-            "download_budget.json キーに書いた run 記録（{date, job, bytes}、UTC 日付）を集計し、"
-            "直近7日の日次内訳・月次見積もり・cap 判定（ok/warn/exceed/unconfigured/no_data）を載せる。"
+            "namespace（immich/vaultwarden/coder/syncthing）の専用 ConfigMap download-budget の "
+            "report.json キーに、download-ledger CronJob が書いた run 記録（{date, job, bytes}、"
+            "UTC 日付）を集計し、直近7日の日次内訳・月次見積もり・cap 判定（ok/warn/exceed/"
+            "unconfigured/no_data）を載せる。bytes は restic の転送統計からではなく操作種別ごとの "
+            "推定モデル（産出側 CronJob の LEDGER_RULES）による推定量。"
             "cap の実値は B2 コンソールにしか無いため既定は unconfigured（決め打ちしない）。"
             "産出側がまだ稼働していない namespace は error エントリになる。"
         ),

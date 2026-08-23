@@ -5,11 +5,13 @@
 消費するのは誰かを測る者はいなかった。このモジュールはその帳簿の集計・見積もり・
 閾値判定だけを担う純関数群で、クラスタやネットワークに触れない。
 
-- 産出側 (各 namespace の CronJob): restic Job ログから推定量を作り、ConfigMap へ
+- 産出側 (各 namespace の download-ledger CronJob): restic Job の完了実績から推定量を作り、
+  自 namespace の専用 ConfigMap `download-budget` (キー report.json) へ
   「runs: [{date: "YYYY-MM-DD", job: 名前, bytes: N}, ...]」(UTC 日付。cap のリセットが
   毎日 00:00 UTC のため UTC が唯一の自然な区切り) の形で書き込む。推定の仕方
   (restic はダウンロードバイト数を表示しないため操作種別ごとのモデルになる) は
-  産出側の責務で、ここでは検査しない
+  産出側の責務で、ここでは検査しない。pvc-usage-report への追加キーにしないのは、
+  既存 pvc-usage-reporter の PUT が data 全体置換のため (report.py 参照)
 - 集約側 (apps/ops-health-reporter/report.py): ConfigMap 群を読んで build_report() に
   渡し、返り値を latest.json / history jsonl の `download_budget` キーへ載せる
 

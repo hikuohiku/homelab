@@ -328,9 +328,12 @@ class Heart:
         cursors = sf.load_cursors()
 
         # --- 観測。失敗した項目は None (「無い」と区別する。decide が保守的に扱う) ---
-        unhealthy_apps, health_fresh, _ = facts.load_health(
+        unhealthy_apps, health_fresh, health_doc = facts.load_health(
             self.repo_dir, self.cfg.health_branch
         )
+        # B2 download cap の帳簿の警報すべき状態 (P-0128)。warn/exceed のときだけ
+        # 中身があり、それ以外は None (budget_alert_due が繰り返しを落とす)
+        budget = facts.budget_alert(health_doc)
         try:
             jobs = facts.collect_jobs(self.k8s_client(), self.cfg.namespace)
         except Exception as e:
@@ -401,8 +404,38 @@ class Heart:
         # 二重実行する
         sf.save_projects(doc)
         sf.save_cursors(cursors)
+        # B2 download cap の警報 (P-0128)。既存の流路 2 本に乗せる:
+        # briefing-queue.jsonl (review_needed と同じ位置) と incident 通知 (下段)。
+        # 鳴るのは budget.status が warn/exceed のときだけで、同じ status の同一日内
+        # の再通知は cursors の前回記録で落とす (ビートは 120s で回るため)。
+        # 前回記録は save_cursors より先に cursors へ置く — 後から書くとこのビートで
+        # 永続化されず、次のビートが同じ警報を積み直す
+        today = now.date().isoformat()
+        budget_incident_text = None
+        budget_queued = False
+        if facts.budget_alert_due(budget, cursors.get("download_budget_alert"), today):
+            # budget_alert_due が True を返すのは alert が実在するときだけ
+            cursors["download_budget_alert"] = {
+                "status": budget["status"],
+                "date": today,
+            }
+            budget_incident_text = (
+                f"B2 download cap の帳簿が {budget['status']} です: {budget['reason']}"
+            )
+            budget_queued = True
+
         for item in review_needed:
             sf.append_jsonl("briefing-queue.jsonl", {"at": now_iso(now), **item})
+        if budget_queued:
+            sf.append_jsonl(
+                "briefing-queue.jsonl",
+                {
+                    "at": now_iso(now),
+                    "source": f"download-budget ({budget['status']})",
+                    "body": budget["reason"],
+                },
+            )
+            log(f"download_budget alert: {budget['status']} — queued to briefing")
         # タスク依頼の受領 (P-0091)。id 重複は merge_new が落とすので、
         # カーソル巻き戻り等で同じ note を再取り込みしても積み直さない
         queue = sf.read_jsonl(tasks.QUEUE_FILE)
@@ -416,6 +449,11 @@ class Heart:
 
         # --- 二段目: 副作用の実行と、その結果 (job 名等) の永続化 ---
         self.execute(actions, doc, sf, notifier, now)
+        if budget_incident_text:
+            if self.cfg.shadow:
+                log(f"[shadow] notify[incident] {budget_incident_text[:80]}")
+            else:
+                notifier.send("incident", budget_incident_text, now)
 
         sf.append_jsonl(
             "metrics.jsonl",
@@ -428,6 +466,7 @@ class Heart:
                 "unhealthy_apps": unhealthy_apps,
                 "health_fresh": health_fresh,
                 "breaker": breaker_info,
+                "budget_status": budget["status"] if budget else None,
                 "vetoes": vetoes,
                 "stop_all": stop_all,
                 "actions": [a["type"] for a in actions],

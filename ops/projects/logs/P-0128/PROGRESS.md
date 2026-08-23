@@ -141,3 +141,80 @@
 - (前セッション分を引き継ぎ) PyYAML 依存の混在、history jsonl の肥大化注意。追加の新規発見なし —
   pvc-usage-reporter の data 置換セマンティクスは本プロジェクトの産出側設計に直接効くため
   上の罠節に置いた (curriculum へ回すほど汎用ではない)
+
+## 2026-08-23 セッション 3 — レビュー指摘 3 点の解消 (産出側新設・契約先変更・警報配線)
+
+### やったこと
+
+レビュー指摘 3 点 (産出側不在 / pvc-usage-report との契約衝突 / 警報受け口不在) を
+**全部**解消した。verify 2 項目とも再実行で green (23 tests OK, grep rc=0)。
+`ops/tests` 全体 172 tests OK、`ops/heart/tests` 全体 OK (budget_alert の新規 10 tests 含む)、
+`ops/check_download_ledger_script_sync.py` 新設して CI (ci.yml consistency checks) に足した。
+
+- **指摘 2 (契約衝突) → 専用 ConfigMap `download-budget` への変更で解消**。
+  前セッションで保留していた「別名 ConfigMap + RBAC resourceNames 追加」を採用。
+  report.py の `collect_download_budget()` は `/configmaps/download-budget` の
+  `report.json` キーを読むように変え、rbac.yaml の configmaps get の resourceNames に
+  `"download-budget"` を追加。report.py のコメントに「pvc-usage-reporter が PUT で data
+  全体置換するので追加キー契約は吹き飛ぶ」という理由を書き残した (次セッションは再考しないこと)
+- **指摘 1 (産出側不在) → 各 ns に download-ledger CronJob 新設** (immich/vaultwarden/coder/
+  syncthing の 4 ファイル、埋め込みスクリプトは完全同一 — 同期チェックが CI で担保)。
+  設計: 自 ns の Job 一覧を batch API から取得し、Complete かつ KEEP_DAYS(14日) 内のものを
+  ownerReferences から親 CronJob 名へ解決 → env `LEDGER_RULES`
+  (`cronjob名:bytes,...`。スクリプト内に既定値は持たない) で推定 bytes を付与 →
+  既存帳簿と id (=Job 名) でマージ・trim して ConfigMap へ GET→resourceVersion 付き PUT。
+  pods/log は読まない (T-0110 の閉じ込みを広げない)。Role は jobs get/list +
+  configmaps get/update (resourceNames 制約)。対象 ConfigMap は manifest で事前作成し
+  create 権限を持たせない (消されたら 403 で目立って落ちる)。runAsUser 65534・特権なし。
+  スケジュールは毎時 :25 (health-reporter :00/:30、pvc-usage :05 とのずらし)
+- **推定モデル**: backup 1 回 ≈ 32 MiB (repo open 時の config/snapshots/index)、
+  retention (forget --prune) 1 回 ≈ 512 MiB (書き換え pack の読み直し + index 再読み)。
+  桁感であり実測ではない。この桁だと土曜夜の retention 一斉稼働 (4 リポジトリ × 512 MiB)
+  がアカウント合計で cap を超え得るという 08-22 事故の形状と辻褄が合う。キャリブレーション
+  (B2 コンソール日次グラフとの突き合わせ = 人間専有作業) は LEDGER_RULES の数値差し替えだけで効く。
+  ルールに無い CronJob は runs に混ぜず payload の `unknown_jobs` に出す (設定忘れを黙って
+  0 扱いにしない)。失敗 Job の部分的消費は数えない = 過小方向の誤差 (既知の限界として YAML
+  ヘッダと notes に記載)
+- **指摘 3 (警報受け口) → heart の既存流路 2 本に配線**。facts.py に純関数 2 本追加:
+  `budget_alert(doc)` (latest.json から warn/exceed のときだけ中身を抽出。ok/unconfigured/
+  no_data/壊れは None — judge() 側と同じ「鳴らせる状態になったときだけ鳴る」) と
+  `budget_alert_due(alert, prev, today)` (同じ status の同一日内の再通知を cursors の前回記録で落とす。
+  status 変化 warn→exceed は同日でも鳴る)。heart.beat は (a) load_health の raw doc を捨てず受けて
+  budget_alert を計算、(b) save_cursors より**前に** cursors["download_budget_alert"] を置く
+  (後から置くと永続化されず次ビートが積み直す — 実装時に一度やって気づいて直した)、
+  (c) briefing-queue.jsonl へ review_needed と同じ位置で append、(d) 二段目で notifier.send("incident")
+  (shadow モードでは log のみ)、(e) metrics.jsonl に budget_status フィールド追加。
+  選んだ経路と理由: briefing-queue.jsonl は P-0096 (朝の briefing) が回収する予定の既存溜めであり、
+  incident 通知は即時性を担う。新しい通知機構は作っていない (VISION「器を太らせる前に使い切る」)
+
+### 実測
+
+- verify #1/#2 再実行 green。上記ユニットテスト全緑
+- download_ledger.py を YAML から実抽出し偽 k8s_request で main() を回した e2e 実測:
+  Complete Job のみ集計・窓外/未完了/orphan 排除・unknown_jobs 記録・id マージ (同一 id は
+  今回分優先)・trim・resourceVersion 付き PUT・壊れた既存帳簿からの再出発、まで確認
+- report.py の collect_download_budget() 経由の結合実測: 産出側 payload → 集約形
+  (daily_bytes/by_job/window_total/monthly_estimate/budget=unconfigured) まで到達。
+  生 runs (id/estimated) は latest.json 形に漏れないことを確認
+- kustomize build: vaultwarden/coder/syncthing/ops-health-reporter は実測 OK。
+  **immich だけサンドボックスに helm が無く未検証** (helmCharts を使うのは immich のみ、
+  既存制約)。download-ledger-cronjob.yaml 単体のビルドと 4 ファイルの YAML パースは実測 OK。
+  push 後の wrapper/CI で immich の kustomize build (--enable-helm) が通ることを確認すること
+
+### 未解決の罠・開いた設計問答 (次セッション以降)
+
+- 推定値 32 MiB / 512 MiB は**未較正**。B2 コンソールの実値でのキャリブレーションと cap 実値の
+  DEFAULT_DAILY_CAP_BYTES 設定は人間専有作業 (管理コンソール)。needs-human 化するならここ。
+  較正されるまで warn/exceed は理論上しか鳴らない (unconfigured で沈黙 — 正しい挙動)
+- coder の LEDGER_RULES は 4 CronJob 分 (coder-restic-backup/coder-restic-retention/
+  coder-workspace-home-backup/coder-workspace-home-backup-retention) を入れた。CronJob 名の
+  改名があったら LEDGER_RULES と同期すること (unknown_jobs に出れば気づける)
+- heart 側の警報抑制は「同一日内 & 同一 status」単位なので、warn が続く限り毎日 1 回ずつ
+  briefing に積まれる (意図的)。これがうるさいようなら次のレビューで議論すること
+- 環境の罠は前セッション分が有効 (mktemp 引数なし推奨、/tmp/opencode へのリダイレクト不可)。
+  追加分: このサンドボックスには helm/pip/ruff が無い。ruff F821 相当は py_compile で代用した
+
+### 発見 (スコープ外。curriculum が拾うこと)
+
+- 新規なし。pvc_usage.py と同型の「同一埋め込みスクリプト複製 + CI 同期チェック」パターンが
+  3 ファイル → 4 ファイルに増えただけ (check_pvc_usage_script_sync.py と同型のチェックを追加済み)
