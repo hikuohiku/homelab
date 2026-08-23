@@ -24,10 +24,10 @@ spec:
           type: RuntimeDefault
       containers:
         - name: adapter
-          # TODO(初回リリース): main マージ後に SHA タグの OCI index digest を実測して
-          # ここを digest pin に差し替える。build-dashboard-image.yml と同じ二段階
-          # (workflow のヘッダコメント参照)。それまでは latest。
-          image: ghcr.io/hikuohiku/homelab-telegram-adapter:latest
+          # 93d1c431bde60ee372c85d380e694191e6d4730f (PR #525 の merge commit) の
+          # OCI index digest。registry API の docker-content-digest ヘッダで実測。
+          # apps/telegram-adapter/app/** を変えたら同じ手順で digest を取り直すこと
+          image: ghcr.io/hikuohiku/homelab-telegram-adapter@sha256:c6340363d8ed81c0fd38f6876781e0fa6dc162748f09e7840e3991631d96a329
           terminationMessagePolicy: FallbackToLogsOnError
           env:
             - name: TELEGRAM_BOT_TOKEN
