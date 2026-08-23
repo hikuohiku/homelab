@@ -881,6 +881,42 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   validate.py が archive.jsonl 先頭不一致 error を出したら origin/main を merge
   (セッション 20 の発見節参照)。unittest 件数は固定値でないので「OK か」で判断すること
 
+### セッション 24 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking メンバーは 3 件で不変**
+  (P-0092 / P-0161 / P-0175。checked=62)。固定指示どおり実演習は見送り
+- 本セッションの実イベントその 1: **台帳完全凍結 6 例目** (23→24)。
+  前例に続き **「projects.json の新 version 自体ゼロ」型 (b)** — 同ファイルを触る
+  commit は 09:00:21 (8a4598afe, beat 59 decide) を最後に皆無のまま、beats は
+  beat83 → beat86 (09:30:50Z) まで進行。id+state 写像は 62/62 完全一致
+  (内訳 delivered 27 / vetoed 2 / stalled 29 / announced 1 / active 3 も不変)。
+  型 (b) 凍結が **2 例連続**となり、「version 出力停止」は一過性でなく持続しうる状態だと判明
+- 実イベントその 2: **blocking プロジェクト P-0161 のブランチが進行**
+  (fetch で fe101d43a→d8cdcb401) したのに台帳上 P-0161 は active のまま不変。
+  差分を実測すると同プロジェクト自身の PROGRESS.md 追記のみ (1 file, +24) で、
+  演習材料やコードには無関係。「ブランチ進行 ≠ 台帳遷移」の第 4 例
+  (ops-state 全体 / 自プロジェクト / p-0163 / p-0161)
+- main 不動 (`git merge-base --is-ancestor origin/main HEAD` が真。merge 不要)。
+  ドラフト PR #524 は初手から mergeable_state=clean・ci/GitGuardian success
+  (head=5d24c8932 不変。base が動いていないので unknown 罠も発火せず)
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 3), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 294 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git merge-base --is-ancestor origin/main HEAD          # 真 = main 不動・merge 不要
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932 不変
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。「0 か否か」だけを見る原則は維持。
+  validate.py が archive.jsonl 先頭不一致 error を出したら origin/main を merge
+  (セッション 20 の発見節参照)。unittest 件数は固定値でないので「OK か」で判断すること
+
 ### セッション 23 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
 
 - 冒頭で dry-run を実測 → **弁は閉じたまま、blocking メンバーは 3 件で不変**
@@ -921,6 +957,17 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   (セッション 20 の発見節参照)。unittest 件数は固定値でないので「OK か」で判断すること
 
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 24, ライフサイクル観測の続き) **台帳完全凍結 6 例目** (23→24、id+state
+  写像 62/62 一致) で、**凍結様態 (b)「projects.json の新 version 自体ゼロ」が 2 例連続**
+  となった — 同ファイルを触る commit は 09:00:21 を最後に皆無のまま beats が
+  beat83→beat86 まで進行。「version 出力停止」は一過性でなく持続しうる状態であり、
+  heart が台帳書き込みを休止している期間の存在が実測された。判定方法 (id+state 写像)
+  の変更は依然不要。併せて **blocking プロジェクト P-0161 のブランチ進行を第 4 例として
+  観測** (fe101d43a→d8cdcb401、差分は同プロジェクト自身の PROGRESS 追記のみ、台帳は
+  active 不変) — 「ブランチ進行 ≠ 台帳遷移」が blocking 他プロジェクト系統で複数成立。
+  自タスク unittest 39 / 全体 294 green、validate 0 error、targets 3/3 ready、
+  前置条件の劣化無し
 
 - (セッション 23, ライフサイクル観測の続き) **台帳完全凍結 5 例目** (22→23、
   id+state 写像 62/62 一致、内訳・announced+active メンバーも完全同一) と同時に、
