@@ -348,3 +348,49 @@
   到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
   test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
 - main が動いていれば追い越す (#578 時点の要領どおり)。動いていなければ merge 不要
+
+## セッション 10 (2026-08-23 23:31 UTC) — 現在地の再実測のみ。main 不動・census 未着・変更ゼロ
+
+### やったこと
+
+- **現在地を再実測**: /tmp/opencode は依然 root:root 755・uid 10001 (autopilot) で不変
+  → V2 は fail-fast rc=2 で red で正しい。仕様の verify コマンドをそのまま実行して
+  wrapper の実測と同一の stderr を確認 (書き込みプローブが main() 冒頭・クラスタ接触前に
+  走るので副作用ゼロで中断。exfil_drill.py:322-327)
+- **修正済みであることをコード行単位で再確認**: 本ブランチの spawn.py は fsGroup 10001
+  配下の emptyDir (64Mi) を /tmp/opencode に mount 済み (ops/heart/spawn.py:157,
+  168-169, 184-192)。merge+sync 後の新 runner Pod では V2 の前提が崩れない
+- **origin/main を fetch**: #578 以降の新着なし (`git log HEAD..origin/main` は空)。
+  動いたのは ops-state と他プロジェクトブランチ (p-0258/p-0270)、
+  feat/core-dispatch の削除のみ → 追い越し対象は存在しなかった
+- **P-0203 census を再確認** (`git ls-tree -r origin/main | grep -c egress`):
+  まだ無い (rc=1)。NP は DNS-only fail-closed のままが正解
+- spec verify V1 green / V3 green を再確認 (V3 は台帳基準 1 pass=true +
+  evidence_path=ops/profiles/private-data/demo.json 実在も確認)
+- **コード変更は今セッションもゼロ**。この記録の追記だけ。
+  unittest 全走は見送り: 最後の全 454 本 OK (セッション 7) 以降のコード差分が
+  コミット単位でゼロ (セッション 8/9 も本セッションも PROGRESS.md のみ) なので
+  退行の起きようがない
+
+### 分かったこと
+
+- 台帳基準 1 (trifecta-separation-drill) は evidence_path の実在を含めて健全
+  (demo.json の 5 指標すべて true、2026-08-23 22:13 着地の in-cluster 実測)。
+  「捏造ではない正当な pass」であることは本ブランチ内で完結して確認できるので、
+  残る赤は V2 の 1 つだけ
+
+### 検証 (全部自分で実走済み)
+
+- spec verify V1 green / V3 green / V2 red (既知 fail-fast rc=2、クラスタ副作用ゼロ)
+- census 未着確認 (rc=1) / main 新着なし確認
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4〜9 から一歩も動いていない**: V2 は本 PR の merge+sync 後の
+  新 runner Pod で自動 green 化する (spawn.py の emptyDir mount 済み、行番号上記)。
+  Pod 内での再走は無駄。やることは「PR merge を待つ」だけ。
+  main 新着がなければ、セッション 8〜10 と同じ「再実測 + ログ追記のみ」でよい
+- census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+  到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+- main が動いていれば追い越す (#578 時点の要領どおり)。動いていなければ merge 不要
