@@ -33,19 +33,9 @@ spec:
           # nats:2.14.5-alpine の index digest (2026-08-23 に registry API で実測)
           image: nats@sha256:d4ac35882ac65aff236cd65b9d3fa4d24332c681e1a85f94eedccd3cdd65b1da
           terminationMessagePolicy: FallbackToLogsOnError
+          # NKey 認証なので、サーバ側に渡す秘密は無い (config には公開鍵しか無い)。
+          # seed を持つのはクライアント側だけ
           args: ["--config", "/etc/nats/nats.conf"]
-          env:
-            # nats.conf が $VAR で展開する。設定ファイルに秘密を書かずに済ませる経路
-            - name: NATS_PRODUCER_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: nats-credentials
-                  key: NATS_PRODUCER_PASSWORD
-            - name: NATS_CONSUMER_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: nats-credentials
-                  key: NATS_CONSUMER_PASSWORD
           ports:
             - name: client
               containerPort: 4222
