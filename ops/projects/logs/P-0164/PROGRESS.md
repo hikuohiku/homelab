@@ -395,8 +395,45 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   P-0157 / P-0161) が本体で、in_review からの再 active (P-0174) がノイズとして乗る —
   「減っていれば開く日が近い」という読みは当てにならず、0 か否かだけを見ること
 
+### セッション 10 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking が 5→6 件に増加**
+  (P-0092 / P-0116 / P-0157 / P-0161 / **P-0163 が戻った** / P-0174。checked=61)。
+  減少局面は一度も訪れていない (7→6→5→6→5→6)。固定指示どおり実演習は見送り。
+  コード変更は無し
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 6), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 281 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git fetch origin && git rev-parse origin/main          # c5d6df255 (不動)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- 増加の原因を実測 (読み取り専用 `git show origin/ops-state:projects.json`):
+  セッション 9 に台帳へ残っていた `in_review` 最後の 1 件 (P-0163) が active へ
+  遷移していた (state 内訳: delivered 26 / vetoed 2 / stalled 26 / announced 1 /
+  **active 6** / in_review 0)。P-0163 は adopt_gate_attempts=1・verify 未通過
+  (ops/tools/syncthing_acceptance.py 系) のまま active — in_review→active の復帰が
+  **2 例連続**となり、in_review は「完了目前」ではなく「差し戻し/保留」の表現である
+  可能性が高い。in_review 台帳値は本日時点で 0
+- 当日の手順はセッション 3 固定のまま不変 (--run 背景起動 → 全 zero 確認 → PATCH ready
+  解除 → PUT merge)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。in_review は 0 になったので、以降の blocking 増減は
+  announced/active の出入りのみで決まる。本体は announced 1 (P-0092) + active 5 —
+  「減っていれば近い」は当てにならないままで、0 か否かだけを見ること
+
 ## 発見 (スコープ外。curriculum が拾うもの)
 
+- (セッション 10, ライフサイクル観測の続き) 観測された `in_review` 2 件 (P-0174 /
+  P-0163) の遷移先が**揃って active だった** (いずれも翌セッションで実観測)。
+  完了 (delivered) 行きの中間状態とは言えず、「レビュー差し戻し/保留」の状態表現と
+  考えるのが妥当。in_review の出現を「弁が開く前兆」と読むのは誤り
 - (セッション 9, ライフサイクル観測の続き) セッション 8 に初観測された `in_review`
   2 件のうち 1 件 (P-0174) が翌セッションで **active へ遷移するのが実観測された**。
   in_review は中間状態として実在し、そこから active に戻る (弁を再び塞ぐ) ことがある。
