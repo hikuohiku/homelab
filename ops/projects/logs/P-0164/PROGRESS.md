@@ -881,6 +881,55 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   validate.py が archive.jsonl 先頭不一致 error を出したら origin/main を merge
   (セッション 20 の発見節参照)。unittest 件数は固定値でないので「OK か」で判断すること
 
+### セッション 25 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、だが blocking が 3→2 に減少**
+  (P-0092 / P-0175。checked=62)。固定指示どおり実演習は見送り
+- 実イベントその 1 (**blocking メンバーに初の変動**): P-0161 が **active→stalled** へ遷移
+  (`stalled_reason: budget_exhausted`、beat90 decide 09:35:24Z)。台帳差分はこの 1 行のみ
+  (61/62 不変、id+state 一括 diff。内訳 delivered 27 / vetoed 2 / stalled 29→30 /
+  announced 1 / active 3→2)。セッション 14 型の「流出による減少」の再現 — delivered 不変の
+ まま blocking は減る
+- 実イベントその 2 (**停滞は吸収状態**): projects.json 直近 200 version を全走査して遷移を
+  集計したところ、**stalled からの出口遷移が 1 例も無かった** (センサス:
+  active→in_review 17 / proposed→active 12 / active→stalled 10 ← P-0161 が 10 例目 /
+  in_review→active 9 / announced→active 5 / proposed→announced 5 / merging→soaking 4 /
+  soaking→delivered 4 / in_review→stalled 2 / merging→delivered 2 / proposed→stalled 1)。
+  観測窓内で stalled は終端状態であり、**P-0161 の弁塞ぎ脱落は恒久的とみなせる**。
+  併せて stalled_reason は標準フィールド (歴代 spec_error 1000 / review_rejected 907 /
+  human_stop 800 / budget_exhausted 590 等) で新物ではなく、台帳の budget.used_tokens は
+  全員常時 0 (budget_exhausted で落ちた P-0161 ですら used_tokens=0) — **誰が次に枯れるかを
+  台帳数値から予測することは不可能**
+- 弁開放の見通し (更新): 残塞ぎ手は P-0092 (announced) / P-0175 (active) の 2 件。
+  delivered はセッション 11 以降ずっと 27 で凍結中なので、**最も確率の高い弁開放経路は
+  「両塞ぎ手の budget 枯渇による stalled 流出」** (P-0175 は active なのでそのまま stalled 化
+  しうる。P-0092 は announced からどう抜けるか未観測 — announced→active は歴代 5 例あるが
+  announced→stalled 等の直接出口は観測無し)。delivered 増を待つ必要は無い
+- main 不動 (`git merge-base --is-ancestor origin/main HEAD` が真。merge 不要)。
+  ドラフト PR #524 は head=5d24c8932 不変・初手 mergeable_state=unknown →
+  **12 秒待ちで clean 復帰** (罠の 6 回目。ただし本例は **base 移動も push も無いのに発火した
+  初例** — unknown は base 移動への束縛が無く散発的に現れる。「unknown = 待つ」運用は不変)。
+  ci/GitGuardian success
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 2), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 294 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git merge-base --is-ancestor origin/main HEAD          # 真 = main 不動・merge 不要
+$ GET /pulls/524  → open / draft=true / unknown →(12s)→ clean / head=5d24c8932 不変
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。残塞ぎ手は P-0092 / P-0175 の 2 件で、budget 枯渇 stalled
+  流出が最有力の弁開放経路 (delivered 待ちは非現実的。used_tokens からは予測不能なので
+  台帳の state 遷移だけを見ること)。validate.py が archive.jsonl 先頭不一致 error を出したら
+  origin/main を merge (セッション 20 の発見節参照)。unittest 件数は固定値でないので
+  「OK か」で判断すること
+
 ### セッション 24 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
 
 - 冒頭で dry-run を実測 → **弁は閉じたまま、blocking メンバーは 3 件で不変**
@@ -957,6 +1006,24 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   (セッション 20 の発見節参照)。unittest 件数は固定値でないので「OK か」で判断すること
 
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 25, ライフサイクル観測の続き) **blocking 数の流出型減少が 2 例目** (3→2)。
+  P-0161 が `stalled_reason: budget_exhausted` で active→stalled (beat90 decide,
+  09:35:24Z)、台帳差分はこの 1 行のみ (61/62 不変)。**projects.json 直近 200 version の
+  全走査で stalled からの出口遷移はゼロ = 停滞は観測窓内で吸収状態** — 「塞ぎ手は復活
+  しうる」仮説は支持されず、流出した塞ぎ手は恒久的に戻らないと扱ってよい。
+  遷移センサス (200 version): active→in_review 17 / proposed→active 12 / active→stalled 10 /
+  in_review→active 9 / announced→active 5 / proposed→announced 5 / merging→soaking 4 /
+  soaking→delivered 4 / in_review→stalled 2 / merging→delivered 2 / proposed→stalled 1。
+  なお stalled_reason 自体は標準フィールド (歴代 spec_error 1000 / review_rejected 907 /
+  human_stop 800 / budget_exhausted 590 等) であり、台帳の budget.used_tokens は全員常時 0
+  (budget_exhausted で落ちた P-0161 ですら 0) — **budget 枯渇の予兆を台帳数値から読むことは
+  不可能で、観測は state 遷移一択**
+
+- (セッション 25, PR #524 罠の追加観測) mergeable_state=unknown は **base 移動が無くても
+  散発的に現れる** 初例 (main 不動・head push 無しで発火、12 秒待ちで clean 復帰)。
+  「unknown の原因は base 移動直後の計算遅延」というセッション 11 以来の説明は必要条件に
+  すぎなかった。「unknown = 待って再取得」運用自体は不変でよい
 
 - (セッション 24, ライフサイクル観測の続き) **台帳完全凍結 6 例目** (23→24、id+state
   写像 62/62 一致) で、**凍結様態 (b)「projects.json の新 version 自体ゼロ」が 2 例連続**
