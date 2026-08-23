@@ -377,10 +377,13 @@ def preflight():
         problems.append("namespace の作成権限がない")
     if kubectl("auth", "can-i", "delete", "namespaces").stdout.strip() != "yes":
         problems.append("namespace の削除権限がない (lab の掃除ができない)")
-    for crd in ("applications.argoproj.io", "appprojects.argoproj.io",
-                "applicationsets.argoproj.io"):
-        if kubectl("get", "crd", crd, check=False).returncode != 0:
-            problems.append(f"CRD {crd} が存在しない (流用前提が崩れた)")
+    # CRD の get/list は autopilot-writer に許可されていない (Forbidden = 存在しない
+    # ではない)。discovery API 経由なら全認証済み主体が見えるので api-resources で確認する
+    api_res = run(["kubectl", "api-resources", "--api-group=argoproj.io"],
+                  check=False).stdout
+    for res in ("applications", "appprojects", "applicationsets"):
+        if not re.search(rf"(?m)^\s*{res}\s", api_res):
+            problems.append(f"argoproj.io の {res} が discovery に無い (流用前提が崩れた)")
     out = kubectl("top", "nodes", "--no-headers").stdout.split()
     # NAME CPU(cores) CPU% MEMORY(bytes) MEMORY%
     mem_pct = float(out[4].rstrip("%"))

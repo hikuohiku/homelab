@@ -1,0 +1,138 @@
+# P-0196 argocd OOM lab 用の最小権限 — **人間が 1 回だけ適用することを提案するもの**。
+# 自動適用はしない (autopilot-writer は RBAC 作成を意図的に持たない: apps/autopilot/rbac.yaml
+# 「rbac.authorization.k8s.io: 自分の権限を自分で広げる経路を作らない」。2026-08-23 セッション 2 実測で
+# chart 由来の ArgoCD は自前 SA+Role 無しでは Applications を list/watch できず reconcile が成立しない
+# ことを確認。これが無いと lab は RSS 曲線でなく RBAC エラーループを計測することになる)。
+#
+# 適用 (lab 構築の直前に 1 回):
+#   kubectl apply -f ops/projects/logs/argocd-oom-lab/proposed-rbac-for-human.yaml
+# 明示的な削除は不要 — lab の down (Namespace 削除) に巻き込まれて消える。
+#
+# 最小権限の根拠:
+#   - すべて名前空間スコープ (ClusterRole/ClusterRoleBinding は含まない)。対象は lab ns のみ
+#   - secrets は含まない。合成負荷は公開 HTTPS リポジトリなので repo credential を読む必要がない
+#     (argocd-secret は ESO がダミー値で作るが、pod 起動に必要な値は env secretKeyRef を kubelet が
+#      解決するため、controller が Secrets API を叩る経路は不要のはず。もし起動ログで
+#      secret 読み取りの致命的エラーが出たら PROGRESS.md 経由で再相談する)
+#   - applications の create/delete は含まない。Application の投入・掃除は worker 側
+#     (autopilot-writer が applications:* を既に持つ) が行い、controller は既存分の
+#     list/watch と status 更新だけできればよい
+#   - destinations を lab 外へ向ける余地は別レイヤーで塞ぐ: worker が各 ns へ AppProject
+#     (destinations を自 ns に限定) を作る。この Role が見えるリソースも自 ns 内のみ
+# ---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd-lab-916
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: argocd-lab-1040
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-lab-application-controller
+  namespace: argocd-lab-916
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-lab-repo-server
+  namespace: argocd-lab-916
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argocd-lab
+  namespace: argocd-lab-916
+rules:
+  # controller が自身の管轄アプリを読み、status を更新するため。create/delete は含めない (上記)
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "appprojects"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  # diff (live state 取得) と自設定の読み取り。destination を自 ns に限定している前提
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "endpoints", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+  # アプリ状態変化のイベント記録
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-lab
+  namespace: argocd-lab-916
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argocd-lab
+subjects:
+  - kind: ServiceAccount
+    name: argocd-lab-application-controller
+    namespace: argocd-lab-916
+  # repo-server は API を叩かないが、chart の workload が参照する SA 名として存在が必要。
+  # 権限は付いても使われない (API を呼ぶコードパスが無い)
+  - kind: ServiceAccount
+    name: argocd-lab-repo-server
+    namespace: argocd-lab-916
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-lab-application-controller
+  namespace: argocd-lab-1040
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: argocd-lab-repo-server
+  namespace: argocd-lab-1040
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: argocd-lab
+  namespace: argocd-lab-1040
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications", "appprojects"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: [""]
+    resources: ["pods", "services", "configmaps", "endpoints", "persistentvolumeclaims"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "statefulsets", "daemonsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: argocd-lab
+  namespace: argocd-lab-1040
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: argocd-lab
+subjects:
+  - kind: ServiceAccount
+    name: argocd-lab-application-controller
+    namespace: argocd-lab-1040
+  - kind: ServiceAccount
+    name: argocd-lab-repo-server
+    namespace: argocd-lab-1040

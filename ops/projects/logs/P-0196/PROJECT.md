@@ -68,6 +68,12 @@ verdict.json の補助フィールドと PROGRESS.md に証跡とともに残す
 - **kubectl は `autopilot:autopilot-writer` SA で動く** (P-0175 実測: netpol 作削除 / pods 作成 /
   exec 可、secret・SA list 不可)。namespace 作成権限の有無は未実測 — 初手で確認し、
   無ければ代替案を PROGRESS.md に記す。
+- **(セッション 2 追記) chart 由来の ArgoCD には自前 SA + Role + RoleBinding が必要だが、
+  autopilot-writer は RBAC 作成を意図的に持たない** (`apps/autopilot/rbac.yaml`:
+  「自分の権限を自分で広げる経路を作らない」。CRD の get も不可 — 存在確認は discovery 経由)。
+  up は ESO 同期まで成功した後、この壁で中断。解消には人間の一手
+  (`ops/projects/logs/argocd-oom-lab/proposed-rbac-for-human.yaml` の適用) を要求中。
+  詳細と棄却した代替案は PROGRESS.md セッション 2。
 - **監視ループは親 shell に引きずられて死ぬことがある** (P-0175 実測) → サンプラは
   `setsid` + stdin リダイレクトで起動し、進捗は CSV への追約で残す。セッションを跨ぐ場合は
   git log + PROGRESS.md + commit済み CSV から再開できるよう、CSV は逐次 commit する。
