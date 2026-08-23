@@ -4409,7 +4409,51 @@
         "soft_cap": 1200000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T14:06:47Z",
+        "verify": [
+          {
+            "cmd": "python3 ops/security/egress_census.py --check",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-hbja51t_/repo/ops/security/egress_census.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "python3 -c \"import json; d=json.load(open('docs/security/egress-census.json')); eps=d.get('endpoints',[]); hosts={e['endpoint'].split(':')[0] for e in eps}; need={'api.doppler.com','api.backblazeb2.com','api.github.com','api.telegram.org'}; assert len(eps)>=8 and need <= hosts and all(e.get('reason') and e.get('workload') for e in eps)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json; d=json.load(open('docs/security/egress-census.json')); eps=d.get('endpoints',[]); hosts={e['endpoint'].split(':')[0] for e in eps}; need={'api.doppler.com','api.backblazeb2.com','api.github.com','api.telegram.org'}; assert len(eps)>=8 and need <= hosts and all(e.get('reason') and e.get('workload') for e in eps)\n                             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'docs/security/egress-census.json'\n"
+          },
+          {
+            "cmd": "test -s docs/security/egress-census.md && grep -qE 'Doppler|Backblaze' docs/security/egress-census.md && grep -qE '既定拒否|default-deny' docs/security/egress-census.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_egress_census",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_egress_census (unittest.loader._FailedTest.test_egress_census)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_egress_census\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_egress_census'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
