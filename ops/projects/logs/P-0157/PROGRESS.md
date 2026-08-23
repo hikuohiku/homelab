@@ -122,3 +122,85 @@ DoD(2) の heart 注記配線を実装した (budget_alert 同型、新規通知
 どちらも merge 前には絶対に進めないので、それ以外の作業は無い。rules.json は人間レビュー
 必須パスなので auto-merge は期待しないこと (session 2 と同じ)。heart 注記の実環境での
 発報確認はしなくてよい (warn になるまで数日かかる。fixture で両方向固定済み)。
+
+## 2026-08-23 session 4 (worker)
+
+### やったこと
+
+failing だった verify #2 に着手し、達成条件を分解して調査した結果、
+**通常経路ではこのプロジェクトが永遠にレビューへ進めない構造的デッドロック**を特定した。
+実装の追加作業は無い (測定パイプラインも注記配線も session 2/3 で完了済み)。
+verify を自力で再実測: #1 green (34 tests) / #3 green / #2 red 継続 (2026-08-23T06:40Z)。
+
+### 発見 — verify #2 は通常経路では永遠に green にならない (spec 修正が必要)
+
+1. runner は **verify 全項目 ok のときだけ** PR を作る
+   (`ops/runner/runner.py` L861-864: `all(v["ok"] ...) and not findings_pending` でだけ
+   `ensure_pr()` → `ready_for_review`)
+2. verify #2 が見ている health ブランチ latest.json の `backup_freshness` は、
+   **本ブランチの merge → ArgoCD sync → reporter 実行 (30 分毎)** の後でしか出現しない
+   (PROJECT.md 冒頭も自認。origin/main の report.py には `backup_freshness` が
+   存在しないことを `git show origin/main:apps/ops-health-reporter/report.py | grep -c` = 0 で実測)
+3. 実測 (2026-08-23T06:40Z): `project/p-0157` 由来の PR は **全状態で 0 件**
+   (GitHub API `/pulls?state=all&head=...`)。health ブランチ latest.json に
+   `backup_freshness` キー無し
+4. よって閉路: **PR が作られない ← verify 全 green にならない ← 新コードで reporter が
+   走らない ← merge されない ← PR が作られない**。時間経過では解消しない。
+   P-0111 の待ち込み (セッション内待機) は外部要因 (B2 cap 回復) の自然回復を待てたから
+   成立したが、本件の gate は「自分自身の deploy」が前提なので何も変化しない
+5. このままだと、以降の worker セッションは作業を持たず予算 (soft cap 120 万 tokens) を
+   消化し、最終的に checkpoint → budget_exhausted → heart が question 型で
+   「継続する価値があれば予算を積んで」 と人間に丸投げする
+   (`ops/heart/reconcile.py` L325-331) 経路しか残らない
+
+### 発見 — この環境からの代替ルートも不成立 (実測)
+
+- **クラスタ到達不能**: kubectl はあるが kubeconfig 無し (localhost:8080 拒否)、
+  in-cluster SA token 無し、Tailscale credential 無し。PROJECT.md L100 が許す
+  DoD(5) の「kubectl 実測」ルートで initial-freshness.md を先行作成することは不可能
+- api.github.com への curl は到達可 (CHARTER §5.2 のクラウドサンドボックスとは別環境)。
+  それでも **PR の手動作成をしなかった**: 完成の宣言は wrapper の職責であることに加え、
+  reviewer Job には機械強制がある (`runner.py` L972-978: wrapper 実測で verify 全 green
+  でなければ reviewer の判定を無視して fail にされる)。手動 PR はレビューを通らず、
+  heart 帳簿 (projects.json) との不整合だけを生む
+
+### 解消候補 (記録のみ。判断と実行は curriculum / heart / 人間)
+
+- **(a) 推奨: archive.jsonl への同 id 追記で verify #2 を差し替える**。
+  `ops/projects/README.md` の正規手順 (追記のみ・同 id は最後の行が勝つ。書き手は
+  curriculum Job の PR か heart の snapshot PR)。差し替え先は merge 前判定可能な等価検査、
+  例: `grep -q '\"backup_freshness\": collect(collect_backup_freshness)' apps/ops-health-reporter/report.py`
+  (report.py L581 の配線行。verify はブランチ checkout 上で走るので pre-merge で判定できる)。
+  ペイロード契約 ({repo, hours_since_success} 等) は既に
+  `test_every_entry_satisfies_verify_contract` (ops/tests/test_backup_freshness.py) が
+  fixture 固定済みなので検査力は落ちない。旧 #2 (health ブランチ確認) と DoD(5) は
+  P-0128 同型の「merge 後フォローアップ」として引き継ぎに降格する
+- (b) 人間が手動で PR 作成〜merge する道もあるが、上 1./2. の閉路は残るので (a) とセット。
+  順序注意: merge を先にすると、その後 verify 全 green になった時に `ensure_pr()` が
+  「commits 無し」で POST /pulls が 422 になりうる (runner 側にハンドラ無し)。
+  spec 差し替えを先に
+- (c) runner に post-merge gate (merge 後に初めて判定可能な verify 項目) の概念を足す。
+  スコープは大きいが、同型案の再発防止として価値がある — archive.jsonl で health ブランチを
+  見る verify を持った案は P-0110 / P-0111 / P-0133 / P-0135 / P-0157 と複数あり、
+  採択されるたびに同じ罠を踏みうる
+
+### verify 現状 (session 4 自力再実測)
+
+- [x] #1 `python3 -m unittest ops.tests.test_backup_freshness` — rc=0 (34 tests)
+- [ ] #2 health ブランチ latest.json — red 継続。**worker には怎么にもならない**
+      (上記デッドロック)。変化がないのは怠けではなく構造のせい
+- [x] #3 `grep -qE 'backup_fresh' ops/rules.json` — rc=0
+- 回帰確認: repo 全体 discover 523 tests OK / `ops/validate.py` 0 error
+  (warning 1 件: backlog todo 空は本プロジェクトと無関係)
+
+### 次のセッションへの一言
+
+**やるべき作業は無い。** verify #2 は上記デッドロックのため worker には解決できない。
+無為なセッションを積んで予算を消化するより、発見節が拾われ spec が差し替えられる
+(または人間が介入する) のを待つのが正しい。もし archive.jsonl の同 id 追記で verify が
+全 green になったら: 次 の wrapper サイクルで自動的に ensure_pr → ready_for_review となり
+通常フローに復帰する。merge 後フォローアップは 2 つ:
+(i) ArgoCD sync → reporter 実行 (30 分毎) 後に
+`git show origin/ops-health-report:ops/health/latest.json` で backup_freshness が
+>=5 要素載ったことを確認 (旧 #2 の本体)、
+(ii) 同じ内容を取得時刻付きで initial-freshness.md に書く (DoD(5))。
