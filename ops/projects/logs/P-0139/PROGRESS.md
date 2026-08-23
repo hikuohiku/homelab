@@ -1068,3 +1068,52 @@ webhook URL は autopilot-writer SA には読めない (RBAC 実測 Forbidden) �
    判定除外) / on-sync-failed 式の生きた発火検証を追加注入で実施するか否か
    (spec の注入 1 回は消化済みのため要人間裁定)
 3. fired.json / drill fixture は触らない
+
+### セッション 22 (2026-08-23) — 待機状態の全項目再実測 16 回目。merge 未・**main tip 前進再開** (c8095f6f → 3c6a1aa9、6 セッションぶり)・merge-tree rc=0・controller エラー新規ゼロ
+
+**やったこと**:
+
+1. **merge 状況**: 未 merge (`fetch --prune` 後に `git branch -r --contains` が
+   a08db5a9 で origin/project/p-0139 のみ)。**main tip = c8095f6f → 3c6a1aa9 に前進**
+   (17〜21 の 5 セッション停滞から 6 セッションぶり。heart/curriculum 関連 PR #521 の merge)。
+   ops-state / project/p-0116 も進んでいたが本件に影響なし
+2. **競合確認**: `git merge-tree --write-tree origin/main project/p-0139` が rc=0 —
+   main 前進後の in-memory merge 完走を直接証明
+3. **verify 再実測**: #1 green / #3 = fixture 14 tests OK / #2 の red は既知の
+   `--enable-helm` ゲートのみ (ES ファイル自体は存在) / #4 の red は message_id null のみ
+   (delivered: True は生きている)。fired.json 自体は無傷 (git status 空で確認)
+4. **render を本セッションでも再実証**: 初手から `export PATH="$HOME/bin:$PATH"`
+   → helm v3.18.4 を認識、`kubectl kustomize --enable-helm` で rc=0 / 27,222 行 /
+   stderr 0 バイト (セッション 14〜21 と行数一致)。cm data は PyYAML safe_load_all で
+   文書単位に parse して**ちょうど 7 キー** (on-sync-failed の式は `?.` 付きを確認) /
+   ES argocd-notifications-discord-webhook (ns argocd) も render される
+5. **クラスタの merge 前状態が正しいことを再実測**: argocd-notifications-cm data =
+   ['context'] のみ / externalsecret 一覧は **argocd-dex-client-secret** のみ
+   Ready=True (LAST SYNC 30m、同期自体は生きている) / discord-webhook 分は未存在 /
+   drill 残骸 (App p0139-notification-drill・ns p0139-drill) とも NotFound
+6. **controller エラー増加ゼロを実測**: pod 名を label で引き直し、`--since-time=
+   2026-08-23T05:42:27Z` (セッション 21 の測定点) で error 0 行 (当該範囲 374 行)。
+   restarts=19 据え置き。startedAt は 2026-08-03T14:21:14Z
+   (記録のみで判定には使わない方針は不変)
+   **次回以降の since-time 起点: 2026-08-23T05:46:43Z**
+7. **App 状態観測**: 全 15 本中 OutOfSync/Healthy は coder / immich / syncthing /
+   vaultwarden の 4 本 (セッション 9 以降据え置き)、version-watcher Synced/Healthy。
+   Degraded はゼロで通知対象外
+
+**分かったこと**:
+
+- 新規発見ゼロ。main が前進しても merge-tree rc=0 で競合は無い
+- 既知の待機条件 (merge 待ち・裁定 3 点) に変化はない
+
+**次のセッションへの一言 (= やることリスト)**:
+
+1. merge 済みか最初に確認 (`git branch -r --contains a08db5a9`)。merge 済みならクラスタ反映を実測:
+   **argocd-notifications-cm** data が 7 キーちょうど (on-sync-failed は `?.` 付き) /
+   externalsecret argocd-notifications-discord-webhook が SecretSynced /
+   controller error 新規ゼロ (since-time=`2026-08-23T05:46:43Z` 以降を測る) /
+   全 App Healthy 戻り確認
+2. 未 merge ならやることは無い。main が進んでいても merge-tree rc=0 を毎回取り直すこと。
+   裁定事項は不変 3 点: **#2** (sandbox 恒久 red) / **#4** (message_id 人間視認 or
+   判定除外) / on-sync-failed 式の生きた発火検証を追加注入で実施するか否か
+   (spec の注入 1 回は消化済みのため要人間裁定)
+3. fired.json / drill fixture は触らない
