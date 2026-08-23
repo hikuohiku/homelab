@@ -2707,7 +2707,7 @@
     {
       "id": "P-0118",
       "title": "口は開いたが号令は通ったことがない — Telegram 受信からの停止/再開キーワード判定を、実輸送と fixture 判定の両輪で疎通させる",
-      "state": "in_review",
+      "state": "stalled",
       "branch": "project/p-0118",
       "irreversible": false,
       "capabilities": [],
@@ -2768,7 +2768,8 @@
       ],
       "review_requested_at": "2026-08-23T02:07:40Z",
       "review_retries": 0,
-      "review_cycles": 2
+      "review_cycles": 3,
+      "stalled_reason": "review_rejected"
     },
     {
       "id": "P-0126",
@@ -2954,12 +2955,13 @@
       },
       "veto_deadline": "2026-08-23T02:07:40Z",
       "spawn_count": 1,
-      "job": "runner-p-0139-a1"
+      "job": "runner-p-0139-a1",
+      "drift_count": 0
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T01:31:56Z",
-  "last_activity_at": "2026-08-23T02:07:40Z",
+  "last_curriculum_at": "2026-08-23T02:08:51Z",
+  "last_activity_at": "2026-08-23T02:08:51Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
