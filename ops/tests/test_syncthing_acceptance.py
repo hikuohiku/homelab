@@ -11,13 +11,19 @@ device ID 導出のゴールデンベクトルは syncthing 本家のテスト
 この device ID になる」と固定しているものをそのまま移植側の仕様として使う。
 fixture 証明書は公開ルート CA (Amazon Root CA 3) の PEM で、真正な自己署名
 証明書として ssl.PEM_cert_to_DER_cert → sha256 の経路を実入力で通すためのもの。
+
+末尾の TestMigrationDocScript / TestToolDefaultsMatchDoc は docs/syncthing-migration.md
+(手順 B〜D は人間がコピペで実行する台本) を構文と構造の面から固定する。これも
+ネットワークに出ない (sh -n と YAML パースのみ)。
 """
 
 import json
 import base64
 import hashlib
 import io
+import re
 import ssl
+import subprocess
 import tempfile
 import unittest
 import urllib.error
@@ -605,6 +611,240 @@ class TestRenderAndExitCodes(unittest.TestCase):
         mixed = [sa.make_result("req", True, sa.PASS, ""),
                  sa.make_result("opt", False, sa.FAIL, "")]
         self.assertEqual(sa.exit_code(mixed), 1)
+
+
+# ---------------------------------------------------------------------------
+# docs/syncthing-migration.md (DoD 3 の台本) の契約。
+#
+# 手順 B〜D は人間がコピペで実行する。セッション 2 が doc からスクリプト/YAML を
+# 抽出して合成環境で往復試験した際と同じ構文検査をここに恒久化し、以後の編集で
+# 台本が壊れても CI で落とす。実機での空回しは k8s API に届く位置でしかできない
+# (runner 環境からは API 不到達を実測済み) ので、リポジトリ側で出来る崩れ検知は
+# これが全て。実行時の振る舞いそのものは上のユニット群が担う。
+# ---------------------------------------------------------------------------
+
+ROOT = Path(__file__).resolve().parents[2]
+MIGRATION_DOC = ROOT / "docs" / "syncthing-migration.md"
+SYNCTHING_DEPLOYMENT = ROOT / "apps" / "syncthing" / "deployment.yaml"
+
+BASH_BLOCK_RE = re.compile(r"^```bash[ \t]*\n(.*?)^```[ \t]*$", re.S | re.M)
+HEREDOC_RE = re.compile(r"<<'(\w+)'\n(.*?)^\1[ \t]*$", re.S | re.M)
+
+
+def _sh_syntax_ok(script):
+    """sh -n に流して構文だけ検査する (実行はしない)。"""
+    proc = subprocess.run(["sh", "-n"], input=script, capture_output=True,
+                          text=True, timeout=30)
+    return proc.returncode == 0, proc.stderr.strip()
+
+
+class TestMigrationDocScript(unittest.TestCase):
+    def setUp(self):
+        self.doc = MIGRATION_DOC.read_text(encoding="utf-8")
+        self.blocks = BASH_BLOCK_RE.findall(self.doc)
+
+    def heredocs(self, delim):
+        out = []
+        for block in self.blocks:
+            for d, body in HEREDOC_RE.findall(block):
+                if d == delim:
+                    out.append(body)
+        return out
+
+    def script_body(self, marker):
+        matches = [b for b in self.heredocs("SCRIPT") if marker in b]
+        self.assertEqual(len(matches), 1,
+                         f"marker {marker!r} で台本を一意に特定できない")
+        return matches[0]
+
+    def require_yaml(self):
+        try:
+            import yaml
+        except ImportError:
+            self.skipTest("PyYAML が無い環境")
+        return yaml
+
+    def yaml_docs(self):
+        """doc 内の EOF heredoc のうち YAML として書かれているものを全部パースする。"""
+        yaml = self.require_yaml()
+        if getattr(self, "_parsed", None) is None:
+            parsed = []
+            for body in self.heredocs("EOF"):
+                if not body.lstrip().startswith("apiVersion:"):
+                    continue
+                parsed.extend(yaml.safe_load_all(body))
+            self._parsed = parsed
+        return self._parsed
+
+    def doc_of_kind(self, kind, name=None):
+        found = [d for d in self.yaml_docs()
+                 if d.get("kind") == kind
+                 and (name is None or d.get("metadata", {}).get("name") == name)]
+        self.assertTrue(found, f"kind={kind} name={name} のマニフェストが doc 内に無い")
+        return found
+
+    def test_bash_blocks_parse_with_sh_n(self):
+        # 台本ブロックが抽出できていることの下限。減ったら doc の構成を見直す
+        self.assertGreaterEqual(len(self.blocks), 9)
+        for i, block in enumerate(self.blocks, start=1):
+            ok, err = _sh_syntax_ok(block)
+            self.assertTrue(ok, f"bash ブロック {i}: sh -n 失敗: {err}")
+
+    def test_script_heredocs_parse_with_sh_n(self):
+        bodies = self.heredocs("SCRIPT")
+        # 配置スクリプト + ロールバックスクリプト
+        self.assertGreaterEqual(len(bodies), 2)
+        for i, body in enumerate(bodies, start=1):
+            ok, err = _sh_syntax_ok(body)
+            self.assertTrue(ok, f"SCRIPT heredoc {i}: sh -n 失敗: {err}")
+
+    def test_yaml_heredocs_are_k8s_objects_or_placeholder(self):
+        yaml = self.require_yaml()
+        kinds, placeholders = [], []
+        for body in self.heredocs("EOF"):
+            if not body.lstrip().startswith("apiVersion:"):
+                placeholders.append(body.strip())
+                continue
+            for parsed in yaml.safe_load_all(body):
+                self.assertIn(parsed.get("kind"), ("Pod", "Job"))
+                self.assertTrue(parsed["metadata"].get("name"))
+                kinds.append(parsed["kind"])
+        # ロールバック節の「手順 B の YAML を貼れ」プレースホルダだけは意図的な非 YAML
+        self.assertEqual(len(placeholders), 1, placeholders)
+        self.assertIn("手順 B", placeholders[0])
+        # 共通作業用 Pod + acceptance Job + 片付け用 Pod
+        self.assertGreaterEqual(len(kinds), 3)
+
+    def test_acceptance_job_contract(self):
+        job = self.doc_of_kind("Job", "syncthing-acceptance")[0]
+        self.assertEqual(job["metadata"]["namespace"], "syncthing")
+        self.assertEqual(job["spec"]["backoffLimit"], 0)
+        tmpl = job["spec"]["template"]["spec"]
+        self.assertEqual(tmpl["restartPolicy"], "Never")
+        self.assertIs(tmpl["automountServiceAccountToken"], False)
+        c = tmpl["containers"][0]
+        sc = c["securityContext"]
+        # uid/gid 1000 (= PUID/PGID) で動かすことで pvc-rw が本番同等の判定になる
+        self.assertEqual(sc["runAsUser"], 1000)
+        self.assertEqual(sc["runAsGroup"], 1000)
+        self.assertIs(sc["allowPrivilegeEscalation"], False)
+        self.assertEqual(sc["capabilities"]["drop"], ["ALL"])
+        self.assertNotIn("add", sc["capabilities"])
+        vols = {v["name"]: v for v in tmpl["volumes"]}
+        self.assertEqual(vols["work"]["configMap"]["name"], "syncthing-acceptance")
+        self.assertEqual(vols["data"]["persistentVolumeClaim"]["claimName"],
+                         "syncthing-data")
+        mounts = {m["name"]: m["mountPath"] for m in c["volumeMounts"]}
+        self.assertEqual(mounts["work"], "/work")
+        self.assertEqual(mounts["data"], sa.DEFAULT_ROOT)
+        script = c["args"][0]
+        ok, err = _sh_syntax_ok(script)
+        self.assertTrue(ok, f"Job args のスクリプトが sh -n 失敗: {err}")
+        # check (--strict) を通ったときだけ exercise を回す順序
+        self.assertIn("/work/syncthing_acceptance.py check", script)
+        self.assertIn("--strict", script)
+        self.assertLess(script.index("check"), script.index("exercise"))
+        self.assertIn("--data-dir /var/syncthing", script)
+        self.assertIn("/work/restic-backup-cronjob.yaml", script)
+        # GUI/sync 宛先はツール既定値 (= in-cluster Service DNS) に任せる
+        self.assertNotIn("--gui-url", script)
+        self.assertNotIn("--sync-addr", script)
+
+    def test_migrate_pod_contract_and_mount_matches_deployment(self):
+        pods = [p for p in self.doc_of_kind("Pod", "syncthing-migrate")
+                if p["spec"]["containers"][0]["securityContext"]
+                .get("capabilities", {}).get("add")
+                == ["CHOWN", "FOWNER", "DAC_OVERRIDE"]]
+        # 片付け用 Pod (DAC_OVERRIDE のみ) ではなく、共通の作業用 Pod を掴む
+        self.assertEqual(len(pods), 1)
+        spec = pods[0]["spec"]
+        self.assertEqual(pods[0]["metadata"]["namespace"], "syncthing")
+        self.assertEqual(spec["restartPolicy"], "Never")
+        self.assertIs(spec["automountServiceAccountToken"], False)
+        c = spec["containers"][0]
+        sc = c["securityContext"]
+        self.assertIs(sc["allowPrivilegeEscalation"], False)
+        self.assertEqual(sc["capabilities"]["drop"], ["ALL"])
+        # chown / cp -a の属性維持に必要な最小限 (docs/backup.md 復元試験の教訓)
+        self.assertEqual(sc["capabilities"]["add"],
+                         ["CHOWN", "FOWNER", "DAC_OVERRIDE"])
+        vols = {v["name"]: v for v in spec["volumes"]}
+        self.assertEqual(vols["data"]["persistentVolumeClaim"]["claimName"],
+                         "syncthing-data")
+        mounts = {m["name"]: m["mountPath"] for m in c["volumeMounts"]}
+        # 本体 Deployment の mountPath とずれると配置先が PVC の外に出る —
+        # 実マニフェストと突き合わせて固定する
+        dep = next(d for d in self.repo_yaml(SYNCTHING_DEPLOYMENT)
+                   if d.get("kind") == "Deployment")
+        tspec = dep["spec"]["template"]["spec"]
+        dvols = {v["name"]: v for v in tspec["volumes"]}
+        dep_mount = None
+        for vm in tspec["containers"][0]["volumeMounts"]:
+            claim = dvols.get(vm["name"], {}).get("persistentVolumeClaim", {})
+            if claim.get("claimName") == "syncthing-data":
+                dep_mount = vm["mountPath"]
+        self.assertIsNotNone(dep_mount,
+                             "deployment に syncthing-data の mount が見つからない")
+        self.assertEqual(dep_mount, sa.DEFAULT_ROOT)
+        self.assertEqual(mounts["data"], dep_mount)
+
+    def repo_yaml(self, path):
+        return list(self.require_yaml().safe_load_all(
+            path.read_text(encoding="utf-8")))
+
+    def test_placement_script_keeps_rollback_point(self):
+        body = self.script_body("OLD_HOME=")
+        ok, err = _sh_syntax_ok(body)
+        self.assertTrue(ok, f"配置スクリプトが sh -n 失敗: {err}")
+        # 手順 A の tar -C 前提 (展開物が UNPACK 直下に来る) の再確認が残っている
+        self.assertIn('test -f "$UNPACK/cert.pem"', body)
+        # ロールバック点 (.pristine 待避) と layout 目印
+        self.assertIn(".pristine", body)
+        self.assertIn("LAYOUT", body)
+        # GUI バインド修正 (セッション 2 の新発見。忘れると probe 失敗ループ)
+        self.assertIn("s|127\\.0\\.0\\.1:8384|0.0.0.0:8384|g", body)
+        self.assertIn("chown -R 1000:1000", body)
+
+    def test_rollback_script_restores_pristine(self):
+        body = self.script_body("rolled back")
+        ok, err = _sh_syntax_ok(body)
+        self.assertTrue(ok, f"ロールバックスクリプトが sh -n 失敗: {err}")
+        # .pristine だけ残して移行分を全消ししてから戻す (削除→作成の順序も含めて)
+        self.assertIn("! -name '.pristine'", body)
+        self.assertIn('rmdir "$PR"', body)
+        # 配置がまだなら何もせず成功 (巻き戻すものが無いのは正常系)
+        self.assertIn("exit 0", body)
+
+    def test_configmap_sources_exist_in_repo(self):
+        self.assertIn(
+            "--from-file=syncthing_acceptance.py=ops/tools/syncthing_acceptance.py",
+            self.doc)
+        self.assertIn(
+            "--from-file=restic-backup-cronjob.yaml"
+            "=apps/syncthing/restic-backup-cronjob.yaml", self.doc)
+        for rel in ("ops/tools/syncthing_acceptance.py",
+                    "apps/syncthing/restic-backup-cronjob.yaml"):
+            self.assertTrue((ROOT / rel).is_file(), f"{rel} が無い")
+
+    def test_doc_documents_tar_one_liner_rollback_and_ownership(self):
+        # DoD 3 の中身: tar 1 コマンド / ロールバック節 / 置き場所と所有権
+        self.assertIn(
+            "pct exec 101 -- tar -C /var/lib/syncthing -czf - . > syncthing-101.tar.gz",
+            self.doc)
+        self.assertIn("## 失敗したとき — ロールバック", self.doc)
+        self.assertIn("1000:1000", self.doc)
+        self.assertIn(".pristine", self.doc)
+        # LXC 101 は検証合格まで止めない、という安全性の要諦
+        self.assertIn("停止しない", self.doc)
+
+
+class TestToolDefaultsMatchDoc(unittest.TestCase):
+    def test_defaults_are_the_incluster_values(self):
+        # 手順 C の Job は既定値に頼る (--gui-url/--sync-addr の上書きを持ち込まない)。
+        # 既定値を変えたら Job 定義と docs の説明の追従が必要になる
+        self.assertEqual(sa.DEFAULT_GUI_URL, "http://syncthing.syncthing.svc:8384")
+        self.assertEqual(sa.DEFAULT_SYNC_ADDR, "syncthing-sync.syncthing.svc:22000")
+        self.assertEqual(sa.DEFAULT_ROOT, "/var/syncthing")
 
 
 if __name__ == "__main__":
