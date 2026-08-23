@@ -230,3 +230,64 @@ worker セッションごとに追記する。書式は自由だが、証跡 (�
    review_needed のみ昇格、沈黙は実際の送信日を正直に書いて記録)
 3. 人間への依頼文面はセッション 3 の 3 ステップで確定済み (本セッションで裏付け完了)。
    PROGRESS を読んだ人はそれを実行すれば良い。worker 側に残された作業はなし
+
+## セッション 5 (worker, 2026-08-23)
+
+### やったこと: 返信切り分けの歯止めを実装 (seed 化セッションでの誤昇格を機械的に防ぐ)
+
+- **環境再実測**: runner pod 構成はセッション 3・4 と同一
+  (`runner-p-0192-a1-jfgr8`、TELEGRAM 系 env 無し / SA token 未 mount /
+  kubectl は localhost:8080 拒否)。argocd/doppler/tailscale/helm/just CLI も無し。
+  リモート再実測: origin/project/p-0192 = local HEAD (`6a4252a23`)、
+  evidence も pending も未着 = **Job はまだ一度も走っていない**
+- **inbox 基準線が 4 → 5 件に増えた** (fetch 実測): 新着
+  `20260823-133904-1e88e233.json` 本文「こんちわ」(received 13:39:04Z)。
+  募集はまだ送っていないので**返信ではあり得ない**無関係 note。
+  この存在が本セッションの動機: 変換ツールは渡された notes を全部「返信」として
+  扱うため、evidence 到着後のセッションが inbox 全部を素通しで渡すと
+  送信前の挨拶まで要望行に昇格する
+- 本体実装 (`ops/tools/wish_seeds.py`、apps/wish-seeds/ コピーへ同期済み):
+  - `replies_after(notes, sent_at)` 新設 — evidence の sent_at より厳密に後に
+    届いた note だけを返す。境界同秒は返信と数えない。received の欠落・
+    解釈不能は黙って落とさず ValueError (何を返信と数えたかの正しさ =
+    沈黙記録の正しさなので)
+  - `render_seeds_section()` の沈黙文の日付焼き付き「2026-08-23」を除去
+    (セッション 3 発見分の解消)。`sent_at=` 引数から日付を取り、省略時は
+    ValueError で推測を拒む。返信あり系の呼び出し (sent_at 不要) は非破壊
+  - unittest 5 本追加 (`ops.tests.test_wish_seeds` 16 → 21)。
+    「cutoff → render」の定石 1 本も固定済み
+- 実測 (全 green): test_wish_seeds 21 / test_wish_seeds_job 22
+  (ConfigMap byte 一致検査含む) / ops/tests 332 / heart 196 / runner 36 /
+  validate.py 0 error (warning 11 既存分) / kustomize rc=0 / py_compile ok
+
+### 分かったこと / 発見
+
+- サンドボックスの python は 3.14 (fromisoformat が Z サフィックスを直接解釈)。
+  `_parse_iso8601` は念のため Z→+00:00 正規化してあるので古い python でも動く
+- verify 現在地 (自力実測): v1 rc=1 / v2 FileNotFoundError / v3 rc=1 /
+  v4 OK。v1・v2 はセッション 4 記載の wrapper 測定罠どおり Job 実行 +
+  fetch+merge 待ち。v3 は seed 化待ち
+
+### 次のセッションへ
+
+1. **ボトルネックは変わらず「Job を一度走らせること」** (セッション 3 の 3 ステップ
+   preview、裏付けはセッション 4)。冒頭に `git fetch && git ls-tree origin/project/p-0192
+   -- ops/projects/logs/P-0192/` をやり、ask-evidence.json が乗っていたら
+   merge/fast-forward して verify 1・2 を green 化。pending だけ乗って evidence 無しは
+   Job 失敗の可能性 → セッション 4 記載の確認を人間へ依頼
+2. evidence 到着後の seed 化手順 (**更新版**。セッション 1 記載の「notes を渡す」は
+   置き換え):
+   ```python
+   import json
+   from ops.tools import wish_seeds as ws
+   ev = json.load(open("ops/projects/logs/P-0192/ask-evidence.json"))
+   # notes は origin/ops-feedback の inbox (読み取り専用) から received 順に読む
+   replies = ws.replies_after(notes, ev["sent_at"])
+   print(ws.render_seeds_section(replies, rules=ws.load_rules(), sent_at=ev["sent_at"]))
+   ```
+   出力を seeds.md の H6 近くへ貼る。**inbox 全部を直接 render_seeds_section に
+   渡さない** (送信前 note「こんちわ」等を誤昇格する)。返信ゼロなら
+   `render_seeds_section([], rules=..., sent_at=...)` で沈黙記録
+   (日付は自動で正しく入る。手で書き直さなくてよくなった)
+3. triage 後 review_needed のみ昇格・停止系は「要確認」別掲の挙動は不変
+   (セッション 1 記載どおり)

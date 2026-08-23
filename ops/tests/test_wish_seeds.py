@@ -10,6 +10,9 @@
 - 証跡は message_id / sent_at を機械可読に持つ (verify 2 の要求形)
 - 返答 → seed 変換は PROJECT.md 作り方 4 の 3 系列を固定する:
   「返信あり」「ゼロ件 (沈黙)」「veto 語が本文に混じる通常文」
+- 返信の切り分け (replies_after): 募集送信より前の inbox note は返信と数えない
+  (2026-08-23 実測で送信前に無関係な telegram note が既に inbox にあるため)。
+  沈黙記録の日付は evidence の sent_at 由来のみで、推測では焼かない
 - 受信側の取り込み契約 (DoD (2)): telegram-adapter の note は **kind フィールドを
   持たない**。collect_feedback がそれを通常の feedback (review_needed) として
   取り込めることを実物サンプルと同じ形の fixture で実証する
@@ -177,11 +180,17 @@ class TestRenderSeedsSection(unittest.TestCase):
         ])
 
     def test_silence_is_recorded_as_observation(self):
-        section = ws.render_seeds_section([], rules=RULES)
+        section = ws.render_seeds_section(
+            [], rules=RULES, sent_at="2026-08-24T09:30:00Z")
         self.assertIn("人間の要望", section)
+        self.assertIn("2026-08-24 に募集を送ったが", section)
         self.assertIn("返信 0 件", section)
         self.assertIn("聞いたこと・返ってこなかったこと", section)
         self.assertFalse([ln for ln in section.splitlines() if ln.startswith("- ")])
+
+    def test_silence_without_sent_at_refuses_to_guess_the_date(self):
+        with self.assertRaises(ValueError):
+            ws.render_seeds_section([], rules=RULES)
 
     def test_veto_word_inside_long_normal_sentence_is_promoted(self):
         body = (
@@ -210,6 +219,47 @@ class TestRenderSeedsSection(unittest.TestCase):
         self.assertIn("veto", section)
         self.assertNotIn("とりあえず", section.replace(
             "「veto P-0001 とりあえず」", ""))
+
+
+class TestReplySelection(unittest.TestCase):
+    """送信前 note を「返信」として採らない歯止め (replies_after)。
+
+    2026-08-23 実測: 募集送信前に inbox には無関係な telegram note が既にあり
+    (挨拶系)、全 notes を素通しで render_seeds_section に渡すと誤昇格する。
+    """
+
+    SENT_AT = "2026-08-23T12:30:00Z"
+
+    def test_pre_ask_notes_are_dropped_and_replies_kept(self):
+        pre = telegram_note("20260823-120317-1e88e232", "2026-08-23T12:03:17Z",
+                            "こんにちさ")
+        reply = telegram_note("r1", "2026-08-23T13:00:00Z", "服選びが面倒")
+        self.assertEqual(
+            ws.replies_after([pre, reply], self.SENT_AT), [reply])
+
+    def test_same_second_as_send_is_not_a_reply(self):
+        boundary = telegram_note("b1", "2026-08-23T12:30:00Z", "same second")
+        self.assertEqual(ws.replies_after([boundary], self.SENT_AT), [])
+
+    def test_unparseable_or_missing_received_fails_loud(self):
+        with self.assertRaises(ValueError):
+            ws.replies_after([{"id": "x", "body": "時刻が無い"}], self.SENT_AT)
+        with self.assertRaises(ValueError):
+            ws.replies_after(
+                [telegram_note("y", "not-a-time", "壊れた時刻")], self.SENT_AT)
+        with self.assertRaises(ValueError):
+            ws.replies_after([], "also-not-a-time")
+
+    def test_documented_recipe_cutoff_then_render(self):
+        """PROGRESS 記載の定石 (cutoff → render) を 1 本で固定する。"""
+        pre = telegram_note("pre", "2026-08-23T12:03:17Z", "こんにちさ")
+        reply = telegram_note("r1", "2026-08-24T01:00:00Z", "ごみ出しリマインダー")
+        section = ws.render_seeds_section(
+            ws.replies_after([pre, reply], self.SENT_AT),
+            rules=RULES, sent_at=self.SENT_AT,
+        )
+        self.assertNotIn("こんにちさ", section)
+        self.assertIn("- ごみ出しリマインダー", section)
 
 
 NOTE_PATH = "ops/feedback/inbox/note-1.json"

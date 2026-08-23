@@ -13,6 +13,9 @@
    置く note ({id, source: "telegram", received, body}) を受け取り、seeds.md の新節
    「人間の要望 (2026-08 募集より)」の本文を起こす。返信ゼロでも
    「聞いたこと・返ってこなかったこと」を記録する (沈黙も観測)。
+   inbox には募集**以前**から溜まっている無関係な note があるため、昇格に渡すのは
+   `replies_after(notes, evidence["sent_at"])` の結果だけ (送信前 note を
+   「返信」として採らない。2026-08-23 実測: 送信前に挨拶系 note が既に inbox にある)。
 
    昇格の前に triage.classify を通す。お願いへの自由文返事に「やめて」「止めて」等が
    入ると heart は全停止/veto として拾う (決定論パススルー)。それは triage の仕様として
@@ -127,7 +130,38 @@ def _wish_lines(body):
     return lines
 
 
-def render_seeds_section(notes, rules=None):
+def _parse_iso8601(value, what):
+    """ISO 8601 文字列を UTC の datetime へ。解釈不能は黙って落とさず ValueError。"""
+    try:
+        parsed = datetime.datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        raise ValueError("{} ({!r}) を ISO 8601 として解釈できない".format(what, value))
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=datetime.timezone.utc)
+    return parsed.astimezone(datetime.timezone.utc)
+
+
+def replies_after(notes, sent_at):
+    """問いかけの送信より後に届いた note だけを返す (返信の切り分け)。
+
+    sent_at は ask-evidence.json の sent_at (ISO 8601)。境界は「送信時刻より
+    厳密に後」(同秒は返信ではない)。募集前から inbox にある無関係な note を
+    要望として誤昇格しないための歯止め。received の欠落・解釈不能は
+    ValueError にする — 何を返信と数えたかの正しさは沈黙記録の正しさそのもの
+    なので、黙った落としは許さない。
+    """
+    cutoff = _parse_iso8601(sent_at, "sent_at")
+    selected = []
+    for note in notes:
+        received = _parse_iso8601(
+            note.get("received"), "note {} の received".format(note.get("id", "(id 不明)"))
+        )
+        if received > cutoff:
+            selected.append(note)
+    return selected
+
+
+def render_seeds_section(notes, rules=None, sent_at=None):
     """返答 note の list から seeds.md 新節の本文を起こす。
 
     notes は telegram-adapter 形 ({id, source, received, body}) を想定するが、
@@ -135,7 +169,9 @@ def render_seeds_section(notes, rules=None):
     貼れるテキスト (末尾改行付き)。
 
     - review_needed に分類された本文だけを要望行に昇格する (クラス docstring 参照)
-    - 要望 0 件かつ返信 0 件なら沈黙の記録になる
+    - 要望 0 件かつ返信 0 件なら沈黙の記録になる。その際 sent_at
+      (ask-evidence.json の sent_at) が必須 — 実際の送信日を正直に書くため。
+      省略した場合は ValueError (推測で日付を焼かない)
     - 返信はあるが全部昇格見送りの場合も正直にそう書く (沈黙とは言わない)
     """
     from ops.heart import triage
@@ -172,9 +208,14 @@ def render_seeds_section(notes, rules=None):
             "返信はあったが、すべて triage が停止/veto 系に分類したため要望としては昇格しなかった。"
         )
     else:
+        if sent_at is None:
+            raise ValueError(
+                "沈黙の記録には実際の送信時刻が必要。ask-evidence.json の"
+                " sent_at を sent_at= で渡すこと (推測で日付を焼かない)"
+            )
         out.append(
             "{} に募集を送ったが、締め時点で返信 0 件だった。".format(
-                "2026-08-23"
+                _parse_iso8601(sent_at, "sent_at").date().isoformat()
             )
         )
         out.append("聞いたこと・返ってこなかったことの記録。沈黙も観測である。")
