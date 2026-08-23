@@ -376,3 +376,67 @@ vaultwarden / immich / coder-postgres / coder-workspace-homes / syncthing
 - 今晩 (08-24 02:45 JST 窓) の定期 backup が通常どおり成功すれば鮮度は保たれる。
   cap 再発に備え、次の週次発火 (日曜 05:30 JST) の前に B2 Caps & Alerts の恒久対策
   (download_cap 上限引き上げ or alert 設定) が人間側で決着していると望ましい
+
+## session6 (P-0116 worker, 2026-08-23)
+
+やったこと: **main への rebase** (validate.py error 解消) と受入状況の再確認。
+コード・manifest 側の追加作業は不要だったことを再確認したセッション。
+
+### issue #56 の確認結果
+
+verify #1 文言判断への回答は**まだ来ていない** (コメント全 176 件を API で時系列確認。
+最後のプロジェクト関連は `ack P-0102 (継続として再採択済み)` 2026-08-23T00:24:16Z)。
+
+### 発見: 分岐後の main 先行で validate.py が赤 → rebase で解消
+
+- ローカル CI 相当で `python3 ops/validate.py` が
+  「error: archive.jsonl: origin/main の内容と先頭一致しない」を出した
+- ブランチ側の帳簿破損ではなく、**merge-base (5c9a1c73) 以降に origin/main が先行して
+  いたことだけが原因** (curriculum 採択・P-0111/P-0103/P-0088/P-0107 の merge で
+  `ops/projects/archive.jsonl` が +18 行)。validate.py は「ブランチ側の archive.jsonl が
+  origin/main の内容で始まること」(ops/validate.py:418 の startswith) を要求するので、
+  追従していない古いブランチは内容が健全でも必ず赤になる
+- 対処: P-0107 の前例 (`19336fd5 P-0107: worker #2 — main rebase ...`) にならい
+  `git rebase origin/main` 実行。コンフリクト予測は `ops/inventory.json` のみで、
+  実際も双方が別位置への要素追記 (branch: restic-check-restic-image /
+  main: openclaw-bridge-image) だったため自動解決、両要素の共存を実測
+- 教訓: **寿命の長いプロジェクトブランチ (継続で 1 日超) は、push 前に必ず main 追従を
+  自分で確認する**。validate.py の archive 検査は「rebase 忘れ」を機械的に教えてくれる
+
+### rebase 後の再実測 (全 green, 2026-08-23T01:0xZ)
+
+- validate.py: **0 error** (11 warning は既存の heart 領分で変化なし)
+- 受入 #2: `unittest ops.tests.test_restic_check_runner` **28 tests OK**
+- discover 全体: `unittest discover -s ops/tests` **177 tests OK rc=0**
+  (session2 時点の 93 から増加 — main 側の新規テスト群を取り込んだため。出力中の
+  ResourceWarning / ::error:: 行は openclaw bridge・sops 系テストが意図的に流す
+  stderr であり失敗ではない)
+- 受入 #3 python verify: rc=0 再実測
+- script sync / credential map / version sync: 全 rc=0
+
+### heart 向け材料 (verify #1 の置換候補 — 判断は heart のまま)
+
+BusyBox grep 対応の等価コマンド 2 案 (どちらもこの環境で rc=0 を実測):
+
+- `grep -rq 'restic-check' apps/` — --include 削除の最小差分。YAML 以外のファイルも
+  拾いうるが、誤検知の方向が安全側 (manifest が有るのに無いと判定される方向ではない)
+- `find apps/ -name '*.yaml' -exec grep -q 'restic-check' {} \;` — YAML 限定の趣旨を保持
+
+### verify 現状
+
+- #1 grep: **red のまま** (spec 文言 × BusyBox grep --include 非対応は変化なし。
+  manifest 実体は `apps/restic-check/` にあり、--include 無し版は rc=0 実測ずみ)。
+  heart 判断待ち — コード側に直すものは無い
+- #2 unittest: **green (28 tests)** 再実測
+- #3 evidence: **green** 再実測
+
+### 次セッションへの要点
+
+- コード側の作業は**完全に完了**。唯一の未達 (verify #1) は heart/spec 側の判断待ちで、
+  worker 側にできることは無い (issue #56 の回答確認だけ)
+- wrapper が verify を回すとき、#1 は文言どおりだと BusyBox 環境では赤になる点を
+  PR 説明に必ず明記すること (session5 からの繰り返し依頼)
+- push 前には `git fetch && git log HEAD..origin/main --oneline` で main 先行を確認し、
+  先行していたら rebase → validate.py 0 error を確認してから push すること
+- 今晩 (08-24 02:45 JST 窓) の定期 backup 成功が鮮度維持の前提。B2 cap 恒久対策は
+  人間側課題のまま (P-0080 依頼への直接回答は #56 で未確認)
