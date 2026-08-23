@@ -13,6 +13,58 @@ issue #56 (2026-08-05 04:40:59) で人間から新方針: **PBS は重すぎる�
 `ops/backlog.json` の T-0065〜T-0073 系列（IaC 完全性の棚卸し・実サイズ測定・restic 保存先用意・
 アプリ別 backup CronJob・復元試験・PBS 退役判断）。
 
+## B2 download cap の予算とスケジュール分散 (P-0216, 2026-08-23)
+
+2026-08-22 夜、夜間 backup Job 全滅の一次原因は Backblaze B2 アカウントの
+**download cap 超過**だった (`download_cap_exceeded` / HTTP 403。調査の全文は
+[`ops/projects/logs/P-0111/root_cause.md`](../ops/projects/logs/P-0111/root_cause.md))。
+cap はアカウント単位で鍵の種類に無関係、usage counter は**毎日 00:00 UTC にリセット**
+される (公式ドキュメント + p0111-cap-watch による 08-23T00:04Z 回復実測)。P-0128 の
+download-ledger CronJob が「誰が消費したか」の**事後の帳簿**なのに対し、この節と
+`ops/b2/budget.py --check`(CI の consistency checks) は**事前の歯止め**: manifest から
+B2 消費者を機械抽出した台帳に対して、「重い消費者の同一時間帯密集」「リセット境界付近
+での開始」「台帳未登録の消費者の混入」を落とす。
+
+### 各消費者の想定転送量と判断根拠
+
+推定値は P-0128 の `LEDGER_RULES` (apps/*/download-ledger-cronjob.yaml) と同値で、
+「桁感であり実測ではない」。実測に差し替えるときは LEDGER_RULES とこの表を一緒に更新する
+(`ops/b2/budget.py` の REGISTRY も同値)。
+
+| CronJob | 想定 download/回 | 根拠 |
+|---|---|---|
+| `*-restic-backup` ×5 (日次) | 32 MiB | repo open 時の config/index 読みが支配的。index サイズは pack 数に比例しデータ総量には比例しないため、規模が増えてもこの桁は当面動かない。日次差分の stored 実測は小さい (vaultwarden 158 KiB / immich 1.835 MiB / coder-postgres 520 KiB / workspace general 差分 2.425 MiB / test 0 B、2026-08-10 手動 Job 実測) ため、backup の読みはほぼこの固定費 |
+| `*-restic-retention` ×5 (週次) | 512 MiB | `forget --prune` が書き戻す pack の読み直し + index 再読み。削除量依存で大きく揺れる。2026-08-22 の cap 超過日は土曜 = 全 retention 一斉稼働日であり、この桁がアカウント合計で cap を超え得ることと辻褄が合う |
+
+参考 (リポジトリ総量の桁。復元試験でのフルリストア実測): immich 332 MiB /
+workspace home (test) 925 MiB / vaultwarden 4.6 MiB / syncthing 14.577 KiB。
+restore drill・bit rot 読み・週次健康診断など将来の読み取り系ジョブは、この台帳への
+登録が CI で強制される (未登録のまま混ぜると `ops/b2/budget.py --check` が落とす)。
+
+### スケジュール分散 (P-0216 で実施)
+
+旧: 全 retention が日曜 JST 深夜 (= **土曜 18:45–19:50 UTC**) に 65 分間で 5 本。
+日次 backup 帯 (17:45–18:55Z) と同じ UTC 夜に乗り、合計 ≈ 2.7 GiB が一日の終わり
+数時間に集中していた。08-10・08-22 の超過日はいずれも土曜 (retention 稼働日) だった。
+
+新: **1 曜日 1 本**へ分散。開始時刻はすべて 04:00 JST (= 前日 19:00 UTC、リセット境界
+から 5 時間)。日次 backup 5 本の開始時刻は単一障害点のため触っていない。retention を
+各アプリの backup 帯から丸ごと離したことで restic lock 競合も構造的に消えた。
+
+| CronJob | 旧 (JST) | 新 (JST) |
+|---|---|---|
+| `immich-restic-retention` | 日曜 03:45 | 月曜 04:00 |
+| `vaultwarden-restic-retention` | 日曜 04:00 | 火曜 04:00 |
+| `coder-restic-retention` | 日曜 04:10 | 水曜 04:00 |
+| `coder-workspace-home-backup-retention` | 日曜 04:30 | 木曜 04:00 |
+| `syncthing-restic-retention` | 日曜 04:50 | 金曜 04:00 |
+
+分散後の合計見積もり: 毎日固定分 160 MiB + 週次 512 MiB = 最悪日 672 MiB
+(旧土曜は 2,720 MiB)。cap の実値 (何 GB か) は B2 コンソールにしかなく repo 外のため、
+`--check` の合計検査 (a) は `--cap-bytes` / 環境変数 `B2_DAILY_CAP_BYTES` を与えたときだけ
+有効になる (unconfigured なら正直に沈黙。決め打ちはしない)。cap 実値を確認したら
+CI から参照できる形にするかどうかは人間と相談。
+
 ## IaC 完全性の棚卸し (T-0065, run #30)
 
 「node01 が揮発しても Git/Doppler に無いものが残っていないか」を repo 横断で確認した。
@@ -91,7 +143,8 @@ Box との比較検討は不要。宣言値（PVC の `requested`）と実測値
   毎回依存してしまうため置き換えた。vaultwarden 内蔵の `/vaultwarden backup` コマンドは
   ソース確認の結果 `db.sqlite3` と同じディレクトリにしか出力できず読み取り専用マウントと
   両立しないため不採用）
-- **`vaultwarden-restic-retention`**（毎週日曜 04:00 JST、UTC 換算では前日 19:00）: `restic forget --keep-daily 7
+- **`vaultwarden-restic-retention`**（毎週日曜 04:00 JST、UTC 換算では前日 19:00。
+  → P-0216 で火曜 04:00 JST へ変更、下記「B2 download cap の予算とスケジュール分散」）: `restic forget --keep-daily 7
   --keep-weekly 4 --keep-monthly 6 --prune`
 - 保存先は Backblaze B2（`b2:<bucket>:vaultwarden`）。immich（T-0068）・coder-postgres
   （T-0070）も同じ bucket・同じ credential でパス末尾だけ変える設計にした
@@ -118,7 +171,8 @@ Box との比較検討は不要。宣言値（PVC の `requested`）と実測値
 - **`immich-restic-backup`**（毎日 02:45 JST、immich 自身のダンプ完了を待つため45分後に開始。
   UTC 換算では前日 17:45）:
   `immich-library` PVC をそのまま restic backup する
-- **`immich-restic-retention`**（毎週日曜 03:45 JST、UTC 換算では前日 18:45）: `restic forget --keep-daily 7
+- **`immich-restic-retention`**（毎週日曜 03:45 JST、UTC 換算では前日 18:45。
+  → P-0216 で月曜 04:00 JST へ変更）: `restic forget --keep-daily 7
   --keep-weekly 4 --keep-monthly 6 --prune`
 - 保存先は vaultwarden/coder-postgres と同じ Backblaze B2 バケット、パス末尾のみ `immich`
   （`b2:<bucket>:immich`）
@@ -154,7 +208,8 @@ PostgreSQL 向けに適用したもの。
   `ops/inventory.json` の `coder-postgres` エントリの `mirrors` としてバージョン同期を
   `check_version_sync.py` の CI で追う）。PVC には触れず DB へのネットワーク接続のみのため、
   vaultwarden の sqlite-snapshot initContainerと違い `DAC_READ_SEARCH` は不要
-- **`coder-restic-retention`**（毎週日曜 04:10 JST、UTC 換算では前日 19:10）: `restic forget --keep-daily 7
+- **`coder-restic-retention`**（毎週日曜 04:10 JST、UTC 換算では前日 19:10。
+  → P-0216 で水曜 04:00 JST へ変更）: `restic forget --keep-daily 7
   --keep-weekly 4 --keep-monthly 6 --prune`
 - 保存先は vaultwarden と同じ Backblaze B2 バケット、パス末尾のみ `coder-postgres`
   （`b2:<bucket>:coder-postgres`）
@@ -183,7 +238,7 @@ vaultwarden/coder-postgres）と異なり、対象 PVC (`coder-<workspace-id>-ho
   末尾のみ `coder-workspace-homes` に変える設計
 - **1リポジトリを workspace 間で共有**: 各 Job は `restic backup --host <workspace-id>` で
   ホストタグを付ける。**`coder-workspace-home-backup-retention`**（毎週日曜 04:30 JST、UTC 換算では
-  前日 19:30）は
+  前日 19:30。→ P-0216 で木曜 04:00 JST へ変更）は
   `restic forget --group-by host --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune`
   でホスト単位に世代管理する。workspace が削除されてもそのホストの世代は自然に切り捨てられる
   （明示的な削除はしない）
@@ -210,7 +265,8 @@ namespace から引ける）。
   「戻せない」形で出る。加えて `config/cert.pem` と `config/key.pem` は syncthing のデバイス ID
   そのもので、失うと再発行しかなく既存ピアからは「別デバイス」に見える（再ペアリングが要る）。
   同期する実データ（T-0140）が来る前から、既に戻せないデータを持っている
-- **スケジュール**: backup 毎日 03:55 JST / retention 毎週日曜 04:50 JST。既存 4 本の帯
+- **スケジュール**: backup 毎日 03:55 JST / retention 毎週日曜 04:50 JST (retention は
+  P-0216 で金曜 04:00 JST へ変更)。既存 4 本の帯
   （backup 2:45/3:10/3:30/3:40、retention 3:45/4:00/4:10/4:30）と衝突しない。既存 CronJob と
   同じく `spec.timeZone` は書かず node01 の time.timeZone（JST）で評価される
 - **リポジトリパス**: `b2:$(RESTIC_B2_BUCKET):syncthing`（既存の

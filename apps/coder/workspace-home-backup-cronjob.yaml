@@ -340,13 +340,14 @@ spec:
 # 週次で古い世代を刈る。workspace ごとに restic --host <workspace-id> でタグ付けしているため、
 # --group-by host でホスト単位に世代管理する。workspace が削除されても、そのホストの
 # スナップショットは keep-* の世代分だけ残り続けたのち自然に切り捨てられる（明示的な削除はしない）
+# P-0216: retention の日曜深夜集中を曜日分散へ。この CronJob は木曜担当。
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: coder-workspace-home-backup-retention
   namespace: coder
 spec:
-  schedule: "30 4 * * 0"
+  schedule: "0 4 * * 4"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3

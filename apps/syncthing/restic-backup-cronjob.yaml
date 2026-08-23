@@ -109,15 +109,15 @@ spec:
                 readOnly: true
 ---
 # 週次で古い世代を刈る (restic forget --prune)。PVC には触れないため readOnly マウント不要。
-# 既存の retention 帯 (日曜 3:45 immich / 4:00 vaultwarden / 4:10 coder / 4:30 workspace-home)
-# と重ならない 4:50 に置く
+# P-0216: retention の日曜深夜集中 (旧「既存の retention 帯と重ならない 4:50 に置く」方針) を
+# 曜日分散へ再編。syncthing は金曜担当。
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: syncthing-restic-retention
   namespace: syncthing
 spec:
-  schedule: "50 4 * * 0"
+  schedule: "0 4 * * 5"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3

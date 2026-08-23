@@ -76,6 +76,7 @@ jobs:
           python3 ops/check_doc_commands.py
           python3 ops/check_feedback.py
           python3 ops/check_credential_map.py
+          python3 ops/b2/budget.py --check
 
       # --- apps/ を触った PR だけ ---
 

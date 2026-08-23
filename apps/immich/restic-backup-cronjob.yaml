@@ -97,13 +97,16 @@ spec:
                 readOnly: true
 ---
 # 週次で古い世代を刈る (restic forget --prune)。PVC には触れないため readOnly マウント不要。
+# P-0216: 全 retention が日曜 JST 深夜 (= 土曜 18:45–19:50Z) に密集すると B2 download cap
+# を食い潰す (2026-08-08 / 08-22 の実事故) ため、5 本を曜日分散した。immich は月曜担当。
+# 台帳と検査は ops/b2/budget.py (--check が CI で見張る)、経緯は docs/backup.md
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: immich-restic-retention
   namespace: immich
 spec:
-  schedule: "45 3 * * 0"
+  schedule: "0 4 * * 1"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3

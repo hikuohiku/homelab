@@ -120,13 +120,15 @@ spec:
               emptyDir: {}
 ---
 # 週次で古い世代を刈る (restic forget --prune)。DB には触れないため pg_dump 不要。
+# P-0216: 全 retention が日曜 JST 深夜に密集すると B2 download cap を食い潰す
+# (2026-08-08 / 08-22 の実事故) ため、5 本を曜日分散した。coder-postgres は水曜担当。
 apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: coder-restic-retention
   namespace: coder
 spec:
-  schedule: "10 4 * * 0"
+  schedule: "0 4 * * 3"
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 3
   failedJobsHistoryLimit: 3
