@@ -843,3 +843,41 @@ session 5〜23 の「次のセッションへの一言」をそのまま引き�
 merge 後フォローアップは session 4 末尾 (i)(ii): ArgoCD sync → reporter 実行後に
 health ブランチの backup_freshness >=5 要素を確認、同じ内容を取得時刻付きで
 initial-freshness.md に記録。
+
+## 2026-08-23 session 24 (worker)
+
+### 結論 — 変化なし。spec 差し替え待ちのまま、実装・commit は無用と確認して終了
+
+session 23 の指示通り現状確認のみ。**作業は無かった** (これが正しい状態)。
+代替ルート不成立の再探索は session 13 で不要と確定済み、本セッションも触れない。
+
+### 再実測 (2026-08-23T07:59Z 時点、wrapper 実測と一致)
+
+- `git show origin/main:ops/projects/archive.jsonl | grep -c '"id": "P-0157"'` → **1**
+  (差し替え追記はまだ無い。同 id エントリの title は旧定義のまま)
+  ※ origin/main は **cc1c86626 のまま静止** (session 22 以降変動無し、新着 PR 無し)。
+  `git diff --name-only cc1c86626..origin/main -- ops/projects ops/rules.json` は **0 件** —
+  curriculum 側の動きは無し
+- verify #1 green (34 tests OK) / #2 red 継続 (health ブランチ latest.json の
+  `backup_freshness` は AssertionError = None) / #3 green (`backup_fresh` in rules.json)。
+  wrapper 実測と一致
+- 補足: health ブランチは**生きている** (最新 commit 6df6c238d = generated_at
+  2026-08-23T07:30:07Z、本実測 07:59:31Z は次回更新 ~08:00Z の直前で稼働内の静止)。
+  reporter 自体は正常に回っており、#2 が red なのは「鮮度計コードがまだ merge されていない」
+  ことだけが原因 — session 4 特定の構造的デッドロックの再確認
+- 差し替え用コマンドの判定力は維持:
+  `grep -c '"backup_freshness": collect(collect_backup_freshness)' apps/ops-health-reporter/report.py`
+  がブランチでは一致 (1 件) / origin/main では collect_backup_freshness 言及 0 件 —
+  session 5 実測のまま
+- origin/project/p-0157 は local HEAD (本セッション開始時点で a981c31c6 = session 23 の
+  PROGRESS commit) と同一 — wrapper 側の新着 commit も無し
+
+### 次のセッションへの一言
+
+session 5〜24 の「次のセッションへの一言」をそのまま引き継ぐ (方針に変更なし)。
+要約: (1) archive.jsonl の同 id 追記数を確認 (>1 なら差し替え済み)、(2) verify 3 項目を
+自力実測。#2 が旧定義のまま red なら実装も commit も無用 (この PROGRESS 追記のみ)。
+差し替え済みで全 green なら何も足さず wrapper に流す (PR 作成・push は wrapper の職責)。
+merge 後フォローアップは session 4 末尾 (i)(ii): ArgoCD sync → reporter 実行後に
+health ブランチの backup_freshness >=5 要素を確認、同じ内容を取得時刻付きで
+initial-freshness.md に記録。
