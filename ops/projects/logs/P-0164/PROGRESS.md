@@ -1092,7 +1092,79 @@ $ python3 ops/validate.py                                # 0 error, 11 warning (
   main が動いたら validate.py の archive.jsonl error → origin/main を merge。
   unittest 件数は固定値でないので「OK か」で判断すること
 
+### セッション 28 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking 5 件でメンバー不変**
+  (P-0092 announced / P-0175・P-0181・P-0182・P-0185 active。checked=65、
+  09:58:04Z 実測)。固定指示どおり実演習は見送り。**blocking メンバー不変は
+  26→27→28 で 3 セッション連続**になった
+- **台帳完全凍結の継続 (様態 b)**: projects.json を触る commit は
+  df707db34 09:42:37Z (beat 94 decide) を最後に皆無で、beats は 94→106
+  (d2ce77036 09:57:15Z) まで進行。id+state 写像はセッション 27 記録の内訳と完全一致
+  (delivered 27 / vetoed 2 / stalled 30 / announced 1 / active 5、total 65)。
+  様態 (b)「新 version 自体ゼロ」型は 24 例目に続き継続観測
+- **PR #524 材料耐久 7 例目**: GET /pulls/524 → open / draft=true /
+  mergeable_state=**clean** / head=5d24c8932 不変。head commit の check-runs で
+  ci success・GitGuardian success 再確認。main は 9b9470594 で不動・自ブランチ
+  包含済みにつき validate 劣化なし・merge 不要
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 5), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 294 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+```
+
+- **当日健診表の訂正 (セッション 27 の記録を訂正)**: `kubectl get pods -n argocd`
+  を custom-columns で精密再読したところ、RESTARTS=19 一様は**誤りだった**。
+  実際は applicationset/dex/notifications/redis の 4 pod (開始 2025-12-16) が
+  19/Unknown、**repo-server と server は restartCount=1・lastState.reason=Completed**
+  (開始 2026-08-05T17:31Z)。startTime から本日中の pod 再作成は否定できるため、
+  セッション 27 側の読み取りが雑だっただけ。当日健診は本実測形式 (custom-columns で
+  READY/RESTARTS/LASTSTATE を pod 単位) で行うこと。application-controller-0 は
+  セッション 27 と同一値 (ready=true・restartCount=4・lastState=OOMKilled)
+- **常時部分同期ループを発見 (当日計測の妨害源になりうる)**: immich / vaultwarden /
+  syncthing / coder の 4 Application が同一リビジョン 9b9470594 への自動同期を
+  約 5 分周期で繰り返している (10:00Z 前後の events 実測: "Partial sync operation ...
+  succeeded" が 4 アプリで反復)。原因まで特定: 各 ns の **download-ledger CronJob**
+  (25 * * * *、本日 03:39 頃導入) が Git 管理の空 ConfigMap `download-budget` へ
+  Python-urllib で書き込むためアプリが恒常 OutOfSync になり、self-heal 同期が
+  ループしている (sync は Succeeded を返すのに drift は解消しない)。
+  --run 当日の catchup 計測はこの環境ノイズと重なる — ラベル commit の伝播は
+  アプリ単位で時刻を取り、revision+label 到達で判定すること (発見節に追記済み)。
+  なお 4 アプリ選択は「download-ledger を持つ ns」と正確に一致する
+- コード変更なし
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順はセッション 3・4 の固定 + 当日健診: pod の
+  restartCount/lastState を custom-columns で pod 単位確認 + 4 アプリの常時同期
+  ルールを頭に入れてから計測)、開いていなければ再実測だけして軽く閉じてよい。
+  塞ぎ手 5 件不変 (P-0092 announced / P-0175・P-0181・P-0182・P-0185 active)。
+  main が動いたら validate.py の archive.jsonl error → origin/main を merge
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 28, クラスタ側の環境ノイズ) **download-ledger CronJob 導入以降、
+  その 4 ns の Application が恒常 OutOfSync → 約 5 分周期の部分同期ループに乗っている**。
+  Git 上は空 `data` の ConfigMap download-budget へ CronJob が Python-urllib で
+  実データを書くため drift が絶えず、auto-sync+selfHeal が「Succeeded を返すが
+  drift 解消にならない」同期を繰り返す (10:00Z events + app status 実測)。
+  含意は 2 つ: (a) 本演習の catchup 計測ではこの 4 アプリの同期は commit 到達と
+  無関係に定期発火するため、**計測対象の判定は status.sync.revision==新 main かつ
+  ラベル到達で行い、アプリ単位で時刻を取る**(targets の vaultwarden/coder は
+  ちょうどこのループ内); (b) health reporter / watcher は平時から 4 アプリ分の
+  OutOfSync ノイズを常時見ることになり、「ArgoCD 停止中の status 鮮度劣化」観測
+  (DoD (3)) の baseline が汚れている前提で読む必要がある。download-budget を
+  ignoreDifferences に入れる等の構造修正は本プロジェクト領域外 (syncthing/
+  download-ledger 側の論点) につきここに記録するのみ
+
+- (セッション 28, 当日健診の読み取り方法の確定) pod 健診はデフォルト列や目視ではなく
+  `kubectl get pods -n argocd -o custom-columns="NAME:.metadata.name,READY:...,RESTARTS:...,LASTSTATE:..."`
+  で pod 単位に取ること。セッション 27 の「他コンポーネント 5 種すべて
+  RESTARTS=19 一様」は誤読で、実態は repo-server/server が restartCount=1・
+  lastState=Completed (開始 2026-08-05 のまま)。lastState の理由種別は
+  OOMKilled / Completed / Unknown と様々で、一様性を仮定すると OOM 直後の
+  残滓を見落とす
 
 - (セッション 27, P-0182 落地時の構造リスク) blocking の新入場 3 案のうち
   **P-0182 が「stalled からの復活レーン」そのものを提案している** (verify に
