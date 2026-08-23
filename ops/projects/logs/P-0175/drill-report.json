@@ -1,0 +1,348 @@
+{
+ "project_id": "P-0175",
+ "title": "Doppler 一時遮断演習 (External Secrets の唯一の上流を NetworkPolicy で遮断し、既存 Secret・アプリの挙動を実測)",
+ "executed_at": "2026-08-23T09:34:18Z",
+ "cluster": "k3s single-node (node nixos, v1.34.2+k3s1)、ESO ghcr.io/external-secrets/external-secrets:v2.9.0",
+ "method": {
+  "approach": "external-secrets ns の ESO 本体 Pod (labels app.kubernetes.io/instance=external-secrets + app.kubernetes.io/name=external-secrets) に Egress NetworkPolicy を適用し、クラスタ内 (pod CIDR 10.42.0.0/24 と node IP :6443) のみ許可して api.doppler.com 行きを遮断",
+  "manifest_record": "ops/projects/logs/P-0175/netpol.yaml",
+  "enforcement_probe": {
+   "method": "同一ラベルの busybox 一時 Pod (p0175-probe) を external-secrets ns に起こし、ESO と同じポリシー適用下で疎通を確認",
+   "dns_api.doppler.com": "OK (名前解決は可能 — 遮断されるのは TCP 接続のみ)",
+   "tcp_api.doppler.com:443": "Connection refused (拒否)",
+   "tcp_1.1.1.1:443": "拒否 (Doppler 以外の外部も同様に不可)",
+   "cluster_internal": "OK (K8s API service / kube-dns は到達可)"
+  },
+  "policy_iterations": [
+   {
+    "version": 1,
+    "problem": "service CIDR (10.43.0.0/16) の ipBlock 許可では K8s API に届かない。kube-router の実装は DNAT 後の宛先 (endpoint 側 IP) で評価するため。適用直後の probe で検出、T0+118s に修正",
+    "fixed_at": "2026-08-23T09:36:16Z"
+   },
+   {
+    "version": 2,
+    "problem": "pod CIDR への port 6443 制限を付けてしまったため kube-dns endpoint (:53) が遮断され DNS が死亡。T0+217s に修正 (pod CIDR は port 制限なし、node IP:6443 は port 付きに分離)",
+    "fixed_at": "2026-08-23T09:37:55Z"
+   }
+  ],
+  "clean_drill_window_note": "T0〜T0+217s は policy 調整中のため ESO の K8s API 経路が一時不通だった可能性がある。以降の計測値にはこの注記が付くものがある",
+  "secret_value_handling": "Secret の値は取得・記録していない。resourceVersion (不変証明) と ExternalSecret の status のみを扱う"
+ },
+ "blocked_minutes": 35.5,
+ "blocked_started_at": "2026-08-23T09:34:18Z",
+ "blocked_ended_at": "2026-08-23T10:09:47Z",
+ "clean_block_start": "2026-08-23T09:37:55Z",
+ "eso_error_first_seen_seconds": 539,
+ "eso_error_first_seen": {
+  "externalsecret": "coder/coder-db-url",
+  "at": "2026-08-23T09:43:17Z",
+  "note": "T0 起点。クリーン窓 (T0+217s) 起点なら 322 秒"
+ },
+ "pre_existing_errors_excluded": [
+  {
+   "externalsecret": "syncthing/syncthing-photo-intake-credentials",
+   "since": "2026-08-22T17:11:37Z",
+   "note": "演習前から SecretSyncedError。target Secret 自体が未作成 (GET が 404)。ESO ログ上は key IMMICH_API_KEY の取得失敗が繰り返されている。演習の新規エラー計測からは除外"
+  }
+ ],
+ "new_errors": [
+  {
+   "externalsecret": "coder/coder-db-url",
+   "first_seen": "2026-08-23T09:43:17Z",
+   "elapsed_seconds_from_t0": 539,
+   "scheduled_due_baseline": "2026-08-23T09:43:17Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "coder/coder-restic-backup-credentials",
+   "first_seen": "2026-08-23T09:43:19Z",
+   "elapsed_seconds_from_t0": 541,
+   "scheduled_due_baseline": "2026-08-23T09:43:19Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "coder/coder-postgres-credentials",
+   "first_seen": "2026-08-23T09:43:23Z",
+   "elapsed_seconds_from_t0": 545,
+   "scheduled_due_baseline": "2026-08-23T09:43:23Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "coder/coder-restic-credentials",
+   "first_seen": "2026-08-23T09:43:25Z",
+   "elapsed_seconds_from_t0": 547,
+   "scheduled_due_baseline": "2026-08-23T09:43:25Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "ops-health-reporter/github-health-reporter-token",
+   "first_seen": "2026-08-23T09:43:29Z",
+   "elapsed_seconds_from_t0": 551,
+   "scheduled_due_baseline": "2026-08-23T09:43:29Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "tailscale/tailscale-oauth",
+   "first_seen": "2026-08-23T09:43:56Z",
+   "elapsed_seconds_from_t0": 578,
+   "scheduled_due_baseline": "2026-08-23T09:43:56Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "immich/immich-postgres-credentials",
+   "first_seen": "2026-08-23T09:43:58Z",
+   "elapsed_seconds_from_t0": 580,
+   "scheduled_due_baseline": "2026-08-23T09:43:58Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "immich/immich-restic-credentials",
+   "first_seen": "2026-08-23T09:43:59Z",
+   "elapsed_seconds_from_t0": 581,
+   "scheduled_due_baseline": "2026-08-23T09:43:59Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "immich/immich-restic-backup-credentials",
+   "first_seen": "2026-08-23T09:44:02Z",
+   "elapsed_seconds_from_t0": 584,
+   "scheduled_due_baseline": "2026-08-23T09:44:02Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "autopilot/autopilot-credentials",
+   "first_seen": "2026-08-23T09:50:58Z",
+   "elapsed_seconds_from_t0": 1000,
+   "scheduled_due_baseline": "2026-08-23T09:50:58Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "autopilot/telegram-adapter-credentials",
+   "first_seen": "2026-08-23T09:53:29Z",
+   "elapsed_seconds_from_t0": 1151,
+   "scheduled_due_baseline": "2026-08-23T09:53:29Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "vaultwarden/vaultwarden-admin-token",
+   "first_seen": "2026-08-23T09:57:21Z",
+   "elapsed_seconds_from_t0": 1383,
+   "scheduled_due_baseline": "2026-08-23T09:57:20Z",
+   "delay_vs_schedule_seconds": 1
+  },
+  {
+   "externalsecret": "vaultwarden/vaultwarden-restic-backup-credentials",
+   "first_seen": "2026-08-23T09:57:22Z",
+   "elapsed_seconds_from_t0": 1384,
+   "scheduled_due_baseline": "2026-08-23T09:57:22Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "vaultwarden/vaultwarden-restic-credentials",
+   "first_seen": "2026-08-23T09:57:25Z",
+   "elapsed_seconds_from_t0": 1387,
+   "scheduled_due_baseline": "2026-08-23T09:57:25Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "version-watcher/github-health-reporter-token",
+   "first_seen": "2026-08-23T10:06:09Z",
+   "elapsed_seconds_from_t0": 1911,
+   "scheduled_due_baseline": "2026-08-23T10:06:09Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "syncthing/syncthing-restic-backup-credentials",
+   "first_seen": "2026-08-23T10:07:52Z",
+   "elapsed_seconds_from_t0": 2014,
+   "scheduled_due_baseline": "2026-08-23T10:07:52Z",
+   "delay_vs_schedule_seconds": 0
+  },
+  {
+   "externalsecret": "syncthing/syncthing-restic-credentials",
+   "first_seen": "2026-08-23T10:07:56Z",
+   "elapsed_seconds_from_t0": 2018,
+   "scheduled_due_baseline": "2026-08-23T10:07:56Z",
+   "delay_vs_schedule_seconds": 0
+  }
+ ],
+ "secrets_immutability": {
+  "checked_count": 20,
+  "checked_note": "21 target のうち 20 件が存在 (syncthing/syncthing-photo-intake-credentials の target Secret は演習前から未作成で 404。pre_existing_errors_excluded 参照)",
+  "check_method": "全 ESO 管理 target Secret の metadata.resourceVersion を 3 時点 (遮断前/遮断中/復旧後) で比較。RV は data 変更で必ず変わるため不変証明として使用。値自体は取得しない",
+  "snapshot_times": [
+   "2026-08-23T09:33:48Z",
+   "2026-08-23T09:48:29Z",
+   "2026-08-23T10:26:13Z"
+  ],
+  "changed_during_block": [],
+  "changed_overall": [],
+  "all_unchanged": true
+ },
+ "pods_during_block": {
+  "summary_diffs_start_to_end": {
+   "external-secrets": {
+    "start": {
+     "running": 4,
+     "total": 4,
+     "restarts": 0
+    },
+    "end": {
+     "running": 3,
+     "total": 5,
+     "restarts": 0
+    }
+   }
+  },
+  "note": "restarts の増加が無ければ遮断中も稼働中 Pod は影響を受けていない。Succeeded/Failed の CronJob 履歴 Pod は日次バックアップ等の通常の増減なので除外して見ること",
+  "drill_owned_pods_note": "external-secrets ns の差分 (running 4→3, total 4→5) はワークロードの変化ではなく演習側の一時 Pod: 開始時に強制確認用 probe (p0175-probe) が Running に数えられ、終了時にはそれが Completed になり rv 証跡取得用 probe も Completed として total に残っていたため。ESO 本体・cert-controller・webhook の 3 Pod は restarts=0 のまま"
+ },
+ "pod_recreate": {
+  "deployment": "autopilot/telegram-adapter",
+  "reason_chosen": "stateless・private DM の転送のみ・doppler 由来 credentials を env で消費。データ損失・利用者影響が最小",
+  "restarted_at": "2026-08-23T09:47:48Z (T0+810s)",
+  "rollout_completed_at": "2026-08-23T09:47:55Z",
+  "seconds_to_ready": 7,
+  "result": "遮断中でも新 Pod は既存 Secret を読めて正常起動した (起動ログで Telegram ポーリング開始を確認)"
+ },
+ "pod_recreate_result": "success: rollout restart 中も既存 Secret で新 Pod が Ready になった (7 秒)。Secret 未作成の syncthing-photo-intake 系のようなケースを除き、遮断中の Pod 再作成は既存 Secret だけで救済できる",
+ "recovery_verified": true,
+ "recovery": {
+  "networkpolicy_deleted_at": "2026-08-23T10:09:47Z",
+  "resynced_items": [
+   {
+    "externalsecret": "autopilot/telegram-adapter-credentials",
+    "resynced_at": "2026-08-23T10:16:01Z"
+   },
+   {
+    "externalsecret": "syncthing/syncthing-restic-backup-credentials",
+    "resynced_at": "2026-08-23T10:16:25Z"
+   },
+   {
+    "externalsecret": "syncthing/syncthing-restic-credentials",
+    "resynced_at": "2026-08-23T10:16:29Z"
+   },
+   {
+    "externalsecret": "coder/coder-db-url",
+    "resynced_at": "2026-08-23T10:19:49Z"
+   },
+   {
+    "externalsecret": "coder/coder-restic-backup-credentials",
+    "resynced_at": "2026-08-23T10:19:52Z"
+   },
+   {
+    "externalsecret": "vaultwarden/vaultwarden-admin-token",
+    "resynced_at": "2026-08-23T10:19:52Z"
+   },
+   {
+    "externalsecret": "vaultwarden/vaultwarden-restic-backup-credentials",
+    "resynced_at": "2026-08-23T10:19:55Z"
+   },
+   {
+    "externalsecret": "coder/coder-postgres-credentials",
+    "resynced_at": "2026-08-23T10:19:56Z"
+   },
+   {
+    "externalsecret": "vaultwarden/vaultwarden-restic-credentials",
+    "resynced_at": "2026-08-23T10:19:58Z"
+   },
+   {
+    "externalsecret": "coder/coder-restic-credentials",
+    "resynced_at": "2026-08-23T10:19:59Z"
+   },
+   {
+    "externalsecret": "ops-health-reporter/github-health-reporter-token",
+    "resynced_at": "2026-08-23T10:20:01Z"
+   },
+   {
+    "externalsecret": "tailscale/tailscale-oauth",
+    "resynced_at": "2026-08-23T10:20:29Z"
+   },
+   {
+    "externalsecret": "autopilot/autopilot-credentials",
+    "resynced_at": "2026-08-23T10:20:31Z"
+   },
+   {
+    "externalsecret": "immich/immich-postgres-credentials",
+    "resynced_at": "2026-08-23T10:20:31Z"
+   },
+   {
+    "externalsecret": "immich/immich-restic-credentials",
+    "resynced_at": "2026-08-23T10:20:33Z"
+   },
+   {
+    "externalsecret": "immich/immich-restic-backup-credentials",
+    "resynced_at": "2026-08-23T10:20:36Z"
+   },
+   {
+    "externalsecret": "version-watcher/github-health-reporter-token",
+    "resynced_at": "2026-08-23T10:21:41Z"
+   }
+  ],
+  "still_errored_at_report_end": [],
+  "seconds_until_all_new_errors_resynced": 714,
+  "recovery_verified": true,
+  "behavior_note": "復旧は一斉ではなく指数バックオフに従って階段状に進んだ。遮断後半にエラー化したitem ほど失敗回数が少なく先に戻る (telegram-adapter・syncthing ペアは解除後 ~6.5 分、coder/vaultwarden/immich 等の初期エラー群は ~10 分、最後の 1 件は ~11.9 分)。つまり Doppler 復旧直後に SecretSyncedError が消えなくても 十数分は待てば解消する。逆に言えば「復旧が遅い=まだ上流が死んでいる」とは限らない"
+ },
+ "findings": [
+  "既存 Secret は 35.5 分の完全遮断中も resourceVersion 込みで一切変化せず、稼働中 Pod も restart 0 で影響を受けなかった",
+  "エラーは即座には出ず、各 ExternalSecret の refreshInterval 満了時に個別に顔を出す。初発は T0+539s、全 17 件がエラー化しきるまで約 25 分かかった。「何も起きていないように見える時間」が最も長い",
+  "遮断中の Pod 再作成 (telegram-adapter) は既存 Secret で 7 秒で Ready になり、起動も正常。Doppler 障害中でも新規 Pod 立ち上げは既存 Secret がある限り壊れない",
+  "target Secret が未作成の item (syncthing-photo-intake、演習前からエラー中) のように、初回作成を必要とする新規ワークロードだけが Doppler 障害で立ち上げ不能になる",
+  "復旧は NetworkPolicy 削除 1 発でよく、全 item の再同期完了まで最大 714 秒 (バックオフによる階段状)"
+ ],
+ "events": [
+  {
+   "label": "np-applied-v1",
+   "at": "2026-08-23T09:34:18Z",
+   "elapsed_s_from_t0": 0,
+   "note": "遮断開始。service CIDR 許可のみの初版"
+  },
+  {
+   "label": "np-fixed-v2",
+   "at": "2026-08-23T09:36:16Z",
+   "elapsed_s_from_t0": 118,
+   "note": "K8s API が post-DNAT 評価で塞がれることを probe が検出。node IP:6443 許可を追加"
+  },
+  {
+   "label": "np-clean-start-v3",
+   "at": "2026-08-23T09:37:55Z",
+   "elapsed_s_from_t0": 217,
+   "note": "DNS 塞ぎを修正しクリーンな遮断窓が開始 (pod CIDR 無制限 + node IP:6443)"
+  },
+  {
+   "label": "monitor-started",
+   "at": "2026-08-23T09:38:39Z",
+   "elapsed_s_from_t0": 261,
+   "note": "60 秒毎の監視ループ開始"
+  },
+  {
+   "label": "pod-recreate-started",
+   "at": "2026-08-23T09:47:48Z",
+   "elapsed_s_from_t0": 810,
+   "note": "telegram-adapter rollout restart (遮断中の Pod 再作成試験)"
+  },
+  {
+   "label": "pod-recreate-ready",
+   "at": "2026-08-23T09:47:55Z",
+   "elapsed_s_from_t0": 817,
+   "note": "新 Pod Ready・起動ログ確認 (7 秒)"
+  },
+  {
+   "label": "midblock-rv-snapshot",
+   "at": "2026-08-23T09:48:29Z",
+   "elapsed_s_from_t0": 851,
+   "note": "遮断中の target Secret rv スナップショット (全件 rv_before と一致)"
+  },
+  {
+   "label": "np-deleted",
+   "at": "2026-08-23T10:09:47Z",
+   "elapsed_s_from_t0": 2129,
+   "note": "NetworkPolicy 削除 → 復旧計測開始"
+  }
+ ],
+ "monitor": {
+  "format": "JSONL (1 行 1 分毎): t / es 全件 (ready reason, refreshTime, es_rv) / changes / pods 概況",
+  "raw_file": "ops/projects/logs/P-0175/ には置かずセッション作業領域で保持。要約は本ファイルと PROGRESS.md に記録"
+ }
+}

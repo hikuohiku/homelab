@@ -265,6 +265,99 @@ def collect_download_budget():
     return download_budget.build_report(entries)
 
 
+# ExternalSecret の spec.refreshInterval は K8s duration 文字列 ("1h" / "30m") で
+# 来るため秒へ換算する (P-0175。数値の API バージョンも一応受ける)
+_DURATION_UNITS = {"s": 1, "m": 60, "h": 3600}
+
+
+def _duration_seconds(v):
+    # 決められないときは 0 ではなく None (経過秒との比較で「即滞留」に見えるのを防ぐ)。
+    # 空文字列や単独の単位 ("h") もここへ落とす
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return int(v)
+    s = str(v).strip()
+    if not s:
+        return None
+    total = 0
+    num = ""
+    for ch in s:
+        if ch.isdigit():
+            num += ch
+        elif ch in _DURATION_UNITS:
+            if not num:
+                return None
+            total += int(num) * _DURATION_UNITS[ch]
+            num = ""
+        else:
+            return None
+    if num:
+        # 単位の無い数字列は秒とみなす ("3600"。API によっては数値が文字列で来る)
+        total += int(num)
+    return total
+
+
+def collect_externalsecrets():
+    """ExternalSecret の状態を全件集める (P-0175)。
+
+    Doppler は全 ExternalSecret の唯一の上流で、refreshInterval は概ね 1h。
+    上流が死んでも各 ES の refresh 時刻が巡ってくるまで何も表面化しない
+    (遮断演習の実測: P-0175 drill-report.json 参照)。この「静かな鮮度劣化」を
+    見える化するのが目的なので、Synced のまま古いものも区別せず
+    最終同期からの経過秒を出す。1 件ごとの失敗で全体を止めない既存思想に従い
+    個別のパース失敗は error エントリに落とす。載せるのは status と時刻のみで、
+    Secret の値には触れない。
+    """
+    data = k8s_get("/apis/external-secrets.io/v1/externalsecrets")
+    now = datetime.datetime.now(datetime.timezone.utc)
+    items = []
+    errored = []
+    for raw in data.get("items", []):
+        try:
+            meta = raw.get("metadata", {})
+            status = raw.get("status", {})
+            cond_ready = next(
+                (c for c in status.get("conditions", []) if c.get("type") == "Ready"),
+                {},
+            )
+            reason = cond_ready.get("reason")
+            refresh_time = status.get("refreshTime")
+            last_sync_age_seconds = None
+            if refresh_time:
+                synced_at = datetime.datetime.strptime(
+                    refresh_time, "%Y-%m-%dT%H:%M:%SZ"
+                ).replace(tzinfo=datetime.timezone.utc)
+                last_sync_age_seconds = int((now - synced_at).total_seconds())
+            interval_raw = raw.get("spec", {}).get("refreshInterval")
+            entry = {
+                "name": meta.get("name"),
+                "namespace": meta.get("namespace"),
+                "ready": cond_ready.get("status"),
+                "sync_reason": reason,
+                "refresh_interval_seconds": _duration_seconds(interval_raw),
+                "last_sync_age_seconds": last_sync_age_seconds,
+                "message": None,
+            }
+            if reason == "SecretSyncedError":
+                # message は上流エラーの手がかりだが history jsonl を膨らませないため
+                # 切り詰める。errored の対象名は集約側でも出す
+                entry["message"] = (cond_ready.get("message") or "")[:200]
+                errored.append(
+                    "{}: {}".format(meta.get("namespace"), meta.get("name"))
+                )
+            items.append(entry)
+        except Exception as e:  # noqa: BLE001 — 1 件のパース失敗で他を止めない
+            items.append({"error": "{}: {}".format(type(e).__name__, e)})
+    items.sort(key=lambda x: (x.get("namespace") or "", x.get("name") or ""))
+    return {
+        "total": len(items),
+        "secret_synced_errors": len(errored),
+        "errored": errored,
+        "items": items,
+    }
+
+
 def collect_nodes():
     data = k8s_get("/api/v1/nodes")
     out = []
@@ -533,6 +626,7 @@ def main():
         "node_metrics": collect(collect_node_metrics),
         "pvc_usage": collect(collect_pvc_usage),
         "download_budget": collect(collect_download_budget),
+        "externalsecrets": collect(collect_externalsecrets),
         "autopilot": collect(collect_autopilot_health),
         "notes": (
             "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 "
@@ -559,6 +653,12 @@ def main():
             "推定モデル（産出側 CronJob の LEDGER_RULES）による推定量。"
             "cap の実値は B2 コンソールにしか無いため既定は unconfigured（決め打ちしない）。"
             "産出側がまだ稼働していない namespace は error エントリになる。"
+            " externalsecrets キーは ExternalSecret 全件の状態（P-0175）。Doppler が唯一の上流で "
+            "refreshInterval は概ね 1h のため、上流が死んでも refresh が巡るまで何も表面化しない。"
+            "secret_synced_errors / errored は SecretSyncedError の件数と対象、items[].last_sync_age_seconds は "
+            "status.refreshTime（最終成功同期）からの経過秒。「Ready=True のまま last_sync_age_seconds が "
+            "refresh_interval_seconds を大きく超え続ける」場合は上流への同期が静かに滞留しているサイン。"
+            "Secret 本体の値は取得・記録しない（RBAC も external-secrets.io/externalsecrets の get/list のみ）。"
         ),
     }
 
