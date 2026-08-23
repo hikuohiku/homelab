@@ -17,17 +17,20 @@ spec:
     server: https://kubernetes.default.svc
     namespace: coder
 
-  # download-budget ConfigMap の report.json は download-ledger CronJob (P-0128) が
-  # 毎時書き戻す B2 download cap の帳簿であり、Git (data: {}) と一致しないのが正。
-  # このキーのみ差分比較から除外する ([ii] 生成フィールド型の恒久解消、P-0222)。
-  # 帳簿データは無視するだけで消さない。他キー・他オブジェクトは対象外
+  # download-budget ConfigMap の中身は download-ledger CronJob (P-0128) が毎時
+  # 書き戻す B2 download cap の帳簿であり、Git (data: {}) と一致しないのが正。
+  # この 1 オブジェクトに限定して data を差分比較から除外する ([ii] 生成フィールド型
+  # の恒久解消、P-0222)。帳簿データは無視するだけで消さない。
+  # なお /data 丸ごとなのは ArgoCD v3.2.1 実測による: キー単位 (/data/report.json や
+  # .data["report.json"]) だと「live からだけキーが削除され Git 側 data:{} が残る」
+  # 非対称が差分として残る (argocd #25157 と同型)
   ignoreDifferences:
     - group: ""
       kind: ConfigMap
       name: download-budget
-      jqPathExpressions:
-        - '.data["report.json"]'
-
+      namespace: coder
+      jsonPointers:
+        - /data
   syncPolicy:
     automated:
       prune: true

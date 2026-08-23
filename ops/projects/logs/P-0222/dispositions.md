@@ -15,9 +15,28 @@ immich は本表の対象外 (P-0092 の作業域、一切接触していない)
 
 | アプリ | ドリフト対象 | 根拠 diff (2026-08-23T17:13Z 実測) | 原因型 | 処置 |
 |--------|-------------|-----------------------------------|--------|------|
-| coder | ConfigMap `coder/download-budget` | git target `data: {}` ↔ live `data.report.json` 有 (generated_at 16:25:08Z, runs 8, unknown_jobs=[download-ledger, pvc-usage-reporter]) | [ii] | application.yaml へ `ignoreDifferences` 追加: group "" / kind ConfigMap / name download-budget / jqPathExpressions `.data["report.json"]` |
+| coder | ConfigMap `coder/download-budget` | git target `data: {}` ↔ live `data.report.json` 有 (generated_at 16:25:08Z, runs 8, unknown_jobs=[download-ledger, pvc-usage-reporter]) | [ii] | application.yaml へ `ignoreDifferences` 追加: group "" / kind ConfigMap / name download-budget / namespace 各ns / jsonPointers `/data` |
 | syncthing | ConfigMap `syncthing/download-budget` | 同構図 (runs 4, unknown_jobs=[download-ledger]) | [ii] | 同上 (`apps/syncthing/application.yaml`) |
 | vaultwarden | ConfigMap `vaultwarden/download-budget` | 同構図 (runs 4, unknown_jobs=[download-ledger, pvc-usage-reporter]) | [ii] | 同上 (`apps/vaultwarden/application.yaml`) |
+
+### 処置の範囲について (重要な実測知見)
+
+当初は spec の想定どおり `.data["report.json"]` キー単位での無視を試みたが、**ArgoCD v3.2.1 のクラスタ実測で
+両機構とも効かなかった**:
+
+| 試行 | 結果 |
+|------|------|
+| `jqPathExpressions: ['.data["report.json"]']` | OutOfSync のまま (構文は通る、cmpErr 無し) |
+| `jqPathExpressions: ['.data.report\.json']` | ComparisonError `unexpected token "\\"` で比較全体が Unknown に |
+| `jsonPointers: ['/data/report.json']` | OutOfSync のまま (cmpErr 無し) |
+| **`jsonPointers: ['/data']`** | **3 アプリ全部 Synced (2026-08-23T17:35Z 実測)** |
+
+原因の説明: 正規化器は指定パスを live 側から削除するが、Git 側 target には `data: {}` (空 map) が宣言され
+残り続ける。「report.json だけ消えた live」と「空 map が残る Git」の非対称自体が差分として検出される。
+argocd #25157 (kiali signing_key) と同型の既知挙動で、メンテナも `/data` 全体指定を推奨している。
+`/data` 全体でも対象は name+namespace+kind で download-budget 1 オブジェクトにピン留めされており、
+この ConfigMap は帳簿の書き戻し先として設計上 Git が他のキーを持たないため、実害の範囲拡大は無い。
+(Git 側の `data: {}` 宣言を外す選択肢は「Git 側宣言を一切変えない」という PROJECT.md 方針で排除した)
 
 ### 根拠 diff の取得方法
 
@@ -42,5 +61,18 @@ apps/<app>/download-ledger-cronjob.yaml                                  # → g
 ## 恒久解消の経路
 
 merge 後: root app `apps` (path apps/, selfHeal) が本ブランチの application.yaml を適用 →
-各 Application に ignoreDifferences が載る → 差分比較から `.data["report.json"]` が除外され Synced 化。
+各 Application に ignoreDifferences が載る → 差分比較から当該 ConfigMap の data が除外され Synced 化。
 CronJob・RBAC・スクリプト・Git 側宣言 (`data: {}`) は一切変えていない。
+
+## ライブ検証の記録 (2026-08-23 17:16–17:40Z)
+
+merge 前の実効性確認として、justfile の preview と同種の一時的な live spec 変更で検証した
+(ローカルコミットは ArgoCD から見えないためブランチ向き先変更ではなく spec 直接適用):
+
+1. root app `apps` の syncPolicy.automated を一時削除 (justfile preview と同一手順)
+2. 子 3 アプリへ ignoreDifferences を kubectl patch で適用 + refresh annotation
+3. **3 アプリすべて Synced を実測 (17:35:50Z)**
+4. 復元: root の automated {prune:true, selfHeal:true} を再設定し、selfHeal で子の spec を
+   Git (main) 状態へ戻した (preview-reset 相当)。子は merge まで OutOfSync に戻るのが正
+
+ConfigMap の uid と data (report.json / runs) は検証前後で不変 — 帳簿データには一切触れていない。
