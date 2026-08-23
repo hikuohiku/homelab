@@ -5281,3 +5281,64 @@ issue #56 再確認 (**総数 180 から増減なし**: heart による grep `--
   一時ファイルが必要なときは必ず mktemp (/tmp/opencode 直書きは Permission denied — session99)
 - **PROGRESS.md への追記は必ずファイル末尾** (session46 教訓の再掲)
 
+
+
+## session111 (P-0116 worker, 2026-08-23)
+
+やったこと: 冒頭チェック → **main 先行なし**。remote 分岐移動は ops-state beat (180→184)、
+ops-health-report history、p-0157 (session 14〜16 記録)、p-0163 (session 2 + 移行台本実装、
+**PR #527 新規 open** — 三点マージ diff 走査で領域接触ゼロを実確認)、p-0164 (session 5 +
+当日確転バグ修正 2 件) のみ。いずれも apps/restic-check/ 領域への接触ゼロ。
+issue #56 再確認 (**総数 180 から増減なし**: heart による grep `--include` 問題への回答は
+まだ無い。末尾は P-0161 worker の人間向け依頼 06:30:10Z のまま)。open PR は **4→5 件に増加**
+(#527 = P-0163 移行台本, 本プロジェクト無関連を diff 実測で判別済み)。
+コード変更ゼロ — 受入の再実測と記録のみのセッション (session108〜110 と同型)。
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option: include=*.yaml`) — red 継続。
+  リポジトリ側では解消不能 (#56 の heart 回答待ち)
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** (apps/restic-check/ 健在、
+  kustomization.yaml:19 で配線済み)
+- #2: `ops.tests.test_restic_check_runner` 単体 **28 tests OK, rc=0**、discover 全体
+  **270 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- sync check (`ops/check_restic_check_script_sync.py`): ok
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら文言判断に従うだけ。
+  来ていなければ再実測して末尾への追記で足りる (本セッションもその型)
+- **open PR は 5 件** (session111 時点): #525 telegram-adapter (ready, main 未 merge —
+  merge 時は kustomization.yaml の隣接行コンフリクト注意。解消時は openclaw を外して
+  telegram-adapter + restic-check の 2 行を残すこと)・#524 P-0164 演習用 draft・#512 P-0118・
+  #526 P-0174 Telegram brief・#527 P-0163 移行台本 (領域接触ゼロ実測済みだが merge 後は
+  kustomization.yaml の隣接行がまた動くので目視すること)。番号・タイトルも見て
+  本プロジェクト関連かを判別すること
+- **TestMain にケースを足すときは必ず run_main 経由** (now 注入済み)。実時刻や実時刻基準の
+  レコードを混ぜると時限爆弾の再燃になる (session104 の教訓)
+- **runner を編集したら apps/restic-check/restic_check_runner.py へ必ずコピー**
+  (sync check が CI で守っているが、手元でも先に回すと無駄な push を避けられる)
+- 冒頭チェック・merge 方針・API 走査・mktemp・サマリ拾いの各注意点は session107 以前と
+  同じ (省略しないこと)。main 先行・diverge いずれも **merge 一択** (rebase 不可 — session28)
+- **issue #56 のコメント総数は 180 が最新基準** (session98〜111 実測で 180 のまま)。今後は
+  181 以上で新規着信を疑うこと。ただし最新タイムスタンプとキーワード走査で
+  本プロジェクト関連かを必ず判別すること。**合計数の数え方は p1 + p2 を足す**
+- **curriculum 採択が来たら merge してから validate.py 再実測**: archive.jsonl 先頭一致
+  チェックは main 未追従だと error になる (session92 教訓)
+- **新規 remote 分岐でもコミットゼロなら走査対象外**。remote 分岐は毎回目視、判別基準は
+  「本プロジェクト領域に触れるか」のみ。実コミットの有無は三点マージ diff 走査で判定
+  (p-0164/p-0174/exercise-p-0164-labels 実績)
+- **P-0157 (backup 鮮度監視) は verify 対象が ops/health・ops/rules.json・
+  test_backup_freshness 側**で apps/restic-check/ とは別 (session94〜111 実測でも領域接触ゼロ)
+- **p-0139 系ブランチとの diff 走査は新規コミットだけを見ること**
+  (`git log origin/main..相手` + `git diff --stat origin/main...相手`)
+- **discover の総数は merge で動く**: 固定値ではない (本セッション時点で 270)。
+  rc=0 と OK を確認すること
+- **issue コメントの「最新 N 件」取得は per_page=100&page=2 (最終ページ) の末尾を使う**
+  (session92 実測: sort/direction パラメータは当てにならない)
+- **API 走査は python 内で完結させると一時ファイル不要**。AUTOPILOT_GITHUB_TOKEN を
+  Bearer ヘッダに付けること。GITHUB_REPO は owner/repo 形に正規化。
+  一時ファイルが必要なときは必ず mktemp (/tmp/opencode 直書きは Permission denied — session99)
+- **PROGRESS.md への追記は必ずファイル末尾** (session46 教訓の再掲)
