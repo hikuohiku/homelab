@@ -5044,7 +5044,44 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T21:15:12Z",
+        "verify": [
+          {
+            "cmd": "python3 ops/tools/version_settle_check.py --inventory ops/inventory.json --waivers ops/version-waivers.jsonl",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-3urveo13/repo/ops/tools/version_settle_check.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "git fetch origin ops-health-report && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); assert 'version_drift' in d, 'version_drift キーが健康レポートから消えている'\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "From https://github.com/hikuohiku/homelab\n * branch                ops-health-report -> FETCH_HEAD\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,sys; d=json.load(sys.stdin); assert 'version_drift' in d, 'version_drift キーが健康レポートから消えている'\n                                                    ^^^^^^^^^^^^^^^^^^^^\nAssertionError: version_drift キーが健康レポートから消えている\n"
+          },
+          {
+            "cmd": "python3 ops/check_version_sync.py",
+            "ok": true,
+            "rc": 0,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "ok: argo-cd chart version (T-0002, inventory: argocd-chart) = 9.1.6\nok: busybox initContainer tag (T-0003, inventory: busybox) = 1.38.0\nok: autopilot image digest (旧 loop / heart / spawn 用 env / core の opencode) = sha256:93a898cf0a1ec7a0363e9e2824f39670db2e3a8ca76674e755438ce8273c7bcb\nok: 常駐コアのモデル (models.json roles.core と Deployment の CORE_MODEL) = opencode-go/ox-alpha-free\nok: autopilot-core image digest (init 2 つと driver の 3 箇所) = sha256:f13f3be19bcffa55fe8469bcceb92bb7a7ee564ac7730025334b2b6eb1a8fb25\nok: immich server / machine-learning tag (inventory: immich-server, immich-machine-learning) = v3.1.0\nok: actions/checkout tag (T-0043/T-0044, inventory: gha-actions-checkout) = v7\nok: pvc-usage-reporter python image tag (T-0082, inventory: pvc-usage-reporter-image) = 3.14-alpine\nok: azure/setup-helm version input (T-0090, inventory: gha-setup-helm-version) = v3.21.3\nok: kustomize binary version (T-0090, inventory: kustomize-binary) = 5.8.1\nok: coder-postgres image tag (T-0070, inventory: coder-postgres) = 17.10\nok: restic/restic backup CronJob image tag (T-0098, inventory: vaultwarden-restic-image/coder-postgres-restic-image/immich-restic-image/coder-workspace-home-restic-image/syncthing-restic-image) = 0.19.1\n"
+          }
+        ],
+        "verdict": "some_pass",
+        "passed": [
+          "python3 ops/check_version_sync.py"
+        ],
+        "broken": []
+      }
     },
     {
       "id": "P-0235",
@@ -5064,7 +5101,33 @@
         "soft_cap": 2000000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T21:15:12Z",
+        "verify": [
+          {
+            "cmd": "git fetch origin ops-health-report && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); b=d['backup_freshness']; need={'immich','coder','vaultwarden','syncthing'}; assert need <= set(b) and all(isinstance(v.get('hours_since_success'),(int,float)) for v in b.values())\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "From https://github.com/hikuohiku/homelab\n * branch                ops-health-report -> FETCH_HEAD\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,sys; d=json.load(sys.stdin); b=d['backup_freshness']; need={'immich','coder','vaultwarden','syncthing'}; assert need <= set(b) and all(isinstance(v.get('hours_since_success'),(int,float)) for v in b.values())\n                                               ~^^^^^^^^^^^^^^^^^^^^\nKeyError: 'backup_freshness'\n"
+          },
+          {
+            "cmd": "python3 -m unittest discover -s ops/tests -p 'test_backup_freshness*.py'",
+            "ok": false,
+            "rc": 5,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "\n----------------------------------------------------------------------\nRan 0 tests in 0.000s\n\nNO TESTS RAN\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0237",
@@ -5088,7 +5151,53 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T21:15:12Z",
+        "verify": [
+          {
+            "cmd": "git fetch origin ops-health-report && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); bad=[a['name'] for a in d['applications'] if a['sync']!='Synced']; assert not bad, f'OutOfSync 残存: {bad}'; assert d['externalsecrets']['secret_synced_errors']==0, d['externalsecrets']['errored']\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "From https://github.com/hikuohiku/homelab\n * branch                ops-health-report -> FETCH_HEAD\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,sys; d=json.load(sys.stdin); bad=[a['name'] for a in d['applications'] if a['sync']!='Synced']; assert not bad, f'OutOfSync 残存: {bad}'; assert d['externalsecrets']['secret_synced_errors']==0, d['externalsecrets']['errored']\n                                                                                                                       ^^^^^^^\nAssertionError: OutOfSync 残存: ['immich']\n"
+          },
+          {
+            "cmd": "git fetch origin ops-health-report && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); deg=[a['name'] for a in d['applications'] if a['health']!='Healthy']; assert not deg, f'Degraded 残存: {deg}'\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "From https://github.com/hikuohiku/homelab\n * branch                ops-health-report -> FETCH_HEAD\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,sys; d=json.load(sys.stdin); deg=[a['name'] for a in d['applications'] if a['health']!='Healthy']; assert not deg, f'Degraded 残存: {deg}'\n                                                                                                                          ^^^^^^^\nAssertionError: Degraded 残存: ['coder', 'immich', 'syncthing', 'vaultwarden']\n"
+          },
+          {
+            "cmd": "! grep -rn 'photo-intake' apps/",
+            "ok": true,
+            "rc": 0,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 ops/check_app_list_sync.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "::error::CLAUDE.md: app `version-watcher` への言及が無い\n::error::CLAUDE.md: app `nats` への言及が無い\n::error::CLAUDE.md: app `autopilot-core` への言及が無い\n::error::apps/README.md: app `version-watcher` への言及が無い\n::error::apps/README.md: app `nats` への言及が無い\n::error::apps/README.md: app `autopilot-core` への言及が無い\n\n6 件の drift。apps/kustomization.yaml の app: ['agent-rbac', 'argocd', 'autopilot', 'autopilot-core', 'coder', 'dex', 'external-secrets', 'immich', 'nats', 'ops-dashboard', 'ops-health-reporter', 'syncthing', 'tailscale-operator', 'telegram-adapter', 'vaultwarden', 'version-watcher']\n"
+          }
+        ],
+        "verdict": "some_pass",
+        "passed": [
+          "! grep -rn 'photo-intake' apps/"
+        ],
+        "broken": []
+      }
     }
   ],
   "chores": [],
