@@ -148,6 +148,54 @@ def check_inventory(inv) -> None:
             err(f"{where}: file {f} が存在しない")
 
 
+REMINDER_REPEATS = {"year", "none"}
+
+
+def check_reminders(entries) -> None:
+    """reminders.json (「忘れると困る日」の台帳, P-0231) の検査。
+
+    エントリは date / title / repeat (必須) と note (任意)。date は
+    YYYY-MM-DD に固定する — 緩い解釈を許すとレンダラの due 計算が曖昧になる。
+    repeat="year" は誕生日・定期行事用で、date の年部分は anchor として無視される。
+    台帳は main の Git に乗るため、機微な個人情報 (実名の誕生日等) を入れないこと
+    は検査でなく運用原則 (PROJECT.md P-0231)。
+    """
+    if not isinstance(entries, list):
+        err("reminders.json: エントリの配列であること")
+        return
+    seen: set[tuple[str, str]] = set()
+    for i, e in enumerate(entries):
+        where = f"reminders.json entries[{i}]"
+        if not isinstance(e, dict):
+            err(f"{where}: オブジェクトであること")
+            continue
+        for k in ("date", "title", "repeat"):
+            if not e.get(k):
+                err(f"{where}: {k} が空")
+        if e.get("repeat") not in REMINDER_REPEATS:
+            err(f"{where}: repeat={e.get('repeat')!r} は {sorted(REMINDER_REPEATS)} のいずれか")
+        raw_date = str(e.get("date", ""))
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw_date):
+            try:
+                datetime.date.fromisoformat(raw_date)
+            except ValueError:
+                err(f"{where}: date={raw_date!r} は実在しない日付")
+        else:
+            err(f"{where}: date={raw_date!r} は YYYY-MM-DD")
+        title = e.get("title")
+        if title is not None and not isinstance(title, str):
+            err(f"{where}: title は文字列")
+        note = e.get("note")
+        if note is not None and not isinstance(note, str):
+            err(f"{where}: note は文字列")
+        key = (raw_date, str(title))
+        if key in seen:
+            err(f"{where}: 同じ date+title が重複している ({raw_date} {title})")
+        seen.add(key)
+    if len(entries) > 100:
+        warn(f"reminders.json: {len(entries)} 件。台帳は太らせない (48h 窓の描画コスト)")
+
+
 CONFLICT_MARKER_PATTERNS = [
     re.compile(r"^<{7}(?:\s|$)"),
     re.compile(r"^={7}$"),
@@ -497,6 +545,7 @@ def main() -> int:
     backlog = ledger.load_backlog(include_archive=True)
     inventory = load("inventory.json")
     state = load("state.json")
+    reminders = load("reminders.json")
 
     check_ledger_size()
     check_charter_size()
@@ -514,6 +563,8 @@ def main() -> int:
         check_review_log(backlog)
     if inventory:
         check_inventory(inventory)
+    if reminders is not None:
+        check_reminders(reminders)
     if state:
         check_state(state)
         check_runs_freshness(state)
