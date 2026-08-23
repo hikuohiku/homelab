@@ -1217,3 +1217,83 @@ webhook URL は autopilot-writer SA には読めない (RBAC 実測 Forbidden) �
    判定除外) / on-sync-failed 式の生きた発火検証を追加注入で実施するか否か
    (spec の注入 1 回は消化済みのため要人間裁定)
 3. fired.json / drill fixture は触らない
+
+## checkpoint (予算上限)
+
+最終セッション (セッション 25 相当、2026-08-23)。**実装は何もしていない**。
+`git status` はクリーン、未コミット変更ゼロだったため commit も破棄も不要 (どちらにもしなかった)。
+以下は再開する次の worker がセッションログ 1〜24 を読み返さなくて済むようにした要約。
+
+### 受入チェックリストの現在地 (verify 4 本)
+
+| verify | 状態 | 内容 |
+|--------|------|------|
+| #1 values.yaml trigger/template | **green 確定** | `grep -q 'on-degraded\|on-sync-failed' apps/argocd/values.yaml` で通る |
+| #2 ES ファイル + kustomize render | **sandbox 恒久 red / 実質 green** | `apps/argocd/discord-webhook-external-secret.yaml` は存在。render は sandbox の kubectl v1.35 が `--enable-helm` を要求するため rc=1 になるが、CI (ci.yml の `kustomize build --enable-helm`) 通過 + sandbox 内 helm PATH render rc=0 (27,222 行・cm 7 キー、セッション 5〜24 で毎回再現) で実質担保 |
+| #3 fixture テスト | **green 確定** | `python3 -m unittest ops.tests.test_argocd_notifications` = 14 tests OK。ops/tests 全体 163 OK |
+| #4 合成障害 → fired.json | **red / 実質完了・裁定待ち** | `ops/projects/logs/P-0139/fired.json` に `delivered: true` (配達スタンプ+controller ログ+dedup の三点実測、セッション 4)。ただし **`message_id: null`** — Discord webhook POST は 204 で id を返さず、webhook URL は autopilot SA の RBAC で読めないため `?wait=true` 取得も不可 = **sandbox 内では原理的に取得不能** (セッション 5 で経路不存在まで調査済み)。verify コマンドが `delivered and message_id` を要求するのでこのままでは red |
+
+### 止まっている場所
+
+**コード・テスト・証跡は全て完成し origin/project/p-0139 まで push 済み (tip = f6aa30ff)。
+残るは「main への merge」と「人間 (レビュー側) の裁定 3 点」だけで、worker 側にできることは無い。**
+約 20 セッションこの状態で停滞しており (main tip = 3c6a1aa9)、これが stalled 判定の直接の理由。
+
+主なコミット: d92ce734 (配線本体) → 1a193e89 (裸キーバグ修正 `trigger.` 接頭辞) →
+a08db5a9 (on-sync-failed の nil operationState 修正、optional chaining `?.`) →
+以降は記録コミットのみ。
+
+### 再開されたら最初に取る一手 (順番どおり)
+
+1. **merge 済みか確認**: `git fetch --prune && git branch -r --contains a08db5a9`
+   - origin/main が出てくれば merge 済み → 2 へ。origin/project/p-0139 のみなら **PR 出し待ち**
+     (PR 作成は wrapper 領分。sandbox には gh CLI も認証情報も無い)
+2. **merge 済みならクラスタ反映を実測**:
+   - `kubectl get cm argocd-notifications-cm -n argocd -o yaml` — data がちょうど 7 キー
+     (context / service.webhook.discord / subscriptions / template.discord-app-{degraded,sync-failed} /
+     trigger.on-{degraded,sync-failed}。on-sync-failed は式に `?.` 付き、キー名に注意:
+     裸 `on-sync-failed` ではなく `trigger.on-sync-failed`)
+   - `kubectl get externalsecret -n argocd` — argocd-notifications-discord-webhook が
+     SecretSynced 追加 (既存は argocd-dex-client-secret のみ)
+   - controller error 新規ゼロ: pod 名を label で引き直し
+     (`kubectl get pod -n argocd -l app.kubernetes.io/name=argocd-notifications-controller`)、
+     `--since-time=2026-08-23T05:56:05Z` 以降を測る (セッション 24 の測定点)
+3. merge 待ちの間にすることは無い。**fired.json / drill fixture
+   (ops/projects/logs/P-0139/drill/) は触らない**
+
+### 人間に裁定してほしいこと (プロジェクト完遂のブロッカー)
+
+1. **verify #4 の message_id**: (a) 人間が Discord を実視認して id を fired.json に補完するか、
+   (b) message_id を完了判定から外す (delivered 三点実測で足りないか)。sandbox からの
+   自力解決は不可能と確定済み
+2. **verify #2 の扱い**: コマンド文字列自体は sandbox で恒久 red (--enable-helm ゲート)。
+   CI 通過での代替判定を認めるか
+3. **on-sync-failed の生きた発火検証を追加注入で行うか否か**: drill の発火は on-degraded 経由
+   だったため on-sync-failed 式は実発火未証明 (docs パターン verbatim + fixture で担保済み。
+   spec の注入 1 回は消化済みなので追加注入は人間裁定が必要)
+
+### 残った不確実性
+
+- **message_id 取得経路の不在** (上記 1): notifications-engine の delivery_annotation の
+  トークンは content digest であって Discord id ではない (セッション 14 実測)
+- **on-sync-failed 式の生きた発火未検証** (上記 3)
+- **controller pod startedAt の値振れ** (2026-08-03 ↔ 2025-12-16 をセッションごとに行き来):
+  sandbox 側スナップショット/時計不整合の疑い。pod 再起動判定は restarts カウンタ比較のみ
+  で行うこと (restarts=19 で 18 セッション据え置き)
+- **merge 後の過渡現象は未経験**: 既存 chart 由来の空 Secret argocd-notifications-secret が
+  prune→ESO 再作成の順序ズレを起こしうる (セッション 2 予測)。数分で自己修復する見込みだが、
+  merge 後に ES が Sync エラーになったら ownerReference 引き取り問題 (ESO v2.9.0) を疑う
+
+### 再開時の注意 (過去セッションで実際に踏んだ罠の要約)
+
+- drill の source は**必ず** `ops/projects/logs/P-0139/drill` path + targetRevision
+  project/p-0139 (または merge 後は main)。実 app path 流用は本番断を起こした (セッション 3、
+  vaultwarden 約 2 分断)。drill 手順の詳細は fired.json の timeline
+- 手動 kubectl patch で追加した cm data キーは ArgoCD sync を生き残る (SSA field ownership)。
+  手当てしたキーは自力で除去して NotFound 確認まで (セッション 4)
+- cm のリソース名は argocd-notifications-cm。argocd-cm ではない。ES 実名は
+  argocd-dex-client-secret (dex-client-secret ではない)。drill 残骸の実名は
+  App p0139-notification-drill / ns p0139-drill (fired.json どおり)
+- render 検証は `export PATH="$HOME/bin:$PATH"` ($HOME/bin/helm v3.18.4 残置) →
+  `kubectl kustomize --enable-helm apps/argocd`
+- issue #56 への投稿は sandbox から不可能 (curl POST 要認証)。フィードバックは wrapper 報告のみ
