@@ -1,0 +1,317 @@
+# Mission Control 描画スモークの常設ジョブ・産出側 (P-0193)。
+#
+# 人間が見るダッシュボードは「壊れたことを画面自身が報告しない」ことがある
+# (critic 08-22 実例: 鼓動しています(緑) の隣に異常終了(赤))。readiness probe は
+# HTTP 200 しか見ないため、JS エラー・API 失敗時の白画面・矛盾シグナルの共存は
+# 誰にも見つからない。この CronJob は毎日 1 回、headless chromium で実際に描画し、
+# 断言結果を専用 ConfigMap `dashboard-smoke` の report.json キーへ書き戻す。
+# 集約側は ops-health-reporter (別 namespace, cluster-wide read-only) が
+# collect_dashboard_smoke() で読み、latest.json の dashboard_smoke キーに載せる。
+#
+# スモーク本体の判定ロジックの canonical は ops/tools/dashboard_smoke.py。
+# クラスタ内で動かすため同一内容のコピーを
+# apps/ops-dashboard/dashboard_smoke.py として持ち (kustomize は既定でディレクトリ外の
+# ファイル参照を禁じるため相対参照にできない)、CI の check_dashboard_smoke_script_sync.py
+# が 2 ファイルの一致を検査する (download_ledger.py の 4 コピー同期と同じ考え方)。
+# 直すときは必ず両方を同じ PR で直すこと。
+#
+# ランナー (下の dashboard-smoke-runner ConfigMap) の exit code 契約:
+#   0 合格 — 記録のみで通知は無い (成功は通知予算を消費しない)
+#   1 不合格 (ページが嘘をついた) — 記録してから 1 で落ちる。Job 失敗は既存の
+#     pod_issues 収集にも乗る。次回成功まで日次で見え続けるのが意図した振る舞い
+#   2 装置自身の故障 — 本体が JSON を書けないため、ランナーが ok=False の代役
+#     レコードを書いてから落ちる (鮮度ではなく中身で「装置が回っていない」が分かる)
+#
+# スクリーンショットは Pod ローカルの emptyDir に出るだけでクラスタ外へ運ばれない
+# (JSON には bytes/sha256 のみ残る)。画像履歴の蓄積は PROJECT.md の「やらないこと」。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: dashboard-smoke
+  namespace: autopilot
+---
+# 専用 ConfigMap 1 個の読み書きだけを持つ最小権限。update を resourceNames で絞るのは
+# この namespace に heart へ流れ込む ConfigMap (autopilot-config = プロンプト類) が
+# あるためで、無差別な update 許可はプロンプト注入経路になりうる。create は名前を
+# RBAC で絞れないため対象名を含まない (pvc-usage-reporter と同じ形)。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: dashboard-smoke
+  namespace: autopilot
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["dashboard-smoke"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: dashboard-smoke
+  namespace: autopilot
+subjects:
+  - kind: ServiceAccount
+    name: dashboard-smoke
+    namespace: autopilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: dashboard-smoke
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: dashboard-smoke-runner
+  namespace: autopilot
+data:
+  dashboard_smoke_runner.py: |
+    """dashboard-smoke 常設ジョブの産出側ランナー (P-0193)。
+
+    スモーク本体 /scripts/dashboard_smoke.py (canonical は ops/tools/dashboard_smoke.py。
+    apps/ops-dashboard/dashboard_smoke.py が同内容で、CI の
+    check_dashboard_smoke_script_sync.py が一致を検査) を subprocess で起動し、
+    --out 先に書かれた結果 JSON を専用 ConfigMap `dashboard-smoke` の
+    report.json キーへ書き戻す。集約側は apps/ops-health-reporter/report.py の
+    collect_dashboard_smoke()。標準ライブラリのみで動く。
+
+    書き戻し先を manifest に事前作成しないのは pvc-usage-reporter と同じ
+    (ArgoCD 管理外のままにすることで、ジョブが書いたキーが git の data:{} へ
+    戻される競合を構造的に避ける)。消えていても翌日の実行で create され、
+    それまで reporter 側が no_data / stale で正直に見せる。
+
+    終了コードはスモーク本体のそれを Job にそのまま伝える:
+      0 合格 / 1 不合格 (記録してから落ちる) / 2 装置の故障 (代役レコードを
+    書いてから落ちる)。retry はしない (backoffLimit: 0) — 記録はプロセス内で
+    完了しており、同じ URL の即時再描画で判定が変わる見込みは薄く、prod の
+    ダッシュボードへの chromium 起動負荷だけが倍るため。
+    """
+
+    import datetime
+    import json
+    import os
+    import ssl
+    import subprocess
+    import sys
+    import urllib.error
+    import urllib.request
+
+    SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+    K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
+    K8S_PORT = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+    K8S_BASE = "https://{}:{}".format(K8S_HOST, K8S_PORT)
+
+    CONFIGMAP_NAME = "dashboard-smoke"
+    SMOKE_SCRIPT = "/scripts/dashboard_smoke.py"
+    RESULT_PATH = "/tmp/smoke-result.json"
+    SCREENSHOT_PATH = "/tmp/smoke-result.png"
+    # 代役レコードに載せる stderr の末尾上限。原因の桁感が掴めれば足りる
+    STDERR_TAIL_LIMIT = 400
+
+    with open(os.path.join(SA_DIR, "namespace")) as f:
+        NAMESPACE = f.read().strip()
+    with open(os.path.join(SA_DIR, "token")) as f:
+        SA_TOKEN = f.read().strip()
+    SSL_CTX = ssl.create_default_context(cafile=os.path.join(SA_DIR, "ca.crt"))
+
+
+    def load_result(path):
+        """スモーク本体が --out に書いた結果 JSON を読む。無い・壊れている・
+        dict 以外は None (rc=2 の経路ではそもそも書かれない)。"""
+        try:
+            with open(path, encoding="utf-8") as f:
+                payload = json.load(f)
+        except (OSError, ValueError):
+            return None
+        return payload if isinstance(payload, dict) else None
+
+
+    def fallback_result(rc, stderr_tail, now_utc):
+        """スモーク本体が結果 JSON を書けなかったとき (主に rc=2) の代役レコード。
+
+        run_smoke() 戻り値と同じ schema の最小形。「ページの嘘」(rc=1, checks に
+        不合格が載る) と「装置が回らなかった」を区別できるよう、failed_checks は
+        空のまま tool_error に原因を載せる。stderr の末尾は pod ログと二重だが、
+        latest.json だけを読む人にも届ける。now_utc は引数で受ける (unittest が
+        時刻を差し替えられるように。ops 側の純関数流儀と同じ)
+        """
+        return {
+            "schema": 1,
+            "tool": "dashboard_smoke",
+            "project": "P-0193",
+            "generated_at": now_utc.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "ok": False,
+            "tool_error_rc": rc,
+            "tool_error": (stderr_tail or "")[-STDERR_TAIL_LIMIT:],
+            "checks": [],
+            "failed_checks": [],
+        }
+
+
+    def k8s_request(method, path, body=None):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(
+            K8S_BASE + path,
+            data=data,
+            method=method,
+            headers={
+                "Authorization": "Bearer " + SA_TOKEN,
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, context=SSL_CTX, timeout=15) as resp:
+                raw = resp.read()
+                return resp.status, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            return e.code, (json.loads(raw) if raw else None)
+
+
+    def put_configmap(name, data):
+        # GET → resourceVersion 付き PUT、無ければ POST 作成 (pvc_usage.py と同じ)。
+        # update は resourceNames 制約のある Role で、他の ConfigMap には触れない
+        path = "/api/v1/namespaces/{}/configmaps/{}".format(NAMESPACE, name)
+        status, existing = k8s_request("GET", path)
+        body = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": name, "namespace": NAMESPACE},
+            "data": data,
+        }
+        if status == 200 and isinstance(existing, dict):
+            body["metadata"]["resourceVersion"] = (
+                existing["metadata"]["resourceVersion"]
+            )
+            status, resp = k8s_request("PUT", path, body)
+        else:
+            status, resp = k8s_request(
+                "POST", "/api/v1/namespaces/{}/configmaps".format(NAMESPACE), body
+            )
+        if status not in (200, 201):
+            raise RuntimeError("configmap 書き込みに失敗: {} {}".format(status, resp))
+
+
+    def main():
+        proc = subprocess.run(
+            [
+                sys.executable, SMOKE_SCRIPT,
+                "--out", RESULT_PATH,
+                "--screenshot", SCREENSHOT_PATH,
+            ],
+            capture_output=True,
+            text=True,
+        )
+        # 本体の出力 (検査ごとの合格/不合格行) を pod ログへ残す
+        if proc.stdout:
+            print(proc.stdout, end="")
+        result = load_result(RESULT_PATH)
+        if result is None:
+            result = fallback_result(
+                proc.returncode,
+                proc.stderr,
+                datetime.datetime.now(datetime.timezone.utc),
+            )
+        put_configmap(
+            CONFIGMAP_NAME,
+            {"report.json": json.dumps(result, ensure_ascii=False)},
+        )
+        print(
+            "dashboard-smoke ConfigMap を更新しました (smoke rc={} ok={})".format(
+                proc.returncode, result.get("ok")
+            )
+        )
+        # 本体の exit code をそのまま Job へ (冒頭 docstring の契約どおり)
+        return proc.returncode
+
+
+    if __name__ == "__main__":
+        sys.exit(main())
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: dashboard-smoke
+  namespace: autopilot
+spec:
+  # 毎日 09:40 (spec.timeZone 未指定の評価は JST — substrate 実測)。
+  # health-reporter (:00/:30) / pvc-usage-reporter (:05) / download-ledger (:25) と
+  # 分単位で重ならない時刻にずらした
+  schedule: "40 9 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # 単発で完結させる。記録はランナープロセス内で完了するため retry の利益が
+      # 無く、失敗は failedJobsHistoryLimit と pod_issues の既存経路で見える
+      backoffLimit: 0
+      # 正常時の実測は約 7 秒 (P-0193 セッション 1)。load/render 待ちの上限を合算しても
+      # 100 秒程度で、300 秒は十分な天井
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          serviceAccountName: dashboard-smoke
+          restartPolicy: Never
+          securityContext:
+            # イメージが USER 10001 で作られている (images/autopilot/Dockerfile)。
+            # chromium の sandbox は --no-sandbox で無効化済み (本体が付ける)
+            runAsNonRoot: true
+            runAsUser: 10001
+            runAsGroup: 10001
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: smoke
+              # heart-deployment.yaml と同じ digest。更新は images/autopilot/Dockerfile
+              # 冒頭の手順に従い、check_version_sync.py の「autopilot image digest」
+              # グループがこの箇所の取り残しを検査する
+              image: ghcr.io/hikuohiku/homelab-autopilot@sha256:93a898cf0a1ec7a0363e9e2824f39670db2e3a8ca76674e755438ce8273c7bcb
+              terminationMessagePolicy: FallbackToLogsOnError
+              command: ["python3", "/runner/dashboard_smoke_runner.py"]
+              env:
+                # chromium の user-data-dir は本体が tempfile.mkdtemp() で掘る。
+                # emptyDir の /tmp を指させて Pod 内で完結させる
+                - name: TMPDIR
+                  value: /tmp
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                # readOnlyRootFilesystem は付けない: chromium は user-data-dir 以外にも
+                # HOME 配下 (fontconfig キャッシュ等) へ書くため。非 root 実行は
+                # 上の pod securityContext で担保済み (heart-deployment と同じ判断)
+              # memory limits は付けない: chromium の描画メモリは未実測で、実測の裏付け
+              # なしに縛らない (CHARTER §4)。cpu limit は暴走時に node を張り付かせない
+              # ための緩い天井
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: "1"
+              volumeMounts:
+                - name: tool
+                  mountPath: /scripts
+                  readOnly: true
+                - name: runner
+                  mountPath: /runner
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: tool
+              configMap:
+                # kustomization.yaml の configMapGenerator が生成 (中身は
+                # apps/ops-dashboard/dashboard_smoke.py)
+                name: dashboard-smoke-tool
+            - name: runner
+              configMap:
+                name: dashboard-smoke-runner
+            - name: tmp
+              emptyDir: {}
