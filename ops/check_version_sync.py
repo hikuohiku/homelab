@@ -214,13 +214,18 @@ GROUPS = [
         ],
     },
     {
-        "name": "autopilot image digest (heart-and-projects: 旧 loop / heart shadow / spawn 用 env の 3 箇所)",
+        "name": "autopilot image digest (旧 loop / heart / spawn 用 env / core の opencode)",
         "targets": [
             ("apps/autopilot/deployment.yaml", lambda: extract_image_tag(
                 "apps/autopilot/deployment.yaml", "ghcr.io/hikuohiku/homelab-autopilot@"
             )),
             ("apps/autopilot/heart-deployment.yaml", lambda: extract_image_tag(
                 "apps/autopilot/heart-deployment.yaml", "ghcr.io/hikuohiku/homelab-autopilot@"
+            )),
+            # コアの opencode コンテナも同じイメージを使う。ここが取り残されると
+            # 「heart は新しいのにコアだけ古い opencode」で挙動がずれる
+            ("apps/autopilot-core/deployment.yaml", lambda: extract_image_tag(
+                "apps/autopilot-core/deployment.yaml", "ghcr.io/hikuohiku/homelab-autopilot@"
             )),
         ],
     },

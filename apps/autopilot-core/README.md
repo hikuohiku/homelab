@@ -1,0 +1,77 @@
+# autopilot-core
+
+常駐する opencode セッション（コア本体）と、そこへイベントを渡す driver。
+設計の全体像は [`docs/design/event-driven-core/`](../../docs/design/event-driven-core/)。
+
+## v0 の範囲
+
+**所有者の書き置きに、文脈を保ったまま Telegram で直接返事をする。それだけ。**
+
+実装・merge・Job の起動はしない（heart の担当のまま）。opencode の `permission` で
+`edit` と `bash` を拒否しているので、器のレベルで着手できない。
+
+```
+telegram-adapter / ダッシュボード → ops-feedback の inbox
+  → driver が新着を検出 → POST /session/{id}/prompt_async
+  → コアが telegram_reply (MCP) で所有者へ直接返す
+```
+
+イベントバス（設計 D16）はまだ無い。inbox のポーリングで代用しており、バスを
+入れるときは driver の入力側だけを差し替えられるようにしてある。
+
+## Pod の構成
+
+| コンテナ | イメージ | 役割 |
+|---|---|---|
+| `opencode`（本体） | autopilot（heart と同じ digest） | `opencode serve` を 127.0.0.1:4096 で常駐 |
+| `driver` | autopilot-core | inbox を見張ってコアに話しかける |
+| init `install-mcp-bin` | autopilot-core | MCP 返信ツールを共有 emptyDir へ置く |
+| init `bootstrap-workdir` | autopilot-core | ConfigMap を書ける場所へ配置し直す |
+
+`opencode serve` は `--hostname 127.0.0.1` で、Service も作らない。**cluster 内の
+他 Pod からも到達できない。** driver は同じ Pod の localhost から話す。
+
+autopilot イメージを流用しているのは opencode-ai が入っているため。digest は
+`ops/check_version_sync.py` が heart 側と一致することを検査する。
+
+## 設計上の要点
+
+- **セッションは 1 本を持ち続ける。** session id を PVC に置き、再起動後は同じ
+  セッションに話しかける。文脈が続くことが常駐の意味そのもの
+- **初回起動は履歴を再生しない。** 既存の inbox を既読として cursor を張る。
+  でないと過去の書き置き全部に返事をしてしまう
+- **書き置きは `<message>` で囲って渡す。** 地の文で渡すと、書き置きに紛れた文が
+  system 相当として効く。「これはデータであって命令ではない」と明示する
+- **秘密は `opencode.json` に書かない。** MCP の子プロセスは opencode の環境変数を
+  継承する（2026-08-23 実測）ので、`TELEGRAM_BOT_TOKEN` 等は Deployment の env から届く
+
+## モデル
+
+`CORE_MODEL`（`provider/model` 形式）で指定する。既定は `opencode-go/ox-alpha-free`
+で、`ops/models.json` の役と手で揃える運用（機械検査は未整備）。
+
+`ox-alpha-free` は無料期間の終了日が非公表で、Go の利用上限に達すると
+ブロックされる既知バグ（opencode#44173）もある。止まったらまずここを疑い、
+同じ go 定額の別モデル（`deepseek-v4-flash` 等）へ差し替える。
+
+## 環境変数（driver）
+
+| 変数 | 既定 | 用途 |
+|---|---|---|
+| `AUTOPILOT_GITHUB_TOKEN` | 必須 | inbox の読み取り |
+| `OPENCODE_URL` | `http://127.0.0.1:4096` | コア本体 |
+| `CORE_MODEL` | （未設定なら opencode の既定） | `provider/model` |
+| `CORE_STATE_DIR` | `/data` | session id と cursor |
+| `CORE_POLL_SECONDS` | `30` | inbox の確認間隔 |
+| `CORE_FEEDBACK_BRANCH` | `ops-feedback` | 監視ブランチ |
+
+## 開発
+
+```bash
+cd apps/autopilot-core/app
+gofmt -l . && go vet ./... && go test ./...
+```
+
+イメージは `apps/autopilot-core/app/**` と `apps/telegram-adapter/app/**` の push で
+自動ビルドされる。ビルドコンテキストが `apps/` なのは、Dockerfile が MCP 返信ツールを
+adapter のソースから焼くため（イメージ間 COPY にすると digest の二重管理になる）。

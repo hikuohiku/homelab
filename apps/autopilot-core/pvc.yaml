@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: autopilot-core-state
+  namespace: autopilot
+  annotations:
+    # コアの記憶そのもの。Application ごと消すと finalizer で道連れになるため、
+    # 畳むときは中身を退避してから (openclaw 撤去で実際にそうなった)
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      # opencode の session storage (~/.local/share/opencode) と cursor。
+      # 会話履歴のみで実データを持たない。session storage は自動 GC されない
+      # 既知問題があるので、実使用量は監視すること
+      storage: 5Gi

@@ -1,0 +1,162 @@
+# autopilot-core — 常駐する opencode セッションと、そこへイベントを渡す driver。
+#
+# v0 の範囲は「所有者の書き置きに、文脈を保ったまま Telegram で直接返事をする」だけ。
+# 実装・merge・Job の起動はしない (heart の担当のまま)。opencode の permission でも
+# edit / bash を拒否しており、器のレベルで着手できないようにしてある。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: autopilot-core
+  namespace: autopilot
+  labels:
+    app: autopilot-core
+spec:
+  replicas: 1
+  # セッション storage を単一 PVC に持つので、rolling 中の二重起動を避ける
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: autopilot-core
+  template:
+    metadata:
+      labels:
+        app: autopilot-core
+      annotations:
+        # pod の強制再作成用 (heart と同型。K8s write 権限なしで再起動したいとき)
+        homelab.hikuohiku.dev/restart-stamp: "2026-08-23T10:40Z"
+    spec:
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # opencode が MCP サーバを子プロセスとして起動できるよう、返信ツールの
+        # バイナリを共有 emptyDir へ置く。opencode 側のイメージ (autopilot) には
+        # このバイナリが無いため、core イメージから運ぶ
+        - name: install-mcp-bin
+          image: ghcr.io/hikuohiku/homelab-autopilot-core:latest
+          command: ["sh", "-c", "cp /usr/local/bin/telegram-adapter /mcp/telegram-adapter"]
+          volumeMounts:
+            - name: mcp-bin
+              mountPath: /mcp
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+        # ConfigMap は read-only mount なので、opencode が書ける場所へ配置し直す
+        - name: bootstrap-workdir
+          image: ghcr.io/hikuohiku/homelab-autopilot-core:latest
+          command: ["sh", "-c", "cp /config/opencode.json /config/AGENTS.md /work/"]
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+            - name: work
+              mountPath: /work
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+      containers:
+        # --- コア本体 ---
+        - name: opencode
+          # heart と同じ autopilot イメージ (opencode-ai が入っている)。
+          # digest は ops/check_version_sync.py の "autopilot image digest" が
+          # heart / 旧 loop と一致することを検査する
+          image: ghcr.io/hikuohiku/homelab-autopilot@sha256:93a898cf0a1ec7a0363e9e2824f39670db2e3a8ca76674e755438ce8273c7bcb
+          terminationMessagePolicy: FallbackToLogsOnError
+          # cluster 外にも他 Pod にも出さない。driver は同じ Pod の localhost から話す
+          command: ["sh", "-c", "cd /work && exec opencode serve --hostname 127.0.0.1 --port 4096"]
+          env:
+            - name: HOME
+              value: /data/home
+            - name: OPENCODE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: autopilot-core-credentials
+                  key: OPENCODE_API_KEY
+            # MCP の子プロセス (telegram-adapter mcp) が継承して読む。
+            # opencode.json 側に秘密を書かずに済ませるための経路
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: autopilot-core-credentials
+                  key: TELEGRAM_BOT_TOKEN
+            - name: TELEGRAM_ALLOWED_USER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: autopilot-core-credentials
+                  key: TELEGRAM_ALLOWED_USER_ID
+            - name: TZ
+              value: Asia/Tokyo
+          volumeMounts:
+            - name: work
+              mountPath: /work
+            - name: mcp-bin
+              mountPath: /mcp
+              readOnly: true
+            - name: state
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            # memory の limits は付けない（substrate の規則: 実測の裏付けなしに付けない。
+            # 超過が回復不能な OOMKill になる。CPU limits は throttle で回復するため設定する）
+            limits:
+              cpu: "1"
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+
+        # --- イベントを渡す係 ---
+        - name: driver
+          image: ghcr.io/hikuohiku/homelab-autopilot-core:latest
+          terminationMessagePolicy: FallbackToLogsOnError
+          env:
+            - name: AUTOPILOT_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: autopilot-core-credentials
+                  key: AUTOPILOT_GITHUB_TOKEN
+            - name: OPENCODE_URL
+              value: http://127.0.0.1:4096
+            # ops/models.json の役と揃える運用 (機械検査は未整備)。
+            # ox-alpha-free の無料期間が終わったら同じ go 定額の別モデルへ差し替える
+            - name: CORE_MODEL
+              value: opencode-go/ox-alpha-free
+            - name: CORE_STATE_DIR
+              value: /data
+            - name: TZ
+              value: Asia/Tokyo
+          volumeMounts:
+            - name: state
+              mountPath: /data
+          resources:
+            requests:
+              cpu: 10m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: config
+          configMap:
+            name: autopilot-core-config
+        - name: work
+          emptyDir: {}
+        - name: mcp-bin
+          emptyDir: {}
+        - name: state
+          persistentVolumeClaim:
+            claimName: autopilot-core-state
