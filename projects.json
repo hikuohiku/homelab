@@ -3742,7 +3742,7 @@
     {
       "id": "P-0175",
       "title": "秘密の給水塔が止まった日を先に演じる — External Secrets の唯一の上流 (Doppler) を一時遮断し、既存の Secret とアプリが何時間持つかを秒で実測する",
-      "state": "merging",
+      "state": "soaking",
       "branch": "project/p-0175",
       "irreversible": false,
       "capabilities": [
@@ -3816,7 +3816,16 @@
       "review_requested_at": "2026-08-23T11:12:26Z",
       "review_retries": 0,
       "review_cycles": 2,
-      "merging_since": "2026-08-23T11:22:28Z"
+      "merging_since": "2026-08-23T11:22:28Z",
+      "soak": {
+        "until": "2026-08-23T11:54:47Z",
+        "baseline_unhealthy": [
+          "coder",
+          "immich",
+          "syncthing",
+          "vaultwarden"
+        ]
+      }
     },
     {
       "id": "P-0181",
