@@ -303,3 +303,39 @@ ok=false になったら report.json の phase/error で切り分け (session 2 
 green になるのは merge された世界の latest.json なので、ブランチ上で何度回しても
 red のままであることに注意 (自分の実装の問題ではない)。テスト追加等の派生作業は
 せず、発見はこのファイルの「発見」節に追記するだけでよい。
+
+## セッション 4 (2026-08-24 08:50 JST)
+
+**実装は無し (セッション 3 の結論どおり)。ブランチはまだ merge されていない。**
+このコミットの変更はこの追記のみ。3 項目を再実測した:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 再々実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse -v` | **green (27 tests OK)** 再々実測 |
+| 3 | `git show origin/ops-health-report:...` | red (`recovery_probe: None`) — merge 前なので想定どおり |
+
+verify 3 の red は wrapper のセッション開始実測と一致。reporter の最新 run は
+2026-08-23T23:30:05Z で、latest.json に recovery_probe キー自体が未搭載
+(クラスターに canary の ConfigMap が無いのは merge 前だから、で正しい)。
+
+## 本セッションの新情報: main 側の進行と conflict リスク
+
+branch point (4bdd5d392, PR #576) 以降に main が #577〜#579 まで進んだが、差分ファイルは
+`ops/heart/{gh,heart,reconcile}.py` / `ops/heart/tests/test_reconcile.py` /
+`ops/projects/archive.jsonl` のみで、本ブランチの差分
+(`apps/recovery-canary/*`, `apps/ops-health-reporter/*`, `apps/kustomization.yaml`,
+`ops/tests/test_recovery_probe_parse.py`, 本ログ) と **1 ファイルも重複しない**。
+rebase / conflict 解消は不要。次に branch を触る者も同様に
+`git diff --name-only HEAD...origin/main` で確認すればよい。
+
+reporter 側 3 点セットの在処も再確認済み (レビュー時の参照用):
+rbac.yaml:33 resourceNames / report.py:441 collect_recovery_probe /
+report.py:888 notes 文言。
+
+## 次のセッションへの一言
+
+状況はセッション 3 から一切変わっていない。**やることは「merge 待ち」以外にない。**
+毎回 verify 1/2 の再実測と上表の更新だけでよい。merge された世界になったら
+セッション 3 記載の手順 (ArgoCD sync 確認 → 手動 Job or 03:43 JST 待ち → reporter run 待ち)
+で初回計測を起こし、verify 3 を green にするのが最初で最後の残作業。
