@@ -4545,7 +4545,7 @@
     {
       "id": "P-0210",
       "title": "立案→判定の輪を閉じる — 棄却理由を台帳に刻ませ、提案を CI が検査する",
-      "state": "in_review",
+      "state": "merging",
       "branch": "project/p-0210",
       "irreversible": false,
       "capabilities": [],
@@ -4605,7 +4605,8 @@
         550
       ],
       "review_requested_at": "2026-08-23T16:10:37Z",
-      "review_retries": 0
+      "review_retries": 0,
+      "merging_since": "2026-08-23T16:19:45Z"
     },
     {
       "id": "P-0211",
@@ -4676,7 +4677,7 @@
     {
       "id": "P-0216",
       "title": "B2 の download cap で backup が全滅した夜を二度と作らない — 全消費者の転送量を事前見積りで一枚にし、CI が「cap を食い潰すスケジュール」を落とすようにする",
-      "state": "proposed",
+      "state": "active",
       "branch": "project/p-0216",
       "irreversible": false,
       "capabilities": [],
@@ -4727,12 +4728,13 @@
         "verdict": "all_fail",
         "passed": [],
         "broken": []
-      }
+      },
+      "veto_deadline": "2026-08-23T16:19:45Z"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-23T15:42:25Z",
-  "last_activity_at": "2026-08-23T16:18:31Z",
+  "last_activity_at": "2026-08-23T16:19:45Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
