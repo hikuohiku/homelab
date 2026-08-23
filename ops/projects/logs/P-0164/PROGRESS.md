@@ -336,12 +336,40 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   再実測だけして軽く閉じてよい。blocking 内訳は announced 1 + active 3 なので、
   弁が開くのは P-0092 が消えたあとも active 3 の完了待ちになる可能性が高い
 
+### セッション 8 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking 4 件でセッション 7 から不変**
+  (P-0092 / P-0116 / P-0157 / P-0161。checked=61)。減少傾向 (6→5→4) が止まった。
+  固定指示どおり実演習は見送り。コード変更は無し
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 4), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 281 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git rev-parse origin/main                              # c5d6df255 (不動)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- セッション 7 の発見の補足: projects.json を生読みしたら state 内訳が
+  delivered 26 / vetoed 2 / stalled 26 / **in_review 2** / announced 1 / active 4。
+  前セッションまで「帳簿上観測されるのは 5 状態」だったが、**in_review が初めて
+  台帳に現れた** (active 4 = blocking 3 + 自己 P-0164。excluded_self と辻褄一致)。
+  in_review は弁の判定対象外なので演習条件への影響は無し
+- 当日の手順はセッション 3 固定のまま不変 (--run 背景起動 → 全 zero 確認 → PATCH ready
+  解除 → PUT merge)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。blocking は announced 1 + active 3 のまま減速中 —
+  active の完了待ちが律速という構造は変わっていない
+
 ## 発見 (スコープ外。curriculum が拾うもの)
 
-- なし (今回の範囲では)。強いて挙げれば「projects.json の state ライフサイクルに
-  『review』『merging』等の中間状態がコード上散見されるが帳簿上は
-  delivered/stalled/active/announced/vetoed の 5 状態しか観測していない」程度。
-  弁の判定に影響する話ではないので深追いしていない
+- (セッション 8, セッション 7 発見の補足) 「projects.json の state ライフサイクルに
+  『review』『merging』等の中間状態がコード上散見するが帳簿上未観測」という前回メモに対し、
+  本日 `in_review` 2 件が台帳に実観測された。中間状態は実在する (弁判定対象外につき影響なし)
 - (セッション 3, 環境の小ネタ) `/tmp/opencode` は root 所有で書き込めなかった
   (実測: touch Permission denied)。一時ディレクトリは従来どおり `mktemp -d` へ。
   また `git worktree add -b <branch> <path>` は path の作成に失敗しても branch だけ
