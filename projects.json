@@ -5461,7 +5461,42 @@
         "soft_cap": 3000000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T22:54:32Z",
+        "verify": [
+          {
+            "cmd": "kubectl kustomize apps | grep -q 'name: recovery-canary'",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_recovery_probe_parse -v",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "test_recovery_probe_parse (unittest.loader._FailedTest.test_recovery_probe_parse) ... ERROR\n\n======================================================================\nERROR: test_recovery_probe_parse (unittest.loader._FailedTest.test_recovery_probe_parse)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_recovery_probe_parse\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_recovery_probe_parse'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); r=d.get('recovery_probe'); assert r and isinstance(r.get('last_recovery_seconds'), int), r\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,sys; d=json.load(sys.stdin); r=d.get('recovery_probe'); assert r and isinstance(r.get('last_recovery_seconds'), int), r\n                                                                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: None\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
