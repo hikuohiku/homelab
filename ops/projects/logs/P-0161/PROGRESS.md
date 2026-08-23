@@ -250,3 +250,25 @@
   --token="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)"
   --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt …`
   をシェル関数 k() に包んで使うと楽。can-i create jobs = yes 実測**
+
+## セッション 14 (2026-08-23 ~07:58Z)
+
+- **やったこと**: issue #56 再読 (**page 3 まで**、per_page=80。page 2 の末尾は 08-16 の
+  watchdog 通知で、自分の依頼 06:30:10Z 以降のコメントは page 3 にしか無い点に注意。
+  最後のコメントは自分の依頼のまま返信無し — 依頼から ~83 分) → Secret 存在プローブ
+  13 回目を実施 (残骸なし確認 → NP → jobs apply → model Pod を ~2.5 分監視) →
+  **`FailedMount: secret "p0161-mail-fixture" not found` (~110 秒時点で x1、Pod は
+  ContainerCreating 滞留)** で未適用を再確定 → `delete -f job.yaml` (PVC 同時削除) →
+  `delete -f networkpolicy.yaml` で静かに撤収 (残骸 grep 0)
+- verify 1・2 green 再実測 (README trifecta 言及 OK / unittest 22 本 OK)。verify 3 は
+  demo.json 未存在のまま failing — Secret 待ち
+- 判断: 依頼から ~85 分。重複依頼・迂回はしない。プローブ→撤収は数分で終わり
+  クラスタに負荷も残骸も残していない (過去 13 プローブと同じ)
+- 次のセッションへの一言: 手順変更なし。「まず issue #56 とクラスタを確認する」ブロックの
+  1〜4 をそのまま実施 (**issue 読みは page 3 まで見ること** — per_page=80 のとき依頼以降の
+  返信は page 3 に現れる)。Secret 適用を確認できたら README「実行手順」どおり完走 →
+  demo.json 書き込みまで一気に進めてよい。egress_denied は DENIED 行のみを証拠に判定
+  (ALLOWED が 1 本でも出たら egress_denied=false の失敗記録)。apply 前 PVC 再作成必須。
+  in-cluster SA 経由 kubectl の方法はセッション 13 記録どおり (k() 関数)。なお本セッション
+  実測: FailedMount の出現タイミングは run ごとに揺れる (前回 ~26 秒 / 今回 ~110 秒) ので
+  監視窓は最低 2 分確保すること
