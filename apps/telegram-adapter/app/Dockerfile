@@ -5,11 +5,14 @@
 # base image は OCI index digest で pin する (apps/ops-dashboard/app/Dockerfile と同じ)。
 # 更新するときは registry API の docker-content-digest ヘッダを読んで差し替えること。
 # builder のタグは go.mod の go ディレクティブと揃える。
+#
+# 依存: nats.go / nkeys (イベント経路。ops/inventory.json に登録済み)。
+# go.sum を COPY しないと再現ビルドにならないので必ず一緒に入れること。
 
 # golang:1.25-alpine
 FROM golang@sha256:1ae0735f00daffa3aaf1363a5184c0d2dc55c78e3db4ec70241cdac97bf84b59 AS build
 WORKDIR /src
-COPY go.mod ./
+COPY go.mod go.sum ./
 COPY *.go ./
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/telegram-adapter .
 
