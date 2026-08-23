@@ -6,15 +6,22 @@
 - **セッション 2 (2026-08-23) 完了**: 演習統括スクリプト + unittest を実装し、
   verify のうち unittest と dry-run の 2 項目を green 自力実測。
   残るは report.json (verify 第 1 項) = 実演習の実施のみ。
+- **セッション 3 (2026-08-23) 完了**: 実演習の事前準備をすべて完了。
+  ラベル 2 commit を積んだ `exercise/p-0164-labels` ブランチ push 済み
+  (21011a7af / 5d24c8932)、ドラフト **PR #524** 作成済みで必須チェック `ci` も
+  green。演習当日の Git 側作業は「PR を ready にして merge」の 2 API 呼び出しのみ。
+  安全弁はセッション中も閉じたまま (blocking 5→6 件に増加) なので実施は見送り。
 
 ### 次のセッションへの一言
 
-**実演習 (--run) をやって report.json を出すのが残りすべて。** ただし安全弁が
-閉まっている間は絶対に始めないこと (下記「安全弁の現在値」)。弁が開いたら:
-`python3 ops/tools/deploy_continuity.py --run --notes-file <watcher等の観察JSON>`
-で統括スクリプトに任せ、自分は Git 側 (main への可逆小変更 2 commit を PR merge)
-と観察記録だけを担う。手順詳細は deploy_continuity.py モジュール docstring と
-このファイルの「実演習の手順」節。**dry-run を先に回して弁の判定を見てから。**
+**実演習 (--run) をやって report.json を出すのが残りすべて。材料は全部揃っている**
+(下記「実演習の手順」と PR #524)。弁が開いたら: `--run` を nohup 起動 →
+`kubectl get` で 3 対象の ready=0 を自分の目で確認 → PR #524 を ready+merge
+(curl + $AUTOPILOT_GITHUB_TOKEN、コマンドは手順節にある) → あとはスクリプトが
+scale 1・計時・report.json 書き出しまで自動。**スクリプトは実行中ずっと黙る**
+(出力は最後の 1 回)。進捗は kubectl で直接見ること。**dry-run を先に回して
+弁の判定を見てから。** 閉じていたら何も始めないで終わってよい (準備済みのため
+やり残しはない。P-0174 が新たに announced されており、開くのはまだ先の可能性が高い)。
 
 ## 実装メモ
 
@@ -64,25 +71,68 @@
 - kubectl write の許可はコードレベルでガード済み: `k_scale` は TARGETS (3 対象) 以外
   と replicas 0/1 以外を ValueError で拒む (TestScaleGuard が固定)
 
-### 実演習の手順 (次セッション用チェックリスト)
+### 実演習の手順 (次セッション用チェックリスト。材料はセッション 3 で準備済み)
 
 1. `python3 ops/tools/deploy_continuity.py --dry-run` → 弁 ok:true を確認
-   (2026-08-23 時点: P-0092 announced + P-0116/P-0157/P-0161/P-0163 active で閉鎖中。
-   他プロジェクトが delivered/stalled になるのを待つしかない)
-2. バックグラウンドで `--run --max-wait 900 --settle 30 --dwell 60` を起動
-   (nohup 等。標準出力に進行 JSON、stderr に復帰ログ)
-3. 演習アプリ 2 つ (vaultwarden / coder。EXERCISE_APPS 定数) の
-   application.yaml にラベル追加 commit を 2 本作り、PR 経由で main に merge:
-   - apps/vaultwarden/application.yaml の metadata に
-     `labels: {p0164.continuity: "1"}` 追加
-   - apps/coder/application.yaml に同様 `p0164.continuity: "2"` を追加
+   (2026-08-23 時点の閉鎖中: P-0092 announced + P-0116/P-0157/P-0161/P-0163 active、
+   さらに P-0174 announced が追加。他プロジェクトが delivered/stalled になるのを待つ)。
+   閉じていたら終わってよい
+2. **PR #524 の鮮度確認** (演習前日・直前に 1 回):
+   `exercise/p-0164-labels` (21011a7af vaultwarden / 5d24c8932 coder の 2 commit) は
+   ドラフト PR #524 で main を向いて待機中。main が進んで conflict していれば
+   `PUT /repos/hikuohiku/homelab/pulls/524/update-branch` で解消し `ci` の再 green
+   を待つ。ドラフトが何かに閉じられていれば同じ head/base で開き直す
+3. バックグラウンドで `--run` を起動。**スクリプトは完了まで stdout に何も出さない**
+   (最後に summary JSON の 1 回だけ)。ログはファイルへ:
+
+   ```bash
+   LOG=$(mktemp /tmp/p0164-run.XXXXXX)
+   nohup python3 ops/tools/deploy_continuity.py --run --max-wait 900 --settle 30 --dwell 60 \
+     > "$LOG" 2> "$LOG.err" & echo "pid=$! log=$LOG"
+   ```
+
+4. scale 0 の完了を**自分で kubectl 読み取りで確認してから** merge する
+   (起動から 1〜3 分程度):
+
+   ```bash
+   kubectl get deployment/argocd-server deployment/argocd-repo-server \
+     statefulset/argocd-application-controller -n argocd   # 3 行とも READY 0 を確認するまで数秒おきに再実行
+   ```
+
+   3 対象すべて READY=0 を確認したら、PR #524 を ready→merge (ruleset で main 直 push
+   不可・レビュー 0 人・必須チェック `ci` は既に green 済みなので merge だけ通る):
+
+   ```bash
+   curl -s -X PATCH -H "Authorization: Bearer $AUTOPILOT_GITHUB_TOKEN" \
+     -H "Content-Type: application/json" -d '{"draft": false}' \
+     https://api.github.com/repos/hikuohiku/homelab/pulls/524 | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('state'),d.get('draft'))"
+   curl -s -X PUT -H "Authorization: Bearer $AUTOPILOT_GITHUB_TOKEN" \
+     -H "Content-Type: application/json" -d '{"merge_method":"merge"}' \
+     https://api.github.com/repos/hikuohiku/homelab/pulls/524/merge
+   ```
+
    - LABEL_KEY=`p0164.continuity` はスクリプトが live の Application CR 上で見に行く
      キー。値は何でもよい (key の存在だけを見る)
    - metadata.labels 変更はワークロード再起動を誘発しない (touches_apps=false 両立)
-   - **1 PR に 2 commit でも 2 PR でもよい** (merge で main に積めばいい)
-4. スクリプトが自動で scale 1 → 計時 → report.json 書き出しまで運ぶ
-5. watcher/critic の報告は `--notes-file` で observations に入れるか、
-   PROGRESS.md の証跡に時刻付きで貼る (DoD (3) の対象。verify は見ない)
+   - 早すぎる merge (ready=0 前) は「ArgoCD 生きている間の main 前進」になってしまうので
+     必ず確認後に行う。逆に遅くても `--max-wait 900` 内なら問題ない
+5. スクリプトが自動で dwell → scale 1 → 計時 → report.json 書き出しまで運ぶ。
+   `$LOG` に summary JSON (catchup_seconds 等)、stderr 側に final restore 行
+6. watcher/critic の観察は**停止窓口の間に**集める (DoD (3)。verify は見ない):
+   `python3 ops/tools/version_watch.py` の出力や health reporter の見え方を時刻付きで
+   PROGRESS.md の証跡に貼る。`--notes-file` は起動時に渡さないこと (**ファイルが存在
+   しないと report 書き出し直前に例外で abort する** — rc=3, scale 復帰は finally で
+   行われるが計測は失われる)。観察は実行後に
+   `report.json` の `observations` へ python 一行で追記すればよい (validate 対象外の
+   自由キー)
+
+   ```bash
+   python3 -c "import json;p='ops/projects/logs/P-0164/report.json';d=json.load(open(p));d['observations']['watcher']='(ここに観察)';json.dump(d,open(p,'w'),ensure_ascii=False,indent=2)"
+   ```
+7. 完了後: verify 3 項目を自分で回す (第 1 項が初めて green になる)。その後
+   ラベル撤去 — `exercise/p-0164-labels` の差分を打ち消す branch + PR + merge を
+   通常経路 (ArgoCD 生還後なので普通に同期される) で行い、live の Application から
+   ラベルが消えたことを確認してから commit・セッション終了
 
 ## 証跡
 
@@ -129,9 +179,47 @@ $ python3 ops/validate.py                          # 0 error (既存 warning 11 
 - branch 先頭の origin/main merge (archive.jsonl 先頭一致エラーの解消):
   `Merge origin/main (curriculum 採択) into project/p-0164 — 本プロジェクト領域への影響なし`
 
+### セッション 3 (2026-08-23, 演習事前準備。project/p-0164 checkout, リポジトリルートで実行)
+
+- **演習用ブランチ + ドラフト PR を準備済み** (実施は弁開放待ちのため見送り):
+  - branch `exercise/p-0164-labels` = origin/main (c5d6df255) + 2 commit
+    (21011a7af: vaultwarden に `p0164.continuity: "1"` / 5d24c8932: coder に
+    `"2"`。どちらも metadata.labels への 2 行追加のみ、diff --stat 実測で
+    2 files changed, 4 insertions)。push 済み (push_rc=0)
+  - ドラフト PR **#524** (head: exercise/p-0164-labels / base: main) 作成済み。
+    本文に「普段は merge しない・演習窓口で ready+merge される」旨を明記済み
+- **main の ruleset 実測** (`GET /repos/hikuohiku/homelab/rules/branches/main`):
+  deletion / non_fast_forward / pull_request (required_approving_review_count: 0) /
+  required_status_checks (context: `ci`)。つまり **PR が通れば承認なしで merge 可能、
+  ただし `ci` チェック必須** → ci.yml は `pull_request` トリガーなので、ドラフトを
+  先に開いておけばチェックは演習前に green になる (実際 green を実測:
+
+  ```
+  $ curl .../commits/5d24c8932/check-runs → ci completed success
+  ```
+
+  演習窓口での Git 側作業は PATCH (ready 解除) + PUT (merge) の 2 API 呼び出しで済む)
+- 認証: git push と API はどちらも `$AUTOPILOT_GITHUB_TOKEN`
+  (git config の credential helper 実測。API GET repo = 200)。gh CLI は無いが不要
+- 弁の再確認 (セッション後半):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run | python3 -c "...print valve..."
+valve ok: False | blocking: ['P-0092','P-0116','P-0157','P-0161','P-0163','P-0174']
+```
+
+  セッション 2 時点より 1 件増えており (P-0174 が新たに announced)、閉じる方向に
+  動いている。実施判断を誤らないため、この日は準備のみで閉じた
+- unittest 36 件 + dry-run rc=0 はセッション 3 冒頭でも再実測ずみ (変更加えていない
+  ため省略なしで同一結果)
+
 ## 発見 (スコープ外。curriculum が拾うもの)
 
 - なし (今回の範囲では)。強いて挙げれば「projects.json の state ライフサイクルに
   『review』『merging』等の中間状態がコード上散見されるが帳簿上は
   delivered/stalled/active/announced/vetoed の 5 状態しか観測していない」程度。
   弁の判定に影響する話ではないので深追いしていない
+- (セッション 3, 環境の小ネタ) `/tmp/opencode` は root 所有で書き込めなかった
+  (実測: touch Permission denied)。一時ディレクトリは従来どおり `mktemp -d` へ。
+  また `git worktree add -b <branch> <path>` は path の作成に失敗しても branch だけ
+  先に作られる (実測。exercise/p-0164-labels がこの経路で生まれたが結果的にそのまま利用)
