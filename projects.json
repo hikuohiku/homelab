@@ -3384,7 +3384,44 @@
         "soft_cap": 800000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T05:17:40Z",
+        "verify": [
+          {
+            "cmd": "test -f docs/auth-break-glass.md && grep -qE argocd docs/auth-break-glass.md && grep -qE admin docs/auth-break-glass.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -c \"import json; d=json.load(open('ops/projects/logs/P-0151/drill.json')); assert d.get('session_http') in (200,401,403) and d.get('dex_restored') and d.get('window_seconds',99999)<600\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json; d=json.load(open('ops/projects/logs/P-0151/drill.json')); assert d.get('session_http') in (200,401,403) and d.get('dex_restored') and d.get('window_seconds',99999)<600\n                             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'ops/projects/logs/P-0151/drill.json'\n"
+          },
+          {
+            "cmd": "kubectl -n dex get deployment -o name | grep -q dex",
+            "ok": true,
+            "rc": 0,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "some_pass",
+        "passed": [
+          "kubectl -n dex get deployment -o name | grep -q dex"
+        ],
+        "broken": []
+      }
     }
   ],
   "chores": [],
