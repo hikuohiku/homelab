@@ -186,3 +186,48 @@
 - census 到着時の手順はセッション 3/4 記載どおり不変 (両 NP バイト一致更新 +
   test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)。
   「digest pin 化未処理」は**解消済み** — 引き継ぎ事項から消してよい
+
+## セッション 6 (2026-08-23 23:15 UTC) — origin/main (#576/#577) を追い越し、heart 全テストの退行なしを確認
+
+### やったこと
+
+- **現在地を再実測**: /tmp/opencode は依然 root:root 755 で uid 10001 から不変
+  → V2 は本 Pod では fail-fast rc=2・クラスタ副作用ゼロで red で正しい。V1/V3 green。
+  セッション 3〜5 の診断は今日も正しい
+- **main 新着の内容確認**: #576 は curriculum 帳簿 (archive.jsonl +9 行のみ)、
+  #577 は merge-conflict backoff (gh.py / heart.py / reconcile.py / test_reconcile.py)。
+  本 PR が触る spawn.py を含む 14 ファイルと重複なし
+- **P-0203 census を main の木で再確認** (`git ls-tree -r origin/main | grep egress`):
+  まだ無い (rc=1)。NP は DNS-only fail-closed のままが正解。穴開けタスクは引き続き休止中
+- **origin/main を merge** (今回の本体): コンフリクトなしで取り込み完了。
+  archive.jsonl の追記も一緒に入った
+- **merge 後に ops/heart テスト全走**: 253 本 OK (#577 の新 test_reconcile 含む)。
+  本ブランチの spawn.py 変更と #577 の組み合わせで退行なし
+- python3 ops/validate.py: **error 0** — セッション 5 まで出ていた「archive.jsonl が
+  origin/main 先頭一致せず」error は、main 側帳簿を取り込んだことで消滅。
+  warning 11 件は既存問題 (dashboard refs と todo 枯渇)
+
+### 分かったこと
+
+- #577 以降、「コンフリクトする PR」は自動 merge が即 stalled 化して人間に question
+  1 回だけ送る挙動になる (= コンフリクト = 人間待ち)。長命なプロジェクトブランチは
+  定期的に main を追い越すのが実務的な予防策で、本セッションの追い越しはその実施でもある
+- validate.py の既知 error は「branch 作業中は常に出る」ではなく「**main 追い越し前は**
+  出る」が正確だった。追い越せば消える
+
+### 検証 (全部自分で実走済み)
+
+- spec verify V1 green / V3 green / V2 red (既知 fail-fast rc=2)
+- unittest: test_private_data_profile + test_stage3_readiness 37 本 OK /
+  ops/heart 全 253 本 OK (退行なし)
+- python3 ops/validate.py: error 0, warning 11 (既存)
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4/5 から一歩も動いていない**: V2 は本 PR の merge+sync 後の
+  新 runner Pod で自動 green 化する。Pod 内での再走は無駄。やることは「PR merge を待つ」だけ
+- census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+  到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+- main がまた動いたら同じ要領で追い越すこと (#577 以降はコンフリクト放置が
+  即「人間待ち停止」に繋がるため、追い越しの価値は上がっている)
