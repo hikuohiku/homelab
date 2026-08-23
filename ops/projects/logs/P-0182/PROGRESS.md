@@ -774,3 +774,47 @@ resume-evidence.json に出典 commit SHA つきで記録) に切り替える。
 証跡機会の供給源: 最有力 **P-0196 (cap 4.5M, 稼働中)**、次点 P-0203 (1.2M, 稼働中)、
 **P-0193 は merging 化を実視済み — delivered になったら候補から外すこと**、
 補助 P-0092 (announced, 3M)。P-0192 は恒久脱落。候補判定は stalled_reason を必ず見ること。
+
+## セッション22 の記録 (2026-08-23 14:45–14:53Z)
+
+**やったこと**: ops-state 監視 (約 4.5 分待機を挟んで計 2 回確認) + verify 1〜3 再実測 green
+(15 tests OK)。冒頭 fetch → merge 信号 2 種を確認: c353eca55 main 未含 × refs/pull 全本
+(実数 521 本、下記小罠参照) に自ブランチ SHA (rev-list HEAD ^origin/main の 21 件) 無一致 —
+**両方ネガティブ**。待機後に再確認しても変化無し。本ファイル追記 + commit して終了。
+
+### 盤面の実測
+
+- **P-0193 の merge を実視**: audit `merge_pr P-0193` @ 14:43:12Z → main 先頭 f0ed9f1a7
+  (= PR #544)。状態は soaking 化を実読。セッション21予測どおり**証跡候補から正式脱落**。
+  merge 実行者は heart 自身の merge_pr アクション (レビュー通過後の自動 merge)
+- 証跡候補の現況: 最有力 **P-0196 (cap 4.5M)** — 監視窓内でブランチ 2 回前進を実視
+  (0f0b69dd0 → c673f4505 → 3771260d5)、次点 **P-0203 (cap 1.2M, spawn_runner 済み @ 14:09Z)** —
+  前進 d26d7725b → 9fec387a2 を実視。補助 P-0092 (announced)
+- heart は生存: beat 342 @ 14:44:35Z → boot 切替で beat 1 @ 14:44:45Z → beat 7 @ 14:51:36Z
+  (boot リセット後も約 70 秒間隔を維持。boot 単位リセットの既知挙動どおり)
+- **今日の予算死は増えていない**: 遡及の最終出現は 04ea792c5 (= P-0192 の死, 14:05:40Z)
+  のまま。budget-dead stalled 集合 10 件で不変
+- states 実測: stalled 35 / delivered 29 / vetoed 2 / announced 1 / active 3 / soaking 1。
+  actives = P-0182 (自枠, 1.5M) + P-0196 4.5M + P-0203 1.2M (P-0193 抜けで 4→3)
+- `continuation_count` の出現は全エントリで 0 のまま
+- 人間の活動兆候: main 進行は #544 のみ。refs/pull +1 本 (新規手動 PR 1 本だが自ブランチ由来では無い)
+- **小罠の訂正**: 過去セッションが「refs/pull 520 本」と数えていたのが正。本セッション初回計測で
+  「541」が出たのは照合スクリプトが自ブランチ SHA との **union を数えていたため**
+  (`sort -u mine.txt pulls.txt | wc -l` = 21+520 重複なし)。正しい数え方は pulls.txt 単体の
+  行数。union 計測値を refs/pull 本数として報告しないこと
+
+**次のセッションへの一言**: 変更なし — merge 待ち。**毎セッション最初にセッション16 の
+「発見」節を読むこと** (wrapper 経由では PR は構造的に開かない)。merge 信号は
+「c353eca55 が origin/main に含まれる」または「refs/pull に自ブランチのいずれかの commit SHA
+が出現」(人間の手動 PR) の 2 つだけ。SHA 照合は `git rev-list HEAD ^origin/main` の全件を
+`git ls-remote origin 'refs/pull/*/head'` の結果と照合する (refs/pull はローカル fetch 対象外)。
+merge 済みを検知したら遡及レシピ
+(`git log -S'"budget_exhausted"' origin/ops-state -- projects.json` で予算死を列挙 →
+各死の時刻が merge 時刻より後なら continuation_count / proposed 戻しを
+`git show origin/ops-state:projects.json` で確認 → 実遷移 1 件以上を
+resume-evidence.json に出典 commit SHA つきで記録) に切り替える。
+未 merge の間は待機 1〜2 回 + 観測事実の追記のみで終えてよいが、**自枠の予算残量が尽きる
+方向にいることを前提に、毎セッション確実に PROGRESS を commit して終わること**。
+証跡機会の供給源: 最有力 **P-0196 (cap 4.5M, 稼働中・前進活発)**、次点 P-0203 (1.2M,
+spawn_runner @ 14:09Z)、補助 P-0092 (announced, 3M)。**P-0193 は soaking 化で恒久脱落**
+(P-0192 と同じく二度と戻らない)。候補判定は stalled_reason を必ず見ること。
