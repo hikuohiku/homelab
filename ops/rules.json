@@ -14,7 +14,9 @@
   },
   "notify": {
     "daily_budget": 6,
-    "_comment": "Discord への即時送信は 1 日この件数まで。超過分は digest に畳む。即時送信してよい型は予告 (announce)・納品 (deliver)・question・障害 (incident) のみ"
+    "_comment": "Discord への即時送信は 1 日この件数まで。超過分は digest に畳む。即時送信してよい型は予告 (announce)・納品 (deliver)・question・障害 (incident) のみ",
+    "telegram_morning_brief_per_day": 1,
+    "_comment_telegram_brief": "OpenClaw 経由の Telegram 朝 brief (P-0174, apps/openclaw/morning-brief-cronjob.yaml) は 1 日この回数まで。Discord 即時送信の daily_budget とは別枠の予算 (別チャネル・別の口なので相殺しない)。brief は送信専用で受信はしない"
   },
   "breaker": {
     "daily_cost_usd": 100.0,

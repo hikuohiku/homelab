@@ -9,6 +9,8 @@ resources:
   - agents-md.yaml
   - external-secret.yaml
   - deployment.yaml
+  # P-0174: 毎朝 JST 08:00 の Telegram brief (送信専用。受信は bridge の領分)
+  - morning-brief-cronjob.yaml
 
 # P-0107: 決定論パススルー (feedback-bridge sidecar) のスクリプト。
 # repo の bridge.py が ConfigMap 経由でそのまま pod へ乗る (ops-health-reporter 同型)。
@@ -19,6 +21,12 @@ configMapGenerator:
     namespace: autopilot
     files:
       - bridge.py
+  # P-0174: morning_brief.py も同型で ConfigMap 経由。CronJob は
+  # `python /scripts/morning_brief.py` 起動なので sys.path[0]=/scripts (単一ファイルで完結)
+  - name: openclaw-morning-brief-script
+    namespace: autopilot
+    files:
+      - morning_brief.py
 
 generatorOptions:
   disableNameSuffixHash: true
