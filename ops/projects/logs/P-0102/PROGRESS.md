@@ -236,3 +236,53 @@ Sync → `kubectl create job --from=cronjob/restic-check` の手順は実機で�
   (鮮度警報が替代検知になるが、retention 単体の異常は見えない)
 - B2 の Caps & Alerts 上限到達は backup/retention/check を同時に全滅させうる。使用量の
   大きい操作 (restore drill 等) の後は cap 消費を織り込むべき (P-0080 系との接続点)
+
+## checkpoint (予算上限)
+
+このセッションは状態の書き残しだけを行った (実装・クラスタ操作はしていない)。
+ワーキングツリーはクリーンで、commit も破棄も必要な変更は無かった。
+
+### 受入チェックリストの現在地 (2026-08-23 実測)
+
+| # | 状態 | 内容 |
+|---|------|------|
+| 1 grep | **red** (実装は完了済み) | manifest は `apps/restic-check/` に存在し `grep -rq 'restic-check' apps/` (--include 無し) は rc=0 実測。spec 文言どおりだと BusyBox grep が `--include` 非対応で必ず赤 — heart の判断待ち (session3 罠節、issue #56 済み) |
+| 2 unittest | **green** | 本 checkpoint セッションで再実測: 28 tests OK |
+| 3 evidence | **未達** | 失敗 Run の記録は `check_evidence_20260823_incident.json` (5 レコード、失敗混在 — 緑と偽らないため意図的に別名)。green Run 1 回で取れる状態まで届いている |
+
+つまりコード・manifest 側は完成しており、残りは「実機での green Run 1 回」と
+「heart による verify #1 文言判断」だけ。
+
+### 止まっている場所と次の一手
+
+止まっている場所: 受入 #3 の evidence 収取。session4 で障害 3 連鎖 (B2 cap / EROFS /
+Cloudflare UA) をすべて解消済みで、次の Run が成功すれば evidence が取れる。
+前提は **08-23 (月) 02:45–03:55 JST の backup 窓が成功していること** (08-22 夜分は
+cap 全滅で欠落済み)。この checkpoint を読む worker は以下を順に実行すること
+(session4「次セッションへの要点」の手順と同一):
+
+1. `kubectl get jobs -A | grep restic-backup` — 昨夜の backup 成否を最初に確認
+2. `kubectl apply -k apps/restic-check` → `kubectl get externalsecret -n restic-check`
+   で 2 本とも SecretSynced 待ち
+3. `kubectl create job --from=cronjob/restic-check restic-check-evidence -n restic-check`
+   → `kubectl logs -n restic-check job/restic-check-evidence -c evaluate` が
+   overall=OK(0) になることを確認 (成功時は Discord に何も飛ばない)
+4. ログ最終行 `EVIDENCE_JSON ` 以降の配列をそのまま
+   `ops/projects/logs/P-0102/check_evidence.json` に保存 →
+   受入 #3 の python verify が green になることを実測
+5. 片付け: `kubectl delete ns restic-check` (merge 後の ArgoCD 導入時の衝突防止。
+   session4 罠節どおり Job は CronJob 削除で GC されるので namespace ごと消してよい)
+6. PR を出す。PR 説明に (a) verify #1 は spec 文言のままだと BusyBox 環境で赤になる
+   旨、(b) 鮮度 warn を exit 2 (通知対象) に拡張した設計判断、を明記すること
+
+### 残った不確実性
+
+- **append-only 鍵での check 完走はまだ一度も証明されていない** (Run #1–#3 は全て
+  cap 障害 or 鮮度 warn で非ゼロ終了。check 自体の rc=0 は後半 2 リポジトリでのみ実績)。
+  受入 #3 の green Run が初検証になる
+- B2 download_cap の恒久対策は未決。08-22 夜の全滅は人手で解除されただけで、再発すれば
+  手順 3 の Job も同じ死に方をする (その場合は session4 障害 1 節の診断手順で切り分け)
+- verify #1 の文言修正可否 (issue #56 投げ済み) と、鮮度警報の exit 2 化という
+  DoD 超過の設計判断の人間側受け入れ — どちらも未回答
+- スコープ外発見の ops/heart/notify.py Cloudflare 1010 (UA 明示 1 行で直る) が
+  修復されたか不明。未修復なら heart の障害通知が今も静かに捨てられている
