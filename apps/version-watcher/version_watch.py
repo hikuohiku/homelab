@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+# ★手動同期コピーである (P-0126)。正本は ops/tools/version_watch.py (単体テストの対象)。
+# kustomize の configMapGenerator は kustomization.yaml の置かれたディレクトリの外の
+# ファイルを参照できない (root-only 制限) ため、クラスタ内で import できるようここに
+# 複製している。修正・改良は必ず正本に行った上でこのコピーへ反映すること —
+# コピーが陳腐化すると、テストで固めた判定ロジックとクラスタで走るロジックがズレる
 """ops/inventory.json の全 target の上流最新版を見に行き、drift を一覧する (P-0126)。
 
 なぜ要るか: inventory の上流追従は 2026-08-06 以降誰もやっていない (#49 の構造原因
@@ -38,10 +43,6 @@ status=error として記録し、全体は止めない (部分的な観測も�
 判定ロジックの固定テストは ops/tests/test_version_watch.py
 (`python3 -m unittest ops.tests.test_version_watch`)。HTTP 層は注入可能で、
 テストはレスポンス JSON の fixture だけで通る (ネットワークなし)。
-
-このモジュールは apps/version-watcher/version_watch.py に**手動同期コピー**されている
-(kustomize の configMapGenerator が kustomization.yaml の外のファイルを読めないため)。
-ロジックを変えたらコピーへの反映を忘れないこと — コピー側には単体テストが無い。
 """
 
 from __future__ import annotations

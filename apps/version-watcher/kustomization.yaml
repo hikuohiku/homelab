@@ -1,0 +1,19 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - external-secret.yaml
+  - cronjob.yaml
+
+configMapGenerator:
+  - name: version-watcher-script
+    namespace: version-watcher
+    files:
+      - watch.py
+      # ops/tools/version_watch.py の手動同期コピー (root-only 制限のため同梱必須)。
+      # 元ファイルを変えたらこちらへ反映すること
+      - version_watch.py
+
+generatorOptions:
+  disableNameSuffixHash: true
