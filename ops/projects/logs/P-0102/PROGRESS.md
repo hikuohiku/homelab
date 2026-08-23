@@ -137,64 +137,102 @@ PROJECT.md「設計方針」を読むこと。
 - なし (credential map の fail-closed が新規 ExternalSecret を正しく拾ったのは
   機能が意図どおり働いているという好例であり、論点ではない)
 
-## session4 (worker) — 中間報告
+## session4 (worker)
 
-やろうとしたこと: **受入 #3 の evidence 収取** (受入 #1 は BusyBox grep 問題で heart 判断待ち、
-#2 は session2 で green 済み)。session3 メモの preview 経路を実行した。
+やったこと: **受入 #3 の evidence 収取を試み、実機初回実行で障害を連鎖発見**。
+2 件は自分の領域で修正済み (下記 障害 2/3)、1 件は外部要因で人間対応後に自然解消
+(障害 1)。preview デプロイ (`kubectl apply -k apps/restic-check`) → ExternalSecret
+Sync → `kubectl create job --from=cronjob/restic-check` の手順は実機で通し済み。
 
-経過:
+### 障害 1: B2 download_cap_exceeded (外部要因 — 実行中に解消)
 
-- `kubectl apply -k apps/restic-check` で preview 配備 (application.yaml は kustomization
-  に含まれないので ArgoCD 側は無関係のまま)。ExternalSecret 2 本とも SecretSynced を確認。
-- 手動 Job `restic-check-evidence` を起こしたところ、vaultwarden の check が
-  `Stat(<config/>) … b2_download_file_by_name: 403` で延々リトライ。
+- 初回の check が全リポジトリで `Stat(<config/>) … b2_download_file_by_name: 403`。
+  クラスタ確認の結果、**昨夜 (2026-08-22 夜) の定期 backup が 5 本すべて失敗**
+  (immich/coder は Failed、vaultwarden/syncthing は同エラーのリトライ後に fatal)。
+  retention 4 本も「repository not initialized yet, skipping」で**実は初期化プローブが
+  同一原因で失敗し、それを skip として正常終了に仮装していた** (Complete 表示は当てにならない)
+- 診断 Pod から B2 API 直叩きで切り分け: append-only 鍵の capability は正常
+  (`writeFiles,listFiles,readFiles,listBuckets` + namePrefix null)。download を
+  直接再現すると **HTTP 403 `download_cap_exceeded`** — アカウントのダウンロード上限。
+  解除は B2 コンソールの Caps & Alerts で人間が上げるしかない
+- **実行途中 (~2026-08-23 00:00 UTC 頃) に誰かが上限を解除した**: 同一 Run 内で前半 3
+  リポジトリは 403 で失敗、後半 2 リポジトリ (coder-workspace-homes / syncthing) は
+  check rc=0 で完走。Run 後の API 再確認でも download 200。解除者・理由は不明 (heart 確認推奨)
+- 影響: 全 5 リポジトリが 08-22 夜分の backup を欠落。次の backup 窓は 08-23 (月) 02:45 JST
 
-**重大な発見 — 本プロジェクトの前提が崩れている (人間の対応が必要)**:
+### 障害 2: evaluate の results マウント readOnly → EROFS 即死 (自前 — commit 737745c0)
 
-- クラスタ側を確認すると **昨夜の定期 backup が全滅している**: immich/coder は Failed
-  (各 99m/74m リトライ後 fatal)、vaultwarden/syncthing は同エラーのリトライで Running 継続。
-  エラーは手動 Job と完全に同一 (`create key in repository ... failed: Stat: 403`)。
-- retention 4 本も「repository not initialized yet, skipping」で**実は初期化プローブが
-  失敗してスキップされていただけ** (Complete 表示は当てにならない)。
-- 診断 Pod から B2 API を直接叩いて切り分け:
-  1. `b2_authorize_account` は成功し、append-only 鍵の capability は
-     `writeFiles,listFiles,readFiles,listBuckets` + namePrefix null で docs/backup.md L459
-     どおり**鍵は正常**
-  2. `GET {downloadUrl}/file/{bucket}/config` (restic の Stat と同じ経路) が
-     **HTTP 403 `download_cap_exceeded`** — 「download bandwidth or transaction (Class B)
-     cap exceeded. See the Caps & Alerts page to increase your cap.」
-- つまり **B2 アカウントのダウンロード上限に達してアカウント全体でダウンロード拒否中**
-  (アップロードは別枠なので書き込みだけ生きている)。解除は B2 コンソールの Caps & Alerts
-  で上限を上げるしかなく、リポジトリ側では直せない。原因の仮説としては最近の大容量
-  ダウンロード (P-0080 の RTO 計測?) が上限を消費した可能性もあるが未検証 — heart が
-  コンソールで使用量を確認すること
-- **この状態は P-0102 の why (backup 静的失敗の検知) が現実に起きた瞬間**。昨夜分から
-  backup が取れておらず、既存の監視では誰も気づけなかった。本機能の初回実行がそれを検出した
-- 影響: **受入 #3 は人間が上限を引き上げるまで green 化不可能**。check_evidence.json は
-  わざと書かない (非ゼロのレコードを書くのは受入の虚偽充足になるため)。失敗 Run の
-  EVIDENCE_JSON は別名で事故記録として保存する (下記)
+- Run #2 で job_main.py が `/work/results/*.json` へ書けず即死。判定どころか通知より前に
+  落ちるため「何が起きたか」すら消える。session3 の煙霧試験は書き込み先がローカル tmp で、
+  manifest 結合後の readOnly マウントを再現していなかったため未検出
+- 修正: cronjob.yaml の evaluate 側 results マウントから `readOnly: true` を削除
+- 教訓: **ConfigMap スクリプトの書き込み先と volume マウント属性の整合は、render ではなく
+  実 Pod でしか検証できない**
 
-運用上の罠 (次セッション以降):
+### 障害 3: Discord 403 = Cloudflare error 1010 (python-urllib 既定 UA のブロック — runner 側修正済み c0ab0095)
 
-- **`kubectl create job --from=cronjob/X` で作った Job にはこのクラスタでは CronJob への
-  ownerReference が付く**。元の CronJob を削除すると GC が手動 Job も即削除する
-  (実際 1 回目の手動 Job をこれで消した)。手動 Job を使う間は CronJob を残すこと。
-  週次スケジュールとの二重発火を避けるなら `suspend=true` に patch する (今回そうした。
-  05:30 JST 発火予定だったため)。診断終了後は namespace ごと消すので suspend の戻しは不要
-- 手動 Job 実行中でも webhook は生きているので、この失敗 Run 完了時に Discord へ
-  incident 通知が 1 通飛ぶ (**設計どおりの初めての実通知**)。重複防止のため週次 CronJob は
-  suspend 済み
+- Run #3 はパイプライン完走 → 通知のみ `HTTP Error 403: Forbidden` で失敗
+- 診断: webhook 値は有効 (UA を明示した POST は **204 成功**)。403 の本文は Discord では
+  なく **Cloudflare error 1010 (ブラウザシグネチャブロック)** で、`Python-urllib/3.x`
+  既定 UA が叩かれている。UA を何らかの製品トークンに変えるだけで通る
+- 修正: `ops/restic_check_runner.py` post_discord() に UA 明示 + テスト 3 例追加
+  (28 tests green)。apps 側コピーへ同期、sync check green
+- **heart 側は未修復 (発見節へ)**: ops/heart/notify.py も素の urllib で、本日 09:16Z を
+  最後に sent.jsonl が停止し、21:50Z 頃から outbox に滞留が発生している — 同一原因の可能性
 
-次セッションへの要点:
+### 実機で初めて証明できたこと (Run #3, 2026-08-23T00:01:10Z)
 
-- 前提: 人間が B2 の download cap を引き上げ済みであること (issue #56 / PR 説明で確認)。
-  未解除なら何もできない — この項目は読み飛ばすこと
-- `kubectl apply -k apps/restic-check` → ExternalSecret Sync 待ち →
-  `kubectl create job --from=cronjob/restic-check restic-check-evidence -n restic-check`
-  → 全 5 リポジトリ rc=0 で完走 (約 1〜2h。B2 からの実読み) → evaluate ログの
-  `EVIDENCE_JSON ` 行を `ops/projects/logs/P-0102/check_evidence.json` に保存 →
-  受入 #3 の python verify が green になることを実測 → **namespace ごと削除して片付け**
-  (merge 後の ArgoCD 導入時に未管理リソースが衝突するのを防ぐ)
-- check が lock を取って hide マーカーで外せるか (append-only 鍵での完走証明) は今回の
-  失敗 Run では途中までしか検証できていない。lock 作成までは成功していた (403 はその後の
-  config 読み取り)。cap 解除後の Run で改めて確認すること
+- パイプライン全体 (probe 直列検査 → staging → レコード組み立て → 判定 → レポート →
+  EVIDENCE_JSON → 通知試行 → 非ゼロ終了) が設計どおり動く
+- **鮮度警報が実データで初点灯**: coder-workspace-homes age=29.51h / syncthing age=29.1h
+  を WARN 判定。「夜間 backup の静的失敗」をまさに検出した (プロジェクト why の実証)
+- 失敗 Run の EVIDENCE_JSON は `check_evidence_20260823_incident.json` として保存
+  (受入用の check_evidence.json は**わざと書いていない** — 非ゼロ混入を緑と偽らないため)
+
+### verify 現状
+
+- #1 grep: red のまま (BusyBox grep が --include 非対応。manifest 実体はあり —
+  heart の判断待ち、session3 罠節のとおり)
+- #2 unittest: **green (28 tests)**
+- #3 evidence: 未達。あと 1 回の green Run で取れる (下記手順)
+
+### 次セッションへの要点 (受入 #3 の green 化手順)
+
+前提: 08-23 (月) 02:45–03:55 JST の backup 窓が**成功して**全 snapshot が 24h 以内に
+なっていること (B2 cap は既に解除済みを実測。ただし再発するかもしれないので最初に
+`kubectl get jobs -A | grep restic-backup` で昨夜の成否を確認すること)。
+
+1. `kubectl apply -k apps/restic-check` (namespace は session4 の片付けで削除済みのため
+   再作成される) → `kubectl get externalsecret -n restic-check` で 2 本とも SecretSynced 待ち
+2. `kubectl create job --from=cronjob/restic-check restic-check-evidence -n restic-check`
+   → B2 が健全なら完了は数十分 (cap 障害時のような 15 分×10 回のリトランはない)
+   → `kubectl logs -n restic-check job/... -c evaluate` が overall=OK(0) になり、
+   Discord には何も飛ばない (成功時黙る)
+3. ログ最終行 `EVIDENCE_JSON ` 以降の配列をそのまま
+   `ops/projects/logs/P-0102/check_evidence.json` へ保存 → 受入 #3 の python verify が
+   green になることを実測
+4. **片付け: `kubectl delete ns restic-check`** (merge 後の ArgoCD 導入時に未管理
+   リソースが衝突するのを防ぐ。evidence は git に残る)
+
+罠 (実測ずみ — 次セッションは踏まないこと):
+
+- **`kubectl create job --from=` で作った Job には CronJob への ownerReference が付く**
+  ので、元 CronJob を削除すると GC で Job も即消える (Run #1 をこれでロスト)。
+  二重発火防止は削除でなく `suspend=true` patch で。ただし **`kubectl apply -k` を打ち直すと
+  suspend patch は manifest どおり false に戻る** (次の週次発火は 7 日先なので実害は無い)
+- secret の GET/LIST は RBAC で禁止されている (credential 分離が効いている)。
+  webhook の値比較などは Pod 経由でのみ可能
+- 手動 Job でも失敗時の Discord 通知は本番に飛ぶ (今回そうだった)。診断目的の反復実行は
+  通知重複に注意
+
+発見 (スコープ外、curriculum が拾うこと):
+
+- **ops/heart/notify.py の discord POST が Cloudflare 1010 で失敗している可能性が高い**
+  (runner と同一の素 urllib。sent.jsonl 最終 2026-08-22T09:16:44Z、outbox 滞留 21:50Z〜)。
+  修復は runner と同じ UA 明示 1 行。heart 自身の障害通知が今この瞬間も静かに捨てられている
+  可能性があり、優先度は高い
+- retention CronJob が「初期化プローブ失敗」を "repository not initialized yet, skipping"
+  として exit 0 で吞み込む。backup 全滅の晩に Complete 表示になるのは監視上の盲点
+  (鮮度警報が替代検知になるが、retention 単体の異常は見えない)
+- B2 の Caps & Alerts 上限到達は backup/retention/check を同時に全滅させうる。使用量の
+  大きい操作 (restore drill 等) の後は cap 消費を織り込むべき (P-0080 系との接続点)
