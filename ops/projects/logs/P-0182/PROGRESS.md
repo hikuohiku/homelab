@@ -253,3 +253,27 @@ refs/pull 照合 0 件 = PR 未開 → origin/main 未含も確認 → 4.5 分�
 まで薄まったので、観測候補の主供給源は curriculum 新規採択。手順は一切変わらない:
 冒頭 fetch → refs/pull 照合 → merge 済みなら遡及レシピで continuation_count 出現を探す、
 未 merge なら待機 1〜2 回して観測事実だけ追記して終了。
+
+## セッション8 の記録 (2026-08-23 11:23–11:34Z)
+
+**やったこと**: ops-state 監視のみ。冒頭 fetch → head 092504803 を refs/pull 照合
+(0 件 = PR 未開) → 実装コミット c353eca55 が origin/main 未含も確認 → 約 4.5 分待機 ×2 を
+挟んで 3 回確認したが merge 無し。本ファイル追記 + commit して終了。
+
+**盤面の実測 (11:24Z / 11:29Z / 11:34Z の 3 回)**:
+
+- `continuation_count` の出現は 0 のまま (merge 前なので当然)
+- heart は生存: beat 180 @ 11:23:36Z → beat 185 @ 11:29:12Z → beat 189 @ 11:33:34Z
+  (ビート約 70 秒間隔を維持)
+- **P-0175 が delivered になった**: 11:23:36Z の `merge_pr` (P-0175) を audit で実視。
+  main log では PR #534 の merge (4ff29cfe3)。merge 後に origin/project/p-0175 は削除済み
+  (fetch で `[deleted]` を実視)。レビュー往復 2 周で当日中に通った例
+- **観測候補の新供給源が現れた**: **P-0092 が announced (3M)**。veto 窓通過後に active 化すれば
+  次の予算死候補になる。actives 実測は自プロジェクト P-0182 (1.5M) のみのまま
+- 人間の活動兆候: 今日の merge が #527〜#534 に増加 (本セッション監視中にも #534 が通った)。
+  本 PR のレビューも今日開かれる可能性は維持
+
+**次のセッションへの一言**: 変更なし — merge 待ち。手順は一切変わらない:
+冒頭 fetch → refs/pull 照合 → merge 済みなら遡及レシピで continuation_count 出現を探す、
+未 merge なら待機 1〜2 回して観測事実だけ追記して終了。観測候補は P-0092 (announced→active 待ち)
+と curriculum 新規採択。
