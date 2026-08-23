@@ -5471,3 +5471,68 @@ session102 の間 (旧 4760 行目付近) にエントリを挿入したまま c
   Bearer ヘッダに付けること。GITHUB_REPO は owner/repo 形に正規化。
   一時ファイルが必要なときは必ず mktemp (/tmp/opencode 直書きは Permission denied — session99)
 - **PROGRESS.md への追記は必ずファイル末尾** (session46 教訓 + session112 事故の再発防止)
+
+
+## session114 (P-0116 worker, 2026-08-23)
+
+やったこと: 冒頭チェック → **main 先行 5 件を merge で解消** (#525 telegram-adapter 置換 +
+#528 digest pin)。予告されていた kustomization.yaml 隣接行コンフリクトが実際に発生し、
+台本どおり解消した (**openclaw を外し telegram-adapter + restic-check の 2 行を残す**)。
+remote 分岐移動は ops-state beat/p-0157 (session 19〜22 記録)/p-0161 (プローブ 12 度目)/
+p-0163 (レビュー指摘解消 + セッション 2〜3)/p-0164 (セッション 9〜10) のみ、いずれも
+三点マージ diff 実測で apps/restic-check/ 領域への接触ゼロ。issue #56 再確認 (**総数 180
+から増減なし**: heart による grep `--include` 問題への回答はまだ無い。末尾は P-0161 worker
+の人間向け依頼 06:30:10Z のまま)。open PR は **5→4 件** (#525 が merge 済みで消滅。
+残り #527/#526/#524draft/#512、全て既知・無関連)。コード変更ゼロ — merge 解消と
+受入の再実測・記録のみ。
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option: include=*.yaml`) — red 継続。
+  リポジトリ側では解消不能 (#56 の heart 回答待ち)
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** (apps/restic-check/ 健在、
+  kustomization.yaml で配線済み)
+- #2: `ops.tests.test_restic_check_runner` 単体 **28 tests OK, rc=0**、discover 全体
+  **234 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- sync check (`ops/check_restic_check_script_sync.py`): ok
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら文言判断に従うだけ。
+  来ていなければ再実測して末尾への追記で足りる (本セッションもその型)
+- **discover の基準値は 270 → 234 に更新** (本セッション実測): main の #525 で
+  test_openclaw_bridge.py が削除されたため (270−36=234)。今後は「234 で OK」が新基準。
+  今後の merge でも自然に動く値なので固定値ではなく **rc=0 と OK のみ確認すること**
+- **#525 は merge 済み**: kustomization.yaml 隣接行コンフリクトの心配は解消。ただし
+  次に apps/kustomization.yaml を触る PR (#526/#527 等) が merge されたら同じ位置が
+  再び動くので目視すること
+- **open PR は 4 件** (session114 時点): #527 P-0163 移行台本 (ready)・#526 P-0174 Telegram
+  brief (ready)・#512 P-0118 (ready)・#524 P-0164 演習用 (draft)。いずれも本プロジェクト
+  無関連だが、merge 後は kustomization.yaml の隣接行を目視。番号・タイトルも見て判別すること
+- **TestMain にケースを足すときは必ず run_main 経由** (now 注入済み)。実時刻や実時刻基準の
+  レコードを混ぜると時限爆弾の再燃になる (session104 の教訓)
+- **runner を編集したら apps/restic-check/restic_check_runner.py へ必ずコピー**
+  (sync check が CI で守っているが、手元でも先に回すと無駄な push を避けられる)
+- 冒頭チェック・merge 方針・API 走査・mktemp・サマリ拾いの各注意点は session107 以前と
+  同じ (省略しないこと)。main 先行・diverge いずれも **merge 一択** (rebase 不可 — session28)
+- **issue #56 のコメント総数は 180 が最新基準** (session98〜114 実測で 180 のまま)。今後は
+  181 以上で新規着信を疑うこと。ただし最新タイムスタンプとキーワード走査で
+  本プロジェクト関連かを必ず判別すること。**合計数の数え方は p1 + p2 を足す**
+- **curriculum 採択が来たら merge してから validate.py 再実測**: archive.jsonl 先頭一致
+  チェックは main 未追従だと error になる (session92 教訓)
+- **新規 remote 分岐でもコミットゼロなら走査対象外**。remote 分岐は毎回目視、判別基準は
+  「本プロジェクト領域に触れるか」のみ。実コミットの有無は三点マージ diff 走査で判定
+  (p-0164/p-0174/exercise-p-0164-labels 実績)
+- **P-0157 (backup 鮮度監視) は verify 対象が ops/health・ops/rules.json・
+  test_backup_freshness 側**で apps/restic-check/ とは別 (session94〜114 実測でも領域接触ゼロ)
+- **p-0139 系ブランチとの diff 走査は新規コミットだけを見ること**
+  (`git log origin/main..相手` + `git diff --stat origin/main...相手`)
+- **issue コメントの「最新 N 件」取得は per_page=100&page=2 (最終ページ) の末尾を使う**
+  (session92 実測: sort/direction パラメータは当てにならない)
+- **API 走査は python 内で完結させると一時ファイル不要**。AUTOPILOT_GITHUB_TOKEN を
+  Bearer ヘッダに付けること。GITHUB_REPO は owner/repo 形に正規化。
+  一時ファイルが必要なときは必ず mktemp (/tmp/opencode 直書きは Permission denied — session99)
+- **PROGRESS.md への追記は必ずファイル末尾** (session46 教訓 + session112 事故の再発防止。
+  本セッションは `cat >> ... <<EOF` の純粋追記で対応)
