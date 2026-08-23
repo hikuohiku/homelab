@@ -575,3 +575,48 @@
   到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
   test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
 - main が動いていれば追い越す (#578 時点の要領どおり)。動いていなければ merge 不要
+
+## セッション 16 (2026-08-23 深夜) — 短絡チェックのみ (セッション 13 の方針どおり)。main 不動・census 未着・変更ゼロ
+
+### やったこと
+
+- **セッション 13 の短絡手順に従い 4 点チェックだけ実施**:
+  V1 green / V2 red (既知 fail-fast rc=2、stderr も wrapper 実測と同一:
+  `/tmp/opencode` は root:root 755 のまま不変 → 書き込みプローブが main() 冒頭・
+  クラスタ接触前に中断し副作用ゼロ) /
+  V3 green (evidence_path=ops/profiles/private-data/demo.json 実在 +
+  完全性も機械確認 — 下記の罠に一度引っかかったが無傷と判明) /
+  census 未着 (rc=1)
+- **main 新着なし**: `git rev-list HEAD..origin/main --count` = 0 (#578 のまま)。
+  ワーキングツリー清潔・origin/project/p-0243 と一致 (`git diff HEAD` 空) →
+  追い越し対象なし。コード行の目視再確認も省略 (セッション 13 の合意どおり)
+- PR 状態は `gh` 未導入で確認できず (merge 判定は wrapper 任せ。セッション 15 同様)
+
+### 分かったこと (次セッションへの罠注意)
+
+- **demo.json の完全性チェックは「結果系 bool 7 キー」を見ること**:
+  「全トップレベルキーの値が True」と書くと誤検知する。demo.json には
+  drill/target/image/policy/namespace/started_at/pods/finished_at といった
+  メタデータ (文字列・辞書・null 含む) が混在しており、bool 同列で assert すると
+  必ず落ちる。正しいチェックは 7 キー
+  (labeled_blocked, unlabeled_allowed, dns_ok_labeled, dns_ok_control,
+  cleaned_up, all_passed, probes_conclusive) が全 true +
+  labeled.probe.https_ok is False (拒否の証拠そのものなので False で正しい) +
+  control.probe.https_ok is True の対照確認。今セッションでこの形に直して
+  全パスを確認済み — 次からはこれを写すこと
+
+### 検証 (全部自分で実走済み)
+
+- spec verify V1 green / V3 green / V2 red (既知 fail-fast rc=2、クラスタ副作用ゼロ)
+- demo.json 完全性確認 (7 キー + プローブ対照を assert) / census 未着確認 (rc=1) / main 新着なし確認
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4〜15 から一歩も動いていない**: V2 は本 PR の merge+sync 後の
+  新 runner Pod で自動 green 化する (spawn.py の emptyDir mount 済み)。
+  Pod 内での再走は無駄。やることは「PR merge を待つ」だけ。
+  main 新着がなければ、セッション 13〜16 と同じ「4 点チェック短絡 + ログ追記」でよい
+- census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+  到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+- main が動いていれば追い越す (#578 時点の要領どおり)。動いていなければ merge 不要
