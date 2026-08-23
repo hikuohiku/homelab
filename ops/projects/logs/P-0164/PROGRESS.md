@@ -365,8 +365,42 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   再実測だけして軽く閉じてよい。blocking は announced 1 + active 3 のまま減速中 —
   active の完了待ちが律速という構造は変わっていない
 
+### セッション 9 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking が 4→5 件に増加**
+  (P-0092 / P-0116 / P-0157 / P-0161 / **P-0174 が戻った**。checked=61)。減少傾向
+  (6→5→4) が反転した。固定指示どおり実演習は見送り。コード変更は無し
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 5), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git fetch origin && git rev-parse origin/main          # c5d6df255 (不動)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- 増加の原因を実測 (読み取り専用で `git show origin/ops-state:projects.json`):
+  セッション 8 に初観測だった `in_review` が **2→1 件に減り、抜けた 1 件が
+  P-0174 として active に遷移していた** (state 内訳: delivered 26 / vetoed 2 /
+  stalled 26 / announced 1 / active 5 / in_review 1)。つまり in_review から
+  active への遷移が実際に起こった — in_review は一時停止であり完了ではない。
+  演習条件への影響は「active が 3→4 件に増えた」ことのみ (自己除外後の blocking 実質 4)
+- 当日の手順はセッション 3 固定のまま不変 (--run 背景起動 → 全 zero 確認 → PATCH ready
+  解除 → PUT merge)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。blocking は announced 1 (P-0092) + active 3 (P-0116 /
+  P-0157 / P-0161) が本体で、in_review からの再 active (P-0174) がノイズとして乗る —
+  「減っていれば開く日が近い」という読みは当てにならず、0 か否かだけを見ること
+
 ## 発見 (スコープ外。curriculum が拾うもの)
 
+- (セッション 9, ライフサイクル観測の続き) セッション 8 に初観測された `in_review`
+  2 件のうち 1 件 (P-0174) が翌セッションで **active へ遷移するのが実観測された**。
+  in_review は中間状態として実在し、そこから active に戻る (弁を再び塞ぐ) ことがある。
+  「in_review = 完了目前」と楽観できない
 - (セッション 8, セッション 7 発見の補足) 「projects.json の state ライフサイクルに
   『review』『merging』等の中間状態がコード上散見するが帳簿上未観測」という前回メモに対し、
   本日 `in_review` 2 件が台帳に実観測された。中間状態は実在する (弁判定対象外につき影響なし)
