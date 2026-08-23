@@ -258,3 +258,32 @@ main 側追加分が見かけ上の削除として混ざる。docs/backup.md +16
 本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
 リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
 docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
+
+### 2026-08-23 セッション9 — セッション8 手順どおりの兆候確認 (変化なし)
+
+**やったこと**: spec DoD の追加実装は無し。セッション5〜8 と同じく verify 再実測 +
+外部シグナル 5 点の変化確認だけをした。結果はすべて変化なし。
+
+1. **verify 再実測**: #1 rc=1 / #2 rc=0 / #3 rc=2。セッション3 以降ずっと同一
+   (#1/#3 は verdict=keep ゆえ意図通り failing、#2 green)
+2. **観測環境の再実測** (8 回目の独立実測、結果同じ): `env` に proxmox/pve 系無し (rc=1) /
+   `tailscale` `pvesh` `qm` `gh` CLI すべて absent。MCP ツール (`mcp__proxmox__*`) も無し
+3. **origin/main の新着確認**: `git fetch --prune` 後、merge-base `f4a7862b..origin/main`
+   の commit は **ゼロ**。main は分岐点から一度も動いていない。動いたリモートブランチは
+   `ops-state`/`project/p-0115` のみ (autopilot 帳簿と P-0115 自ログ)
+4. **project/p-0115 再確認**: 再更新されていた (50111f58..f9a45bf2)。新着 commit 1 件の差分を
+   直接実測: **自ログ PROGRESS.md +29 行のみ** (docs/・terraform/proxmox/・本プロジェクト
+   logs への差分ゼロ、PBS/112 言及ゼロ)。累積 diff は真の merge-base 9b5c741d 基準で
+   docs/backup.md +16 行のまま変化なし。同ログ自身も「#56 の新規コメントは 0 件」と実測しており整合
+5. **issue #56 を webfetch で直接読んだ**: コメント無し = 条件 A/B の実施報告は未着
+
+→ verdict は `keep` のまま、inventory への反映対象なし。docs/pbs-retirement.md は書かない。
+
+**次のセッションへの一言**: セッション5〜8 と完全に同一 — **やることは残っていない。**
+兆候が無い起動では今回と同じく verify 再実測 + 5 点確認 + 最小ログ追記で終えてよい。
+p-0115 は自ログ追記だけで更新され続けているので、差分を見るときは「新着 commit のうち
+docs/・terraform/・P-0142 logs への差分」と「PBS/112 言及」の 2 点だけでよく、中身の精読は不要
+(merge-base は引き続き 9b5c741d 基準)。
+本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
+リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
+docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
