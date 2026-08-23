@@ -1,0 +1,41 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: recovery-canary-probe
+  namespace: recovery-canary
+---
+# CronJob 用の最小権限。できることは「対象 Deployment 1 個の get/delete」と
+# 「結果 ConfigMap 1 個の get/update/create」だけで、いずれも resourceNames で
+# 名前まで固定する (DoD: CronJob 自身の SA は自 namespace の deployment 操作のみ)。
+# pods の列挙権限は不要 — Ready 判定は Deployment の status.readyReplicas 観測で行う
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: recovery-canary-probe
+  namespace: recovery-canary
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    resourceNames: ["recovery-canary"]
+    verbs: ["get", "delete"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["recovery-probe"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: recovery-canary-probe
+  namespace: recovery-canary
+subjects:
+  - kind: ServiceAccount
+    name: recovery-canary-probe
+    namespace: recovery-canary
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: recovery-canary-probe

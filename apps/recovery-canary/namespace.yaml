@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: recovery-canary
+  labels:
+    app.kubernetes.io/name: recovery-canary
+    # DoD (3): canary を閉じ込ける専用 namespace の目印。本体アプリ (immich /
+    # vaultwarden / coder 等) のリソースはこの namespace に一切なく、canary の
+    # 削除と selfHeal 再同期が他 Application のオブジェクトと交差する経路が
+    # manifest 上で存在しない。「捨ててよい実験区画」の一覧用マーカーであり
+    # selector には使わない
+    recovery-canary: isolated

@@ -77,6 +77,7 @@ external-secrets     Synced        Healthy
 immich               Synced        Healthy
 ops-dashboard        Synced        Healthy
 ops-health-reporter  Synced        Healthy
+recovery-canary      Synced        Healthy
 syncthing            Synced        Healthy
 tailscale-operator   Synced        Healthy
 telegram-adapter     Synced        Healthy
@@ -133,7 +134,8 @@ apps/
 ├── autopilot/
 ├── ops-dashboard/
 ├── syncthing/
-└── telegram-adapter/
+├── telegram-adapter/
+└── recovery-canary/
 ```
 
 各アプリは以下の構造:

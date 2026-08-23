@@ -13,7 +13,7 @@ Terraform で VM プロビジョニング、NixOS でOS構成、Kubernetes (Argo
 - **Networking**: Tailscale
 - **Secrets**: SOPS, External Secrets Operator
 - **Auth**: Dex (Google OAuth)
-- **Apps**: ArgoCD, agent-rbac, Dex, External Secrets Operator, Tailscale Operator, Immich, Vaultwarden, Coder, ops-health-reporter, autopilot, ops-dashboard, syncthing, telegram-adapter
+- **Apps**: ArgoCD, agent-rbac, Dex, External Secrets Operator, Tailscale Operator, Immich, Vaultwarden, Coder, ops-health-reporter, autopilot, ops-dashboard, syncthing, telegram-adapter, recovery-canary
 
 ## Directory Structure
 

@@ -1,0 +1,358 @@
+# recovery-canary の産出側 CronJob (P-0258)。
+#
+# 毎晩 1 回 canary Deployment (pause 1 本) を削除し、ArgoCD の自動修復
+# (automated.selfHeal) で再作成されて Ready に戻るまでの壁時計秒を測る。
+# 「node01 が消えたら / ArgoCD が止まったら」系の復旧演習を 1 回の勇気ではなく
+# 毎晩の時計にする装置。結果は専用 ConfigMap `recovery-probe` の report.json キーへ
+# 書き、集約側 ops-health-reporter (別 namespace) が読んで latest.json の
+# recovery_probe キーへ載せる (download-budget / dashboard-smoke と同じ
+# 「産出側が専用 ConfigMap、reporter が読む」分離)。
+#
+# 計測の定義 (PROJECT.md): DELETE 呼び出しの時刻から、Deployment 再作成後に
+# Pod が Ready へ戻るまで。ArgoCD 既定の reconciliation 間隔が値に乗るが、
+# それ自体が「ループの速さ」なので正しい値 (間隔を変えるのは測定器の改変になる)。
+#
+# 書き戻し先 ConfigMap `recovery-probe` を manifest に事前作成しないのは
+# dashboard-smoke と同じ (ジョブが create したオブジェクトは tracking label を
+# 持たないため ArgoCD 管理外となり、selfHeal / prune と競合しない)。
+# 消えていても翌晩の実行で再作成される。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: recovery-canary-runner
+  namespace: recovery-canary
+data:
+  recovery_probe_runner.py: |
+    """recovery-canary の産出側ランナー (P-0258)。
+
+    canary Deployment を削除し、selfHeal による再作成 → Ready 復帰までを
+    k8s API ポーリングで計測して、専用 ConfigMap `recovery-probe` の
+    report.json キーへ書く。標準ライブラリのみで動く。
+
+    終了コード: 0 = 復旧を計測できた (ok=true の記録を残す) / 1 = 上限時間内に
+    復旧しない等 (ok=false の記録を残してから落ちる。Job 失敗は pod_issues 収集と
+    appTree health という既存経路にも乗る)。ランナー自身がクラッシュして記録を
+    書けなかった場合は、集約側が stale / no_data として正直に見せる。
+    """
+
+    import datetime
+    import json
+    import os
+    import ssl
+    import sys
+    import time
+    import urllib.error
+    import urllib.request
+
+    SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+    K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
+    K8S_PORT = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+    K8S_BASE = "https://{}:{}".format(K8S_HOST, K8S_PORT)
+
+    SCHEMA_VERSION = 1
+    DEPLOYMENT_NAME = "recovery-canary"
+    CONFIGMAP_NAME = "recovery-probe"
+    # ポーリング間隔。所要の主体は ArgoCD reconciliation (既定 3 分) 待ちなので
+    # 細かく張り付く利益は薄く、この刻みの ±10 秒は測定器として十分な精度
+    POLL_INTERVAL_S = 10
+    # 削除呼び出しから Ready 復帰までの一括上限。reconciliation 既定 + 再作成 +
+    # Pod 起動を大きく上回る天井。超えたら「ループが止まっている」として失敗記録
+    HEAL_TIMEOUT_S = 1200
+
+    with open(os.path.join(SA_DIR, "namespace")) as f:
+        NAMESPACE = f.read().strip()
+    with open(os.path.join(SA_DIR, "token")) as f:
+        SA_TOKEN = f.read().strip()
+    SSL_CTX = ssl.create_default_context(cafile=os.path.join(SA_DIR, "ca.crt"))
+
+
+    def iso(dt):
+        return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+    def deployment_ready(obj):
+        """Deployment の status が「全 replica Ready」か (純関数)。
+
+        再作成直後は status.readyReplicas 自体がまだ無い。bool は int の派生なの
+        で明示的に弾く (download_budget.coerce_bytes と同じ倒し方)。
+        """
+        spec = obj.get("spec") or {}
+        replicas = spec.get("replicas")
+        ready = (obj.get("status") or {}).get("readyReplicas") or 0
+        return (
+            isinstance(replicas, int)
+            and not isinstance(replicas, bool)
+            and replicas > 0
+            and isinstance(ready, int)
+            and ready >= replicas
+        )
+
+
+    def build_report(now_utc, started_at, namespace, ready_at=None,
+                     phase=None, error=None):
+        """report.json キーの中身を作る (純関数。unittest 固定対象)。
+
+        成功レコードだけが last_recovery_seconds (int) を持つ。失敗時は秒数を
+        捏造せず、詰まった段階 (phase) と人間向け文面 (error) を残す —
+        「ArgoCD が再作成しなかった」(wait-recreate) と「再作成されたが
+        Ready にならなかった」(wait-ready) は意味が違うので区別できる形。
+        """
+        record = {
+            "schema": SCHEMA_VERSION,
+            "tool": "recovery_canary",
+            "project": "P-0258",
+            "generated_at": iso(now_utc),
+            "ok": ready_at is not None,
+            "deleted_at": iso(started_at),
+            "namespace": namespace,
+            "deployment": DEPLOYMENT_NAME,
+        }
+        if ready_at is not None:
+            record["last_recovery_seconds"] = int(
+                (ready_at - started_at).total_seconds()
+            )
+            record["ready_at"] = iso(ready_at)
+        else:
+            record["phase"] = phase
+            record["error"] = error
+        return record
+
+
+    def deployment_path():
+        return "/apis/apps/v1/namespaces/{}/deployments/{}".format(
+            NAMESPACE, DEPLOYMENT_NAME
+        )
+
+
+    def k8s_request(method, path, body=None):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(
+            K8S_BASE + path,
+            data=data,
+            method=method,
+            headers={
+                "Authorization": "Bearer " + SA_TOKEN,
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, context=SSL_CTX, timeout=15) as resp:
+                raw = resp.read()
+                return resp.status, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            return e.code, (json.loads(raw) if raw else None)
+
+
+    def wait_gone(path, deadline, old_uid=None):
+        """DELETE 後に「古いオブジェクト」が消えたことを確認する (API 待ち)。
+
+        これを飛ばすと「古いオブジェクトがまだ残っていて readyReplicas=1」の窓を
+        即復帰と誤計測する。消失の判定は原則 404。ただし再作成が最初の poll よりも
+        速い環境 (webhook 等で reconciliation が即時)では新オブジェクトが既に
+        存在しうるため、その場合は metadata.uid の変化をもって旧来の消滅とみなす。
+        deadline 内に確認できなければ False。
+        """
+        while datetime.datetime.now(datetime.timezone.utc) < deadline:
+            status, obj = k8s_request("GET", path)
+            if status == 404:
+                return True
+            if (
+                old_uid is not None
+                and isinstance(obj, dict)
+                and ((obj.get("metadata") or {}).get("uid")) not in (None, old_uid)
+            ):
+                return True
+            time.sleep(POLL_INTERVAL_S)
+        return False
+
+
+    def wait_ready(path, deadline):
+        """selfHeal による再作成 → Ready を待ち、Ready 時刻を返す。
+
+        タイムアウト時の原因切り分け用に、再作成されたオブジェクトを一度でも
+        観測したかを併せて返す (False なら reconciliation すら届いていない)。
+        """
+        saw_recreated = False
+        while datetime.datetime.now(datetime.timezone.utc) < deadline:
+            status, obj = k8s_request("GET", path)
+            if status == 200 and isinstance(obj, dict):
+                saw_recreated = True
+                if deployment_ready(obj):
+                    return datetime.datetime.now(datetime.timezone.utc), True
+            time.sleep(POLL_INTERVAL_S)
+        return None, saw_recreated
+
+
+    def put_configmap(name, data):
+        # GET → resourceVersion 付き PUT、無ければ POST 作成
+        # (dashboard-smoke ランナーと同じ流儀)。update は resourceNames 制約の
+        # ある Role で、他の ConfigMap には触れない
+        path = "/api/v1/namespaces/{}/configmaps/{}".format(NAMESPACE, name)
+        status, existing = k8s_request("GET", path)
+        body = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": name, "namespace": NAMESPACE},
+            "data": data,
+        }
+        if status == 200 and isinstance(existing, dict):
+            body["metadata"]["resourceVersion"] = (
+                existing["metadata"]["resourceVersion"]
+            )
+            status, resp = k8s_request("PUT", path, body)
+        else:
+            status, resp = k8s_request(
+                "POST", "/api/v1/namespaces/{}/configmaps".format(NAMESPACE), body
+            )
+        if status not in (200, 201):
+            raise RuntimeError("configmap 書き込みに失敗: {} {}".format(status, resp))
+
+
+    def record_and_exit(record):
+        put_configmap(
+            CONFIGMAP_NAME, {"report.json": json.dumps(record, ensure_ascii=False)}
+        )
+        print(
+            "recovery-probe ConfigMap を更新しました (ok={} last={})".format(
+                record.get("ok"), record.get("last_recovery_seconds")
+            )
+        )
+        return 0 if record.get("ok") else 1
+
+
+    def main():
+        started_at = datetime.datetime.now(datetime.timezone.utc)
+        deadline = started_at + datetime.timedelta(seconds=HEAL_TIMEOUT_S)
+
+        status, deleted = k8s_request("DELETE", deployment_path())
+        now = datetime.datetime.now(datetime.timezone.utc)
+        if status in (200, 202):
+            # 削除が受理された。まず消失を確認してから再作成を待つ。
+            # DELETE 応答に旧オブジェクトが載っていれば uid を採っておく
+            old_uid = None
+            if isinstance(deleted, dict):
+                old_uid = (deleted.get("metadata") or {}).get("uid")
+            if not wait_gone(deployment_path(), deadline, old_uid):
+                return record_and_exit(
+                    build_report(
+                        datetime.datetime.now(datetime.timezone.utc),
+                        started_at,
+                        NAMESPACE,
+                        phase="wait-deletion",
+                        error="削除後 {} 秒経っても対象 Deployment の消失を確認できない".format(
+                            HEAL_TIMEOUT_S
+                        ),
+                    )
+                )
+        elif status != 404:
+            # 権限不足・API 障害など。削除できなければ計測は成立しない
+            # (404 は既に無い = 前回失敗の残置なので、このまま再作成待ちへ進む)
+            return record_and_exit(
+                build_report(
+                    now,
+                    started_at,
+                    NAMESPACE,
+                    phase="delete",
+                    error="対象 Deployment の削除に失敗: HTTP {}".format(status),
+                )
+            )
+
+        # ここからは selfHeal 任せ。ArgoCD が再作成し Pod が Ready に戻るのを待つ
+        ready_at, saw_recreated = wait_ready(deployment_path(), deadline)
+        if ready_at is not None:
+            return record_and_exit(
+                build_report(
+                    datetime.datetime.now(datetime.timezone.utc),
+                    started_at,
+                    NAMESPACE,
+                    ready_at=ready_at,
+                )
+            )
+        if saw_recreated:
+            phase = "wait-ready"
+            detail = "再作成は観測したが {} 秒以内に Ready に戻らない".format(HEAL_TIMEOUT_S)
+        else:
+            phase = "wait-recreate"
+            detail = "{} 秒以内に selfHeal による再作成が起こらない (ArgoCD が止まっている疑い)".format(
+                HEAL_TIMEOUT_S
+            )
+        return record_and_exit(
+            build_report(
+                datetime.datetime.now(datetime.timezone.utc),
+                started_at,
+                NAMESPACE,
+                phase=phase,
+                error=detail,
+            )
+        )
+
+
+    if __name__ == "__main__":
+        sys.exit(main())
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: recovery-canary-probe
+  namespace: recovery-canary
+spec:
+  # 毎晩 03:43 (spec.timeZone 未指定の評価は JST — substrate「Kubernetes」節)。
+  # 既存の collector たち (:00/:05/:25/:30/:37、09:40) と分単位で重ならない位置
+  schedule: "43 3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      # retry しない: 失敗は「20 分待っても生き返らない」という記録であり、
+      # 数分後に即やり直しても判定は大差ない。失敗は failedJobsHistoryLimit と
+      # pod_issues / appTree health の既存経路で見える
+      backoffLimit: 0
+      # HEAL_TIMEOUT_S (1200) + 記録書き込みの余裕
+      activeDeadlineSeconds: 1500
+      template:
+        spec:
+          serviceAccountName: recovery-canary-probe
+          restartPolicy: Never
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            runAsGroup: 65534
+            seccompProfile:
+              type: RuntimeDefault
+          containers:
+            - name: probe
+              # version-watcher と同じ標準ライブラリのみ方針 (pip 不要)
+              image: python:3.14-alpine
+              terminationMessagePolicy: FallbackToLogsOnError
+              command: ["python", "/runner/recovery_probe_runner.py"]
+              env:
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+              # memory limits は付けない (T-0055)。標準ライブラリの HTTP ポーリング
+              # のみで実消費は数十 MB に満たない想定だが未実測につき縛らない
+              # (dashboard-smoke と同じ判断)。cpu limit は暴走時の緩い天井
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 100m
+              volumeMounts:
+                - name: runner
+                  mountPath: /runner
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: runner
+              configMap:
+                name: recovery-canary-runner
+            - name: tmp
+              emptyDir: {}
