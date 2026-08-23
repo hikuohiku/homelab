@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telegram-adapter
+  namespace: autopilot
+  labels:
+    app: telegram-adapter
+spec:
+  replicas: 1
+  # Telegram の getUpdates は同一 bot token に対して消費者 1 つしか許さない
+  # (並行すると 409 Conflict)。rolling 中の二重起動を避けるため Recreate。
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: telegram-adapter
+  template:
+    metadata:
+      labels:
+        app: telegram-adapter
+    spec:
+      securityContext:
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: adapter
+          # TODO(初回リリース): main マージ後に SHA タグの OCI index digest を実測して
+          # ここを digest pin に差し替える。build-dashboard-image.yml と同じ二段階
+          # (workflow のヘッダコメント参照)。それまでは latest。
+          image: ghcr.io/hikuohiku/homelab-telegram-adapter:latest
+          terminationMessagePolicy: FallbackToLogsOnError
+          env:
+            - name: TELEGRAM_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-adapter-credentials
+                  key: TELEGRAM_BOT_TOKEN
+            - name: TELEGRAM_ALLOWED_USER_ID
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-adapter-credentials
+                  key: TELEGRAM_ALLOWED_USER_ID
+            - name: AUTOPILOT_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: telegram-adapter-credentials
+                  key: AUTOPILOT_GITHUB_TOKEN
+            # 受信を握り潰さないための最小限の定型応答。OpenClaw の LLM 応答を
+            # 撤去した穴を埋めるだけのもので、内容の判断はしない。
+            # 常駐コア (docs/design/event-driven-core) が入ったらコアの発話に置き換える。
+            # 空文字にすると ack を送らない。
+            - name: TELEGRAM_ACK_TEXT
+              value: "受け取りました。内容は次の点検サイクルで読まれます。"
+            - name: TZ
+              value: Asia/Tokyo
+          resources:
+            requests:
+              cpu: 10m
+              memory: 16Mi
+            # memory の limits は付けない（substrate の規則: 実測の裏付けなしに付けない。
+            # 超過が回復不能な OOMKill になる。CPU limits は throttle で回復するため設定する）
+            limits:
+              cpu: 200m
+          securityContext:
+            # distroless/static:nonroot の既定 uid。書き込む先はどこにも無い
+            # (cursor は Telegram 側 offset が持つため PVC を持たない)
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]

@@ -48,12 +48,6 @@ EXEMPT_PVCS = {
         "immich 内蔵の日次 DB ダンプが immich-library PVC 配下に出力され、そちらが "
         "immich-restic-backup の対象。DB 本体を別途取る必要が無い (docs/backup.md に明記)"
     ),
-    ("openclaw", "openclaw-state"): (
-        "OpenClaw (P-0090) の bot 状態 SQLite + workspace。消えても allowlist・config は "
-        "Git 由来で再構築でき、bot は初期状態からやり直すだけで他アプリへの影響が無い。"
-        "受信メッセージの原本は ops-feedback ブランチに残るため消失しない。実データを"
-        "蓄積する運用に変えた時点で backup を足すこと (P-0090 PROGRESS に記録済み)"
-    ),
 }
 
 
