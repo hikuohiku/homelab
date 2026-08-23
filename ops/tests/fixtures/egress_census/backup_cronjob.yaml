@@ -1,0 +1,49 @@
+# 合成 fixture: restic backup CronJob 2 doc + コメント内 URL の罠。
+# 実リポジトリの apps/*/restic-backup-cronjob.yaml の構造を模した最小形。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: app-restic-backup
+  namespace: app-ns
+spec:
+  schedule: "0 2 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: restic-backup
+              image: restic/restic:0.19.1
+              # ドキュメントへの参照。通信先ではないので抽出してはいけない
+              # https://github.com/dani-garcia/vaultwarden/wiki/Backing-up-your-vault
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  restic backup /mnt/data
+              env:
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):app-data"
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: app-restic-credentials
+                      key: B2_ACCOUNT_ID
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: app-restic-retention
+  namespace: app-ns
+spec:
+  schedule: "0 3 * * 0"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+            - name: restic-forget
+              env:
+                - name: RESTIC_REPOSITORY
+                  value: "b2:literal-bucket-name:app-data"

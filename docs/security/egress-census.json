@@ -1,0 +1,682 @@
+{
+  "spec": "P-0203",
+  "generated_by": "ops/security/egress_census.py",
+  "method": "静的走査 (apps/**, nix/**, ops/rules.json)。実クラスタへの通信試験は含まない",
+  "endpoints": [
+    {
+      "workload": "external-secrets",
+      "namespace": "external-secrets",
+      "endpoint": "api.doppler.com:443",
+      "reason": "ClusterSecretStore doppler (provider: doppler) — ESO が homelab/prd の secret を同期しに行く先。host は ESO doppler プロバイダの定数で manifest に直書きされない [source_evidence: apps/external-secrets/cluster-secret-store.yaml]",
+      "breakage": "全 namespace (12 箇所) の ExternalSecret 同期が停止する。既存 Secret は残るが refresh 失敗が積み重なり、回転後の新 credential が届かない",
+      "source_evidence": [
+        "apps/external-secrets/cluster-secret-store.yaml (provider: doppler)"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.doppler.com (external-secrets controller)",
+      "exception_note": ""
+    },
+    {
+      "workload": "argocd-repo-server",
+      "namespace": "argocd",
+      "endpoint": "argoproj.github.io",
+      "reason": "argo-cd chart 自身の取得元 (Helm inflation)",
+      "breakage": "ArgoCD 自身の再デプロイ・upgrade ができない",
+      "source_evidence": [
+        "apps/argocd/kustomization.yaml:6",
+        "(doc: Kustomization  @ )"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → argoproj.github.io",
+      "exception_note": ""
+    },
+    {
+      "workload": "argocd-repo-server",
+      "namespace": "argocd",
+      "endpoint": "charts.dexidp.io",
+      "reason": "dex chart の取得元。ArgoCD repo-server が Helm chart の取得先として使う(kustomization.yaml の helmCharts.repo)",
+      "breakage": "dex のデプロイ・upgrade ができない",
+      "source_evidence": [
+        "apps/dex/kustomization.yaml:6",
+        "(doc: Kustomization  @ )"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → charts.dexidp.io",
+      "exception_note": ""
+    },
+    {
+      "workload": "argocd-repo-server",
+      "namespace": "argocd",
+      "endpoint": "charts.external-secrets.io",
+      "reason": "external-secrets chart の取得元。ArgoCD repo-server が Helm chart の取得先として使う(kustomization.yaml の helmCharts.repo)",
+      "breakage": "ESO のデプロイ・upgrade ができない",
+      "source_evidence": [
+        "apps/external-secrets/kustomization.yaml:6",
+        "(doc: Kustomization  @ )"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → charts.external-secrets.io",
+      "exception_note": ""
+    },
+    {
+      "workload": "argocd-repo-server",
+      "namespace": "argocd",
+      "endpoint": "ghcr.io",
+      "reason": "oci://ghcr.io/immich-app/immich-charts からの OCI Helm chart 取得",
+      "breakage": "immich のデプロイ・upgrade ができない",
+      "source_evidence": [
+        "apps/immich/kustomization.yaml:6",
+        "(doc: Kustomization  @ )"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → ghcr.io (OCI)",
+      "exception_note": ""
+    },
+    {
+      "workload": "argocd-repo-server",
+      "namespace": "argocd",
+      "endpoint": "github.com",
+      "reason": "Application の repoURL https://github.com/hikuohiku/homelab.git を argocd-repo-server が git fetch する (App of Apps の全 Application)",
+      "breakage": "全 ArgoCD Application の sync が停止し、クラスタの宣言的運用が止まる",
+      "source_evidence": [
+        "apps/agent-rbac/application.yaml:12",
+        "(doc: Application agent-rbac @ argocd)",
+        "apps/apps.yaml:12",
+        "(doc: Application apps @ argocd)",
+        "apps/argocd/application.yaml:12",
+        "(doc: Application argocd @ argocd)",
+        "apps/autopilot/application.yaml:12",
+        "(doc: Application autopilot @ argocd)",
+        "apps/autopilot-core/application.yaml:11",
+        "(doc: Application autopilot-core @ argocd)",
+        "apps/coder/application.yaml:12",
+        "(doc: Application coder @ argocd)",
+        "apps/dex/application.yaml:12",
+        "(doc: Application dex @ argocd)",
+        "apps/external-secrets/application.yaml:12",
+        "(doc: Application external-secrets @ argocd)",
+        "apps/immich/application.yaml:11",
+        "(doc: Application immich @ argocd)",
+        "apps/ops-dashboard/application.yaml:12",
+        "(doc: Application ops-dashboard @ argocd)",
+        "apps/ops-health-reporter/application.yaml:12",
+        "(doc: Application ops-health-reporter @ argocd)",
+        "apps/syncthing/application.yaml:11",
+        "(doc: Application syncthing @ argocd)",
+        "apps/tailscale-operator/application.yaml:12",
+        "(doc: Application tailscale-operator @ argocd)",
+        "apps/telegram-adapter/application.yaml:11",
+        "(doc: Application telegram-adapter @ argocd)",
+        "apps/vaultwarden/application.yaml:11",
+        "(doc: Application vaultwarden @ argocd)",
+        "apps/version-watcher/application.yaml:12",
+        "(doc: Application version-watcher @ argocd)",
+        "nix/images/proxmox-cloud/k3s-manifests.nix:73"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → github.com (argocd-repo-server / application-controller)",
+      "exception_note": ""
+    },
+    {
+      "workload": "argocd-repo-server",
+      "namespace": "argocd",
+      "endpoint": "pkgs.tailscale.com",
+      "reason": "tailscale-operator chart の取得元。ArgoCD repo-server が Helm chart の取得先として使う(kustomization.yaml の helmCharts.repo)",
+      "breakage": "tailscale-operator のデプロイ・upgrade ができない",
+      "source_evidence": [
+        "apps/tailscale-operator/kustomization.yaml:12",
+        "(doc: Kustomization  @ )"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → pkgs.tailscale.com",
+      "exception_note": ""
+    },
+    {
+      "workload": "dex",
+      "namespace": "dex",
+      "endpoint": "accounts.google.com",
+      "reason": "Google OIDC connector の issuer (config.issuers.connectors[].config.issuer)。discovery/JWKS/token を dex server が上流取得する",
+      "breakage": "Google アカウントでの SSO 全不能 (ArgoCD ログインを含む)",
+      "source_evidence": [
+        "apps/dex/values.yaml:32"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → accounts.google.com (dex)",
+      "exception_note": ""
+    },
+    {
+      "workload": "tailscale-operator (+proxy pods)",
+      "namespace": "tailscale",
+      "endpoint": "controlplane.tailscale.com:443",
+      "reason": "Tailscale client の coordination server。host は Tailscale client のprovider 定数で manifest に直書きされない [source_evidence: apps/tailscale-operator/kustomization.yaml (chart 導入 + apiServerProxyConfig)]",
+      "breakage": "operator/proxy が tailnet から離脱し、*.ts.net ingress と K8s API proxy 認証が全滅する",
+      "source_evidence": [
+        "apps/tailscale-operator/kustomization.yaml"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → controlplane.tailscale.com。DERP relay (*.derp.tailscale.com, UDP/TCP) も状況により必要 — blind_spots 参照",
+      "exception_note": ""
+    },
+    {
+      "workload": "immich-restic-backup",
+      "namespace": "immich",
+      "endpoint": "api.backblazeb2.com:443",
+      "reason": "RESTIC_REPOSITORY=\"b2:$(RESTIC_B2_BUCKET):…\" — restic の Backblaze B2 バックエンドは api.backblazeb2.com:443 と話す (restic b2 backend の provider 定数。manifest には host 名は出ない)",
+      "breakage": "バックアップと retention (forget --prune) の両方が失敗し、災害時に復元点が無い。PVC 単独障害でデータロストに直結",
+      "source_evidence": [
+        "apps/immich/restic-backup-cronjob.yaml:57",
+        "(doc: CronJob immich-restic-backup @ immich)"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.backblazeb2.com (各 restic CronJob)",
+      "exception_note": ""
+    },
+    {
+      "workload": "immich-restic-retention",
+      "namespace": "immich",
+      "endpoint": "api.backblazeb2.com:443",
+      "reason": "RESTIC_REPOSITORY=\"b2:$(RESTIC_B2_BUCKET):…\" — restic の Backblaze B2 バックエンドは api.backblazeb2.com:443 と話す (restic b2 backend の provider 定数。manifest には host 名は出ない)",
+      "breakage": "バックアップと retention (forget --prune) の両方が失敗し、災害時に復元点が無い。PVC 単独障害でデータロストに直結",
+      "source_evidence": [
+        "apps/immich/restic-backup-cronjob.yaml:136",
+        "(doc: CronJob immich-restic-retention @ immich)"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.backblazeb2.com (各 restic CronJob)",
+      "exception_note": ""
+    },
+    {
+      "workload": "vaultwarden-restic-backup",
+      "namespace": "vaultwarden",
+      "endpoint": "api.backblazeb2.com:443",
+      "reason": "RESTIC_REPOSITORY=\"b2:$(RESTIC_B2_BUCKET):…\" — restic の Backblaze B2 バックエンドは api.backblazeb2.com:443 と話す (restic b2 backend の provider 定数。manifest には host 名は出ない)",
+      "breakage": "バックアップと retention (forget --prune) の両方が失敗し、災害時に復元点が無い。PVC 単独障害でデータロストに直結",
+      "source_evidence": [
+        "apps/vaultwarden/restic-backup-cronjob.yaml:146",
+        "(doc: CronJob vaultwarden-restic-backup @ vaultwarden)"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.backblazeb2.com (各 restic CronJob)",
+      "exception_note": ""
+    },
+    {
+      "workload": "vaultwarden-restic-retention",
+      "namespace": "vaultwarden",
+      "endpoint": "api.backblazeb2.com:443",
+      "reason": "RESTIC_REPOSITORY=\"b2:$(RESTIC_B2_BUCKET):…\" — restic の Backblaze B2 バックエンドは api.backblazeb2.com:443 と話す (restic b2 backend の provider 定数。manifest には host 名は出ない)",
+      "breakage": "バックアップと retention (forget --prune) の両方が失敗し、災害時に復元点が無い。PVC 単独障害でデータロストに直結",
+      "source_evidence": [
+        "apps/vaultwarden/restic-backup-cronjob.yaml:229",
+        "(doc: CronJob vaultwarden-restic-retention @ vaultwarden)"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.backblazeb2.com (各 restic CronJob)",
+      "exception_note": ""
+    },
+    {
+      "workload": "coder-restic-backup",
+      "namespace": "coder",
+      "endpoint": "api.backblazeb2.com:443",
+      "reason": "RESTIC_REPOSITORY=\"b2:$(RESTIC_B2_BUCKET):…\" — restic の Backblaze B2 バックエンドは api.backblazeb2.com:443 と話す (restic b2 backend の provider 定数。manifest には host 名は出ない)",
+      "breakage": "バックアップと retention (forget --prune) の両方が失敗し、災害時に復元点が無い。PVC 単独障害でデータロストに直結",
+      "source_evidence": [
+        "apps/coder/restic-backup-cronjob.yaml:88",
+        "(doc: CronJob coder-restic-backup @ coder)"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.backblazeb2.com (各 restic CronJob)",
+      "exception_note": ""
+    },
+    {
+      "workload": "coder-restic-retention",
+      "namespace": "coder",
+      "endpoint": "api.backblazeb2.com:443",
+      "reason": "RESTIC_REPOSITORY=\"b2:$(RESTIC_B2_BUCKET):…\" — restic の Backblaze B2 バックエンドは api.backblazeb2.com:443 と話す (restic b2 backend の provider 定数。manifest には host 名は出ない)",
+      "breakage": "バックアップと retention (forget --prune) の両方が失敗し、災害時に復元点が無い。PVC 単独障害でデータロストに直結",
+      "source_evidence": [
+        "apps/coder/restic-backup-cronjob.yaml:159",
+        "(doc: CronJob coder-restic-retention @ coder)"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.backblazeb2.com (各 restic CronJob)",
+      "exception_note": ""
+    },
+    {
+      "workload": "coder-workspace-home-backup",
+      "namespace": "coder",
+      "endpoint": "api.backblazeb2.com:443",
+      "reason": "RESTIC_REPOSITORY=\"b2:$(RESTIC_B2_BUCKET):…\" — restic の Backblaze B2 バックエンドは api.backblazeb2.com:443 と話す (restic b2 backend の provider 定数。manifest には host 名は出ない)",
+      "breakage": "バックアップと retention (forget --prune) の両方が失敗し、災害時に復元点が無い。PVC 単独障害でデータロストに直結",
+      "source_evidence": [
+        "apps/coder/workspace-home-backup-cronjob.yaml:210",
+        "(doc: ConfigMap workspace-home-backup-script @ coder)"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.backblazeb2.com (各 restic CronJob)",
+      "exception_note": ""
+    },
+    {
+      "workload": "coder-workspace-home-backup-retention",
+      "namespace": "coder",
+      "endpoint": "api.backblazeb2.com:443",
+      "reason": "RESTIC_REPOSITORY=\"b2:$(RESTIC_B2_BUCKET):…\" — restic の Backblaze B2 バックエンドは api.backblazeb2.com:443 と話す (restic b2 backend の provider 定数。manifest には host 名は出ない)",
+      "breakage": "バックアップと retention (forget --prune) の両方が失敗し、災害時に復元点が無い。PVC 単独障害でデータロストに直結",
+      "source_evidence": [
+        "apps/coder/workspace-home-backup-cronjob.yaml:379",
+        "(doc: CronJob coder-workspace-home-backup-retention @ coder)"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.backblazeb2.com (各 restic CronJob)",
+      "exception_note": ""
+    },
+    {
+      "workload": "syncthing-restic-backup",
+      "namespace": "syncthing",
+      "endpoint": "api.backblazeb2.com:443",
+      "reason": "RESTIC_REPOSITORY=\"b2:$(RESTIC_B2_BUCKET):…\" — restic の Backblaze B2 バックエンドは api.backblazeb2.com:443 と話す (restic b2 backend の provider 定数。manifest には host 名は出ない)",
+      "breakage": "バックアップと retention (forget --prune) の両方が失敗し、災害時に復元点が無い。PVC 単独障害でデータロストに直結",
+      "source_evidence": [
+        "apps/syncthing/restic-backup-cronjob.yaml:68",
+        "(doc: CronJob syncthing-restic-backup @ syncthing)"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.backblazeb2.com (各 restic CronJob)",
+      "exception_note": ""
+    },
+    {
+      "workload": "syncthing-restic-retention",
+      "namespace": "syncthing",
+      "endpoint": "api.backblazeb2.com:443",
+      "reason": "RESTIC_REPOSITORY=\"b2:$(RESTIC_B2_BUCKET):…\" — restic の Backblaze B2 バックエンドは api.backblazeb2.com:443 と話す (restic b2 backend の provider 定数。manifest には host 名は出ない)",
+      "breakage": "バックアップと retention (forget --prune) の両方が失敗し、災害時に復元点が無い。PVC 単独障害でデータロストに直結",
+      "source_evidence": [
+        "apps/syncthing/restic-backup-cronjob.yaml:150",
+        "(doc: CronJob syncthing-restic-retention @ syncthing)"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.backblazeb2.com (各 restic CronJob)",
+      "exception_note": ""
+    },
+    {
+      "workload": "version-watcher",
+      "namespace": "version-watcher",
+      "endpoint": "api.github.com",
+      "reason": "inventory 対象の最新版確認 (GitHub releases / Docker Hub tags / npm registry)",
+      "breakage": "バージョン監視が止まり、pin の放置による同期停止事故 (#49 型) の早期発見を失う",
+      "source_evidence": [
+        "apps/version-watcher/version_watch.py:165",
+        "apps/version-watcher/version_watch.py:180",
+        "apps/version-watcher/watch.py:45",
+        "apps/version-watcher/watch.py:71"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.github.com / hub.docker.com / registry.npmjs.org",
+      "exception_note": ""
+    },
+    {
+      "workload": "version-watcher",
+      "namespace": "version-watcher",
+      "endpoint": "hub.docker.com",
+      "reason": "inventory 対象の最新版確認 (GitHub releases / Docker Hub tags / npm registry)",
+      "breakage": "バージョン監視が止まり、pin の放置による同期停止事故 (#49 型) の早期発見を失う",
+      "source_evidence": [
+        "apps/version-watcher/version_watch.py:197"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.github.com / hub.docker.com / registry.npmjs.org",
+      "exception_note": ""
+    },
+    {
+      "workload": "version-watcher",
+      "namespace": "version-watcher",
+      "endpoint": "registry.npmjs.org",
+      "reason": "inventory 対象の最新版確認 (GitHub releases / Docker Hub tags / npm registry)",
+      "breakage": "バージョン監視が止まり、pin の放置による同期停止事故 (#49 型) の早期発見を失う",
+      "source_evidence": [
+        "apps/version-watcher/version_watch.py:274"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.github.com / hub.docker.com / registry.npmjs.org",
+      "exception_note": ""
+    },
+    {
+      "workload": "ops-health-reporter",
+      "namespace": "ops-health-reporter",
+      "endpoint": "api.github.com",
+      "reason": "K8s/ArgoCD 健全性の GitHub への報告と issue 参照 (GITHUB_HEALTH_REPORTER_TOKEN)",
+      "breakage": "autopilot と人間への健全性報告が途絶える (soak 判定も不能化)",
+      "source_evidence": [
+        "apps/ops-health-reporter/report.py:505",
+        "apps/ops-health-reporter/report.py:570"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.github.com",
+      "exception_note": ""
+    },
+    {
+      "workload": "autopilot",
+      "namespace": "autopilot",
+      "endpoint": "github.com",
+      "reason": "git clone/fetch/push (main への帳簿 push と PR)。credential.helper に https://github.com を設定",
+      "breakage": "autopilot が repo を読み書きできず自律運用全体が停止する",
+      "source_evidence": [
+        "apps/autopilot/loop.sh:24",
+        "apps/autopilot/loop.sh:90",
+        "apps/autopilot/loop.sh:92"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → github.com (git over HTTPS)",
+      "exception_note": "暫定例外: lethal trifecta 分離 (stage3 seeds #11) 未実施のため、既定拒否 NetworkPolicy を autopilot namespace 対象外とする場合がある。その場合でも本 endpoint は器自身の生存に必須であり、分離適用時には workload 別の egress ルールとして復刻すること"
+    },
+    {
+      "workload": "autopilot-core",
+      "namespace": "autopilot",
+      "endpoint": "api.github.com",
+      "reason": "ops-feedback ブランチの読み取り (GITHUB_API 既定値)",
+      "breakage": "コアがフィードバックを読めなくなる",
+      "source_evidence": [
+        "apps/autopilot-core/app/main.go:71"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.github.com",
+      "exception_note": "暫定例外: lethal trifecta 分離 (stage3 seeds #11) 未実施のため、既定拒否 NetworkPolicy を autopilot namespace 対象外とする場合がある。その場合でも本 endpoint は器自身の生存に必須であり、分離適用時には workload 別の egress ルールとして復刻すること"
+    },
+    {
+      "workload": "autopilot-heart",
+      "namespace": "autopilot",
+      "endpoint": "api.anthropic.com:443",
+      "reason": "allowed_autopilot_doppler_keys の CLAUDE_CODE_OAUTH_TOKEN 由来。Claude Code OAuth の接続先 (provider 定数。repo 内に直書きは無い) [source_evidence: ops/rules.json allowed_autopilot_doppler_keys]",
+      "breakage": "autopilot の思考エンジンが動かず、全プロジェクトが停止する",
+      "source_evidence": [
+        "ops/rules.json allowed_autopilot_doppler_keys",
+        "CLAUDE_CODE_OAUTH_TOKEN"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP → api.anthropic.com:443 (autopilot-heart)",
+      "exception_note": "暫定例外: lethal trifecta 分離 (stage3 seeds #11) 未実施のため、既定拒否 NetworkPolicy を autopilot namespace 対象外とする場合がある。その場合でも本 endpoint は器自身の生存に必須であり、分離適用時には workload 別の egress ルールとして復刻すること。本行は credential allowlist 由来であり、鍵を rules.json から削除すれば台帳からも消れる"
+    },
+    {
+      "workload": "autopilot-heart",
+      "namespace": "autopilot",
+      "endpoint": "api.telegram.org:443",
+      "reason": "allowed_autopilot_doppler_keys の TELEGRAM_BOT_TOKEN 由来。Telegram Bot API。許可鍵リストに入っている以上、直接送信経路として存在しうる (主経路は telegram-adapter) [source_evidence: ops/rules.json allowed_autopilot_doppler_keys]",
+      "breakage": "autopilot からの Telegram 通知が失われる可能性がある",
+      "source_evidence": [
+        "ops/rules.json allowed_autopilot_doppler_keys",
+        "TELEGRAM_BOT_TOKEN"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP → api.telegram.org:443 (autopilot-heart)",
+      "exception_note": "暫定例外: lethal trifecta 分離 (stage3 seeds #11) 未実施のため、既定拒否 NetworkPolicy を autopilot namespace 対象外とする場合がある。その場合でも本 endpoint は器自身の生存に必須であり、分離適用時には workload 別の egress ルールとして復刻すること。本行は credential allowlist 由来であり、鍵を rules.json から削除すれば台帳からも消れる"
+    },
+    {
+      "workload": "autopilot-heart",
+      "namespace": "autopilot",
+      "endpoint": "discord.com:443",
+      "reason": "allowed_autopilot_doppler_keys の DISCORD_WEBHOOK_URL 由来。通知 webhook の POST 先 (ops/heart/notify.py の _post_discord)。URL 自体は Doppler から注入されるため repo に host 直書きは無い [source_evidence: ops/rules.json allowed_autopilot_doppler_keys]",
+      "breakage": "予告・納品・障害の即時通知が全て失われる (digest も届かない)",
+      "source_evidence": [
+        "ops/rules.json allowed_autopilot_doppler_keys",
+        "DISCORD_WEBHOOK_URL"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP → discord.com:443 (autopilot-heart)",
+      "exception_note": "暫定例外: lethal trifecta 分離 (stage3 seeds #11) 未実施のため、既定拒否 NetworkPolicy を autopilot namespace 対象外とする場合がある。その場合でも本 endpoint は器自身の生存に必須であり、分離適用時には workload 別の egress ルールとして復刻すること。本行は credential allowlist 由来であり、鍵を rules.json から削除すれば台帳からも消れる"
+    },
+    {
+      "workload": "autopilot-heart",
+      "namespace": "autopilot",
+      "endpoint": "github.com",
+      "reason": "heart 起動時の repo clone/fetch (REPO_URL 既定値)",
+      "breakage": "heart-and-projects の起動ができない",
+      "source_evidence": [
+        "apps/autopilot/heart-bootstrap.sh:8",
+        "apps/autopilot/heart-bootstrap.sh:14",
+        "apps/autopilot/heart-bootstrap.sh:16"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → github.com (git over HTTPS)",
+      "exception_note": "暫定例外: lethal trifecta 分離 (stage3 seeds #11) 未実施のため、既定拒否 NetworkPolicy を autopilot namespace 対象外とする場合がある。その場合でも本 endpoint は器自身の生存に必須であり、分離適用時には workload 別の egress ルールとして復刻すること"
+    },
+    {
+      "workload": "ops-dashboard",
+      "namespace": "autopilot",
+      "endpoint": "api.github.com",
+      "reason": "feedback 投稿時の GitHub API 呼び出し (GITHUB_API 既定値)",
+      "breakage": "dashboard から ops-feedback への書き置きができなくなる",
+      "source_evidence": [
+        "apps/ops-dashboard/app/src/app/api/feedback/route.ts:20"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.github.com",
+      "exception_note": "暫定例外: lethal trifecta 分離 (stage3 seeds #11) 未実施のため、既定拒否 NetworkPolicy を autopilot namespace 対象外とする場合がある。その場合でも本 endpoint は器自身の生存に必須であり、分離適用時には workload 別の egress ルールとして復刻すること"
+    },
+    {
+      "workload": "ops-dashboard",
+      "namespace": "autopilot",
+      "endpoint": "github.com",
+      "reason": "ISSUE_URL — フィードバック issue へのリンク文字列の生成のみ。サーバからの通信先ではなくブラウザが開く先なので、既定拒否で開ける穴には数えない",
+      "breakage": "壊れない (リンク文字列)。リンク先自体は人間の閲覧経路",
+      "source_evidence": [
+        "apps/ops-dashboard/app/src/app/api/feedback/route.ts:24",
+        "apps/ops-dashboard/app/src/lib/ops-state.ts:7"
+      ],
+      "open_at_default_deny": false,
+      "open_note": "",
+      "exception_note": "暫定例外: lethal trifecta 分離 (stage3 seeds #11) 未実施のため、既定拒否 NetworkPolicy を autopilot namespace 対象外とする場合がある。その場合でも本 endpoint は器自身の生存に必須であり、分離適用時には workload 別の egress ルールとして復刻すること"
+    },
+    {
+      "workload": "telegram-adapter",
+      "namespace": "autopilot",
+      "endpoint": "api.github.com",
+      "reason": "Telegram Bot API の long polling (TELEGRAM_API 既定値) と、受信 DM を ops-feedback へ流す際の GitHub API (GITHUB_API 既定値)",
+      "breakage": "人間→autopilot の Telegram 受信窓が閉じる",
+      "source_evidence": [
+        "apps/telegram-adapter/app/main.go:77"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.telegram.org / api.github.com",
+      "exception_note": "暫定例外: lethal trifecta 分離 (stage3 seeds #11) 未実施のため、既定拒否 NetworkPolicy を autopilot namespace 対象外とする場合がある。その場合でも本 endpoint は器自身の生存に必須であり、分離適用時には workload 別の egress ルールとして復刻すること"
+    },
+    {
+      "workload": "telegram-adapter",
+      "namespace": "autopilot",
+      "endpoint": "api.telegram.org",
+      "reason": "Telegram Bot API の long polling (TELEGRAM_API 既定値) と、受信 DM を ops-feedback へ流す際の GitHub API (GITHUB_API 既定値)",
+      "breakage": "人間→autopilot の Telegram 受信窓が閉じる",
+      "source_evidence": [
+        "apps/telegram-adapter/app/main.go:76"
+      ],
+      "open_at_default_deny": true,
+      "open_note": "egress TCP 443 → api.telegram.org / api.github.com",
+      "exception_note": "暫定例外: lethal trifecta 分離 (stage3 seeds #11) 未実施のため、既定拒否 NetworkPolicy を autopilot namespace 対象外とする場合がある。その場合でも本 endpoint は器自身の生存に必須であり、分離適用時には workload 別の egress ルールとして復刻すること"
+    },
+    {
+      "workload": "node01/helm-controller (bootstrap)",
+      "namespace": "(node)",
+      "endpoint": "argoproj.github.io",
+      "reason": "初回ブートストラップの HelmChart CR (argo-cd) の取得元。ArgoCD 起動後は apps/argocd/kustomization.yaml 側に主導権が移る",
+      "breakage": "空クラスタからの ArgoCD ブートストラップができない",
+      "source_evidence": [
+        "nix/images/proxmox-cloud/k3s-manifests.nix:41"
+      ],
+      "open_at_default_deny": false,
+      "open_note": "bootstrap 時のみ。helm-controller は node 側で動くため Pod NetworkPolicy の対象外",
+      "exception_note": ""
+    },
+    {
+      "workload": "node01/kubelet (image pull)",
+      "namespace": "(node)",
+      "endpoint": "docker.io:443",
+      "reason": "python/restic/busybox/postgres/vaultwarden/syncthing 等の Docker Hub イメージ。image pull は kubelet = ノード側 egress で Pod NetworkPolicy の対象外という重要な注意付きで載せる",
+      "breakage": "新規 Pod の起動・再スケジュールができない (既存コンテナは影響なし)",
+      "source_evidence": [
+        "各 Deployment/CronJob の image: 行"
+      ],
+      "open_at_default_deny": false,
+      "open_note": "Pod NetworkPolicy の対象外 (node egress)。node firewall での統制が必要",
+      "exception_note": ""
+    },
+    {
+      "workload": "node01/kubelet (image pull)",
+      "namespace": "(node)",
+      "endpoint": "ghcr.io:443",
+      "reason": "自前イメージ群 (homelab-*) と vectorchord/coder 等。image pull は kubelet = ノード側 egress で Pod NetworkPolicy の対象外という重要な注意付きで載せる",
+      "breakage": "新規 Pod の起動・再スケジュールができない (既存コンテナは影響なし)",
+      "source_evidence": [
+        "各 Deployment/CronJob の image: 行"
+      ],
+      "open_at_default_deny": false,
+      "open_note": "Pod NetworkPolicy の対象外 (node egress)。node firewall での統制が必要",
+      "exception_note": ""
+    },
+    {
+      "workload": "node01/nix-daemon",
+      "namespace": "(node)",
+      "endpoint": "cache.nixos.org",
+      "reason": "nix.settings.substituters — ノード構築・再構成時の binary cache 取得",
+      "breakage": "ノードの再構築・設定変更適用ができない (Pod ではないため NetworkPolicy 管轄外。node firewall レイヤーの統制対象)",
+      "source_evidence": [
+        "nix/images/proxmox-cloud/configuration.nix:166"
+      ],
+      "open_at_default_deny": false,
+      "open_note": "Pod NetworkPolicy の対象外 (node egress)。",
+      "exception_note": ""
+    },
+    {
+      "workload": "node01/nix-daemon",
+      "namespace": "(node)",
+      "endpoint": "hikuohiku.cachix.org",
+      "reason": "nix.settings.substituters — ノード構築・再構成時の binary cache 取得",
+      "breakage": "ノードの再構築・設定変更適用ができない (Pod ではないため NetworkPolicy 管轄外。node firewall レイヤーの統制対象)",
+      "source_evidence": [
+        "nix/images/proxmox-cloud/configuration.nix:167"
+      ],
+      "open_at_default_deny": false,
+      "open_note": "Pod NetworkPolicy の対象外 (node egress)。",
+      "exception_note": ""
+    }
+  ],
+  "excluded_hosts": [
+    {
+      "host": "127.0.0.1:1",
+      "category": "cluster_local",
+      "reason": "クラスタ内アドレス (Service/API server)",
+      "evidence": [
+        "apps/autopilot-core/app/main_test.go:181",
+        "apps/autopilot-core/app/mcp_test.go:106",
+        "apps/telegram-adapter/app/mcp_test.go:171"
+      ]
+    },
+    {
+      "host": "127.0.0.1:4096",
+      "category": "cluster_local",
+      "reason": "クラスタ内アドレス (Service/API server)",
+      "evidence": [
+        "apps/autopilot-core/app/main.go:68",
+        "apps/autopilot-core/deployment.yaml:141"
+      ]
+    },
+    {
+      "host": "kubernetes.default.svc",
+      "category": "cluster_local",
+      "reason": "クラスタ内アドレス (Service/API server)",
+      "evidence": [
+        "apps/agent-rbac/application.yaml:17",
+        "apps/apps.yaml:17",
+        "apps/argocd/application.yaml:17",
+        "apps/autopilot/application.yaml:17",
+        "apps/autopilot-core/application.yaml:15",
+        "apps/coder/application.yaml:17",
+        "apps/dex/application.yaml:17",
+        "apps/external-secrets/application.yaml:17",
+        "apps/immich/application.yaml:15",
+        "apps/ops-dashboard/application.yaml:17",
+        "apps/ops-health-reporter/application.yaml:17",
+        "apps/syncthing/application.yaml:15",
+        "apps/tailscale-operator/application.yaml:17",
+        "apps/telegram-adapter/application.yaml:15",
+        "apps/vaultwarden/application.yaml:15",
+        "apps/version-watcher/application.yaml:17",
+        "nix/images/proxmox-cloud/k3s-manifests.nix:78"
+      ]
+    },
+    {
+      "host": "ops-dashboard.autopilot.svc",
+      "category": "cluster_local",
+      "reason": "クラスタ内アドレス (Service/API server)",
+      "evidence": [
+        "apps/autopilot-core/app/mcp.go:103"
+      ]
+    },
+    {
+      "host": "opencode.ai",
+      "category": "schema_reference",
+      "reason": "$schema 等のメタデータ参照。通信しない",
+      "evidence": [
+        "apps/autopilot-core/config.yaml:13"
+      ]
+    },
+    {
+      "host": "argocd.tailae6c2.ts.net",
+      "category": "self_public_url",
+      "reason": "tailnet 上の自サービス公開 URL。ブラウザやクライアント側の接続先であり、workload からの egress 先ではない",
+      "evidence": [
+        "apps/argocd/values.yaml:9",
+        "apps/dex/values.yaml:47"
+      ]
+    },
+    {
+      "host": "coder.tailae6c2.ts.net",
+      "category": "self_public_url",
+      "reason": "tailnet 上の自サービス公開 URL。ブラウザやクライアント側の接続先であり、workload からの egress 先ではない",
+      "evidence": [
+        "apps/coder/deployment.yaml:39"
+      ]
+    },
+    {
+      "host": "dex.tailae6c2.ts.net",
+      "category": "self_public_url",
+      "reason": "tailnet 上の自サービス公開 URL。ブラウザやクライアント側の接続先であり、workload からの egress 先ではない",
+      "evidence": [
+        "apps/argocd/values.yaml:15",
+        "apps/dex/values.yaml:10",
+        "apps/dex/values.yaml:35"
+      ]
+    },
+    {
+      "host": "vaultwarden.tailae6c2.ts.net",
+      "category": "self_public_url",
+      "reason": "tailnet 上の自サービス公開 URL。ブラウザやクライアント側の接続先であり、workload からの egress 先ではない",
+      "evidence": [
+        "apps/vaultwarden/deployment.yaml:51"
+      ]
+    }
+  ],
+  "blind_spots": [
+    {
+      "topic": "LLM API 実接続先の一部",
+      "detail": "OPENCODE_API_KEY の向こう側の endpoint は repo 内に直書きが無い。api.anthropic.com は CLAUDE_CODE_OAUTH_TOKEN の provider 定数として載せたが、telemetry 系 (statsig 等) は確定できない"
+    },
+    {
+      "topic": "Syncthing の global discovery / relay",
+      "detail": "discovery.syncthing.net 等の宛先は GUI (PVC 上の config) で決まり repo に現れない。tailnet 直接接続のみで成立しているかは実測が必要 (実測プローブは次のプロジェクト)"
+    },
+    {
+      "topic": "Vaultwarden の icon 取得",
+      "detail": "icon cache が有効な場合、登録済みサイトの任意 host へ出ていく。repo には現れない"
+    },
+    {
+      "topic": "Tailscale DERP relay",
+      "detail": "*.derp.tailscale.com (UDP/TCP 443) は NAT 越えが必要なときだけ使う。coordination 本体 (controlplane.tailscale.com) とは別に開ける判断が要る"
+    },
+    {
+      "topic": "coder の workspace agent 接続",
+      "detail": "CODER_ACCESS_URL (https://coder.tailae6c2.ts.net) は公開 URL としてself_public_url に除外したが、deployment.yaml のコメント通り workspace agent の接続先にもなる。既定拒否適用時は agent → coder の実経路を確認すること (実測プローブは次のプロジェクト)"
+    },
+    {
+      "topic": "kubelet の image pull",
+      "detail": "docker.io / ghcr.io からの pull は node 側 egress。既定拒否 NetworkPolicy では防げないので、統制は node firewall レイヤーで別途検討"
+    }
+  ]
+}

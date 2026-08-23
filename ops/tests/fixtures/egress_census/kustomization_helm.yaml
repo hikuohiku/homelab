@@ -1,0 +1,15 @@
+# 合成 fixture: kustomization の helmCharts (https と oci)。
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources: []
+helmCharts:
+  - name: some-chart
+    repo: https://charts.example.org/subdir
+    version: 1.2.3
+    releaseName: some-chart
+    namespace: app-ns
+  - name: oci-chart
+    repo: oci://ghcr.io/some-org/some-charts
+    version: 0.4.3
+    releaseName: oci-chart
+    namespace: app-ns

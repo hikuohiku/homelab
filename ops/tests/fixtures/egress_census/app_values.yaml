@@ -1,0 +1,23 @@
+# 合成 fixture: helm values 内の外部 issuer / 自サービス URL / $schema。
+# 実リポジトリの apps/dex/values.yaml と apps/autopilot-core/config.yaml の混合形。
+config:
+  # https://charts.example.com/docs — コメントなので抽出しない
+  issuer: https://accounts.google.com
+  redirectURI: https://myapp.tailabc123.ts.net/callback
+  connectors:
+    - type: oidc
+      id: google
+      config:
+        clientID: $GOOGLE_CLIENT_ID
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: app-ns
+data:
+  config.json: |
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "listen": "http://127.0.0.1:4096"
+    }
