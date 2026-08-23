@@ -389,3 +389,41 @@ verify 再実測 + 上記確認 + 最小ログ追記で終えてよい。
 本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
 リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
 docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
+
+### 2026-08-23 セッション13 — セッション12 手順どおりの兆候確認 (main 零新着・動いたブランチ 3 本すべて無関係)
+
+**やったこと**: spec DoD の追加実装は無し。セッション5〜12 と同じく verify 再実測 +
+外部シグナル確認だけをした。動いたブランチは ops-state / p-0115 / p-0116 の 3 本で、
+各々前回 tip 以降の差分を実測しすべて条件 A/B 無関係と確認した (下記 3〜4)。
+
+1. **verify 再実測**: #1 rc=1 / #2 rc=0 / #3 rc=2。セッション3 以降ずっと同一
+   (#1/#3 は verdict=keep ゆえ意図通り failing、#2 green)
+2. **観測環境の再実測** (12 回目の独立実測、結果同じ): `env` の proxmox/pve/tailscale 系無し
+   (rc=1) / `tailscale` `pvesh` `qm` `gh` CLI すべて absent
+3. **origin/main の新着確認**: `git fetch --prune` 後、`8c5cbd7d..origin/main` の commit は
+   **ゼロ**。動いたブランチ 3 本を各々実測 (判定はすべて diff 本文側で grep -c):
+   - `ops-state` (aa552e1d..aba86cf0): heartbeat.json / metrics.jsonl のみ。docs/terraform/
+     P-0142 paths **0**、diff 本文の PBS/qm shutdown 言及 **0 件** → 無関係
+   - `project/p-0115` (183f3b05..b417c14d): 自ログ PROGRESS.md +46 行のみ。
+     docs/terraform/P-0142 paths **0**、diff 本文の PBS/qm shutdown 言及 **0 件** → 無関係
+   - `project/p-0116` (19465c8d..7ca44808): main (8c5cbd7d, P-0128) を merge 済みで差分には
+     P-0128 分も含むが、docs/terraform/P-0142 paths **0**、diff 本文の PBS/qm shutdown 言及
+     **0 件** → 無関係 (P-0128 自体はセッション10 で main 基準により無関係済み)
+4. **issue #56 を GitHub REST API で実測した**: webfetch の HTML レンダリングにはコメント欄が
+   出てこない (lazy load のため本文しか読めない — 今回判明した罠)。`curl
+   api.github.com/.../issues/56/comments` の実測では **合計 177 件 = セッション12 基準から増減
+   ゼロ**。最終コメントは 2026-08-23T01:23:30Z の P-0118 質問で、条件 A/B の実施報告は未着
+
+→ verdict は `keep` のまま、inventory への反映対象なし。docs/pbs-retirement.md は書かない。
+
+**次のセッションへの一言**: やり方はセッション5〜13 と同一。main 比較基準は引き続き
+`8c5cbd7d..origin/main` (今回は零新着)。動いたブランチは「docs/・terraform/・P-0142 logs への
+diff 本文パス」と「PBS/`qm shutdown 112` 言及」の 2 点を diff 本文側で grep -c すればよく、
+中身の精読は不要。**罠**: (a) log メッセージ内の「112」「P-0142」は番号誤マッチするので本文側判定。
+(b) `grep | head` の rc は当てにならない。(c) **issue #56 のコメント確認は webfetch では不可
+(コメント欄がレンダリングされない) — `curl https://api.github.com/repos/hikuohiku/homelab/issues/56/comments?per_page=100&page=N`
+で page を辿り総数を数えるのが確実** (今回の基準: 177 件 / 最終 2026-08-23T01:23:30Z)。
+verify 再実測 + 上記確認 + 最小ログ追記で終えてよい。
+本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
+リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
+docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
