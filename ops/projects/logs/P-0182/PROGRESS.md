@@ -277,3 +277,34 @@ refs/pull 照合 0 件 = PR 未開 → origin/main 未含も確認 → 4.5 分�
 冒頭 fetch → refs/pull 照合 → merge 済みなら遡及レシピで continuation_count 出現を探す、
 未 merge なら待機 1〜2 回して観測事実だけ追記して終了。観測候補は P-0092 (announced→active 待ち)
 と curriculum 新規採択。
+
+## セッション9 の記録 (2026-08-23 11:37–11:53Z)
+
+**やったこと**: ops-state 監視のみ。冒頭 fetch → head 7730dc58b を refs/pull 照合
+(0 件 = PR 未開) → 実装コミット c353eca55 が origin/main 未含も確認 → 約 4.5 分待機 ×2 を
+挟んで 3 回確認したが merge 無し。verify 1〜3 を再実測 green (15 tests OK)。
+本ファイル追記 + commit して終了。
+
+**盤面の実測 (11:37Z / 11:46Z / 11:52Z の 3 回)**:
+
+- `continuation_count` の出現は 0 のまま (merge 前なので当然)
+- heart は生存: beat 192 @ 11:36:54Z → beat 200 @ 11:45:50Z → beat 205 @ 11:51:24Z
+  (ビート約 70 秒間隔を維持)
+- **P-0175 が soaking になった**: delivered の後、state が `soaking` へ遷移しているのを
+  projects.json snapshot で実視 (merge_pr 11:23:36Z 以降、audit に P-0175 の追加 action 無し —
+  delivered→soaking は heart の自動遷移と整合)。soak 完了でどうなるかは本案件と無関係だが、
+  「actives が減るもう一つの経路」として観測メモ
+- **今日の予算死は増えていない**: 遡及列挙を再実行し、08-23 分は 11 件のまま
+  (最新 = P-0161 @ 09:41:14Z)。つまり merge から 2 時間以上経過しても旧挙動の死は
+  追加されず、証跡機会はまだ失われていない (死が起きない=証拠も取れない)
+- **spawn_curriculum @ 11:39:07Z を audit で実視** — 採択が出れば観測候補が補充される
+- actives 実測は自プロジェクト P-0182 のみで変化なし。P-0092 は announced (3M) のまま
+- 人間の活動兆候: 今日の merge が #527〜#536 に増加 (#535 feat/core 常駐コア、
+  #536 chore/core digest pin が監視前に通った)。ただし本 PR のレビューは未開のまま
+
+**次のセッションへの一言**: 変更なし — merge 待ち。手順は一切変わらない:
+冒頭 fetch → refs/pull 照合 (ブランチ head SHA で。`refs/heads` 自身に引っかけないこと) →
+merge 済みなら遡及レシピ (上記「DoD (4) 証跡の取り方」) で continuation_count 出現を探す、
+未 merge なら待機 1〜2 回して観測事実だけ追記して終了。予算死の供給源は現状ゼロ
+(actives = 自分のみ・P-0092 は announced 待ち) なので、証跡取得は curriculum 新規採択か
+P-0092 の active 化後になる見込み。
