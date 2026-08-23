@@ -257,3 +257,29 @@ verify コマンドを実測で確定させたこと** (下記「発見」)。�
 実装も commit も無用 (PROGRESS 追記のみ)。差し替え済みで全 green なら、実装は完了済みなので
 何も足さず wrapper に流す (PR 作成・push は wrapper の職責。手動 PR は作らない — session 4 の
 実測と理由を参照)。merge 後フォローアップは session 4 末尾 (i)(ii) のまま。
+
+## 2026-08-23 session 6 (worker)
+
+### 結論 — 変化なし。spec 差し替え待ちのまま、実装・commit は無用と確認して終了
+
+session 5 の指示通り現状確認のみ。**作業は無かった** (これが正しい状態)。
+
+### 再実測 (2026-08-23)
+
+- `git show origin/main:ops/projects/archive.jsonl | grep -c '"id": "P-0157"'` → **1**
+  (差し替え追記はまだ無い。main の新着は curriculum #522/#523 由来の P-0160〜P-0174 で、
+  P-0157 言及は元 spec 行 + P-0168 / P-0172 の本文言及のみ)
+- verify #1 green (34 tests OK) / #2 red 継続 (health ブランチ latest.json の
+  `backup_freshness` は None) / #3 green (`backup_fresh` in rules.json)。wrapper 実測と一致
+- 差し替え用コマンドの判定力は維持:
+  `grep -q '"backup_freshness": collect(collect_backup_freshness)' apps/ops-health-reporter/report.py`
+  が origin/main の report.py では不一致 (rc 相当 = 0 件) — session 5 実測のまま
+
+### 次のセッションへの一言
+
+session 5 の「次のセッションへの一言」をそのまま引き継ぐ (方針に変更なし)。
+要約: (1) archive.jsonl の同 id 追記数を確認、(2) verify 3 項目を自力実測。
+#2 が旧定義のまま red なら実装も commit も無用 (この PROGRESS 追記のみ)。
+差し替え済みで全 green なら何も足さず wrapper に流す。merge 後フォローアップは
+session 4 末尾 (i)(ii): ArgoCD sync → reporter 実行後に health ブランチの
+backup_freshness >=5 要素を確認、同じ内容を取得時刻付きで initial-freshness.md に記録。
