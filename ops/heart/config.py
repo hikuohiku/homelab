@@ -29,6 +29,19 @@ class Config:
         self.health_branch = env.get("HEALTH_BRANCH", "ops-health-report")
         self.feedback_branch = env.get("FEEDBACK_BRANCH", "ops-feedback")
         self.feedback_issue = int(env.get("FEEDBACK_ISSUE", "56"))
+        # イベントバス経由の書き置きが落ちてくる場所 (同じ Pod のサイドカーが書く。
+        # apps/autopilot/bus-sidecar)。既定値はサイドカーの BUS_SIDECAR_OUT_DIR と
+        # 揃えてあり、どちらも通常は設定しなくてよい。ディレクトリが無ければ
+        # 「バス経路が無い」として GitHub 経路だけで動く
+        self.feedback_bus_dir = Path(
+            env.get("HEART_FEEDBACK_BUS_DIR") or (self.data_dir / "feedback-bus" / "inbox")
+        )
+        # 常駐コア発の command (設計 D3/D21) が落ちてくる場所。書き置きと**別**の
+        # ディレクトリなのは、混ぜると triage が人間の発話として誤分類するため。
+        # 既定値はサイドカーの BUS_SIDECAR_COMMAND_DIR と揃えてある
+        self.command_bus_dir = Path(
+            env.get("HEART_COMMAND_BUS_DIR") or (self.data_dir / "command-bus" / "inbox")
+        )
         self.beat_seconds = int(env.get("HEART_BEAT_SECONDS", "120"))
         self.image = env.get("AUTOPILOT_IMAGE", "")
 

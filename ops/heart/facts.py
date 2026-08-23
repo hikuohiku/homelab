@@ -6,6 +6,7 @@
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 
 from . import gitutil, tasks, triage
 from .statefiles import parse_iso
@@ -207,6 +208,13 @@ def collect_prs(gh, project_branches):
     return open_prs, merged
 
 
+# 書き置きの既読を持つ鍵の形。GitHub 経路 (ops-feedback ブランチの ls-tree) が
+# この接頭辞つきのパスを返すので、バス経路のファイル名もこの形に寄せる。
+# 揃えることで cursors["seen_feedback_files"] 1 つで 2 経路の重複が落ちる
+# (autopilot-core の seenKey と同じ判断)。
+FEEDBACK_KEY_PREFIX = "ops/feedback/inbox/"
+
+
 def _list_feedback_files(repo_dir, feedback_branch):
     try:
         listing = gitutil.run(
@@ -219,10 +227,40 @@ def _list_feedback_files(repo_dir, feedback_branch):
         return []
 
 
-def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_branch):
-    """issue #56 の新着コメント + ops-feedback ブランチの新着書き置きを
+def _list_bus_notes(bus_dir):
+    """バスのサイドカーが置いた書き置きを [(key, Path)] で返す。
+
+    key は GitHub 経路と同じ形 ("ops/feedback/inbox/<id>.json") にする。同じ書き置きは
+    両経路で同じ id を持つので、鍵を揃えれば既存の cursor がそのまま重複を落とす。
+
+    サイドカー (apps/autopilot/bus-sidecar) が rename で置くまでファイルは現れないが、
+    書きかけの一時ファイルを万一拾わないよう "." 始まりは読まない。
+    ディレクトリが無い / 読めないときは「バス経路が無い」として空を返す —
+    バスの不調で GitHub 経路まで止めない (停止経路を運ぶ側が可用性を下げない)。
+    """
+    if bus_dir is None:
+        return []
+    try:
+        names = sorted(
+            p.name for p in Path(bus_dir).iterdir()
+            if p.is_file() and p.name.endswith(".json") and not p.name.startswith(".")
+        )
+    except OSError:
+        return []
+    return [(FEEDBACK_KEY_PREFIX + name, Path(bus_dir) / name) for name in names]
+
+
+def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_branch,
+                     bus_dir=None):
+    """issue #56 の新着コメント + ops-feedback ブランチ + バス経路の新着書き置きを
     triage して (vetoes, acks, stop_all, review_needed, resume_all, task_requests,
     approves, new_cursors) を返す。
+
+    bus_dir はイベントバス (NATS) のサイドカーが書き置きを落とすローカルディレクトリ
+    (移行の段階 3)。GitHub 経路を残したまま足すのは、所有者の「止めて」が GitHub の
+    可用性に依存する状態を先に解くため — 片方が死んでももう片方で届く。
+    どちらから来ても鍵は同じ ("ops/feedback/inbox/<id>.json") なので、同じ書き置きが
+    2 回処理されることはない。
 
     初回起動 (cursor 未初期化) は **過去の全履歴を triage しない** (レビュー指摘 [7])。
     issue #56 には 100 件超の過去コメントがあり、旧 CHARTER の引用等に停止キーワードが
@@ -272,8 +310,11 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
             )
         except Exception:
             new_cursors["issue_comments_since"] = None
+        # バス経路のぶんも「現在までを既読」に含める。ここを落とすと初回起動で
+        # 手元に残っている過去の書き置きを一斉に triage してしまう
         new_cursors["seen_feedback_files"] = sorted(
-            _list_feedback_files(repo_dir, feedback_branch)
+            set(_list_feedback_files(repo_dir, feedback_branch))
+            | {key for key, _ in _list_bus_notes(bus_dir)}
         )
         return [], [], False, [], False, [], [], new_cursors
 
@@ -298,15 +339,9 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
             continue
         handle(body, f"issue-comment {c.get('id')}")
 
-    seen = set(cursors.get("seen_feedback_files", []))
-    new_seen = set(seen)
-    for path in _list_feedback_files(repo_dir, feedback_branch):
-        if path in seen:
-            continue
-        new_seen.add(path)
-        raw = gitutil.show(repo_dir, f"origin/{feedback_branch}", path)
-        if raw is None:
-            continue
+    def handle_note(raw, key):
+        """書き置き 1 件の生テキストを分類に回す。JSON note ならトップレベル kind を
+        読み、そうでなければ本文そのものとして扱う (経路によらず同じ扱い)。"""
         kind = None
         try:
             note = json.loads(raw)
@@ -316,12 +351,88 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
                 kind = k
         except ValueError:
             body = raw
-        handle(body, path, kind)
+        handle(body, key, kind)
+
+    seen = set(cursors.get("seen_feedback_files", []))
+    new_seen = set(seen)
+    for path in _list_feedback_files(repo_dir, feedback_branch):
+        if path in seen:
+            continue
+        new_seen.add(path)
+        raw = gitutil.show(repo_dir, f"origin/{feedback_branch}", path)
+        if raw is None:
+            continue
+        handle_note(raw, path)
+
+    # バス経路 (NATS → サイドカー → ローカルファイル)。GitHub 経路と同じ鍵を使うので、
+    # 同じ書き置きが両方から来ても 2 回処理されない。判定に new_seen を使うのは、
+    # 同一ビート内で先に GitHub 側が拾ったぶんも落とすため
+    for key, path in _list_bus_notes(bus_dir):
+        if key in new_seen:
+            continue
+        try:
+            raw = path.read_text()
+        except OSError:
+            # 読めないものは既読にしない (次のビートで拾い直す)
+            continue
+        new_seen.add(key)
+        handle_note(raw, key)
 
     new_cursors = dict(cursors)
     new_cursors["issue_comments_since"] = newest
     new_cursors["seen_feedback_files"] = sorted(new_seen)
     return vetoes, acks, stop_all, review_needed, resume_all, task_requests, approves, new_cursors
+
+
+def collect_commands(command_dir):
+    """常駐コア発の command (設計 D3/D7/D21) を名前順に返す。
+
+    経路: コア (MCP の request_task) → NATS events.heart.> → 同居サイドカー
+    (apps/autopilot/bus-sidecar) → <command_dir>/<command_id>.json → ここ。
+
+    **書き置き (feedback) とは別ディレクトリ**にしてある。混ぜると triage が
+    「人間の発話」として分類し、依頼が briefing に埋もれる。ここは triage を
+    通さず、reconcile.decide() が種別で分岐する。
+
+    重複排除はここではやらない。台帳 (tasks.COMMAND_LEDGER_FILE) を facts として
+    decide に渡し、判断は純関数側に置く。
+
+    ディレクトリが無い / 読めないときは空を返す — バスの不調で heart を止めない。
+    壊れたファイル・必須項目 (command_id / type / body) を欠くものは黙って飛ばす。
+    サイドカーが入口で捨てているはずのものが届いたということなので、ここで
+    例外にしてビートを落とす方が害が大きい。
+    """
+    if command_dir is None:
+        return []
+    try:
+        paths = sorted(
+            p for p in Path(command_dir).iterdir()
+            if p.is_file() and p.name.endswith(".json") and not p.name.startswith(".")
+        )
+    except OSError:
+        return []
+    out = []
+    for path in paths:
+        try:
+            command = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(command, dict):
+            continue
+        cid = str(command.get("command_id") or "").strip()
+        ctype = str(command.get("type") or "").strip()
+        body = str(command.get("body") or "").strip()
+        if not cid or not ctype or not body:
+            continue
+        out.append({
+            "command_id": cid,
+            "type": ctype,
+            "source": str(command.get("source") or "core"),
+            "issued_at": str(command.get("issued_at") or ""),
+            "title": str(command.get("title") or "").strip(),
+            "body": body,
+        })
+    return out
 
 
 def load_adopted_specs(repo_dir):

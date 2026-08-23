@@ -31,6 +31,13 @@ QUEUE_FILE = "task-requests.jsonl"
 PENDING = "pending"
 PROCESSED = "processed"
 
+# 常駐コア発の command (設計 D3/D21) の処理済み台帳。ops-state ブランチに置く
+# (書き手は heart だけ)。二重実行の唯一の歯止めなので、キューとは別に持つ:
+# キュー側の記録は「依頼として受けたか」であって「command を処理したか」ではない
+# (未知の種別・停止中に落とした command はキューに載らない)。
+COMMAND_LEDGER_FILE = "commands.jsonl"
+COMMAND_SOURCE_PREFIX = "core-command/"
+
 
 def make_id(source):
     """依頼 id を source (note パス / issue コメント id) から決定論的に導く。
@@ -99,6 +106,31 @@ def mark_processed(records, ids, now=None):
             r = {**r, "status": PROCESSED, "processed_at": now_iso(now)}
         out.append(r)
     return out
+
+
+def command_source(command_id):
+    """command をキューに載せるときの source (= 依頼 id の素)。
+
+    書き置き (ops/feedback/inbox/...) と別の名前空間にするのは、同じ id を持つ
+    別経路のものと衝突させないため。command_id は内容から決定論的に導かれるので、
+    同じ依頼は何度流れてきても同じキュー id になる。
+    """
+    return COMMAND_SOURCE_PREFIX + str(command_id)
+
+
+def ledger_ids(records):
+    """処理済み台帳から command_id の集合を返す (壊れた行は無視)。"""
+    return {r.get("command_id") for r in records if r.get("command_id")}
+
+
+def ledger_entry(command_id, command_type, status, now=None):
+    """台帳 1 行。status は accepted (実行した) / unsupported (種別を知らない)。"""
+    return {
+        "at": now_iso(now),
+        "command_id": str(command_id),
+        "type": str(command_type),
+        "status": status,
+    }
 
 
 def done_ids(adopted_specs):

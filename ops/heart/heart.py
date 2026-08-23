@@ -162,6 +162,38 @@ class Heart:
                             tasks.mark_processed(records, a.get("ids", []), now),
                         )
                         log(f"task requests processed: {a.get('ids')}")
+                elif kind == "ingest_command":
+                    # コア発の command を heart の仕事にする (設計 D3/D21)。
+                    #
+                    # 順序: **キューに載せてから台帳に刻む**。逆順にすると、間で
+                    # 落ちたときに「処理済みなのにキューに無い」= 依頼が消える。
+                    # この順なら再実行しても merge_new が id で落とすので、
+                    # 同じ依頼が 2 件になることはない
+                    if shadow:
+                        log(f"[shadow] ingest command {a.get('command_id')} "
+                            f"({a.get('status')})")
+                    else:
+                        if a.get("status") == "accepted":
+                            body = a.get("body", "")
+                            if a.get("title"):
+                                body = f"{a['title']}\n\n{body}"
+                            records = sf.read_jsonl(tasks.QUEUE_FILE)
+                            merged = tasks.merge_new(
+                                records,
+                                [{"source": tasks.command_source(a["command_id"]),
+                                  "body": body}],
+                                now,
+                            )
+                            if len(merged) != len(records):
+                                sf.rewrite_jsonl(tasks.QUEUE_FILE, merged)
+                        sf.append_jsonl(
+                            tasks.COMMAND_LEDGER_FILE,
+                            tasks.ledger_entry(
+                                a["command_id"], a.get("command_type", ""),
+                                a.get("status", ""), now,
+                            ),
+                        )
+                        log(f"command ingested: {a['command_id']} ({a.get('status')})")
                 elif kind == "spawn_critic":
                     if shadow:
                         log("[shadow] spawn critic")
@@ -357,6 +389,7 @@ class Heart:
             facts.collect_feedback(
                 self.gh, self.repo_dir, cursors, self.cfg.rules,
                 self.cfg.feedback_issue, self.cfg.feedback_branch,
+                self.cfg.feedback_bus_dir,
             )
         )
         if vetoes or acks or approves or stop_all or review_needed or resume_all or task_requests:
@@ -367,6 +400,15 @@ class Heart:
                 f"resume_all={resume_all} review_needed={len(review_needed)} "
                 f"task_requests={len(task_requests)}"
             )
+        # 常駐コア発の command (設計 D3/D21)。処理済み台帳を facts として渡し、
+        # 二重実行の判断は decide (純関数) に置く
+        commands = facts.collect_commands(self.cfg.command_bus_dir)
+        processed_commands = sorted(
+            tasks.ledger_ids(sf.read_jsonl(tasks.COMMAND_LEDGER_FILE))
+        )
+        if commands:
+            log(f"commands on bus: {len(commands)} "
+                f"(processed={len(processed_commands)})")
         curriculum = facts.collect_curriculum(
             self.cfg.data_dir, self.repo_dir, self.gh
         )
@@ -398,6 +440,8 @@ class Heart:
             "curriculum": curriculum,
             "critic": critic,
             "adopted_specs": adopted_specs,
+            "commands": commands,
+            "processed_commands": processed_commands,
         }
         doc, actions = reconcile.decide(doc, f, self.cfg.rules, now)
 

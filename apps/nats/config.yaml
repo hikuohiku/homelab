@@ -57,5 +57,17 @@ data:
             subscribe: { allow: ["events.>", "_INBOX.>"] }
           }
         },
+        {
+          # 常駐コア専用 (core-driver と、その MCP 子プロセス)。
+          # producer の鍵を使い回さないのは、事故のときに「誰が流したか」を
+          # 権限で切り分けられるようにするため。コアが流せるのは判断済みの
+          # command (events.heart.>) だけで、生イベント (events.raw.>) は読むだけ。
+          # これで「コアが人間の書き置きを捏造する」経路が権限で塞がる
+          nkey: UBFGH4FB27KAR2TKBNGORTJQWWH765NYASTVFY5KRSW3HLSGK3GGMZ7T
+          permissions: {
+            publish: { allow: ["events.heart.>", "$JS.API.>", "$JS.ACK.>", "_INBOX.>"] }
+            subscribe: { allow: ["events.raw.>", "_INBOX.>"] }
+          }
+        },
       ]
     }

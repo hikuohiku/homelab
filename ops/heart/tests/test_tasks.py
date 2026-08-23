@@ -131,3 +131,35 @@ class TestDoneIds(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCommandLedger(unittest.TestCase):
+    """コア発 command の処理済み台帳 (設計 D21)。
+
+    二重実行を防ぐ鍵は command_id。キューの id は source から導くので、
+    同じ command からは必ず同じ依頼 id になる。
+    """
+
+    def test_source_is_stable_and_distinct_from_notes(self):
+        src = tasks.command_source("core-abc")
+        self.assertEqual(src, tasks.command_source("core-abc"))
+        self.assertNotEqual(tasks.make_id(src),
+                            tasks.make_id("ops/feedback/inbox/core-abc.json"))
+
+    def test_same_command_never_queues_twice(self):
+        src = tasks.command_source("core-abc")
+        records = tasks.merge_new([], [{"source": src, "body": "本文"}], NOW)
+        again = tasks.merge_new(records, [{"source": src, "body": "本文"}], NOW)
+        self.assertEqual(len(again), 1)
+
+    def test_ledger_ids_ignores_broken_rows(self):
+        rows = [{"command_id": "core-a"}, {}, {"command_id": None},
+                {"command_id": "core-b"}]
+        self.assertEqual(tasks.ledger_ids(rows), {"core-a", "core-b"})
+
+    def test_ledger_entry_records_what_happened(self):
+        e = tasks.ledger_entry("core-a", "task-request", "accepted", NOW)
+        self.assertEqual(e["command_id"], "core-a")
+        self.assertEqual(e["type"], "task-request")
+        self.assertEqual(e["status"], "accepted")
+        self.assertTrue(e["at"].endswith("Z"))

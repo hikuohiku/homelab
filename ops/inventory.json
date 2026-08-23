@@ -531,6 +531,30 @@
       "observability_impact": "壊れるとバス経路からの入力が止まる。GitHub の inbox ポーリングは独立して続くので、書き置きがコアに届かなくなるわけではない"
     },
     {
+      "id": "nats-go-client-heart-bus",
+      "kind": "gomod",
+      "name": "github.com/nats-io/nats.go (heart-bus-sidecar のイベント consume)",
+      "current": "v1.53.1",
+      "file": "apps/autopilot/bus-sidecar/go.mod",
+      "match": "github.com/nats-io/nats.go v",
+      "upstream": "github:nats-io/nats.go",
+      "policy": "manual",
+      "note": "2026-08-23 新設 (設計 D16、移行の段階 3)。telegram-adapter / core-driver と同じ版に揃えること。更新時は go.sum も同じ PR で更新する",
+      "observability_impact": "壊れると heart のバス経路からの書き置き取り込みが止まる。issue #56 と ops-feedback ブランチの走査は独立して続くので、停止指示が届かなくなるわけではない"
+    },
+    {
+      "id": "heart-bus-sidecar-builder-image",
+      "kind": "image",
+      "name": "golang:1.25-alpine (heart-bus-sidecar のビルド段)",
+      "current": "sha256:1ae0735f00daffa3aaf1363a5184c0d2dc55c78e3db4ec70241cdac97bf84b59",
+      "file": "apps/autopilot/bus-sidecar/Dockerfile",
+      "match": "FROM golang@sha256:",
+      "upstream": "dockerhub:library/golang",
+      "policy": "manual",
+      "note": "2026-08-23 新設。telegram-adapter-builder-image と同じ digest に揃える (更新はどちらも registry API の docker-content-digest を読む)。成果物イメージ ghcr.io/hikuohiku/homelab-heart-bus は自前ビルドのため inventory では追跡しない",
+      "observability_impact": "壊れるとイメージをビルドできなくなるが、稼働中の Pod は digest pin のまま動き続ける"
+    },
+    {
       "id": "telegram-adapter-builder-image",
       "kind": "image",
       "name": "golang:1.25-alpine (telegram-adapter のビルド段)",

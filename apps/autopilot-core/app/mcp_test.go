@@ -40,7 +40,7 @@ func resultOf(t *testing.T, r rpcResponse) toolResult {
 	return out
 }
 
-func TestToolsListIsReadOnlyAndArgless(t *testing.T) {
+func TestToolsListKeepsWindowsNarrow(t *testing.T) {
 	s, out := newMCP(t, &config{})
 	if err := s.serve(context.Background(), strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`)); err != nil {
 		t.Fatal(err)
@@ -57,20 +57,23 @@ func TestToolsListIsReadOnlyAndArgless(t *testing.T) {
 	names := map[string]bool{}
 	for _, tool := range parsed.Tools {
 		names[tool.Name] = true
-		// 引数を取らせない。URL やクエリを渡せるようにすると、
-		// 「用途を固定した窓」という性質が崩れる
 		schema, _ := json.Marshal(tool.InputSchema)
-		if strings.Contains(string(schema), "required") {
+		// 観測ツールは引数を取らせない。URL やクエリを渡せるようにすると、
+		// 「用途を固定した窓」という性質が崩れる
+		if tool.Name != "request_task" && strings.Contains(string(schema), "required") {
 			t.Fatalf("%s は引数を取らないべき: %s", tool.Name, schema)
 		}
-		for _, forbidden := range []string{"url", "path", "query", "command"} {
+		// 依頼ツールも「何を頼むか」以外の自由度を持たない。宛先・Job 種別・
+		// モデル・優先度を選べるようにすると heart の判断領域を侵す
+		for _, forbidden := range []string{"url", "path", "query", "command", "model", "priority", "job"} {
 			if strings.Contains(string(schema), forbidden) {
 				t.Fatalf("%s に %s を渡せてはいけない: %s", tool.Name, forbidden, schema)
 			}
 		}
 	}
-	if len(parsed.Tools) != 2 || !names["homelab_status"] || !names["homelab_health"] {
-		t.Fatalf("status と health の 2 つだけ: %+v", parsed.Tools)
+	if len(parsed.Tools) != 3 || !names["homelab_status"] || !names["homelab_health"] ||
+		!names["request_task"] {
+		t.Fatalf("status / health / request_task の 3 つだけ: %+v", parsed.Tools)
 	}
 }
 

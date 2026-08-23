@@ -200,6 +200,56 @@ def decide(doc, facts, rules, now):
                 )
             )
 
+    # --- コア発の command (設計 D3/D7/D21) ---
+    # 常駐コアは git にも K8s にも書かない。実装依頼は bus に publish され、
+    # サイドカーがファイルに落とし、ここで初めて heart の仕事になる。
+    # 取り込みは仕事を作らない (立案・spawn 側が breaker と並列上限を見る) ので、
+    # breaker 中でも受け取る。落とすと遮断中に来た依頼が黙って消える。
+    #
+    # 守るのは 2 つ:
+    #   - command_id の台帳で二重実行しない。同じ依頼で 2 つプロジェクトが立つのは
+    #     取りこぼしより高くつく
+    #   - 停止中 (stop_engaged) は 1 件も実行しない。**台帳にも刻まない**ので、
+    #     人間が再開したビートで拾い直す (止めている間の依頼を捨てない)
+    processed_commands = set(facts.get("processed_commands") or [])
+    for command in facts.get("commands") or []:
+        if stop_all:
+            break
+        cid = str(command.get("command_id") or "").strip()
+        if not cid or cid in processed_commands:
+            continue
+        processed_commands.add(cid)
+        ctype = command.get("type")
+        if ctype == tasks.KIND_TASK_REQUEST:
+            actions.append(
+                _action(
+                    "ingest_command",
+                    command_id=cid,
+                    command_type=ctype,
+                    status="accepted",
+                    title=str(command.get("title") or ""),
+                    body=str(command.get("body") or ""),
+                )
+            )
+        else:
+            # 知らない種別は実行しない。ただし台帳には刻む — 刻まないと同じ
+            # command を毎ビート見て通知が発振する
+            actions.append(
+                _action(
+                    "ingest_command",
+                    command_id=cid,
+                    command_type=str(ctype),
+                    status="unsupported",
+                )
+            )
+            actions.append(
+                _action(
+                    "notify", None, ntype="notify",
+                    text=f"コアから未知の command 種別 {ctype} を受け取りました "
+                         f"(id={cid})。実行していません",
+                )
+            )
+
     for p in doc["projects"]:
         state = p["state"]
         if state in TERMINAL_STATES:
