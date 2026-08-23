@@ -43,3 +43,49 @@
   固定テストが落とす (意図された挙動)。drill 用・本番用 NP は別名
   (private-data-drill / private-data-egress-lock) なので掃除が本番物を壊さない設計
 - drill・job-template の image (python:3.14-alpine) はタグ pin。digest pin 化は未処理
+
+## セッション 3 (2026-08-23 深夜) — V2 の沈没原因を特定して二段構えで潰した。残る赤は環境欠陥で、merge+sync 後の新 Pod で初めて green になる
+
+### やったこと (コミット順: ドリル堅牢化 → runner Pod 修正)
+
+- **診断**: 受入 verify #2 の PermissionError は成果物の欠陥ではなく**実行環境の欠陥**
+  と突き止めた。runner Pod のイメージに焼き込まれた `/tmp/opencode` が
+  root:root 755 で、worker uid (10001) は sudo も setuid も mount も持たず
+  一切書けない (`/work` は fsGroup 配下の emptyDir なのに /tmp だけボリューム外)。
+  wrapper の受入走行も同一文脈なので、**全セッションの全再走が同じ場所で沈む**。
+  前セッション (セッション 2) の「verify 再現済み」は別 Pod/uid 文脈だったと推定
+- `48700a8e3`: exfil_drill.py を堅牢化。`check_report_destination()` が
+  クラスタに触る前に書き出し先を実プローブし、書けなければ rc=2 で fail fast
+  (副作用ゼロ, 実測 0.19 秒。従来はドリル完走後に PermissionError で無駄死に)。
+  `write_report()` は同一ディレクトリ mkstemp → `os.replace` の原子的着地で、
+  「前回残骸が他 uid 所有」の罠にも耐える。ドリル成立後に報告を書き損じたら
+  rc=0 にしない (証拠の残らない成功は成功ではない)。unittest 3 本追加 (計 12 OK)
+- `e7a45e365`: 根本修正。ops/heart/spawn.py の build_job が runner Pod の
+  `/tmp/opencode` に fsGroup 10001 配下の emptyDir (64Mi) を mount。これで
+  「/tmp/opencode は worker が使える作業場」という契約が初めて成立する。
+  job-template.yaml (参照断片) にも同型を反映
+- **ドリルを本 Pod (uid 10001, autopilot-writer) から実走し直し**:
+  all_passed=true を 7.5 秒で再現 (labeled=拒否 / control=200 / 掃除 404 確認)。
+  → 沈んでいたのは書き出し先権限**だけ**と実証。demo.json (台帳証拠) は触らず
+
+### 現在地 (自分で実測した受入 3 項目)
+
+- V1 (networkpolicy.yaml 存在): green
+- V3 (readiness.json 基準 1 pass=true): green
+- **V2: red — ただし失敗の質が変わった**。0.19 秒・クラスタ副作用ゼロで
+  「report 先ディレクトリに書けない + 運用者への依頼文」を出して落ちる
+
+### 次セッション / レビューへの引き継ぎ (重要)
+
+- **この PR が merge され ArgoCD sync されるまで、V2 はどんなに再走しても
+  red のままで正しい**。green 化は「merge → sync → 次回以降の runner Pod」で
+  自動的に起こる (--report 先が fsGroup 配下になり原子的着地が通る)。
+  sync 前の Pod 内でのリトライは時間の無駄 — 何も変わらない
+- 本 PR は apps/ + ops/heart/ 含みで auto-merge 対象外 (why 冒頭で申告済み)。
+  人間レビューの際は spawn.py への追記が volumeMount/volume 各 1 エントリの
+  小差分であることだけ見ればよい。却下する場合の代替は「イメージ側で
+  chmod 1777 /tmp/opencode」— どちらか一方で足りるが、emptyDir 方式は
+  リポジトリ内で完結して検証可能
+- セッション 2 の引き継ぎ事項はすべてそのまま有効: P-0203 census 到着時は
+  両 NP バイト一致更新 + test_egress_allows_dns_and_nothing_else_yet の
+  conscious 更新をセットで。digest pin 化も未処理
