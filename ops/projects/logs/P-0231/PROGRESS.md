@@ -95,3 +95,37 @@ green にならないため、**push を伴わずにその通過を事前実証�
 コードは完成・変更不要。verify(3) は merge → heart 初回ビートで green 化する**ことを
 リハーサルで実証済み**。レビュー指摘があればその解消が最優先。merge 後に red が続くようなら
 上のリハーサルを再実行して heart pod 側を疑うこと。
+
+## worker セッション 3 (2026-08-23) — ops-state 先端が進んだ後の再監査。リハーサル再通過・コード変更なし
+
+### やったこと
+
+レビュー指摘は無し。唯一の failing は verify(3) のまま。ブランチ未 merge を git で実測
+(`7335acb20` は `origin/project/p-0231` のみに含まれ main 未到達)。一方 **origin/ops-state が
+セッション 2 以降進んでいた** (00fafbc3f → 6b0776c32) ので、セッション 2 のリハーサルを
+最新先端に対してやり直した。コード変更は不要 — 変更ゼロがこのセッションの結論。
+
+1. `git worktree add --detach <mktemp> origin/ops-state` (先端 6b0776c32)
+2. 実台帳 × 実時刻 (UTC now, beat と同一条件) で `Heart.publish_reminders()` を実行。
+   state_dir を worktree に差し替え
+3. add -A + commit (**push 無し**) → `git show HEAD:briefing/reminders.txt` 通過 =
+   verify(3) と同じ判定式 OK。git status の差分は `briefing/` のみ
+4. 断片はレンダラ CLI 出力 (`python3 -m ops.life.reminders`) と diff ゼロ一致:
+   「今日 8/24 ゴミ収集 (仮置き): 実際の収集日に直す…」
+
+### 分かったこと・罠
+
+- ops-state 先端の commit メッセージが "heart: beat 20" — **heart pod は生きてビートを
+  回している**。merge 後 green 化の前提 (ビートが流れている) を間接確認できた
+- 先端が進んでも手順への影響なし。publish_reminders は既存状態ファイルに触らない
+- このサンドボックスに `gh` CLI は無い。PR/merge 状態は
+  `git branch -r --contains <sha>` で判定した
+- テスト・validate を再実測: unittest 24 本 OK、validate.py OK (劣化なし)
+
+### 次のセッションへの一言
+
+コード完成・変更不要の結論は不変。verify(3) は merge → heart 初回ビート (~120s) で green。
+merge 後も red が続くときの切り分け順: (a) ops-state 最新 commit メッセージでビートが
+回っているか確認 → (b) セッション 2/3 のリハーサル (worktree + publish_reminders +
+commit, push 無し) を再実行してレンダラ/配線側を切り分け → (c) heart pod 側を疑う
+(sync_main 済み repo_dir が新 main になっているか / pod 再起動が必要か)。
