@@ -1,5 +1,64 @@
 # P-0144 — PROGRESS
 
+## checkpoint (予算上限)
+
+**この節について**: 予算ソフト上限に達した最終セッション (worker #10) が書いた。
+本プロジェクトはここから **stalled** になり、人間に「継続する価値があるか」が問われる。
+再開されたら次の worker はこの節から始めること。セッション記録は下の「セッション記録」以下。
+
+### 受入チェックリストの消化状況
+
+| 項目 | 状態 |
+|------|------|
+| DoD(1) 全デバイス一覧の取得と devices.json 保存 | **未完** — 器だけ完成。サンドボックスに credential が無く実測不能を実測 (worker #1〜#10 の 10 セッション全部で TAILSCALE_* env 0 件・MCP 未接続)。verify#1 rc=1 |
+| DoD(2) key_expiry の表 + 印 + ソート | **未完** — render_table() 相当は fetch_devices.py に実装済み・unit test 12 green だが、入力データ待ち。verify#3 rc=2 |
+| DoD(3) docs/tailscale-recovery.md | **完了 = verify#2 GREEN (rc=0、本セッション再実測)**。再認証手順 3 ケース / OAuth 失効の影響 (ESO が Synced のままの盲点含む) / briefing へのリードタイム提案まで書けている。ただし冒頭に「実デバイス期限は未実測」と明記済み |
+| DoD(4) 読み取り専用・可逆 | **達成** — 変更操作なし。実データの捏造混入なし (`git status` clean 継続、リハーサル用サンプルは repo 外のみ) |
+
+### 止まっている場所と次の一手
+
+**止まっている場所**: 実測データ (devices.json) が無いこと以外は全部終わっている。
+実測は worker サンドボックスから不可能なため、issue #56 コメント
+[5384140771](https://github.com/hikuohiku/homelab/issues/56#issuecomment-5384140771)
+(2026-08-23T04:09:12Z 投稿) に「fetch_devices.py の実行 or curl フォールバック」を外注中。
+9 セッション返信なし。人間の GitHub 活動は実測されている (PR #519 を 05:09Z に merge) ので、
+滞留の原因は可視性ではなく外注タスクの作業単位コスト (worker #9 分析)。
+
+**再開されたときの最初の一手 (順番どおり)**:
+
+1. issue #56 のコメントを全ページ走査 (`/repos/hikuohiku/homelab/issues/56/comments?per_page=100`
+   の page=1..N、空バッチで break)。返信判定材料: 投稿者 hikuohiku + 04:09:12Z 以降 +
+   本文にパイプ表または `keyExpiryDisabled` / `expires`。**依頼コメント以降の全件を見ること**
+   (P-0143 など他プロジェクトの自己投稿が FIFO で積まれているため最終コメント比較では誤判定する)
+2. 返信があったら: **最初に `mktemp -d`** で保存先を作り (→ `/tmp/opencode` 直書きは失敗する罠)、
+   コメント本文を保存して
+   `python3 ops/projects/logs/P-0144/fetch_devices.py --from-md <file> -o ops/projects/logs/P-0144/devices.json`
+   (JSON 貼り付けなら `--from-json`、人間が実行時刻を書いていたら `--fetched-at` も)。
+   復元モードは通信しない (unit test 済み)
+3. verify#1/#3 を自分で実行して green 化。その後 DoD(2) 残務: devices.md の印
+   (node01?/cluster-proxy/autopilot) を目視確認し、**node01 名義デバイスの有無で
+   docs/tailscale-recovery.md ケース3 の記述を確定させる**
+4. 返っていなかったら: 依頼コメントの残置確認 (`created_at == updated_at` 判定) +
+   unit test 再実行 + PROGRESS 記録のみ。**捏造・先走りの green 化はしない**
+   (10 セッション一貫の方針)。継続判断は人間へ
+
+### 残った不確実性
+
+- **tailnet 全デバイスの鍵期限は今日も未実測**。このプロジェクトの核心データであり、
+  台本の数値はすべて公式ドキュメント参照 (出典日付き) であって自環境の実測ではない
+- node01 名義の tailscale デバイスが実在するか不明。repo 上は tailscaled 無しという前提訂正は
+  済んでいる (worker #1) が、実 tailnet 上の名義は devices.json が来るまで分からない
+- operator 用 OAuth client は原理的に失効しない (revoke まで有効) ため日数カウントできず、
+  「inventory 帳簿化 + 年 1 回ローテ判断」の提案止まり。帳簿化自体はまだ誰もやっていない
+- 外注依頼がいつまでも消化されない場合の代替経路 (runner secret へ read-only client 配線など) は
+  credential 判断なので CHARTER 上の人間領域。autopilot 側は待つしかない状態が構造的に続く
+
+### 最終セッション (worker #10) がやったこと
+
+- 未コミット変更の処理: **working tree clean につき commit も破棄も不要だった** (実測)
+- verify 3 項目 + unit test 12 件を再実測 (#1 rc=1 / #2 rc=0 / #3 rc=2 / tests OK) — 変化なし
+- 本 checkpoint 節の新設と commit
+
 ## セッション記録
 
 ### worker #9 (2026-08-23) — 返信なしの 9 セッション目。ただし **main が初めて動いた**: 人間が PR #519 (P-0145) を依頼投稿後の 05:09Z に merge = 「人は GitHub に来ているのに外注には未応答」を実測。可視性ではなく作業単位のコストが差になると裏取り済み
