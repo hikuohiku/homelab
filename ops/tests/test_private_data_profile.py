@@ -12,8 +12,11 @@
 リポジトリルートから `python3 -m unittest ops.tests.test_private_data_profile`。
 """
 
+import importlib.util
 import json
+import os
 import pathlib
+import tempfile
 import unittest
 
 import yaml
@@ -37,6 +40,16 @@ class FakeCfg:
 
 def load_np():
     return yaml.safe_load(PROFILE_NP.read_text(encoding="utf-8"))
+
+
+def load_drill():
+    """exfil_drill.py をモジュールとして読む (ディレクトリ名にハイフンが
+    あるので通常 import できず、ファイル位置で読む)。"""
+    path = REPO / "ops/profiles/private-data/exfil_drill.py"
+    spec = importlib.util.spec_from_file_location("exfil_drill", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 class TestDriftGuard(unittest.TestCase):
@@ -109,6 +122,46 @@ class TestSpawnWiring(unittest.TestCase):
                 job_labels, tpl_labels = self._labels(caps)
                 self.assertNotIn("private-data", job_labels)
                 self.assertNotIn("private-data", tpl_labels)
+
+
+class TestReportWriting(unittest.TestCase):
+    """--report 書き出しの堅牢さを固定 (P-0243 セッション 3 の実測より)。
+
+    固定パス /tmp 配下で「ディレクトリが root 所有」「残骸が他 uid 所有」という
+    環境差に報告だけ沈む事故の再発防止。事前プローブで fail fast、最終書き込みは
+    原子的着地、という 2 段構えを機械に覚えさせる。
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.drill = load_drill()
+
+    def test_replaces_stale_readonly_file_atomically(self):
+        with tempfile.TemporaryDirectory() as d:
+            target = pathlib.Path(d) / "report.json"
+            target.write_text("stale", encoding="utf-8")
+            os.chmod(target, 0o444)  # 前回残骸が読み取り専用でも
+            self.drill.write_report(str(target), {"ok": True})
+            doc = json.loads(target.read_text(encoding="utf-8"))
+            self.assertEqual(doc, {"ok": True})
+
+    def test_preflight_rejects_unwritable_dir_before_cluster_work(self):
+        with tempfile.TemporaryDirectory() as d:
+            locked = pathlib.Path(d) / "locked"
+            locked.mkdir()
+            os.chmod(locked, 0o555)
+            try:
+                with self.assertRaises(self.drill.ReportDestinationError):
+                    self.drill.check_report_destination(str(locked / "r.json"))
+            finally:
+                os.chmod(locked, 0o755)  # TemporaryDirectory の掃除のため戻す
+
+    def test_preflight_passes_without_leaving_residue(self):
+        with tempfile.TemporaryDirectory() as d:
+            target = pathlib.Path(d) / "r.json"
+            self.drill.check_report_destination(str(target))
+            self.assertFalse(target.exists())
+            self.assertEqual(list(pathlib.Path(d).iterdir()), [])
 
 
 class TestLedgerEvidence(unittest.TestCase):

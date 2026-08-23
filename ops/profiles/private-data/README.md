@@ -58,6 +58,14 @@ in-cluster の writer 権限で走らせると:
 終了コード 0 = 全判定 true。結果 JSON の判定キーは
 `labeled_blocked / unlabeled_allowed / dns_ok_labeled / dns_ok_control / cleaned_up`。
 
+`--report` 先は**実際に書ける場所**であること。スクリプトはクラスタに触る前に
+書き込み可否を実プローブし、書けなければドリルを走らせず終了コード 2 で落ちる
+(P-0243 実測: runner イメージに焼き込まれた `/tmp/opencode` は root 所有で
+worker uid から不変だった。heart 側 `spawn.py` が runner Pod のこのパスに
+fsGroup 配下の emptyDir を mount して回避)。固定パスへの直書きは「前セッション
+残骸を掴む」罠もあるため、最終書き込みは同一ディレクトリの一時ファイル +
+`os.replace` の原子的着地にしている。
+
 ## 由来と決着
 
 - 台帳基準 1 (`ops/stage3/readiness.json`) の元閾値は P-0161 の成果物を想定して

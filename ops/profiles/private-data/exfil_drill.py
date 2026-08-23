@@ -16,16 +16,25 @@ stdlib のみ (kubectl バイナリ不要 — ops/heart/k8s.py と同型の薄�
 
   python3 ops/profiles/private-data/exfil_drill.py --report /tmp/opencode/exfil-drill.json
 
-終了コード: 全判定 true で 0。結果 JSON のトップレベルキー:
+--report 先は**実際に書ける場所**であること。クラスタに触る前に書き込み可否を
+実プローブし、書けなければドリルを走らせず終了する (P-0243 実測: runner イメージ
+に焼き込まれた /tmp/opencode は root 所有で runner uid から不変。heart 側は
+runner Pod に fsGroup 配下の emptyDir を mount して回避 — spawn.py 参照)。
+
+終了コード: 全判定 true で 0。判定が一つでも false なら 1。--report 先が
+書けない場合は 2 (事前検査、またはドリル成立後の報告書き込み失敗 — 証拠が
+残らないのでドリル成功でも 0 にはしない)。結果 JSON のトップレベルキー:
   labeled_blocked / unlabeled_allowed / dns_ok_labeled / dns_ok_control /
   cleaned_up / all_passed
 """
 
 import argparse
 import json
+import os
 import signal
 import ssl
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -66,6 +75,52 @@ PROBE = (
     '        out["error"] = f"https: {type(e).__name__}: {e}"\n'
     "print(json.dumps(out))\n"
 )
+
+
+class ReportDestinationError(Exception):
+    """--report の書き出し先が実際には書けない (クラスタに触る前に検出する)。"""
+
+
+def check_report_destination(path):
+    """報告 JSON の書き出し先を、クラスタに触る前に実プローブで確認する。
+
+    固定パス /tmp 配下は「イメージ焼き込みの root 所有ディレクトリ」という
+    環境差で沈む (P-0243 実測: /tmp/opencode が root:root 755 で runner uid
+    10001 から不変)。ドリル自体は成功しても報告だけ書けないのが一番惜しい
+    失敗なので、副作用を起こす前に倒す。プローブの一時ファイルは痕跡を残さない。
+    """
+    parent = os.path.dirname(os.path.abspath(path)) or "."
+    try:
+        fd, probe = tempfile.mkstemp(prefix=".exfil-drill-probe-", dir=parent)
+    except OSError as e:
+        raise ReportDestinationError(
+            f"report 先のディレクトリ '{parent}' に書けない: {e}。"
+            "書き込み可能な場所を指定するか、運用者にディレクトリ権限の修正を依頼すること"
+        ) from e
+    os.close(fd)
+    os.unlink(probe)
+
+
+def write_report(path, report):
+    """結果 JSON を同一ディレクトリの一時ファイル経由で原子的に着地させる。
+
+    直 open だと「前回残骸が他 uid 所有で読み取り専用」という罠に当たることが
+    ある (固定パス /tmp の実測済みの教訓) が、os.replace ならディレクトリに
+    書ける以上、既存ファイルの所有者に関わらず着地できる。
+    """
+    text = json.dumps(report, ensure_ascii=False, indent=2) + "\n"
+    parent = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(prefix=".exfil-drill-", suffix=".json.tmp", dir=parent)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 class K8sError(Exception):
@@ -258,6 +313,16 @@ def main():
     ap.add_argument("--report", help="結果 JSON の書き出し先")
     args = ap.parse_args()
 
+    # クラスタに触る前に、報告の行き先が実在するか確認する (fail fast)。
+    # ここで落ちるときはドリル自体を走らせない — 結果を保存できないドリルは
+    # 証拠にならない
+    if args.report:
+        try:
+            check_report_destination(args.report)
+        except ReportDestinationError as e:
+            print(f"exfil_drill: {e}", file=sys.stderr)
+            sys.exit(2)
+
     report = {
         "drill": "private-data exfiltration drill (P-0243)",
         "target": TARGET_URL,
@@ -328,14 +393,21 @@ def main():
             "labeled_blocked", "unlabeled_allowed", "dns_ok_labeled",
             "dns_ok_control", "cleaned_up",
         ))
+        write_failed = False
         if args.report:
-            with open(args.report, "w", encoding="utf-8") as f:
-                json.dump(report, f, ensure_ascii=False, indent=2)
-                f.write("\n")
+            try:
+                write_report(args.report, report)
+            except OSError as e:
+                # 判定と報告の永続化は別事故。stdout の要約は既に出るので、
+                # ここでは「証拠が残らなかった」ことを rc=2 で主張する
+                report["report_error"] = f"{type(e).__name__}: {e}"
+                print(f"exfil_drill: 報告 JSON を {args.report} に書けなかった: "
+                      f"{type(e).__name__}: {e}", file=sys.stderr)
+                write_failed = True
         print(json.dumps({k: report[k] for k in (
             "labeled_blocked", "unlabeled_allowed", "dns_ok_labeled",
             "dns_ok_control", "cleaned_up", "all_passed")}, ensure_ascii=False))
-        rc = 0 if report["all_passed"] else 1
+        rc = 2 if write_failed else (0 if report["all_passed"] else 1)
     sys.exit(rc)
 
 
