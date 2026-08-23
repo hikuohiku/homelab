@@ -204,3 +204,56 @@ verify を自力で再実測: #1 green (34 tests) / #3 green / #2 red 継続 (20
 `git show origin/ops-health-report:ops/health/latest.json` で backup_freshness が
 >=5 要素載ったことを確認 (旧 #2 の本体)、
 (ii) 同じ内容を取得時刻付きで initial-freshness.md に書く (DoD(5))。
+
+## 2026-08-23 session 5 (worker)
+
+### 結論 — デッドロックは未解消、spec 差し替え待ちに変化なし
+
+実装の追加作業は無し。このセッションの実質は **session 4 の解消候補 (a) の差し替え
+verify コマンドを実測で確定させたこと** (下記「発見」)。誰かが archive.jsonl を追記する
+際、コマンドをそのままコピーできる。
+
+### 再実測 (2026-08-23T06:47Z)
+
+- verify #1 green (34 tests OK) / #2 red 継続 (health ブランチ latest.json の
+  `backup_freshness` は依然 None) / #3 green。wrapper 実測と一致
+- `project/p-0157` 由来の PR: 全状態で 0 件 (GitHub API 実測)
+- origin/main 側の動き: curriculum PR #522/#523 (06:11Z/06:39Z merge) が archive.jsonl に
+  P-0160〜P-0174 を追記したが、**P-0157 同 id の追記行は無い** (main 上の 'P-0157' 言及は
+  3 行 = 元 spec 行 + P-0168 / P-0172 の本文言及のみを実測)
+- 注意: 新採択の P-0172 (backup CronJob の health 切り離し) や P-0168 (restic append-only 鍵)
+  は隣接トピックだが本件の verify 構造には触れない。これらが進んでも本デッドロックは解消しない
+
+### 発見 — 差し替え用 verify コマンドを実測確定 (curriculum / heart への受け渡し用)
+
+- 確定コマンド: `grep -q '"backup_freshness": collect(collect_backup_freshness)' apps/ops-health-reporter/report.py`
+  - 本ブランチ checkout 上: rc=0 (report.py L581 の配線行に一致)
+  - origin/main の report.py に対して: rc=1 → **判定力あり** (initializer 流の failing 実測に整合)
+- 追記手順は ops/projects/README.md L7-9 (追記のみ・runner は同 id の最終行を読む)。
+  ペイロード契約は `test_every_entry_satisfies_verify_contract`
+  (ops/tests/test_backup_freshness.py L216) が担保しており #1 の 34 テストに含まれる。
+  旧 #2 と DoD(5) は merge 後フォローアップへ降格 (session 4 記載のまま)
+- 差し替え時の注意 1 点: 新 #2 は**採択時点から green** になる (実装が既にブランチにあるため)。
+  initializer 流「3 項目とも failing 実測」と異なるが問題ではない — runner の gate は
+  全 green のみを見る (`runner.py` L861-864) し、即座に ensure_pr → review へ復帰するのが
+  差し替えの目的そのもの。順序注意 (session 4 (b)) も維持: spec 差し替えを merge より先に
+
+### verify 現状 (session 5 自力再実測)
+
+- [x] #1 `python3 -m unittest ops.tests.test_backup_freshness` — rc=0 (34 tests)
+- [ ] #2 health ブランチ latest.json — red 継続。構造的デッドロックのため worker に
+      解決手段は無い (session 4 の発見節参照。変化がないのは怠けではなく構造のせい)
+- [x] #3 `grep -qE 'backup_fresh' ops/rules.json` — rc=0
+- `ops/validate.py` は archive.jsonl の「origin/main との先頭一致」error 1 件を出すが、
+  これは**本ブランチが main の curriculum 追記 (#522/#523) に遅れているだけ**の副作用
+  (session 4 実測時点は main 同期中につき 0 error)。帳簿は触らないので放置が正。
+  差し替え追記が入る際の rebase/merge (runner の領分) で自然解消する
+
+### 次のセッションへの一言
+
+**まず現状確認だけして、基本何もせず短く終える。**
+(1) `git show origin/main:ops/projects/archive.jsonl | grep -c '"id": "P-0157"'` —
+1 より大きければ差し替え済み。(2) verify 3 項目を自力実測。#2 が旧定義のまま red なら
+実装も commit も無用 (PROGRESS 追記のみ)。差し替え済みで全 green なら、実装は完了済みなので
+何も足さず wrapper に流す (PR 作成・push は wrapper の職責。手動 PR は作らない — session 4 の
+実測と理由を参照)。merge 後フォローアップは session 4 末尾 (i)(ii) のまま。
