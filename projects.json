@@ -2984,7 +2984,42 @@
         "soft_cap": 1200000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 2
+      "adopt_gate_attempts": 2,
+      "adopt_gate": {
+        "at": "2026-08-23T02:51:27Z",
+        "verify": [
+          {
+            "cmd": "grep -q 'probe_status' ops/runner/runner.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_unknown_death_probe",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_unknown_death_probe (unittest.loader._FailedTest.test_unknown_death_probe)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_unknown_death_probe\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_unknown_death_probe'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "python3 -c \"import json,sys; r=json.load(open('ops/rules.json')); sys.exit(0 if r.get('runner',{}).get('unknown_error_max_rounds') else 1)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0142",
@@ -3005,7 +3040,42 @@
         "soft_cap": 800000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 2
+      "adopt_gate_attempts": 2,
+      "adopt_gate": {
+        "at": "2026-08-23T02:51:27Z",
+        "verify": [
+          {
+            "cmd": "test -f docs/pbs-retirement.md && grep -qE '112|PBS' docs/pbs-retirement.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -c \"import json; d=json.load(open('ops/projects/logs/P-0142/pbs-inventory.json')); assert d.get('jobs') is not None and d.get('verdict') in ('retire','keep','partial')\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json; d=json.load(open('ops/projects/logs/P-0142/pbs-inventory.json')); assert d.get('jobs') is not None and d.get('verdict') in ('retire','keep','partial')\n                             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'ops/projects/logs/P-0142/pbs-inventory.json'\n"
+          },
+          {
+            "cmd": "grep -qE 'qm shutdown|切り戻し|rollback' docs/pbs-retirement.md",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: docs/pbs-retirement.md: No such file or directory\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0143",
@@ -3026,7 +3096,42 @@
         "soft_cap": 800000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 2
+      "adopt_gate_attempts": 2,
+      "adopt_gate": {
+        "at": "2026-08-23T02:51:27Z",
+        "verify": [
+          {
+            "cmd": "bash -n ops/tools/coder_idle_audit.sh",
+            "ok": false,
+            "rc": 127,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "bash: ops/tools/coder_idle_audit.sh: No such file or directory\n"
+          },
+          {
+            "cmd": "python3 -c \"import json; d=json.load(open('ops/projects/logs/P-0143/idle-audit.json')); assert d.get('workspaces') and all(('cpu_usage' in w and 'classification' in w) for w in d['workspaces']) and 'reclaimable' in d\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json; d=json.load(open('ops/projects/logs/P-0143/idle-audit.json')); assert d.get('workspaces') and all(('cpu_usage' in w and 'classification' in w) for w in d['workspaces']) and 'reclaimable' in d\n                             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'ops/projects/logs/P-0143/idle-audit.json'\n"
+          },
+          {
+            "cmd": "test -f docs/coder-idle-policy.md && grep -qE 'autostop|idle' docs/coder-idle-policy.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0144",
@@ -3047,7 +3152,42 @@
         "soft_cap": 600000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 2
+      "adopt_gate_attempts": 2,
+      "adopt_gate": {
+        "at": "2026-08-23T02:51:27Z",
+        "verify": [
+          {
+            "cmd": "python3 -c \"import json; d=json.load(open('ops/projects/logs/P-0144/devices.json')); assert len(d.get('devices',[]))>=1 and all('name' in x for x in d['devices'])\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json; d=json.load(open('ops/projects/logs/P-0144/devices.json')); assert len(d.get('devices',[]))>=1 and all('name' in x for x in d['devices'])\n                             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'ops/projects/logs/P-0144/devices.json'\n"
+          },
+          {
+            "cmd": "test -f docs/tailscale-recovery.md && grep -qE '再認証|reauth|tailscale up' docs/tailscale-recovery.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -qE 'key_expiry|expiry' ops/projects/logs/P-0144/devices.json",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: ops/projects/logs/P-0144/devices.json: No such file or directory\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0145",
@@ -3068,7 +3208,42 @@
         "soft_cap": 1000000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 2
+      "adopt_gate_attempts": 2,
+      "adopt_gate": {
+        "at": "2026-08-23T02:51:27Z",
+        "verify": [
+          {
+            "cmd": "test -s ops/projects/logs/P-0145/release_notes_vaultwarden.md && test -s ops/projects/logs/P-0145/release_notes_coder.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -c \"import json; d=json.load(open('ops/inventory.json')); t={x['id']:x for x in d['targets']}; assert t['vaultwarden'].get('last_swept_at') and t['coder'].get('last_swept_at')\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json; d=json.load(open('ops/inventory.json')); t={x['id']:x for x in d['targets']}; assert t['vaultwarden'].get('last_swept_at') and t['coder'].get('last_swept_at')\n                                                                                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n"
+          },
+          {
+            "cmd": "test -s ops/projects/logs/P-0145/sweep.md && grep -qE 'vaultwarden|coder' ops/projects/logs/P-0145/sweep.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0147",
@@ -3091,7 +3266,42 @@
         "soft_cap": 2000000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 2
+      "adopt_gate_attempts": 2,
+      "adopt_gate": {
+        "at": "2026-08-23T02:51:27Z",
+        "verify": [
+          {
+            "cmd": "kubectl kustomize apps/oauth2-proxy >/dev/null && grep -q 'oauth2-proxy/application.yaml' apps/kustomization.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "error: must build at directory: not a valid directory: evalsymlink failure on 'apps/oauth2-proxy' : lstat /tmp/adoptgate-bhe2qcj2/repo/apps/oauth2-proxy: no such file or directory\n"
+          },
+          {
+            "cmd": "grep -rq 'oauth2-proxy' apps/dex/values.yaml && grep -q 'oauth2-proxy' apps/syncthing/ingress.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "test -s ops/projects/logs/P-0147/before-auth.md && test -s ops/projects/logs/P-0147/after-auth.md && grep -qE '302|200' ops/projects/logs/P-0147/after-auth.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
