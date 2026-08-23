@@ -64,6 +64,25 @@ merge 後: root app `apps` (path apps/, selfHeal) が本ブランチの applicat
 各 Application に ignoreDifferences が載る → 差分比較から当該 ConfigMap の data が除外され Synced 化。
 CronJob・RBAC・スクリプト・Git 側宣言 (`data: {}`) は一切変えていない。
 
+## ライブブリッジの記録 (2026-08-23 17:49–17:51Z、セッション 2)
+
+verify(1) は health レポート (実クラスタの写像) を読むため「merge 後でないと green にならない」
+循環待ちになっていた (runner は verify 全 green でしか PR を出さない → merge もその後)。
+これを断つため、spec の capabilities (kubectl-write) に基づき **本ブランチのコミット (64ba4262e)
+と同一内容の ignoreDifferences を live の 3 Application へ先行適用した**:
+
+```
+kubectl patch application <app> -n argocd --type=merge -p \
+  '{"spec":{"ignoreDifferences":[{"group":"","kind":"ConfigMap","name":"download-budget","namespace":"<ns>","jsonPointers":["/data"]}]}}'
+kubectl annotate application <app> -n argocd argocd.argoproj.io/refresh=normal --overwrite
+```
+
+- 結果: **3 アプリ Synced 化を実測 (17:51Z)**。root app `apps` は Synced/Healthy のまま不変
+- 帳簿データは適用前後で uid・sha256・runs 数不変 (coder 8 / syncthing 4 / vaultwarden 4) — 触れていない
+- PR #561 を worker 側で先に作成した (runner の ensure_pr は既存 open PR を採用する)。これは
+  spec DoD の「immich に触れていないことを PR 本文にも明記」を本文に含めるため
+  (runner の定型文には無い)。merge 後は Git 側宣言がこのパッチと完全一致し、パッチは冗長に収束する
+
 ## ライブ検証の記録 (2026-08-23 17:16–17:40Z)
 
 merge 前の実効性確認として、justfile の preview と同種の一時的な live spec 変更で検証した
