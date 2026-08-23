@@ -11,10 +11,7 @@ metadata:
   labels:
     app: autopilot-core
 spec:
-  # 一時的に 0。2026-08-23、prompt_async の 204 を失敗と誤認して同じ書き置きを
-  # 30 秒ごとに再送し続ける不具合が出たため、配信を止めている。
-  # 修正版のイメージを digest pin する PR で 1 に戻すこと
-  replicas: 0
+  replicas: 1
   # セッション storage を単一 PVC に持つので、rolling 中の二重起動を避ける
   strategy:
     type: Recreate
@@ -43,10 +40,11 @@ spec:
         # このバイナリが無いため、core イメージから運ぶ
         #
         # 以下 3 箇所 (init 2 つと driver) の core イメージ digest は必ず同じ値にする。
-        # 39d2fa51173ac3ce112ac02e302c4037a07c626c (PR #535 の merge commit) の
+        # ops/check_version_sync.py の "autopilot-core image digest" が一致を検査する。
+        # 469606ce1be6efc9ae882a08468c8c2358afbe67 (PR #538 = 204 再送ループの修正) の
         # OCI index digest を registry API の docker-content-digest で実測したもの
         - name: install-mcp-bin
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:b40ea393a3e6d4214eb75ad890e643187bbc550fbc42f2f7b400a0d2b3bb4308
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:5192f68e768da77fe7a52a27e83290d0a73ee96bf9cef4f16064c0db4cd0ad54
           command: ["sh", "-c", "cp /usr/local/bin/telegram-adapter /mcp/telegram-adapter"]
           volumeMounts:
             - name: mcp-bin
@@ -57,7 +55,7 @@ spec:
               drop: ["ALL"]
         # ConfigMap は read-only mount なので、opencode が書ける場所へ配置し直す
         - name: bootstrap-workdir
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:b40ea393a3e6d4214eb75ad890e643187bbc550fbc42f2f7b400a0d2b3bb4308
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:5192f68e768da77fe7a52a27e83290d0a73ee96bf9cef4f16064c0db4cd0ad54
           command: ["sh", "-c", "cp /config/opencode.json /config/AGENTS.md /work/"]
           volumeMounts:
             - name: config
@@ -124,7 +122,7 @@ spec:
 
         # --- イベントを渡す係 ---
         - name: driver
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:b40ea393a3e6d4214eb75ad890e643187bbc550fbc42f2f7b400a0d2b3bb4308
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:5192f68e768da77fe7a52a27e83290d0a73ee96bf9cef4f16064c0db4cd0ad54
           terminationMessagePolicy: FallbackToLogsOnError
           env:
             - name: AUTOPILOT_GITHUB_TOKEN
