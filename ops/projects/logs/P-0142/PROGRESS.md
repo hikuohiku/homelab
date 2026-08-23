@@ -507,3 +507,49 @@ verify 再実測 + 上記確認 + 最小ログ追記で終えてよい。
 本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
 リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
 docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
+
+### 2026-08-23 セッション16 — セッション15 手順どおりの兆候確認 (main 零新着・動いたブランチ 4 本すべて無関係。p-0115/p-0143 が初めて動いたが自ログのみ)
+
+**やったこと**: spec DoD の追加実装は無し。セッション5〜15 と同じく verify 再実測 +
+外部シグナル確認だけをした。動いたブランチは ops-state / p-0115 / p-0116 / p-0143 の
+4 本 (**p-0115 と p-0143 は長期間不動だったのが今回動いた**) で、各々前回 tip 以降の
+差分を実測しすべて条件 A/B 無関係と確認した (下記 3〜4)。
+
+1. **verify 再実測**: #1 rc=1 / #2 rc=0 / #3 rc=2。セッション3 以降ずっと同一
+   (#1/#3 は verdict=keep ゆえ意図通り failing、#2 green)
+2. **観測環境の再実測** (16 回目の独立実測、結果同じ): `env` の proxmox/pve/tailscale 系無し
+   (rc=1) / `tailscale` `pvesh` `qm` `gh` CLI すべて absent (rc=1)
+3. **origin/main の新着確認**: `git fetch --prune` 後、`8c5cbd7d..origin/main` の commit は
+   **ゼロ**。動いたブランチ 4 本を各々実測 (判定はすべて diff 本文側で grep -c):
+   - `ops-state` (c8d94ebe..4192c226): heartbeat.json / metrics.jsonl のみ。
+     docs/terraform/P-0142 paths **0**、diff 本文の PBS/qm shutdown 言及 **0 件** → 無関係
+   - `project/p-0115` (b417c14d..c8ed3830): 自ログ PROGRESS.md +46 行のみ
+     (session #190 記録。log メッセージに「#56」があるが本文側判定で PBS/qm shutdown 言及
+     **0 件**)。docs/terraform/P-0142 paths **0** → 無関係
+   - `project/p-0116` (5d5f2556..9ddf8460): 自ログ PROGRESS.md +68 行のみ。両判定 **0**
+     → 無関係
+   - `project/p-0143` (50f67ae7..7e22fdf1): ops/tools/coder_idle_audit.sh 新規 + 自ログのみ。
+     両判定 **0** → 無関係。
+     なお p-0139 (1a193e89) / p-0144 (1bc86ae7) / ops-health-report (1fc66b50) は不動を実測
+4. **issue #56 を GitHub REST API で実測**: page ごとに個別 json.loads で集計した結果
+   **合計 177 件 = セッション15 基準から増減ゼロ**。最終コメントは
+   2026-08-23T01:23:30Z / id 5383567514 のままで、条件 A/B の実施報告は未着
+
+→ verdict は `keep` のまま、inventory への反映対象なし。docs/pbs-retirement.md は書かない。
+
+**次のセッションへの一言**: やり方はセッション5〜16 と同一。main 比較基準は引き続き
+`8c5cbd7d..origin/main` (今回は零新着)。動いたブランチは「docs/・terraform/・P-0142 logs への
+diff 本文パス」と「PBS/`qm shutdown 112` 言及」の 2 点を diff 本文側で grep -c すればよく、
+中身の精読は不要。p-0115 の log メッセージには「#56」「B2」等が出るが番号/単語誤マッチの
+典型なので必ず diff 本文側 (`git diff <old>..<new> | grep '^+' | grep -ciE 'PBS|qm shutdown'`)
+で判定すること。**罠** (実測済み、繰り返さないこと): (a) log メッセージ内の「112」「P-0142」
+「#56」は誤マッチするので本文側判定。(b) `grep | head` の rc は当てにならない。(c) issue #56
+のコメント確認は webfetch 不可 — REST API を使い page ごとに個別 `json.loads` する (連結
+パースは壊れる。id も数えると改変検出に強い)。(d) `/tmp/opencode` は書き込み不可 — 一時
+ファイルは必ず `mktemp -d` で作ったディレクトリに置くこと (今回の基準: issue #56 177 件 /
+最終 2026-08-23T01:23:30Z / 最終 id 5383567514)。
+verify 再実測 + 上記確認 + 最小ログ追記で終えてよい。
+本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
+リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
+docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
+
