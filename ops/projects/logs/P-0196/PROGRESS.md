@@ -219,3 +219,52 @@ verbs:* 済み。chart は default project を作らないため、無いと rec
 4. verify 第 1 項 (--plan) は本セッション終了時点でも green。第 2 項 (verdict.json) は
    サンプリング完了まで failing のままで正常。
 5. status サブコマンドが lab ns の有無も表示するようになった (CSV 無しでも診断に使える)。
+
+## セッション 4 — 2026-08-23: up 実機実行で「未適用」を実測 (人間の一手は未だ)。部分適用時の残留穴を塞ぐ
+
+### やったこと
+
+1. 引き継ぎどおり **RBAC 適用の有無は自分で判定せず `up` をそのまま実行**した。
+   結果: admission probe が未適用を正しく検出 → 自分で作った空 ns を自力掃除 → rc=1 で中断
+   (セッション 3 で実装した経路の実機再確認)。残置ゼロを実測:
+   `kubectl get ns argocd-lab-916 argocd-lab-1040` 両方 NotFound、lab-state.json 未存在、
+   working tree には何も残らない。**つまり人間の一手はまだ来ていない**。
+2. 中断経路のコードを読み直したところ構造的な穴を 1 件発見し修正した:
+   probe 失敗時の掃除が「**失敗した系統だけ**」対象だったため、旧系統 (916) が probe を通って
+   ExternalSecret 適用まで進んだ**後**に新系統 (1040) だけ失敗する「部分適用」(人間が提案 YAML
+   を半分だけ適用した場合など) で argocd-lab-916 + ES が残留する。run 中に自分が作った
+   namespace を全て追跡し、待ち人間中断時にまとめて削除するよう変更
+   (`abort_waiting_human()` — 既存 ns を勝手に消さない境界は create 成功時のみ追跡することで維持)。
+3. オフラインシミュレーション (kubectl / run / probe_rbac / preflight を fake に差し替え) で
+   2 ケース実測: **部分適用ケース** = 両系統とも delete 呼び出し・新系統への apply 無し・
+   lab-state.json 未書込 / **全未適用ケース** = 従来どおり単純掃除で rc=1。
+   `--plan` は修正後も rc=0 (verify 第 1 項 green 継続)。
+
+### 分かったこと
+
+- 「残置ゼロ」は成功時だけでなく**中断時**にも担保が必要。方法としては「今の run が作った
+  オブジェクト」を作成時に記録し、中断パスで一括削除するのが確実。失敗した箇所だけ消す
+  書き方は、処理が先に進んだ系統を見落とす (今回の穴はまさにそれ)。
+- 本プロジェクトのコード側にやれることは尽きた。verify 第 2 項は人間の一手待ちで
+  blocked であり、これは失敗ではなく正常な待機状態。
+
+### 発見 (スコープ外 — curriculum の拾い上げ候補)
+
+- `/tmp/opencode` が root 所有 (drwxr-xr-x root:root) で worker から書けない
+  (mktemp が Permission denied)。worker プロンプトの指示と実環境が乖離している。
+  本プロジェクト内では通常の `mktemp -d` (/tmp 直下) で代替した。
+
+### 次セッションへの引き継ぎ
+
+1. 冒頭で `python3 ops/projects/scripts/argocd_oom_lab.py up` を叩く (適用判定はしない)。
+   - **通った場合**: ESO 待ち → rendered apply → AppProject → Application 60 本投入まで
+     一本で進む。続けて `sample --note "up 直後"` → CSV commit。以後セッション跨ぎで
+     15 分間隔 × 4h 窓・各系統 ≥8 サンプルまで sample → commit を繰り返す
+     (長時間 sleep 禁止は引き続き有効)。
+   - **通らなかった場合** (今日と同じ): 人間の一手待ちのまま変化なし。ns 掃除は自動なので
+     後片付け不要。時間の無駄にならないよう、この事実を PROGRESS に 1 行書いて終えてよい。
+2. 一時ファイルは `/tmp/opencode` ではなく `mktemp -d` を使うこと (上記「発見」のとおり
+  書けない — 実測済みの罠)。
+3. verify 第 1 項 green / 第 2 項 failing はサンプリング完了まで変わらず、で正常。
+4. up が通って pod が立った後はセッション 3 の引き継ぎ 3 番 (phase / CrashLoop 時の
+   SA 名不一致チェック) も有効。

@@ -548,22 +548,31 @@ def cmd_up(_args):
              "generated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}
     print(f"[source] sha={sha[:12]} paths={len(paths)}: {', '.join(paths)}")
 
+    # 自分が今の run で作った namespace。RBAC 未適用での中断時はこれら全てを掃除する —
+    # 掃除を「失敗した系統だけ」にすると、片系統が probe を通って ExternalSecret 適用まで
+    # 進んだ後にもう片方が失敗する「部分適用」で argocd-lab-* が残留する
+    created_ns = []
+
+    def abort_waiting_human(msg):
+        for ns in created_ns:
+            kubectl("delete", "namespace", ns, "--ignore-not-found=true")
+            wait_ns_gone(ns)
+            print(f"[cleanup] 中断 — 自分が今作った namespace {ns} を中身ごと削除")
+        raise SystemExit(msg + "\n"
+                         "  人間が次を適用するのを待つ (トークン複製等の自動回避はしない):\n"
+                         "    kubectl apply -f ops/projects/logs/argocd-oom-lab/"
+                         "proposed-rbac-for-human.yaml")
+
     # lab-state.json は RBAC probe 通過後まで書かない (未適用のまま中断したとき
     # verdict の source_sha 参照が汚れる — セッション 2 の後始末で判明)
     with tempfile.TemporaryDirectory(prefix="p0196-up.") as td:
         for s in SYSTEMS:
             ns = s["ns"]
-            created_here = kubectl("create", "namespace", ns, check=False).returncode == 0
+            if kubectl("create", "namespace", ns, check=False).returncode == 0:
+                created_ns.append(ns)
             ok, msg = probe_rbac(ns)
             if not ok:
-                if created_here:
-                    kubectl("delete", "namespace", ns, "--ignore-not-found=true")
-                    wait_ns_gone(ns)
-                    print(f"[cleanup] 自分が今作った空 namespace {ns} を削除")
-                raise SystemExit(msg + "\n"
-                                 "  人間が次を適用するのを待つ (トークン複製等の自動回避はしない):\n"
-                                 "    kubectl apply -f ops/projects/logs/argocd-oom-lab/"
-                                 "proposed-rbac-for-human.yaml")
+                abort_waiting_human(msg)
             print(f"[rbac] {msg}")
 
             es_path = Path(td) / f"es-{ns}.yaml"
