@@ -4342,7 +4342,33 @@
         "soft_cap": 4500000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T12:34:28Z",
+        "verify": [
+          {
+            "cmd": "python3 ops/projects/scripts/argocd_oom_lab.py --plan",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-nft_k252/repo/ops/projects/scripts/argocd_oom_lab.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "python3 -c \"import json;d=json.load(open('ops/projects/logs/argocd-oom-lab/verdict.json'));assert d.get('conclusion') in ('insufficient-request','leak','chart-regression') and d.get('rss_series_csv')\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json;d=json.load(open('ops/projects/logs/argocd-oom-lab/verdict.json'));assert d.get('conclusion') in ('insufficient-request','leak','chart-regression') and d.get('rss_series_csv')\n                            ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'ops/projects/logs/argocd-oom-lab/verdict.json'\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
