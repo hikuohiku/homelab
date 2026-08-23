@@ -697,3 +697,51 @@ webhook URL は autopilot-writer SA には読めない (RBAC 実測 Forbidden) �
    **#4** (message_id 人間視認 or 判定除外) / on-sync-failed 式の生きた発火検証を
    追加注入で実施するか否か (spec の注入 1 回は消化済みのため要人間裁定)
 3. fired.json / drill fixture は触らない
+
+### セッション 15 (2026-08-23) — 待機状態の全項目再実測 9 回目。merge 未・**main tip が進んだ (8c5cbd7d→95e4671d) が merge-tree で競合無しを直接証明**・controller エラー新規ゼロ
+
+**やったこと**:
+
+1. **merge 状況**: 未 merge (`fetch --prune` 後に `git branch -r --contains` が
+   a08db5a9 で origin/project/p-0139 のみ)。**main tip = 8c5cbd7d → 95e4671d に進んだ**
+   (PR #519 P-0145 merge。待機開始後初めて main の前進を観測)
+2. **進んだ main に対する競合確認**: `git merge-tree --write-tree origin/main project/p-0139`
+   が rc=0 — main が動いた状態での in-memory merge 完走を直接証明。全リモートブランチの
+   apps/argocd diff を merge-base 比較しても自ブランチ以外 0 行
+3. **verify 再実測**: #1 green / #3 = fixture 14 tests OK / #2 の red は既知の
+   `--enable-helm` ゲートのみ / #4 の red は message_id null のみ (delivered: True は生きている)。
+   fired.json 自体は無傷 (触っていない)
+4. **render を本セッションでも再実証** ($HOME/bin/helm v3.18.4 + `--enable-helm`):
+   rc=0 / 27,222 行 / stderr 0 バイト (セッション 14 と行数一致)。argocd-notifications-cm data
+   は**ちょうど 7 キー** / optional chaining 式あり / autopilot フィルタ 2 件 /
+   ES discord-webhook render される
+5. **クラスタの merge 前状態が正しいことを再実測**: argocd-notifications-cm data =
+   ['context'] のみ / externalsecret は dex 分のみ SecretSynced=True / drill 残骸
+   (App・ns) とも NotFound
+6. **controller エラー増加ゼロを実測**: pod 名を label で引き直し、`--since-time=
+   2026-08-23T03:46:02Z` (セッション 14 の測定点) で error 0 行 (当該範囲 4,183 行)。
+   pod restarts=19 / startedAt=2026-08-03T14:21:14Z で本セッションでの再起動は無し
+7. **App 状態観測**: 全 15 本中 OutOfSync/Healthy は coder / immich / syncthing /
+   vaultwarden の 4 本 (セッション 9 以降据え置き)、version-watcher Synced/Healthy。
+   Degraded はゼロで通知対象外
+
+**分かったこと**:
+
+- `/tmp/opencode` はこの sandbox では**書き込めない** (Permission denied → リダイレクト先が
+  作れず rc=1)。一時ファイルは既定どおり必ず `mktemp` を使う (固定パスはそもそも
+  前セッション残骸を拾う罠だったが、書き込み自体も不可だったことが判明)
+- gh CLI はこの sandbox に無い (`command not found`)。PR 状況は確認できない —
+  merge 判定は `git branch -r --contains` ベースで行うのが正 (従来どおり)
+
+**次のセッションへの一言 (= やることリスト)**:
+
+1. merge 済みか最初に確認 (`git branch -r --contains a08db5a9`)。merge 済みならクラスタ反映を実測:
+   **argocd-notifications-cm** data が 7 キーちょうど (on-sync-failed は `?.` 付き) /
+   externalsecret argocd-notifications-discord-webhook が SecretSynced /
+   controller error 新規ゼロ (since-time 付きで測る) / 全 App Healthy 戻り確認
+2. 未 merge ならやることは無い。main が進んでいても merge-tree rc=0 を毎回取り直すこと
+   (本セッションで main 前進を初観測した — 競合は時間と共に起こりうる)。
+   裁定事項は不変 3 点: **#2** (sandbox 恒久 red) / **#4** (message_id 人間視認 or
+   判定除外) / on-sync-failed 式の生きた発火検証を追加注入で実施するか否か
+   (spec の注入 1 回は消化済みのため要人間裁定)
+3. fired.json / drill fixture は触らない
