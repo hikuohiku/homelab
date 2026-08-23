@@ -10,7 +10,8 @@
 #   -n NAMESPACE  対象 namespace (既定: coder)
 #   -s SAMPLES    kubectl top のサンプル回数 (既定: ${CODER_AUDIT_SAMPLES:-5})
 #   -i INTERVAL   サンプル間隔秒 (既定: ${CODER_AUDIT_INTERVAL_S:-10})
-#   -o OUTFILE    出力先 JSON (既定: <repo root>/ops/projects/logs/P-0143/idle-audit.json)
+#   -o OUTFILE    出力先 JSON (既定: <repo root>/ops/projects/logs/P-0143/idle-audit.json)。
+#                 --self-test のときは必須 (fixture を実成果物パスへ書かせないガードあり)
 #   --no-exec     kubectl exec を試みない (pods/exec 権限の無い SA で実行するとき。
 #                 PVC 実使用量は null になり collection_notes に欠損を記録する)
 #   --self-test   クラスタ不要。組み込み fixture で全経路を通し、出力スキーマを
@@ -21,10 +22,12 @@
 #     (selector: app.kubernetes.io/name=coder-workspace — 制御プレーン Pod app=coder は
 #      ラベル系が違うため最初から混入しない)
 #   - kubectl top pod/node の実使用量を SAMPLES 回取得し平均/最大を取る
-#   - 動的 PVC の要求サイズ (PVC spec) と実使用量 (Pod 内 df、要 pods/exec 権限)
+#   - 動的 PVC の要求サイズ (PVC spec) と実使用量 (Pod 内 df、要 pods/exec 権限)。
+#     PVC は deployment と違い start_count=0 でも作られ続けるため、Pod の無い
+#     停止中 workspace の残留 PVC も stopped 分類で数える (main.tf L208/L239 の非対称)
 #   - 分類: 平均CPU < CODER_AUDIT_IDLE_CPU_M (既定 50m) かつ 最大CPU <
-#     CODER_AUDIT_IDLE_CPU_MAX_M (既定 500m) → idle。metrics 不取得なら unknown。
-#     判定根拠 (生サンプル・閾値) を各要素の classification_basis に残す
+#     CODER_AUDIT_IDLE_CPU_MAX_M (既定 500m) → idle。metrics 不取得なら unknown、
+#     Pod 無しなら stopped。判定根拠 (生サンプル・閾値) を classification_basis に残す
 #
 # 終了コード:
 #   0  収集成功 (一部の項目が権限や metrics 不備で欠損した場合も含む。欠損は
@@ -63,13 +66,19 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+CANONICAL_OUT="$REPO_ROOT/ops/projects/logs/P-0143/idle-audit.json"
 if [ -z "$OUT" ]; then
-  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
   if [ -z "$REPO_ROOT" ]; then
     echo "ERROR: -o 未指定かつ git repo 外で実行された (出力先を決められない)" >&2
     exit 64
   fi
-  OUT="$REPO_ROOT/ops/projects/logs/P-0143/idle-audit.json"
+  OUT="$CANONICAL_OUT"
+fi
+if [ "$SELF_TEST" = "1" ] && [ "$OUT" = "$CANONICAL_OUT" ]; then
+  echo "ERROR: --self-test が実成果物 ($OUT) を上書きしようとしている。" >&2
+  echo "       fixture データを実測として残さないため、-o \"\$(mktemp)\" を指定すること" >&2
+  exit 64
 fi
 
 export PYTHONUTF8=1
@@ -187,6 +196,13 @@ FIXTURES = {
          "spec": {"resources": {"requests": {"storage": "10Gi"}}}},
         {"metadata": {"name": "coder-wsb-home", "labels": {"com.coder.workspace.id": "wsb"}},
          "spec": {"resources": {"requests": {"storage": "128Gi"}}}},
+        # Pod の無い停止中 workspace — deployment と違い PVC は start_count=0 でも残留する
+        # (main.tf L208/L239 の非対称)。stopped 経路の試験用
+        {"metadata": {"name": "coder-wsc-home",
+                      "labels": {"com.coder.workspace.id": "wsc",
+                                 "com.coder.workspace.name": "archived",
+                                 "com.coder.user.username": "hiku"}},
+         "spec": {"resources": {"requests": {"storage": "64Gi"}}}},
     ]},
     "top pod": [
         "coder-wsa-main   80m   900Mi",
@@ -359,14 +375,18 @@ def main():
     pvcs_js = get_json("pvcs") or {"items": []}
     pvc_by_ws = {}
     for item in pvcs_js["items"]:
-        wid = item["metadata"].get("labels", {}).get("com.coder.workspace.id")
+        lbl = item["metadata"].get("labels", {})
+        wid = lbl.get("com.coder.workspace.id")
         if wid:
             _, req_b = parse_quantity(
                 item["spec"].get("resources", {}).get("requests", {}).get("storage"))
             pvc_by_ws.setdefault(wid, []).append({
                 "name": item["metadata"]["name"],
                 "requested_gib": r(gib(req_b)) if req_b else None,
-                "used_gib": None, "used_source": None})
+                "used_gib": None, "used_source": None,
+                # stopped 判定時に workspaces 側へ移す属性 (running 経路では使わない)
+                "ws_name": lbl.get("com.coder.workspace.name"),
+                "user": lbl.get("com.coder.user.username")})
 
     series = sample_top()
     node = node_context()
@@ -427,7 +447,43 @@ def main():
         }
         workspaces.append(ws)
 
+    # Pod の無い workspace PVC (停止中 workspace) — CPU 観測は不可能だがディスクは
+    # 残り続けるので、stopped として workspaces に畳む (捏造せず実使用量は null)
+    seen_wids = {
+        item["metadata"].get("labels", {}).get("com.coder.workspace.id")
+        for item in pods_js.get("items", [])
+    }
+    for wid, pvcs in pvc_by_ws.items():
+        if wid in seen_wids:
+            continue
+        total_gib = r(sum(p["requested_gib"] or 0 for p in pvcs))
+        missing_id = "" if wid is not None else " (com.coder.workspace.id ラベル無し)"
+        note(f"{pvcs[0]['name']}: Pod 無しの workspace PVC — stopped として数える"
+             f" (実使用量は計測不可)")
+        workspaces.append({
+            "name": pvcs[0]["ws_name"],
+            "user": pvcs[0]["user"],
+            "pod": None, "phase": None, "started_at": None, "restarts": None,
+            "requests": {"cpu_m": 0, "memory_gib": 0.0},
+            "limits": {"cpu_m": None, "memory_gib": None},
+            "pvc": [{k: p[k] for k in ("name", "requested_gib", "used_gib", "used_source")}
+                    for p in pvcs],
+            "cpu_usage": {"source": "none", "samples_m": [], "mean_m": None,
+                          "max_m": None, "error": "pod 無し"},
+            "memory_usage": {"source": "none", "samples_gib": [], "mean_gib": None,
+                             "error": "pod 無し"},
+            "classification": "stopped",
+            "classification_basis": (
+                f"Pod が存在しない (deployment 停止{missing_id})。CPU は観測対象外で "
+                f"PVC {total_gib} GiB のみ残留"),
+            "reclaim_if_idle": {
+                "requests": {"cpu_m": 0, "memory_gib": 0.0},
+                "usage": {"cpu_m": None, "memory_gib": None},
+                "pvc_gib": total_gib},
+        })
+
     idle = [w for w in workspaces if w["classification"] == "idle"]
+    stopped = [w for w in workspaces if w["classification"] == "stopped"]
     report = {
         "schema": "coder-idle-audit/v1",
         "generated_at": generated_at,
@@ -440,17 +496,22 @@ def main():
         "reclaimable": {
             "total_workspaces": len(workspaces),
             "idle_count": len(idle),
+            "stopped_count": len(stopped),
             "unknown_count": sum(1 for w in workspaces if w["classification"] == "unknown"),
             "requests_based": {
                 "cpu_m": sum(w["reclaim_if_idle"]["requests"]["cpu_m"] or 0 for w in idle),
                 "memory_gib": r(sum(w["reclaim_if_idle"]["requests"]["memory_gib"] or 0 for w in idle)),
                 "pvc_gib": r(sum(w["reclaim_if_idle"]["pvc_gib"] for w in idle)),
             },
+            # 停止中 workspace の残留 PVC。CPU/メモリの解放は既に起きているが
+            # ディスクは確保されたまま — 削除は不可逆なので requests_based には合算しない
+            "stopped_pvc_gib": r(sum(w["reclaim_if_idle"]["pvc_gib"] for w in stopped)),
             "usage_based": {
                 "cpu_m": r(sum(w["reclaim_if_idle"]["usage"]["cpu_m"] or 0 for w in idle)),
                 "memory_gib": r(sum(w["reclaim_if_idle"]["usage"]["memory_gib"] or 0 for w in idle)),
             },
             "note": ("requests_based は scheduler の capacity 差分、usage_based は観測窓での実解放量。"
+                     "stopped_pvc_gib は Pod 無しの停止済み workspace の PVC (CPU/メモリは既に解放済み)。"
                      "PVC は Pod を止めても消えない (local-path)。ディスクを実際に空けるには "
                      "PVC 削除が前提で、これは不可逆なため別判断"),
         },
@@ -467,7 +528,8 @@ def main():
     except BaseException:
         os.unlink(tmp_path)
         raise
-    print(f"OK: {OUT} へ書き出し ({len(workspaces)} workspaces / idle {len(idle)})")
+    print(f"OK: {OUT} へ書き出し "
+          f"({len(workspaces)} workspaces / idle {len(idle)} / stopped {len(stopped)})")
     return 0
 
 
@@ -494,6 +556,17 @@ if SELF_TEST and rc == 0:
     if rec["idle_count"] != 1 or rec["requests_based"]["pvc_gib"] != 128.0 \
             or rec["requests_based"]["cpu_m"] != 250 or rec["requests_based"]["memory_gib"] != 0.5:
         problems.append(f"reclaimable の合計が想定外: {rec}")
+    if rec.get("stopped_count") != 1 or rec.get("stopped_pvc_gib") != 64.0:
+        problems.append(f"stopped (Pod 無し PVC) の集計が想定外: "
+                        f"count={rec.get('stopped_count')} gib={rec.get('stopped_pvc_gib')}")
+    stopped_ws = [w for w in d["workspaces"] if w["classification"] == "stopped"]
+    if len(stopped_ws) == 1:
+        s = stopped_ws[0]
+        if s["name"] != "archived" or s["pod"] is not None \
+                or any(p["used_gib"] is not None for p in s["pvc"]):
+            problems.append(f"stopped エントリの中身が想定外: {s}")
+    else:
+        problems.append(f"stopped エントリが 1 件でない: {len(stopped_ws)} 件")
     scratch = by_name.get("scratch", {})
     if any(p["used_gib"] is not None for p in scratch.get("pvc", [])):
         problems.append("exec 失敗の workspace で used_gib を捏造している")

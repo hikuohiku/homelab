@@ -3,6 +3,31 @@
 各セッションはここの末尾と git log しか読まない。何をやったか / 分かったこと /
 次のセッションへの一言を、セッションごとに追記する。
 
+## 人間への依頼 (このプロジェクトを完了させる唯一の外注。器では実行できない)
+
+実データ収集にはクラスタ credential が必要だが、worker 環境には無いことが
+3 セッション分実測済み (kubeconfig 無し / SA token 未マウント / doppler・tailscale 等
+バイナリも無し / JWT 形式のファイルも探索済みで無し)。**以下を credential のある環境で
+1 回実行し、産出された JSON をこのブランチに commit & push してほしい。** それだけで
+verify#2 が閉じ、レビューに進める。
+
+```bash
+git switch project/p-0143                  # 出力先が repo 内に決まっているためブランチ上で
+ops/tools/coder_idle_audit.sh -s 5 -i 10   # 所要 1〜2 分 (kubectl top を 5 回サンプリング)
+git add ops/projects/logs/P-0143/idle-audit.json
+git commit -m "P-0143: idle-audit 実測結果"
+```
+
+- 期待: rc=0 と「OK: ... へ書き出し」。admin kubeconfig なら pods/exec・metrics.k8s.io も
+  通るはずなので、実使用量 (メモリ/PVC) まで取れる
+- `collection_notes` に欠損が出てもそのまめてよい。欠損を正直に残すのが設計
+- ブランチを切りたくない場合は `-o` で任意の場所へ出力し、JSON を issue #56 に貼っても
+  よい。次の worker セッションが実成果物パスへ転記する (人の生データの写しであり捏造ではない)
+- **`--self-test` は必ず `-o` を付けて動かすこと** (-o 無しだと fixture を実成果物パスへ
+  書こうとして rc=64 で拒否するガード入り。2026-08-23 追設)
+- 停止中 workspace があるほど `reclaimable.stopped_pvc_gib` にディスク残留が映る。
+  stop 済み workspace の PVC 残量も見たいので、消さずにそのまま計ってほしい
+
 ## セッションログ
 
 ### 2026-08-23 セッション1 — 受入1項目目 (収集スクリプト新設) を green に
@@ -96,3 +121,49 @@ docs/coder-idle-policy.md §1 の表へ転記して「草案」を外す、が�
 docs §1 の PVC 使用 GiB 列も「未計測 (権限)」と明記すること。分類閾値 50m/500m の
 妥当性判断は JSON の samples 見てから (変えるなら env 上書きで根拠ごと記録)。
 docs §2 の閾値 8h は暫定値なので、夜間アイドルの実パターンが出たら改訂検討。
+
+### 2026-08-23 セッション3 — verify#2 の器側を完成させ、人間依頼へ切り替え
+
+**やったこと**: verify#2 (実データ) は本日も credential 無しで収集不可能を再実測
+(kubeconfig fallback の localhost:8080 接続拒否 → rc=2 を 0.25 秒で fail、成果物は
+書かないことを確認)。そこで (1) 収集スクリプトの実質バグ 2 件を修正し、(2) P-0027 前例に
+従い PROGRESS 冒頭へ「人間への依頼」を置いた。verify#1/#3 は green 維持、self-test は
+修正込みで green (`-o $(mktemp)` 付き。実パスへの self-test は rc=64 ガードを確認)。
+
+**修正したバグ (どちらも main.tf 実装との突合で発見)**:
+
+- **停止中 workspace の PVC が数えられていなかった。** workspace テンプレートの PVC
+  リソースには deployment と違い `count = start_count` が無く (main.tf L208 vs L239)、
+  Pod を止めた workspace の home PVC は確保されたまま残る。旧実装は Pod 主導ループなので
+  これらを捉えられず、「アイドルで何を奪われているか」のディスク側を過小評価していた。
+  classification `stopped` エントリ + `reclaimable.stopped_count` /
+  `stopped_pvc_gib` (requests_based へは合算しない — 削除は不可逆なため) を追加し、
+  fixture に Pod 無し PVC を足して self-test で固定した
+- **--self-test が実 idle-audit.json を fixture で上書きし得た。** 既定出力先が実成果物
+  パスそのものなので、-o 無しで self-test を回すと捏造ファイルが完成する時限爆だった。
+  実パスなら rc=64 で拒否するガードを追加
+
+**分かったこと / 罠**:
+
+- スクリプトの前提は main.tf と全部一致することを実確認済み: ラベル
+  (`coder-workspace` / `coder-pvc`)・コンテナ名 `dev`(単一コンテナ)・マウント
+  `/home/coder`。requests は全 workspace 固定 **250m / 512Mi**、limits はパラメータ
+  (CPU 2/4/6/8 cores, メモリ 2/4/6/8Gi)。つまり requests_based の capacity 差分は
+  「稼働 workspace 数 × 250m/512Mi」で上限が先に見えている
+- 本環境の kubectl は kubeconfig 無しだと localhost:8080 に落ちる。session1 記録の
+  「KUBERNETES_SERVICE_HOST 宛て anonymous 401」と失敗フェーズが違うが (kubectl は
+  token ファイル無しでは in-cluster 設定を使わない)、credential 不在という結論は同じ。
+  ~/.kube・/var/run/secrets・JWT 形式ファイルの再探索でも何も無し
+- **/tmp/opencode は root 所有で autopilot から書けない** (touch で Permission denied)。
+  一時ファイルは素の mktemp (/tmp 直下) を使うこと
+- P-0027 は同じ「器では実行できない」問題を PR 冒頭の人間依頼で前進させたが、P-0078 は
+  解決者不在のまま 20 セッション滞留した。P-0143 は前者の型に乗って依頼を冒頭に置いた —
+  後者の型に戻さないこと
+
+**次のセッションへの一言**: **収集の再試行を繰り返さないこと。** credential は無いので
+rc=2 以上の情報は出ない (3 セッション実測済み)。基本はレビュー指摘への対応のみ。
+もし環境が変わって SA token / kubeconfig が生えていたら冒頭の依頼コマンドを自分で
+実行してよい (-o 不要。その場で idle-audit.json が正しく生成される)。人間が #56 等に
+JSON を貼った場合は実成果物パスへ転記してよいが、generated_at と collection_notes は
+原文のまま維持すること (出所を消すのは捏造の一種)。実測 JSON が入ったら docs §1 の表
+転記と「草案」外し、分類閾値 (50m/500m) の妥当性判断までが次の仕事。

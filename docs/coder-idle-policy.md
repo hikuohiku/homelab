@@ -33,11 +33,17 @@ ops/tools/coder_idle_audit.sh -s 5 -i 10
 |------|--------------------------------|-------------------------------|
 | CPU | （未計測） | （未計測） |
 | メモリ | （未計測） | （未計測） |
-| PVC GiB | （未計測。**Pod 停止では空かない**。local-path のディスクを実際に空けるには PVC 削除が前提で不可逆） | — |
+| PVC GiB | （未計測。idle 分は `reclaimable.requests_based.pvc_gib`、**停止済み workspace の残留分は `reclaimable.stopped_pvc_gib`**。**Pod 停止では空かない**。local-path のディスクを実際に空けるには PVC 削除が前提で不可逆） | — |
 
 分類の意味と再判定: 分類は観測窓内の平均 CPU が閾値未満かつ最大 CPU がスパイク上限未満
 であれば idle（既定 50m / 500m、`CODER_AUDIT_IDLE_CPU_*` で上書き可）。生サンプルと
 閾値は各 workspace の `classification_basis` に残るので、後から人間が再判定できる。
+
+分類は active / idle / unknown のほかに **stopped** がある。workspace の PVC リソースには
+deployment と違って `count = start_count` が付いておらず（`apps/coder/templates/personal/main.tf`
+L208 と L239 の非対称）、**Pod を止めた workspace の home ディスクは確保されたまま残る**。
+stopped は CPU を一切消していないのにノードのディスクだけ専有している状態で、表の
+実使用列は空欄（観測対象外）とする。削除は不可逆なので idle 分とは別集計にしてある。
 
 ## 2. 対処案 — Coder の autostop（テンプレート設定）
 
