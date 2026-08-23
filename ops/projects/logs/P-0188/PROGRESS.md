@@ -79,3 +79,53 @@
 セクションを見て、entries の形 (特に Proxmox 応答の実物 — info 配列の件数・
 san の接頭辞書式) が fixture の仮定と一致するか確認し、ズレていれば
 build_proxmox_entries を実測に合わせて直す。
+
+## セッション 2 (2026-08-23)
+
+やったこと:
+
+- レビュー verdict 無し・受入全項目 green だったため、**実装全体の自己精査**
+  をした。report.py 配線 / heart (facts.cert_alert + budget_alert_due 再利用、
+  cursors キー cert_expiry_alert) / rbac.yaml (secrets get/list + 値を出さない
+  コメント) / kustomization.yaml / テスト 47 本を全部読み直した。ロジック上の
+  不具合は見つからず、死にコード 1 行のみ: `_parse_asn1_time` GeneralizedTime 枝の
+  `width_year = True` (代入されるが誰も読まない) を除去し cp で同期コピー更新
+- PROJECT.md が要求する「しきい値判定と T-0107 フィールドの中身の証跡」を取得
+  (下記)。fixture 出力は summary.status=critical・reason の順序固定
+  (critical → parse_error → warn)・t0107.resolved=false (T-0107 未解消の現状) を
+  正しく映す。エントリごとの days_left も ok=3649 / warn=23 / critical=-23 /
+  parse_error(日数無し) で境界含め意図どおり
+- CI が `python3 -m unittest discover -s ops/tests -t .` (.github/workflows/ci.yml:58)
+  で本テストを掴むことを確認し、discover 形でも全 green (リポジトリ全体 336 テスト)
+- verify 4/4 を自分でも再実測 green
+
+分かったこと / 実測:
+
+- **この worker サンドボックスからはクラスタに届かない**。kubectl バイナリはあるが
+  kubeconfig 無し・SA token 無し (`KUBERNETES_SERVICE_HOST` 環境変数だけ残骸として
+  残り、`localhost:8080` へ繋ぎに行って拒否される)。tailscale も just も無い。
+  「実クラスタでの初回収集」観測は reporter CronJob が稼働して latest.json に
+  cert_expiry セクションが出るのを待つか、tailscale + kubeconfig がある環境の
+  セッションで行うしかない
+- 証跡 (fixture 再生、`--fixture ops/tests/fixtures/cert_expiry/sample.json`):
+  summary = `{status: critical, reason: "7日未満で失効: immich/immich-tls; 読めないため判定不能:
+  vaultwarden/vw-admin-tls; 30日未満で失効: coder/coder-access"}`。
+  t0107 = `{expected_name: hikuo-homeserver.tailae6c2.ts.net, resolved: false}`。
+  エントリ: argocd-tls=ok(3649日) / coder-access=warn(23日) / immich-tls=critical(-23日) /
+  vw-admin-tls=parse_error / proxmox node01=ok(1226日)+san_match=false
+
+罠 (次のセッションへ):
+
+- 前セッションの罠はすべてそのまま有効 (直接編集禁止の同期コピー・NOW 固定・
+  cursors キー cert_expiry_alert)
+- サンドボックスの `KUBERNETES_SERVICE_HOST` は**繋がる証拠ではない**。SA token
+  (/var/run/secrets/kubernetes.io/serviceaccount/) の存在を確認してから試すこと
+
+## 次のセッションへの一言 (更新)
+
+レビュー指摘があればまずそれ。無ければ変わらず「実クラスタでの初回収集」が最優先の
+未解決。ただし worker サンドボックスからは到達不能と判明済み → reporter CronJob の
+ArgoCD sync 後に ops-health-report ブランチの latest.json を読める環境 (または
+tailscale+kubeconfig 付きセッション) で、Proxmox 応答の実物の形 (info 配列の件数・
+san の接頭辞書式) を fixture の仮定と突き合わせ、ズレていれば build_proxmox_entries
+を実測に合わせて直す。

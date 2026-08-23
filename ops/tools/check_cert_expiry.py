@@ -159,7 +159,6 @@ def _parse_asn1_time(tag, raw):
             raise ValueError("GeneralizedTime の書式が想定外: {!r}".format(text))
         year = int(core[:4])
         digits = core[4:]
-        width_year = True
     else:
         raise ValueError("validity が UTCTime/GeneralizedTime でない (tag={:#04x})".format(tag))
     month = int(digits[0:2])
