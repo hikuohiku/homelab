@@ -196,3 +196,44 @@ green)。レビュー指摘があればその解消が最優先。merge 後 red 
 レビュー指摘があればその解消が最優先。merge 後 red 継続時はセッション 3 末尾の
 (a)(b)(c) で切り分け。断片の文面が空判定になっていても日付経過による正常系
 (上記の罠参照)。
+
+## worker セッション 6 (2026-08-23) — ops-state 先端 beat 31 でリハーサル再通過 + 空窓シナリオを初実証。コード変更なし
+
+### やったこと
+
+レビュー指摘は無し。唯一の failing は verify(3) のまま (ブランチ未 merge を実測:
+`10357e9c8` は `origin/project/p-0231` のみ)。**main はセッション 4 以後ずっと不動**
+(origin/main = 31a806191) なので衝突監査は省略。新規価値は 2 つ:
+
+1. **ops-state がさらに進んでいた** (f1224fec3 → f16128068, "heart: beat 31") ので標準
+   リハーサルを再実施し再通過: worktree 展開 → 実台帳 × 実時刻 (UTC now = 20:35Z,
+   beat 同一条件) で `publish_reminders()` → add -A + commit (**push 無し**) →
+   `git show HEAD:briefing/reminders.txt` 通過 (= verify(3) 判定式)、レンダラ CLI 出力と
+   diff ゼロ一致。「今日 8/24 ゴミ収集…」の 1 行、差分は briefing/ のみ
+2. **セッション 5 が予告した「空窓」を実際に実証** (これまで文面予測だけだった):
+   now=2026-08-27T12:00Z (ゴミ収集が窓外・防災の日も未開の期間) を固定して
+   `publish_reminders()` を実行 → 断片は「**直近 48 時間で告げる日はありません。**」
+   (21 バイト, 非空)。つまり merge が 8/26〜8/30 頃にずれても heart は正常文面を
+   publish し、ファイル欠落・エラー・空ファイルにはならない
+
+テスト再実測: unittest 28 本 OK、validate.py OK (0 error)
+
+### 分かったこと・罠
+
+- **test_reminders_beat の正しいモジュールパスは `ops.heart.tests.test_reminders_beat`**
+  (`ops.tests.` ではない — heart 配下にも tests/ がある)。`ops.tests.test_reminders_beat`
+  と打つと ModuleNotFoundError になり、一見「テストが劣化した」ように見えるので注意
+- 空窓の断片も**非空ファイル**になるため commit_and_push_state の add -A に普通に載る
+  (空文件スキップのような分岐は publish_reminders に無い)。ダッシュボード側はこの
+  1 行をそのまま「次の予定」節に出す設計なので追加対応不要
+- BusyBox 環境では `mktemp /tmp/x.XXXXXX.py` のようなサフィックス付きテンプレートが
+  「Invalid argument」で落ちる (`mktemp -d /tmp/x.XXXXXX` の形にする)。また
+  `/tmp/opencode` は root 所有 755 で書けない (セッション 2 の罠の再確認)
+- heart pod 引き続き稼働中 (beat 31)。merge 後 green 化の前提は崩れていない
+
+### 次のセッションへの一言
+
+結論不変: コード完成・変更不要。verify(3) は merge → heart 初回ビート (~120s) で green。
+レビュー指摘があればその解消が最優先。merge 後 red 継続時はセッション 3 末尾の
+(a)(b)(c) で切り分け。8/26〜8/30 頃に merge された場合、live 断片は
+「直近 48 時間で告げる日はありません。」になるが**壊れではない** (セッション 6 実証済み)。
