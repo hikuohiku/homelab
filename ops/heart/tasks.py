@@ -23,7 +23,7 @@ import json
 
 from .statefiles import now_iso
 
-# P-0090 (OpenClaw) とのインターフェイスは feedback note JSON のトップレベル
+# telegram-adapter とのインターフェイスは feedback note JSON のトップレベル
 # kind フィールドのこの値だけ。相手の実装に触れず並行で作る
 KIND_TASK_REQUEST = "task-request"
 

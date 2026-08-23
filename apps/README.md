@@ -75,11 +75,11 @@ coder                Synced        Healthy
 dex                  Synced        Healthy
 external-secrets     Synced        Healthy
 immich               Synced        Healthy
-openclaw             Synced        Healthy
 ops-dashboard        Synced        Healthy
 ops-health-reporter  Synced        Healthy
 syncthing            Synced        Healthy
 tailscale-operator   Synced        Healthy
+telegram-adapter     Synced        Healthy
 vaultwarden          Synced        Healthy
 ```
 
@@ -133,7 +133,7 @@ apps/
 ├── autopilot/
 ├── ops-dashboard/
 ├── syncthing/
-└── openclaw/
+└── telegram-adapter/
 ```
 
 各アプリは以下の構造:
