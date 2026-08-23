@@ -3622,7 +3622,7 @@
     {
       "id": "P-0164",
       "title": "癒し手が死んでいる間、デプロイ経路はどうなるか — ArgoCD を意図的に止めて Git 先行状態の傷を実測し、復帰時の追いつき時間を秒で出す",
-      "state": "active",
+      "state": "stalled",
       "branch": "project/p-0164",
       "irreversible": false,
       "capabilities": [
@@ -3679,7 +3679,8 @@
       "veto_deadline": "2026-08-23T06:16:33Z",
       "spawn_count": 1,
       "job": "runner-p-0164-a1",
-      "drift_count": 0
+      "drift_count": 0,
+      "stalled_reason": "error"
     },
     {
       "id": "P-0174",
@@ -4032,7 +4033,7 @@
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-23T10:38:32Z",
-  "last_activity_at": "2026-08-23T10:58:56Z",
+  "last_activity_at": "2026-08-23T11:01:13Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": true,
   "stop_engaged": false
