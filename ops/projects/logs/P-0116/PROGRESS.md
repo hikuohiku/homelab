@@ -772,3 +772,51 @@ validate.py の再実測。コード・manifest 側の変更は無し (session5�
 - **main 先行チェックは毎回最初に**: fetch → `git log HEAD..origin/main` が空でなければ
   session6/session13 の前例どおり先に rebase してから検査する
 - push は **`--force-with-lease`**、push 前の main 先行確認は継続
+
+
+## session15 (P-0116 worker, 2026-08-23)
+
+やったこと: issue #56 の回答再確認 (**なし**)・open PR の確認 (#512, P-0118 のみで
+本プロジェクト無関係)・main 先行確認 (**なし**、rebase 不要)・受入全項目と
+validate.py の再実測。コード・manifest 側の変更は無し (session5→15 まで 11 回連続で
+同じ結論。session8 の「貼り付け用文案」「環境メモ」は引き続き有効)。
+
+### 環境メモの追記 (session15 実測)
+
+- **GitHub API の unauthenticated 呼び出しが rate limit 403 になった** (前セッションまで
+  User-Agent 指定のみで通っていた)。`AUTOPILOT_GITHUB_TOKEN` 環境変数が実環境に存在する
+  ので `Authorization: Bearer` を付ければ解消 (issue comments / PR list とも実測済み)。
+  以後の走査スクリプトはトークン付きが前提
+
+### issue #56 / PR / main 先行の確認結果
+
+- コメント **177 件** (session14 から増減なし)。`P-0116` / `--include` /
+  `restic-check` / `BusyBox` 走査で該当 **0 件** — verify #1 文言判断への回答は
+  **未着のまま**
+- open PR: **1 件** (#512, `project/p-0118` — Telegram 疎通)。本プロジェクトのものは**無し**
+- fetch 後に `git log HEAD..origin/main` が**空** — rebase 不要だった
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option`) — red のまま
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** / `find apps/ -name '*.yaml'
+  | xargs grep -q`: **rc=0** (`apps/restic-check/` 実体あり)
+- #2: **28 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- main 先行: **なし** (`git log HEAD..origin/main` 空、rebase 不要)。
+  remote 分岐は `[ahead 79, behind 10]` (session14 +1 分 = 本 session15 コミット除く)。
+  push は引き続き **`--force-with-lease`**
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完全に完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら
+  文言判断に従うだけ。来ていなければ再実測して追記で足りる (session8 の文案・環境メモ
+  もそのまま使える)
+- **GitHub API 走査は AUTOPILOT_GITHUB_TOKEN 付きで**: unauthenticated は 403
+  rate limit (session15 実測)。`Authorization: Bearer $AUTOPILOT_GITHUB_TOKEN` +
+  User-Agent で pageing 走査 (per_page=100) すれば通る。gh CLI 無しは変わらず、
+  /tmp/opencode 読み取り専用 → mktemp も変わらず
+- **main 先行チェックは毎回最初に**: fetch → `git log HEAD..origin/main` が空でなければ
+  session6/session13 の前例どおり先に rebase してから検査する
+- push は **`--force-with-lease`**、push 前の main 先行確認は継続
