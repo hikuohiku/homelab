@@ -286,3 +286,8 @@ cap 全滅で欠落済み)。この checkpoint を読む worker は以下を順�
   DoD 超過の設計判断の人間側受け入れ — どちらも未回答
 - スコープ外発見の ops/heart/notify.py Cloudflare 1010 (UA 明示 1 行で直る) が
   修復されたか不明。未修復なら heart の障害通知が今も静かに捨てられている
+
+### 継続の引き継ぎ (P-0116, 2026-08-23, human-pilot)
+
+P-0102 は実装健全のまま soft cap を使い切って budget_exhausted で停止。
+この P-0116 は全成果を引き継いだ継続 (予算 4M)。checkpoint と PROGRESS.md から再開。
