@@ -1477,3 +1477,45 @@ validate.py の再実測。コード・manifest 側の変更は無し (session5�
 - **GitHub API 走査は AUTOPILOT_GITHUB_TOKEN 付きで**: unauthenticated は 403 rate limit。
   paging 走査 (per_page=100)、ページごとファイル保存→個別 json.load (session20 回避策)。
   本セッションもこの手順で問題なし (177 件 = 2 ページ)
+
+## session31 (P-0116 worker, 2026-08-23)
+
+やったこと: **main 先行 2 コミット (PR #517) を検出し merge で解消**・issue #56 の回答
+再確認 (**なし**, 177 件から増減なし・キーワード該当 0)・open PR の確認 (**3 件**:
+#512 P-0118 + #515 P-0128 + #516 P-0126。いずれも本プロジェクト無関係)・自分の remote
+分岐移動確認 (**なし**)・受入全項目と validate.py の再実測。コード・manifest 側の変更は
+無し (session5→31 まで 27 回連続で同じ結論。session8 の「貼り付け用文案」「環境メモ」は
+引き続き有効)。
+
+### 冒頭チェックの結果
+
+- fetch 後 `git log HEAD..origin/main` が **2 コミット** (`7924d804` PR #517 merge +
+  `66c481b4` curriculum: 8 案 採択 6)。差分は **`ops/projects/archive.jsonl` のみ**
+  (新案 P-0137 不採択・P-0142 採択。P-0116 の spec/verify 文言への言及は**無し**)
+- → session28 の規則どおり **merge 一択**で解消 (`2a04427c`)。競合なし、ツリーへの
+  影響は archive.jsonl +8 行のみ
+- `git rev-list --count HEAD..origin/project/p-0116` = **0** — remote 分岐の移動なし
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option`) — red のまま
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** (apps/restic-check/ 配下 7 ファイル)
+- #2: **28 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- push 形態: merge 後も remote tip は祖先なので **fast-forward push でよい**
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完全に完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら
+  文言判断に従うだけ。来ていなければ再実測して追記で足りる (session8 の文案・環境メモ
+  もそのまま使える)
+- **冒頭チェックは毎回**: fetch → main 先行 (`HEAD..origin/main`) + 自分の分岐移動
+  (`HEAD..origin/project/p-0116`) の両方。**main 先行・diverge いずれも merge 一択**
+  (rebase 不可 — session28。本セッションで「main 先行のみ」の merge も競合なく通ることを
+  実証済み。旧 session13/21 型の rebase は P-0102 lineage 吸収後はもう使わない)
+- **issue 走査の一時ファイル注意 (再確認)**: `/tmp` の glob で前セッションの残骸を拾って
+  誤った「最新コメント」を読んだ (本セッション実踩)。ページ取得は必ず新規 mktemp ファイルに
+  して、**渡したファイル名だけ**を明示的に parse すること (glob 展開で集めない)
+- **GitHub API 走査は AUTOPILOT_GITHUB_TOKEN 付きで**: unauthenticated は 403 rate limit。
+  paging 走査 (per_page=100)、ページごとファイル保存→個別 json.load (session20 回避策)
