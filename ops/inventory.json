@@ -471,30 +471,16 @@
       "note": "T-0138 で新設。タグに v プレフィックスは無い（Docker Hub 実測、2026-08-06）。2.x 系は v1 系から DB を LevelDB→SQLite に変更しているが新規インストールはマイグレーション対象外（GitHub Releases v2.0.0 実測）"
     },
     {
-      "id": "openclaw",
+      "id": "telegram-adapter-builder-image",
       "kind": "image",
-      "name": "ghcr.io/openclaw/openclaw",
-      "current": "2026.7.1 (index digest pin)",
-      "file": "apps/openclaw/deployment.yaml",
-      "match": "openclaw/openclaw@sha256:",
-      "mirrors": [
-        "apps/openclaw/deployment.yaml (bootstrap-state initContainer も同一 digest)"
-      ],
-      "upstream": "github:openclaw/openclaw",
+      "name": "golang:1.25-alpine (telegram-adapter のビルド段)",
+      "current": "sha256:1ae0735f00daffa3aaf1363a5184c0d2dc55c78e3db4ec70241cdac97bf84b59",
+      "file": "apps/telegram-adapter/app/Dockerfile",
+      "match": "FROM golang@sha256:",
+      "upstream": "dockerhub:library/golang",
       "policy": "manual",
-      "note": "P-0090 で新設。Telegram bot gateway。digest pin は意図的（公式 docs 上 version tag は immutable だが moving tag latest/stable を追わないため）。更新手順: (1) ghcr.io/v2/openclaw/openclaw/tags/list で最新 stable version tag を確認、(2) 同 registry API でそのタグの docker-content-digest ヘッダを読む（OCI index = マルチアーキの digest を使うこと。単一アーキ manifest digest だと node01 以外のアーキで壊れる）、(3) deployment.yaml の image を差し替えて initContainer も同じ digest に揃える、(4) リリースノート全文確認。OpenClaw は起動時に startup-safe migration を走らせるが、安全に修復できない場合は gateway が exit する — そのときは同 digest で `openclaw doctor --fix` を PVC mount 付きで 1 回実行してから Deployment を再開 (docs.openclaw.ai/install/docker「Upgrading container images」)。なお openclaw.json の model primary (opencode-go/ox-alpha-free) は ops/models.json の roles と手動で揃える運用で、機械検査は未整備"
-    },
-    {
-      "id": "openclaw-bridge-image",
-      "kind": "image",
-      "name": "python (openclaw feedback-bridge sidecar)",
-      "current": "3.14-alpine",
-      "file": "apps/openclaw/deployment.yaml",
-      "match": "image: python:",
-      "upstream": "dockerhub:library/python",
-      "policy": "auto",
-      "note": "P-0107 で新設。決定論パススルー (feedback-bridge sidecar)。標準ライブラリのみで動く bridge.py を ConfigMap から起動する (ops-health-reporter-image と同型の根拠)",
-      "observability_impact": "壊れると Telegram 受信の ops-feedback 生保存が止まり、人間の『止めて』が heart の決定論 triage に届かなくなる (OpenClaw gateway 自体の応答は生きる)。gateway より影響面は狭いが、停止経路としては重要"
+      "note": "OpenClaw (P-0090/P-0107) の置き換えで新設。ビルド段のみで実行イメージには含まれない。タグは go.mod の go ディレクティブと揃えること。digest pin の更新は registry API の docker-content-digest ヘッダ (OCI index) を読んで差し替える。成果物イメージ ghcr.io/hikuohiku/homelab-telegram-adapter 自体は自前ビルドのため inventory では追跡しない (homelab-dashboard と同じ扱い)",
+      "observability_impact": "壊れるとイメージをビルドできなくなるが、稼働中の Pod は digest pin のまま動き続ける"
     },
     {
       "id": "claude-code-cli",

@@ -29,7 +29,7 @@ curriculum 第 1 段: 発散生成。判定 (採択) は別セッション (curr
 
 ## 人間のタスク依頼 (最優先の原料)
 
-OpenClaw (Telegram) やダッシュボードの書き置きから届いた構造化タスク依頼
+Telegram やダッシュボードの書き置きから届いた構造化タスク依頼
 (feedback note の `kind: task-request`) のうち、まだ叶えられていないものが
 heart から渡される。空 (`[]`) ならこの節は飛ばしてよい。
 
