@@ -485,3 +485,35 @@ session 5〜13 の「次のセッションへの一言」をそのまま引き�
 merge 後フォローアップは session 4 末尾 (i)(ii): ArgoCD sync → reporter 実行後に
 health ブランチの backup_freshness >=5 要素を確認、同じ内容を取得時刻付きで
 initial-freshness.md に記録。
+
+## 2026-08-23 session 14 (worker)
+
+### 結論 — 変化なし。spec 差し替え待ちのまま、実装・commit は無用と確認して終了
+
+session 13 の指示通り現状確認のみ。**作業は無かった** (これが正しい状態)。
+代替ルート (preview / 手動 PR) 不成立の再探索は session 13 で不要と確定済み、本セッションも触れない。
+
+### 再実測 (2026-08-23T07:22Z)
+
+- `git show origin/main:ops/projects/archive.jsonl | grep -c '"id": "P-0157"'` → **1**
+  (差し替え追記はまだ無い。origin/main 先頭は c5d6df255 のまま — curriculum #522/#523 以降
+  新着無し。同 id エントリの title は旧定義のまま)
+- verify #1 green (34 tests OK) / #2 red 継続 (health ブランチ latest.json の
+  `backup_freshness` は AssertionError = None) / #3 green (`backup_fresh` in rules.json)。
+  wrapper 実測と一致
+- 差し替え用コマンドの判定力は維持:
+  `grep -c '"backup_freshness": collect(collect_backup_freshness)' apps/ops-health-reporter/report.py`
+  がブランチでは一致 (1 件) / origin/main では collect_backup_freshness 言及 0 件 —
+  session 5 実測のまま
+- origin/project/p-0157 は local HEAD (22f00e1e6 = session 13 の PROGRESS commit) と同一 —
+  wrapper 側の新着 commit も無し
+
+### 次のセッションへの一言
+
+session 5〜14 の「次のセッションへの一言」をそのまま引き継ぐ (方針に変更なし)。
+要約: (1) archive.jsonl の同 id 追記数を確認 (>1 なら差し替え済み)、(2) verify 3 項目を
+自力実測。#2 が旧定義のまま red なら実装も commit も無用 (この PROGRESS 追記のみ)。
+差し替え済みで全 green なら何も足さず wrapper に流す (PR 作成・push は wrapper の職責)。
+merge 後フォローアップは session 4 末尾 (i)(ii): ArgoCD sync → reporter 実行後に
+health ブランチの backup_freshness >=5 要素を確認、同じ内容を取得時刻付きで
+initial-freshness.md に記録。
