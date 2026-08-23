@@ -16,6 +16,9 @@ import re
 VETO_RE = re.compile(r"veto\s+(P-\d{4})", re.IGNORECASE)
 # 要対応キューの既読化。停止済み (stalled) の墓標をダッシュボードから下げる (2026-08-22)
 ACK_RE = re.compile(r"ack\s+(P-\d{4})", re.IGNORECASE)
+# 拒否権窓の繰り上げ。不可逆案は窓が明けるまで着手しない (reconcile の announced 分岐) が、
+# 人間が読んで良しとしたなら待つ意味が無い。「許可して実行」の口 (2026-08-23)
+APPROVE_RE = re.compile(r"approve\s+(P-\d{4})", re.IGNORECASE)
 
 
 def _matches_stop(text, kw):
@@ -40,7 +43,10 @@ def _matches_stop(text, kw):
 def classify(text, rules):
     """1 コメント/書き置き -> {"kind": ..., "projects": [...]}
 
-    kind: "stop_all" | "veto" | "resume_all" | "review_needed"
+    kind: "stop_all" | "veto" | "ack" | "approve" | "resume_all" | "review_needed"
+
+    approve は最後に評価する。同じ文に停止系が混ざっていたら止める方に倒すため
+    (「approve P-0123 でもやっぱり止めて」を着手と読まない)。
     """
     text = text or ""
     acks = ACK_RE.findall(text)
@@ -56,4 +62,8 @@ def classify(text, rules):
     for kw in rules["veto"].get("resume_keywords", []):
         if _matches_stop(text, kw):
             return {"kind": "resume_all", "projects": []}
+    # 停止系を全部くぐり抜けてから承認を見る (上の docstring 参照)
+    approves = APPROVE_RE.findall(text)
+    if approves:
+        return {"kind": "approve", "projects": [a.upper() for a in approves]}
     return {"kind": "review_needed", "projects": []}

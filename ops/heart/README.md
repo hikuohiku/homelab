@@ -20,7 +20,7 @@ heart (Deployment, ここ)            runner Job (ops/runner/runner.py)
 - **判断は reconcile.py の純関数だけ**。heart.py は観測と実行。テストは遷移表
   (`tests/test_reconcile.py`) が仕様
 - **LLM は心臓に居ない**。フィードバック分類 (triage.py) すらキーワードルール。
-  「止めて」「veto P-NNNN」はモデルの解釈を経由しない
+  「止めて」「veto P-NNNN」「approve P-NNNN」はモデルの解釈を経由しない
 - **merge は heart のコードが実行する**。条件は reviewer の verdict=pass + CI green。
   LLM の自己申告は納品判断に入らない
 - **運用パラメータは ops/rules.json、モデルは ops/models.json** が単一情報源。

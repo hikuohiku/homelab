@@ -175,6 +175,31 @@ def decide(doc, facts, rules, now):
             if p["id"] in acks and p["state"] in TERMINAL_STATES:
                 p["acknowledged"] = True
 
+    # --- 承認 (approve P-NNNN): 拒否権窓を人間の意思で畳む ---
+    # 可逆案の窓は空きスロットがあれば自動で繰り上がるので、これが効くのは実質
+    # 不可逆案 (窓が明けるまで着手しない) と満席のとき。状態は変えない —
+    # deadline を今にするだけで、着手の可否は下の announced 分岐が従来どおり判断する
+    # (breaker・並列上限を迂回させない)。停止中は効かせない
+    approves = set(facts.get("approves", []))
+    if approves and not stop_all:
+        for p in doc["projects"]:
+            if p["id"] not in approves or p["state"] != "announced":
+                continue
+            if p["id"] in vetoes:
+                continue  # 同じビートで veto と approve が来たら止める方に倒す
+            if parse_iso(p["veto_deadline"]) <= now:
+                continue  # 既に窓は明けている
+            p["veto_deadline"] = now_iso(now)
+            p["approved_by_human_at"] = now_iso(now)
+            actions.append(
+                _action(
+                    "notify",
+                    p["id"],
+                    ntype="notify",
+                    text=f"{p['id']} の拒否権窓を人間の承認により繰り上げました",
+                )
+            )
+
     for p in doc["projects"]:
         state = p["state"]
         if state in TERMINAL_STATES:

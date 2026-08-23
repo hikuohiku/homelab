@@ -1107,3 +1107,87 @@ class TestCritic(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestApprove(unittest.TestCase):
+    """approve P-NNNN — 拒否権窓を人間の意思で畳む (2026-08-23)。
+
+    可逆案の窓は空きスロットがあれば自動で繰り上がるので、これが効くのは実質
+    不可逆案と満席のとき。承認は「窓を畳む」だけで、着手の可否は従来の判断に委ねる。
+    """
+
+    def _announced(self, **kw):
+        base = dict(
+            id="P-0001",
+            state="announced",
+            irreversible=True,
+            veto_deadline=(NOW + timedelta(hours=20)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
+        base.update(kw)
+        return project(**base)
+
+    def test_approve_collapses_window_and_starts_irreversible(self):
+        d = doc(self._announced())
+        out, actions = reconcile.decide(d, facts(approves=["P-0001"]), RULES, NOW)
+
+        self.assertEqual(out["projects"][0]["state"], "active")
+        self.assertIn("spawn_runner", [a["type"] for a in actions])
+        self.assertIn("approved_by_human_at", out["projects"][0])
+
+    def test_without_approve_irreversible_keeps_waiting(self):
+        # 承認が無ければ不可逆案は窓が明けるまで着手しない (従来どおり)
+        d = doc(self._announced())
+        out, actions = reconcile.decide(d, facts(), RULES, NOW)
+
+        self.assertEqual(out["projects"][0]["state"], "announced")
+        self.assertNotIn("spawn_runner", [a["type"] for a in actions])
+
+    def test_approve_does_not_bypass_breaker(self):
+        # 承認は窓を畳むだけ。予算遮断は迂回させない
+        d = doc(self._announced())
+        out, actions = reconcile.decide(
+            d, facts(approves=["P-0001"], breaker_tripped=True), RULES, NOW
+        )
+
+        self.assertEqual(out["projects"][0]["state"], "announced")
+        self.assertNotIn("spawn_runner", [a["type"] for a in actions])
+
+    def test_approve_does_not_bypass_concurrency_limit(self):
+        # 並列数は doc 上の active/in_review/merging の数で決まる (facts ではない)
+        busy = [
+            project(id=f"P-01{i:02d}", state="active", job=f"runner-p-01{i:02d}")
+            for i in range(RULES["runner"]["max_concurrent"])
+        ]
+        d = doc(self._announced(), *busy)
+        out, actions = reconcile.decide(d, facts(approves=["P-0001"]), RULES, NOW)
+
+        approved = next(p for p in out["projects"] if p["id"] == "P-0001")
+        self.assertEqual(approved["state"], "announced")
+        # 他プロジェクトの spawn は無関係なので、承認した 1 件だけを見る
+        spawned = [
+            a for a in actions
+            if a["type"] == "spawn_runner" and a.get("project") == "P-0001"
+        ]
+        self.assertEqual(spawned, [])
+        # 窓は畳まれている (スロットが空いた次のビートで着手できる)
+        self.assertIn("approved_by_human_at", approved)
+
+    def test_veto_wins_over_approve_in_same_beat(self):
+        d = doc(self._announced())
+        out, _ = reconcile.decide(
+            d, facts(approves=["P-0001"], vetoes=["P-0001"]), RULES, NOW
+        )
+        self.assertEqual(out["projects"][0]["state"], "vetoed")
+
+    def test_stop_all_wins_over_approve(self):
+        d = doc(self._announced())
+        out, _ = reconcile.decide(
+            d, facts(approves=["P-0001"], stop_all=True), RULES, NOW
+        )
+        self.assertEqual(out["projects"][0]["state"], "stalled")
+
+    def test_approve_ignores_unknown_and_non_announced(self):
+        # 走行中のものに approve が来ても状態を触らない
+        d = doc(project(id="P-0002", state="active", job="runner-p-0002"))
+        out, _ = reconcile.decide(d, facts(approves=["P-0002", "P-9999"]), RULES, NOW)
+        self.assertEqual(out["projects"][0]["state"], "active")

@@ -90,7 +90,7 @@ class BudgetAlertBeatTest(unittest.TestCase):
                 "collect_feedback",
                 # cursors (第 3 引数) をそのまま返す passthrough
                 lambda gh, rd, cursors, *a, **k: (
-                    [], [], False, [], False, [], dict(cursors)
+                    [], [], False, [], False, [], [], dict(cursors)
                 ),
             ),
         ]

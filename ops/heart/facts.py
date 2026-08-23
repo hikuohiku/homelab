@@ -221,8 +221,8 @@ def _list_feedback_files(repo_dir, feedback_branch):
 
 def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_branch):
     """issue #56 の新着コメント + ops-feedback ブランチの新着書き置きを
-    triage して (vetoes, stop_all, review_needed, resume_all, task_requests,
-    new_cursors) を返す。
+    triage して (vetoes, acks, stop_all, review_needed, resume_all, task_requests,
+    approves, new_cursors) を返す。
 
     初回起動 (cursor 未初期化) は **過去の全履歴を triage しない** (レビュー指摘 [7])。
     issue #56 には 100 件超の過去コメントがあり、旧 CHARTER の引用等に停止キーワードが
@@ -235,6 +235,7 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
     """
     vetoes = []
     acks = []
+    approves = []
     stop_all = False
     resume_all = False
     review_needed = []
@@ -250,6 +251,8 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
             vetoes.extend(verdict["projects"])
         elif verdict["kind"] == "ack":
             acks.extend(verdict["projects"])
+        elif verdict["kind"] == "approve":
+            approves.extend(verdict["projects"])
         elif verdict["kind"] == "stop_all":
             stop_all = True
         elif verdict["kind"] == "resume_all":
@@ -272,7 +275,7 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
         new_cursors["seen_feedback_files"] = sorted(
             _list_feedback_files(repo_dir, feedback_branch)
         )
-        return [], [], False, [], False, [], new_cursors
+        return [], [], False, [], False, [], [], new_cursors
 
     # issue コメントは自由文 (kind を持たない) なので通常経路。
     # JSON note のみトップレベル kind を読む
@@ -318,7 +321,7 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
     new_cursors = dict(cursors)
     new_cursors["issue_comments_since"] = newest
     new_cursors["seen_feedback_files"] = sorted(new_seen)
-    return vetoes, acks, stop_all, review_needed, resume_all, task_requests, new_cursors
+    return vetoes, acks, stop_all, review_needed, resume_all, task_requests, approves, new_cursors
 
 
 def load_adopted_specs(repo_dir):
