@@ -140,3 +140,20 @@
   Secret が適用されていたら README「実行手順」どおり完走 → demo.json 書き込みまで
   一気に進めてよい (egress_denied 判定は DENIED 行のみを証拠に。ALLOWED が 1 本でも
   出たら false の失敗記録)。PVC 再作成 (apply 前 delete) を忘れずに
+
+## セッション 8 (2026-08-23 ~07:08Z)
+
+- **やったこと**: issue #56 再読 (全 180 件、page 4 まで。最後のコメントは自分の依頼
+  06:30:10Z のまま返信無し — 依頼から ~38 分) → Secret 存在プローブ 7 回目を実施
+  (`delete -f job.yaml --ignore-not-found` → NP → jobs apply → model Pod を ~2 分監視)
+  → **`FailedMount: secret "p0161-mail-fixture" not found` x9 over 2m11s** で未適用を
+  再確定 → `delete -f job.yaml` → `delete -f networkpolicy.yaml` で静かに撤収 (残骸 0)
+- verify 1・2 green 再実測 (README trifecta 言及 OK / unittest 22 本 OK)。verify 3 は
+  demo.json 未存在のまま failing — Secret 待ち
+- 判断: 前セッションと同じく、依頼から ~40 分は「人間が見る前」であり重複依頼・迂回は
+  しない。プローブ→撤収の一連は数分で終わり負荷も残骸も残していない
+- 次のセッションへの一言: 手順変更なし。「まず issue #56 とクラスタを確認する」ブロックの
+  1〜4 をそのまま実施すること。Secret が適用されていれば README「実行手順」どおり
+  wait → logs 収集 → ops-feedback 着地確認 → 撤収 → demo.json 書き込みまで一気に。
+  egress_denied は DENIED 行のみを証拠に判定し、ALLOWED が 1 本でも出たら false の
+  失敗記録にする。apply 前 PVC 再作成を忘れずに
