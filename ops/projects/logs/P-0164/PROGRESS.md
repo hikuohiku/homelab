@@ -428,8 +428,50 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   announced/active の出入りのみで決まる。本体は announced 1 (P-0092) + active 5 —
   「減っていれば近い」は当てにならないままで、0 か否かだけを見ること
 
+### セッション 11 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking 6 件でセッション 10 から不変**
+  (P-0092 / P-0116 / P-0157 / P-0161 / P-0163 / P-0174。checked=61)。固定指示どおり
+  実演習は見送り。コード変更は無し
+- **本セッションの実イベント: main が初めて動いた** (c5d6df255 → 93d1c431b。
+  PR #525 openclaw 撤去→telegram-adapter 置換えの 3 commit)。演習材料の PR #524 が
+  これを**無介入で乗り越えた**: 触るファイルが素
+  (vaultwarden/coder の application.yaml vs openclaw/telegram-adapter 配下) のため
+  conflict せず、head は 5d24c8932 のまま、update-branch 不要と実測
+  (手順の「conflict していれば update-branch」は発動せず)
+- 前置条件の再実測 (main 前進後も劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 6), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 281 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git fetch origin && git rev-parse origin/main          # 93d1c431b (c5d6df255 から前進)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- ops-state の内訳もセッション 10 から不変 (読み取り専用 `git show
+  origin/ops-state:projects.json`: delivered 26 / vetoed 2 / stalled 26 /
+  announced 1 / active 6 / in_review 0)。スクリプトは自前で refspec 明示 fetch をする
+  (deploy_continuity.py:274) ので、冒頭 dry-run の弁判定は常に最新台帳に対する値
+- 当日の手順はセッション 3 固定のまま不変 (--run 背景起動 → 全 zero 確認 → PATCH ready
+  解除 → PUT merge)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。追加の注意: main はもう動く前提で置くこと。
+  演習直前に PR #524 を見て mergeable_state が **unknown でも慌てない** — base 移動直後は
+  GitHub が計算中で数秒〜十数秒 unknown になる (本日実測: 8 秒待ちで clean に落ち着いた)。
+  待って再取得し、dirty が確定したときだけ update-branch → ci 再 green を待つ
+
 ## 発見 (スコープ外。curriculum が拾うもの)
 
+- (セッション 11, 演習材料の耐久実測) main が初めて動く実イベントで、待機中の
+  ドラフト PR #524 が無介入で mergeable_state=clean を維持した。metadata ラベルの
+  2 行追加はファイル集合が他と素である限り conflict しない — 演習材料の鮮度維持コストは
+  ほぼゼロで、「main 先行 + PR 待機」状態が平時でも普通に成立する。なお GitHub API の
+  `mergeable_state` は base 移動直後に必ず `unknown` を返す (計算遅延)。unknown=conflict
+  ではないので、update-branch の発火条件は unknown でなく dirty で判定すること
 - (セッション 10, ライフサイクル観測の続き) 観測された `in_review` 2 件 (P-0174 /
   P-0163) の遷移先が**揃って active だった** (いずれも翌セッションで実観測)。
   完了 (delivered) 行きの中間状態とは言えず、「レビュー差し戻し/保留」の状態表現と
