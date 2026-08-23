@@ -5544,3 +5544,49 @@ PROGRESS.md から再開すること。
    ops/projects/logs/P-0080/report.json を新規作成するのが正。架空の数字で通さない)
 5. 一時ファイルは mktemp。PROGRESS.md への追記は heredoc append、追記後 `grep -n "^## "` で
    節順を確認
+
+## 2026-08-23 session #147 (worker)
+
+### やったこと
+
+1. **preflight を実行していない** (判断基準どおり): 回復は #133 で実証済み (00:07 UTC 観測)、
+   以降の反復実行は情報価値ゼロ (Class B transaction を溶かすだけ)
+2. **#56 の返信を確認した** (認証なし curl、since=2026-08-22T21:05:04Z、page 1 = 2 件 +
+   page 2 = 0 件でページング完了、両ページ HTTP 200、結果 = baseline 分
+   [5382593790](https://github.com/hikuohiku/homelab/issues/56#issuecomment-5382593790)
+   + P-0102 への ack [5383357478](https://github.com/hikuohiku/homelab/issues/56#issuecomment-5383357478)
+   の**既知 2 件のみ、新規 0 件**)。B2 cap / 本命 run の判断への言及は 0 件
+3. **本命 run は実行しなかった** (解禁条件「#56 の明示」が不成立のため): B2 予算不足
+   (~4.2GiB > 無料日次枠 ~1GB/day) は不変。コード・帳簿以外のファイルは触っていない。
+   テスト 65 件 green を再確認
+   (`python3 -m unittest ops.tests.test_restore_drill` → OK)。
+   verify #3 の現状も #113 記録どおり: `ops/projects/logs/P-0080/report.json`
+   は存在せず、成功 run 時に script が P-0080 パスへ新規作成するのが正。
+   failing は正当で、書き換えない
+
+### 分かったこと
+
+- #146 (00:36 UTC 開始) で確認した既知 2 件から増えておらず、新規コメントは 0 件。
+  人間の直近活動は 00:24 UTC の ack が最新で、本セッション確認 (00:38 UTC) 時点で
+  約 14 分経過。「保留」仮説 (#60 記録) のまま。B2 判断への言及は #60 以降 88 回連続で 0 件
+- 前セッション (#146、開始 00:36 UTC) から約 3 分での起動。起動間隔は短いままだが
+  判断基準への影響なし (#56 の明示待ちに変わりはない)
+- curl の `-o` 先は mktemp を使用 (#30 再踏み分を回避、#31〜#147 と同じ)
+
+### 次セッションへの引き継ぎ (これしか読まないので必読)
+
+**時刻依存の判断基準は session #4〜#147 分から変更なし。**
+
+1. **preflight は実行しない**: 回復は実証済み (#133、00:07 UTC 観測)。繰り返す情報価値はない
+   (Class B transaction を溶かすだけ)
+2. **本命 run の解禁条件は #56 の明示のみ**: 「有料化/cap 引上げ OK」「無料枠継続」
+   「その他の指示」のいずれかが出たら実行する。ack コメントは判断ではない
+   (既知の ack: baseline 分 [5382593790]、[5383357478])。
+   確認方法: 認証なし curl、**baseline: `since=2026-08-22T21:05:04Z`**、page ページング必須
+3. **「無料枠継続」が出た場合の注意**: 全体同時復元 (~4.2GiB) は 1 日の予算に収まらないため、
+   drill の分割 (対象単位・複数日) への書き換えが必要になる公算。進め方は #56 返信の文言に
+   従う (worker の独断で分割しない)
+4. verify #3 は failing のままで正しい (#113 記録どおり。成功 run 時に script が
+   ops/projects/logs/P-0080/report.json を新規作成するのが正。架空の数字で通さない)
+5. 一時ファイルは mktemp。PROGRESS.md への追記は heredoc append、追記後 `grep -n "^## "` で
+   節順を確認
