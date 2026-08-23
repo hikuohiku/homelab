@@ -177,3 +177,28 @@ merge から数時間以内の観測を期待してよい。
 (refs/pull 絞り込み) → 未 merge なら数分待機を 1〜2 回繰り返して様子見。
 それでも merge 無しなら本セッションの観測事実をこのファイルに追記して commit して終了でよい
 (証跡は遡及可能なので連打不要)。merge 済みなら遡及レシピで発火を探すのが主タスク。
+
+## セッション5 の記録 (2026-08-23 10:42–10:53Z)
+
+**やったこと**: ops-state 監視のみ。冒頭 fetch で head 84075d7fe を確認 → refs/pull 照合で
+PR 未開・origin/main 未含を再確認 (セッション3/4 と同状態)。5 分待機 ×2 を挟んで
+3 回確認したが merge 無し。本ファイル追記 + commit して終了。
+
+**盤面の実測 (10:42Z と 10:52Z の 2 回)**:
+
+- `continuation_count` の出現は 0 のまま (`git log origin/ops-state -p -- projects.json | grep -c continuation_count` 相当で未ヒット。merge 前なので当然)
+- heart は生存: heartbeat beat 143 @ 10:40:56Z → beat 152 @ 10:51:46Z (ビート約 70 秒間隔)
+- **P-0185 が delivered になった** (main log で PR #531 の merge を確認。9a8562226)
+- **P-0181 が active → in_review に遷移** (runner が soft_cap 1.2M 内で完了した模様。
+  セッション4 が「merge 後の観測候補筆頭」と書いた候補はこれで一旦外れる。
+  review reject で active に戻れば再び候補になりうる)
+- P-0175 は active → in_review (10:40:56Z の consume_result + spawn_reviewer を audit で実視) →
+  10:52Z 時点で active に戻っている。レビュー往復が速い
+- 観測候補の現在地: **P-0164 (active, 3M)** と **P-0175 (active, 1.5M)** + 以後の curriculum 新規採択分
+- 人間の活動兆候: 今日だけで #527/#528/#529/#530/#531/#532 と merge が続いている。
+  本 PR のレビューも今日中に開かれる可能性はある
+
+**次のセッションへの一言**: 変更なし — merge 待ち。盤面は「actives は P-0164/0175」に
+入れ替わったが手順は一切変わらない。冒頭で fetch → refs/pull 照合 → merge 済みなら
+遡及レシピ (上記) で continuation_count 出現を探す。未 merge なら待機 1〜2 回して
+観測事実だけ追記して終了でよい。
