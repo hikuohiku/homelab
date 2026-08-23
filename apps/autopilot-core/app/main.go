@@ -242,7 +242,10 @@ func (c *client) prompt(ctx context.Context, sessionID, text string) error {
 	if err != nil {
 		return err
 	}
-	if status != http.StatusOK && status != http.StatusCreated && status != http.StatusAccepted {
+	// prompt_async の成功は 204 No Content (OpenAPI 実測: 204 "Prompt accepted")。
+	// 2xx を一律で成功として扱う — 特定の番号を並べると、今回のように成功を
+	// 失敗と誤認して同じ書き置きを永久に再送し続ける (2026-08-23 の実害)。
+	if status < 200 || status >= 300 {
 		return fmt.Errorf("prompt 失敗 (status=%d): %s", status, truncate(string(raw), 200))
 	}
 	return nil
