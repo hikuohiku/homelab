@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "project": "P-0185",
+  "scored_at": "2026-08-23T09:58:07Z",
+  "purpose": "段階 3 (生活ドメイン開放) の開放判断を「その日の気分」にしないため、既存の実測物だけを採点表に畳んだ台帳。閾値の理由は ops/stage3/README.md。新規インフラは作らない — 足りない観点は pass=false で名前を付けることが本業",
+  "verdict_rule": "全 criteria の pass が true のときだけ ready_for_announce_draft。1 つでも false (または採点不能) なら blocked。verdict がどちらに倒れても、開放の実行・予告の送信はこの台帳では行わない — 予告 draft の作成は次の curriculum に、送信と拒否権 (#56) は人間に委ねる",
+  "verdict": "blocked",
+  "criteria": [
+    {
+      "id": "trifecta-separation-drill",
+      "criterion": "lethal trifecta 分離プロファイルの実証 (drill) 証跡が存在する — 私的データを読む手と外へ話す口が物理的に別コンテナであることを合成データで通した記録がある",
+      "threshold": "ops/profiles/private-data/ 配下に Job テンプレートと脅威モデル README があり、合成データでの drill 実績 demo.json (egress_denied / published_to_branch / cleaned_up が全て true) が残っていること (P-0161 の成果物)",
+      "current_value": "未整備 — P-0161 は採択済み (archive.jsonl 採択記録, adopted=true) だが実装成果はまだ届いていない。ops/profiles/private-data/ 未存在 (2026-08-23 実測)。不在の根拠となる一次情報として採択記録を指す",
+      "evidence_path": "ops/projects/archive.jsonl",
+      "pass": false
+    },
+    {
+      "id": "veto-channel-live",
+      "criterion": "最新チャネル (Telegram) から人の目へ veto が届く口が repo 上で整備されている",
+      "threshold": "apps/telegram-adapter/deployment.yaml が存在し、(a) イメージが digest pin されている (b) allowlist の private DM のみを処理する (c) fail-closed (ALLOWED_USER_ID 未設定なら 1 件も保存しない) (d) 判断ロジックを持たず inbox への転送のみ、であること。veto の判定は heart triage が行う前提",
+      "current_value": "整備済み — digest pin 済み (sha256:c6340363d8ed81c0fd38f6876781e0fa6dc162748f09e7840e3991631d96a329)、private チャット限定 + 送信者 ID 一致、fail-closed、決定論アダプタ (app/main.go 冒頭の設計コメントどおり判定ロジック無し)。稼働実績は initializer 実測 (2026-08-23, 稼働中) による",
+      "evidence_path": "apps/telegram-adapter/deployment.yaml",
+      "pass": true
+    },
+    {
+      "id": "secrets-audit-wired",
+      "criterion": "credential 参照の地図と宣言の一致が CI で常時検査され、SOPS 依存地図に未解決問題がない",
+      "threshold": "ops/check_credential_map.py が .github/workflows/ci.yml に配線されており、ops/sops-dependency-map.json の problems が空であること",
+      "current_value": "監査済み — ci.yml:77 に配線済み (P-0077)。sops-dependency-map.json (P-0105) は schema_version 1 / problems: [] / encrypted_files 1 件が creation_rules と一致 / agent_environment は在否判定のみを出す設計",
+      "evidence_path": "ops/sops-dependency-map.json",
+      "pass": true
+    },
+    {
+      "id": "restore-proven",
+      "criterion": "バックアップからの復元が実際に試験され「データが読めること」まで確認されている",
+      "threshold": "restic バックアップからの復元試験 (issue #56 方針「試したことのないバックアップはバックアップではない」) が最低 1 対象で完了し、手順・所要時間・整合性確認が docs に記録されていること",
+      "current_value": "実証済み — immich (2026-08-05, T-0071: restore_rc=0, 16 秒 / 332 MiB / 82 files, DB ダンプ gzip 整合確認) と syncthing (P-0047, 2026-08-10 追加時に復元試験まで完了) の 2 対象",
+      "evidence_path": "docs/backup.md",
+      "pass": true
+    },
+    {
+      "id": "loop-continuity-guarded",
+      "criterion": "ループの連続性が内側 (livenessProbe) と外側 (watchdog) の両方で守られている",
+      "threshold": "(a) heart Deployment に heartbeat 鮮度で再起動させる livenessProbe がある (b) GitHub Actions watchdog が 30 分毎に stale 判定し、沈黙を issue #56 で人間に届ける (c) stale_seconds など閾値が rules.json に単一情報源として宣言されている",
+      "current_value": "二重構え済み — heart-deployment.yaml の livenessProbe (initialDelaySeconds 300 / periodSeconds 30 / failureThreshold 3, P-0065 由来)、watchdog.yml cron */30 * * * *、check_heartbeat_fresh.py は fail-closed 判定 (rules.json heartbeat.stale_seconds=7200)",
+      "evidence_path": ".github/workflows/watchdog.yml",
+      "pass": true
+    },
+    {
+      "id": "veto-machine-enforced",
+      "criterion": "人間の拒否権が運用の善意ではなく機械条件として倒れる",
+      "threshold": "ops/rules.json に veto 窓 (window_hours) と stop_keywords が宣言され、heart triage がそれを実装していること。irreversible プロジェクトは常に窓を待つこと",
+      "current_value": "宣言・実装済み — rules.json veto.window_hours=24 + stop_keywords 7 種 (irreversible=true は常に窓を待つ旨も明記)。triage.classify が veto P-NNNN / 停止キーワードを機械分類し、解釈できない停止命令は全停止に倒れる (watchdog 本文の不変条件まで test_check_heartbeat_fresh.py が固定)",
+      "evidence_path": "ops/rules.json",
+      "pass": true
+    }
+  ]
+}
