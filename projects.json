@@ -5441,11 +5441,32 @@
       "job": "runner-p-0254-a1",
       "drift_count": 0,
       "stalled_reason": "error"
+    },
+    {
+      "id": "P-0258",
+      "title": "復旧の実証を一回の勇気から毎晩の時計へ — 捨ててもいい canary を夜ごとに壊し、ArgoCD が何秒で生き返らせるかを health 履歴に積む",
+      "state": "proposed",
+      "branch": "project/p-0258",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "kubectl kustomize apps | grep -q 'name: recovery-canary'",
+        "python3 -m unittest ops.tests.test_recovery_probe_parse -v",
+        "git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); r=d.get('recovery_probe'); assert r and isinstance(r.get('last_recovery_seconds'), int), r\""
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T22:19:32Z",
-  "last_activity_at": "2026-08-23T22:53:19Z",
+  "last_curriculum_at": "2026-08-23T22:54:32Z",
+  "last_activity_at": "2026-08-23T22:54:32Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
