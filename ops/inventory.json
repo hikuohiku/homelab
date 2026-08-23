@@ -471,27 +471,16 @@
       "note": "T-0138 で新設。タグに v プレフィックスは無い（Docker Hub 実測、2026-08-06）。2.x 系は v1 系から DB を LevelDB→SQLite に変更しているが新規インストールはマイグレーション対象外（GitHub Releases v2.0.0 実測）"
     },
     {
-      "id": "telegram-adapter-image",
+      "id": "telegram-adapter-builder-image",
       "kind": "image",
-      "name": "ghcr.io/hikuohiku/homelab-telegram-adapter (自前ビルド)",
-      "current": "latest (初回リリース。digest pin 待ち)",
-      "file": "apps/telegram-adapter/deployment.yaml",
-      "match": "homelab-telegram-adapter",
-      "upstream": "self:.github/workflows/build-telegram-adapter-image.yml",
-      "policy": "manual",
-      "note": "OpenClaw (P-0090/P-0107) の置き換えとして新設。Go 標準ライブラリのみの単一バイナリ。初回リリースは二段階 (build-dashboard-image.yml と同じ): main マージ後に SHA タグの OCI index digest を実測して deployment.yaml を digest pin に差し替えること。ソース更新は apps/telegram-adapter/app/** の push で自動ビルドされる"
-    },
-    {
-      "id": "telegram-adapter-base-images",
-      "kind": "image",
-      "name": "golang (builder) / distroless static (runtime)",
-      "current": "golang:1.25-alpine, gcr.io/distroless/static-debian12:nonroot",
+      "name": "golang:1.25-alpine (telegram-adapter のビルド段)",
+      "current": "sha256:1ae0735f00daffa3aaf1363a5184c0d2dc55c78e3db4ec70241cdac97bf84b59",
       "file": "apps/telegram-adapter/app/Dockerfile",
-      "match": "FROM ",
+      "match": "FROM golang@sha256:",
       "upstream": "dockerhub:library/golang",
-      "policy": "auto",
-      "note": "builder は go.mod の go ディレクティブと揃える。runtime の distroless static はシェルもパッケージマネージャも持たず、TLS 用 ca-certificates のみ同梱。CGO_ENABLED=0 の静的バイナリ前提なので libc 更新の追随は不要",
-      "observability_impact": "壊れるとイメージがビルドできなくなるが、稼働中の Pod は digest pin のまま動き続ける"
+      "policy": "manual",
+      "note": "OpenClaw (P-0090/P-0107) の置き換えで新設。ビルド段のみで実行イメージには含まれない。タグは go.mod の go ディレクティブと揃えること。digest pin の更新は registry API の docker-content-digest ヘッダ (OCI index) を読んで差し替える。成果物イメージ ghcr.io/hikuohiku/homelab-telegram-adapter 自体は自前ビルドのため inventory では追跡しない (homelab-dashboard と同じ扱い)",
+      "observability_impact": "壊れるとイメージをビルドできなくなるが、稼働中の Pod は digest pin のまま動き続ける"
     },
     {
       "id": "claude-code-cli",
