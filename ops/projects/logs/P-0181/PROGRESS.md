@@ -81,10 +81,60 @@
    証跡を作り直したくなったら `--json > ops/projects/logs/P-0181/memory-series.json`
    で上書きコミットするだけ
 
+### セッション2 (2026-08-23) — values.yaml 引き直しと実測根拠の確定 (verify 1・2 を green 化、4 項目すべて green)
+
+**やったこと**
+
+- `apps/argocd/values.yaml` の controller.resources を引き直した。
+  limits.memory 0.5Gi→**768Mi** / requests.memory 256Mi→**320Mi**。CPU は触らない。
+  repoServer/server も触らない (PROJECT.md「やらないこと」どおり)
+  - limit = max(観測ピーク 398Mi, OOMKill 実績 0.5Gi) x 1.5 マージン。観測ピークは
+    30 分間隔サンプリングの下限で、2026-08-23 に旧 limit (0.5Gi) で OOMKill 4 回の
+    実績があるため真のピークは 0.5Gi 以上と確定 — 素朴な「ピーク x マージン」
+    (≈597Mi) はこの事実を無視するので採らない
+  - request = p95 (314.9Mi) 切り上げ。旧 256Mi は中央値 (261.4Mi) を下回る過小だった
+- 根拠コメントを controller ブロック内に記入。リテラル "512Mi" は書かず **`0.5Gi`
+  表記に統一** (セッション1 の罠メモ 1 のとおり)
+- `ops/projects/logs/P-0181/memory-evidence.md` 新設 (#1)。数値・決め方・
+  再検査コマンド・既知の限界を記す。grep 対象語「ピーク」「p95」を含む
+
+**verify 実測 (このセッション終了時)**
+
+- #1 memory-evidence.md → **green**
+- #2 values.yaml 検査 → **green** (スライス内に resources あり / "512Mi" 無し)
+- #3 unittest → **green** (21 tests OK。本セッションで触っていないので再確認のみ)
+- #4 `--check` → **green** (証跡 JSON は不変、再確認のみ)
+
+**判断の記録**
+
+- 成長率 +15.9Ki/day は significant=False → spec の「seeds.md に恒久策を 1 行」は
+  発火条件未達のため見送り (セッション1 と同一結論。memory-evidence.md 側にも明記済み)
+- 近接警報 (DoD 3) は本セッションで着手せず残した。「values.yaml + evidence」という
+  根拠を共有する 2 項目を先に潰す方が手戻りがない、という選択
+
+**分かったこと**
+
+- values.yaml 変更のクラスタ反映は ArgoCD 自己管理経由だが、controller が OOM
+  ループ中だと sync が滞る可能性がある (StatefulSet の resources 変更は pod 再作成を
+  伴う)。クラスタへの直接適用は spec 範囲外なのでやっていない — マージ後の反映確認は
+  人間 or 別起動で (kubectl CLI 許可済み経路)
+
+**次のセッションへ (残りは DoD 3 の近接警報のみ)**
+
+- やること: report.py (または既存チェッカー) が「実使用が limit の N% 超」を
+  latest.json の argocd セクションに出せるようにする。N は rules.json に置く
+- 配線設計は上記罠メモ 3 の調査済み前提を引き継ぐこと (rules.json 同期コピー +
+  CI 同期チェック / limit は k8s API から実機値を取得してハードコード回避 /
+  rollout 追配不要)
+- PROJECT.md 前提節の注意: rules.json は CODEOWNERS 人間レビュー必須パスなので
+  成果 PR は auto-merge されない — 仕様どおり。PR 本文にレビュー依頼を書く
+- 受入チェックリスト #1–#4 はすべて green 済み。DoD 3 は verify コマンドの直接
+  対象ではないが DoD 本体 (PROJECT.md「verify が直接見ないもの」(3))
+
 ## 引き継ぎ事項
 
-- 受入チェックリストは #3・#4 が green、#1・#2 が failing。残りは
-  values.yaml 引き直し + memory-evidence.md (→ 上記 1・2) と近接警報 (→ 上記 3)
+- 受入チェックリスト #1–#4 **すべて green** (セッション2 終了時実測)。残作業は
+  近接警報 (DoD 3) のみ → セッション2 記録の「次のセッションへ」を参照
 - ツールの既知死角は argocd_memory_series.py の docstring に記載済み
   (観測ピークは下限 / 鋸歯状 leak は slope でしか拾えない / pod 名決め打ち)
 
