@@ -33,6 +33,25 @@ import (
 	"github.com/nats-io/nkeys"
 )
 
+// バスに繋げなかったときの再試行間隔。GitHub 経路が生きている間の劣化運転なので
+// 急がないが、繋がったことに気づかないまま何時間も片肺で走るほど間を空けない。
+const busRetryInterval = time.Minute
+
+// connectBusOrLog は connectBus の結果をログにして返す。繋げなければ nil。
+// 「未設定 (意図した切り戻し)」と「繋げない (異常)」をログで区別する。
+func connectBusOrLog() *busConsumer {
+	bus, err := connectBus()
+	if err != nil {
+		log.Printf("バスに繋げない (GitHub 側だけで動く。%s 後に再試行): %v", busRetryInterval, err)
+		return nil
+	}
+	if bus == nil {
+		return nil
+	}
+	log.Printf("バスに接続 (stream=%s durable=%s filter=%s)", bus.stream, bus.durable, bus.filter)
+	return bus
+}
+
 // busMessage は「バスから来た 1 件」。実体は nats.Msg だが、driver 側の処理
 // (重複排除と ack の順序) を実サーバ無しで検証できるよう interface で挟む。
 type busMessage interface {

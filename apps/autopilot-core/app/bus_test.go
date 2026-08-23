@@ -19,6 +19,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/nats-io/nkeys"
 )
 
 // fakeMessage は busMessage の偽物。ack/term の呼ばれ方と順序を記録する。
@@ -231,6 +233,26 @@ func TestConnectBusRejectsBrokenSeed(t *testing.T) {
 
 	if _, err := connectBus(); err == nil {
 		t.Fatal("壊れた seed は起動時に弾くべき")
+	}
+}
+
+func TestConnectBusOrLogSurvivesUnreachableServer(t *testing.T) {
+	// NATS が落ちていても driver は死なない。ここで落とすと、この driver が唯一の
+	// 経路である所有者の「止めて」が、バスの不調ごと止まる (GitHub 経路は生きているのに)
+	kp, err := nkeys.CreateUser()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed, err := kp.Seed()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("NATS_URL", "nats://127.0.0.1:1")
+	t.Setenv("NATS_NKEY_SEED", string(seed))
+
+	if bus := connectBusOrLog(); bus != nil {
+		bus.close()
+		t.Fatal("繋がらないのに consumer を返してはいけない")
 	}
 }
 

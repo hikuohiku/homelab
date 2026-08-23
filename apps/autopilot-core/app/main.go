@@ -455,18 +455,18 @@ func runDriver() {
 	c.waitForOpencode(ctx)
 
 	// バスからの入力。設定が無ければ nil で、その場合は GitHub 側だけを読む。
-	// 繋がらないときは落とす: 黙って GitHub だけで動き続けると、バスへ移ったつもりで
-	// 移れていない状態に誰も気づけない (GitHub 側を落とす判断を誤らせる)
-	bus, err := connectBus()
-	if err != nil {
-		log.Fatalf("バスに繋げません: %v", err)
-	}
+	//
+	// 繋がらないときに落とさないのは、この driver が所有者の「止めて」を運ぶ唯一の
+	// 経路だから。NATS の不調で driver ごと crashloop すると、生きている GitHub 経路
+	// まで止まる (移行の目的は可用性を上げることで、下げることではない)。
+	// 繋がるまで周期的に試み、その間はログで鳴らし続ける。
+	bus := connectBusOrLog()
 	if bus != nil {
 		defer bus.close()
-		log.Printf("バスに接続 (stream=%s durable=%s filter=%s)", bus.stream, bus.durable, bus.filter)
 	} else {
-		log.Print("NATS 未設定。GitHub の inbox だけを読む")
+		log.Print("バス無しで開始 (未設定か、繋げなかった)。GitHub の inbox だけを読む")
 	}
+	lastBusRetry := time.Now()
 
 	cursorPath := filepath.Join(cfg.stateDir, "cursor.json")
 	healthCursorPath := filepath.Join(cfg.stateDir, "health-cursor.json")
@@ -537,6 +537,13 @@ func runDriver() {
 		// 兼ねる (末尾の sleep を省く)。イベントが来た瞬間に返るため、
 		// 待たされる時間はポーリング間隔ではなく publish からの実時間になる
 		paced := false
+		if bus == nil && time.Since(lastBusRetry) >= busRetryInterval {
+			lastBusRetry = time.Now()
+			// 未設定なら (nil, nil) が返るだけなので、この再試行は何もしない
+			if b := connectBusOrLog(); b != nil {
+				bus = b
+			}
+		}
 		if bus != nil {
 			msgs, err := bus.fetch(16, time.Duration(cfg.pollSeconds)*time.Second)
 			if err != nil {
