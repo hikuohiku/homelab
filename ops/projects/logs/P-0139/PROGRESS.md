@@ -327,3 +327,43 @@ webhook URL は autopilot-writer SA には読めない (RBAC 実測 Forbidden) �
    (drill が on-degraded 経由だったため)。docs パターンの verbatim 採用 + fixture で担保済みだが、
    追加注入での実証を望むなら人間裁定が必要
 3. fired.json / drill fixture は触らない
+
+### セッション 7 (2026-08-23) — 待機状態の全項目再実測。新規発見ゼロ、merge と裁定待ちのまま変化なし
+
+**やったこと**:
+
+1. **merge 状況**: 未 merge のまま (fetch --prune 後に再確認。`git branch -r --contains`
+   が 1a193e89 / a08db5a9 とも origin/project/p-0139 のみ)。main tip = 8c5cbd7d 変化なし。
+   新規に動きのあったリモートブランチ p-0115/0116/0142/0143/0144 の diff vs main に
+   apps/argocd 触りなし → 競合余地は引き続きゼロ
+2. **verify 再実測**: #1 green / #3 = fixture 14 tests OK + ops.tests 全体 163 OK。
+   #2 の red は既知の `--enable-helm` ゲートのみ、#4 の red は message_id null (人間裁定待ち) のみで、
+   **red の理由が前セッションから一つも変質していない**ことを確認
+3. **クラスタの merge 前状態が正しいことを再実測**: cm data = [context] のみ /
+   externalsecret は dex 分のみ SecretSynced / drill 残骸 (p0139-drill App・ns) NotFound
+4. **teardown 後の controller エラー増加ゼロを実測**: `--since-time=03:46:01Z` で error 1 行のみで、
+   それはセッション 6 記録の窓 (03:43:08-03:46:01Z) の最終行そのもの → 以後新規発生なし。
+   nil operationState エラーは drill App 削除で止まったまま
+5. **helm PATH render を本セッションでも再実証**: rc=0 / 27,222 行 / cm ちょうど 7 キー
+   (context, service.webhook.discord, subscriptions, template.discord-app-degraded,
+   template.discord-app-sync-failed, trigger.on-degraded, trigger.on-sync-failed) /
+   trigger.on-sync-failed 内に `?.` 反映済み
+
+**分かったこと**:
+
+- 新規発見ゼロ。強いて言えば kubectl logs の `--since-time` は境界時刻を含む (inclusive) ので、
+  既知エラー窓の終端を起点にすると窓の最終行を拾ってしまう。増加チェックは終端 +1 秒以降を
+  起点にするか、行数との突合で見る
+- pod 名は `kubectl get pod -n argocd -l app.kubernetes.io/name=argocd-notifications-controller`
+  で引ける (pod 再起動で名前が変わるため毎回引く)
+
+**次のセッションへの一言 (= やることリスト)**:
+
+1. merge 済みか最初に確認 (`git branch -r --contains a08db5a9`)。merge 済みならクラスタ反映を実測:
+   cm data が上記 7 キーちょうど (on-sync-failed は ?. 付き) / externalsecret
+   argocd-notifications-discord-webhook が SecretSynced / controller error 新規ゼロ /
+   drill 時の delivery annotation スタンプが消えていないか (argocd Application の annotations)
+2. 未 merge ならやることは無い。裁定事項は不変 3 点: **#2** (sandbox 恒久 red) /
+   **#4** (message_id 人間視認 or 判定除外) / on-sync-failed 式の生きた発火検証を追加注入で
+   実施するか否か (spec の注入 1 回は消化済みのため要人間裁定)
+3. fired.json / drill fixture は触らない
