@@ -58,6 +58,8 @@ class FakeRunner(R.Runner):
                 "default_soft_cap_tokens": 10**9,
                 "inactivity_nudge_seconds": 60,
                 "inactivity_kill_seconds": 120,
+                # P-0141: rules.json runner.unknown_error_max_rounds と同じ値
+                "unknown_error_max_rounds": 3,
             },
             "review": {"max_cycles": 3},
         }
@@ -193,10 +195,13 @@ class TestWorkerLoopQuota(QuotaFlowTest):
         self.assertEqual(self.slept, [R.DEFAULT_QUOTA_WAIT_SECONDS] * 3)
 
     def test_real_errors_still_stall_after_three(self):
-        # 上限の枝が本物の詰まりまで飲み込まないこと (ここが緩むと空回りが無限になる)
+        # 上限の枝が本物の詰まりまで飲み込まないこと (ここが緩むと空回りが無限になる)。
+        # P-0141 から unknown は既知死因とは別カウンタに移されたので、ここでは
+        # 既知死因 (auth) で固定する。unknown の挙動は
+        # ops/tests/test_unknown_death_probe.py が見る
         r = FakeRunner(
             self.tmp,
-            outcomes=[("error", "unknown")] * 3,
+            outcomes=[("error", "auth")] * 3,
             verify_seq=[FAIL],
             initialized=True,
         )
