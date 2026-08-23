@@ -4,11 +4,15 @@
 // 持ち続ける。この driver は「イベントが来たらそのセッションに話しかける」だけを担う。
 // 判断はしない。話しかけた後どう振る舞うかはコア (LLM) 側の責務。
 //
-// v0 の入力は人間の書き置き 1 本だけ:
+// v0 の入力は 2 本:
 //
-//	telegram-adapter / ダッシュボード → ops-feedback の inbox
-//	  → (この driver が新着を検出) → POST /session/{id}/prompt_async
-//	  → コアが telegram_reply MCP ツールで人間へ直接返す
+//	(1) 人間の書き置き
+//	    telegram-adapter / ダッシュボード → ops-feedback の inbox
+//	      → (この driver が新着を検出) → POST /session/{id}/prompt_async
+//	      → コアが telegram_reply MCP ツールで人間へ直接返す
+//
+//	(2) 健全性の変化 (人間に言われずに動く経路)
+//	    ops-health-report の latest.json → 不調なアプリの顔ぶれが変わったら起こす
 //
 // イベントバス (設計 D16) はまだ無い。inbox のポーリングで代用しており、
 // バスを入れるときはこの driver の入力側だけを差し替えられるようにしてある。
@@ -413,6 +417,7 @@ func runDriver() {
 	c.waitForOpencode(ctx)
 
 	cursorPath := filepath.Join(cfg.stateDir, "cursor.json")
+	healthCursorPath := filepath.Join(cfg.stateDir, "health-cursor.json")
 	seen, hadCursor := loadSeen(cursorPath)
 
 	sessionID := ""
@@ -474,6 +479,10 @@ func runDriver() {
 			log.Printf("コアへ渡した: %s (%s, %d chars)", name, n.Source, len(n.Body))
 		}
 
+		// 人間の書き置きを捌いてから、自発的な気づきを見る。
+		// 順序は「人を待たせない」を優先 (健全性の変化は 30 分周期の話なので急がない)
+		c.watchHealth(ctx, sessionID, healthCursorPath)
+
 		time.Sleep(time.Duration(cfg.pollSeconds) * time.Second)
 	}
 }
@@ -483,4 +492,135 @@ func orDash(s string) string {
 		return "(既定)"
 	}
 	return s
+}
+
+// --- 健全性の見張り ---
+//
+// コアが人間に言われなくても異常に気づくための経路。VISION の「指示を待たない」の
+// 最小実装で、v0 では ops-health-report ブランチの latest.json を見て
+// 「不健全なアプリの顔ぶれが変わったとき」だけコアを起こす。
+//
+// 遅延の上限は report を書く CronJob の周期 (30 分) で決まる。ここを詰めるには
+// 常駐 watcher が要る (設計 D15) が、それは別の器。まずは「人間の発話以外でも
+// コアが動く」経路を通すことを優先する。
+
+type healthDoc struct {
+	GeneratedAt  string `json:"generated_at"`
+	Applications []struct {
+		Name   string `json:"name"`
+		Sync   string `json:"sync"`
+		Health string `json:"health"`
+	} `json:"applications"`
+}
+
+// unhealthyApps は「Synced かつ Healthy でない」アプリ名を名前順で返す。
+func unhealthyApps(doc healthDoc) []string {
+	out := []string{}
+	for _, a := range doc.Applications {
+		if a.Sync != "Synced" || a.Health != "Healthy" {
+			out = append(out, fmt.Sprintf("%s(%s/%s)", a.Name, a.Sync, a.Health))
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// healthChanged は前回見た顔ぶれと違うかを返す。
+// 同じ異常が続いている間は起こさない (30 分ごとに同じ不満を言わせない)。
+func healthChanged(previous, current []string) bool {
+	if len(previous) != len(current) {
+		return true
+	}
+	for i := range current {
+		if previous[i] != current[i] {
+			return true
+		}
+	}
+	return false
+}
+
+func buildHealthPrompt(doc healthDoc, previous, current []string) string {
+	var b strings.Builder
+	b.WriteString("homelab の健全性に変化があった (人間からの依頼ではなく、定期観測による自発的な気づき)。\n\n")
+	fmt.Fprintf(&b, "レポート生成時刻: %s\n", doc.GeneratedAt)
+	fmt.Fprintf(&b, "前回の不調: %s\n", orNone(previous))
+	fmt.Fprintf(&b, "今回の不調: %s\n\n", orNone(current))
+	if len(current) == 0 {
+		b.WriteString("復旧したように見える。所有者に一言だけ知らせること。")
+		return b.String()
+	}
+	b.WriteString("homelab_health で詳細を確認し、所有者に telegram_reply で知らせること。" +
+		"影響範囲がわかるなら添える。直せるとは言わないこと — お前に修理の手段は無い。")
+	return b.String()
+}
+
+func orNone(xs []string) string {
+	if len(xs) == 0 {
+		return "(なし)"
+	}
+	return strings.Join(xs, ", ")
+}
+
+// watchHealth は健全性の変化を見て、変わっていればコアを起こす。
+// 起こしたときだけ true を返す。
+func (c *client) watchHealth(ctx context.Context, sessionID, cursorPath string) bool {
+	branch := envOr("CORE_HEALTH_BRANCH", "ops-health-report")
+	path := envOr("CORE_HEALTH_PATH", "ops/health/latest.json")
+	status, raw, err := c.github(ctx,
+		fmt.Sprintf("/repos/%s/contents/%s?ref=%s", c.cfg.repo, path, branch),
+		"application/vnd.github.raw")
+	if err != nil || status != http.StatusOK {
+		// 読めないことは異常の不在を意味しない。黙って次の周回に回す
+		// (ここで騒ぐと、レポート未生成の間ずっと鳴り続ける)
+		return false
+	}
+	var doc healthDoc
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		log.Printf("health レポートが壊れている (無視): %v", err)
+		return false
+	}
+
+	current := unhealthyApps(doc)
+	previous, had := loadHealthCursor(cursorPath)
+	if !had {
+		// 初回は現況を既知として置くだけ。起動しただけで「変化した」と言わない
+		_ = saveHealthCursor(cursorPath, current)
+		log.Printf("初回起動: 健全性の現況を記録 (%s)", orNone(current))
+		return false
+	}
+	if !healthChanged(previous, current) {
+		return false
+	}
+
+	if err := c.prompt(ctx, sessionID, buildHealthPrompt(doc, previous, current)); err != nil {
+		log.Printf("健全性の変化をコアへ渡せない (次の周回で再試行): %v", err)
+		return false
+	}
+	_ = saveHealthCursor(cursorPath, current)
+	log.Printf("健全性の変化をコアへ渡した: %s → %s", orNone(previous), orNone(current))
+	return true
+}
+
+func loadHealthCursor(path string) ([]string, bool) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	var saved struct {
+		Unhealthy []string `json:"unhealthy"`
+	}
+	if json.Unmarshal(raw, &saved) != nil {
+		return nil, false
+	}
+	if saved.Unhealthy == nil {
+		saved.Unhealthy = []string{}
+	}
+	return saved.Unhealthy, true
+}
+
+func saveHealthCursor(path string, unhealthy []string) error {
+	return writeJSON(path, map[string]any{
+		"unhealthy": unhealthy,
+		"saved_at":  time.Now().UTC().Format(time.RFC3339),
+	})
 }
