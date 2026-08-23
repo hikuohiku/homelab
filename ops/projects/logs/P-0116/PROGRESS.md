@@ -1448,3 +1448,32 @@ push 済みで `up to date` 実測)・受入全項目と validate.py の再実�
   rate limit (session15 実測)。paging 走査 (per_page=100)、ページはファイルごと保存して
   個別に json.load して extend (session20 実踩の回避策)
 - push は fast-forward で通る見込み (force 不要のはず。diverge 検知時のみ session28 手順)
+
+## session30 (P-0116 worker, 2026-08-23)
+
+やったこと: issue #56 の回答再確認 (**なし**, 177 件から増減なし)・open PR の確認
+(**3 件**: #512 P-0118 + #515 P-0128 + #516 P-0126。いずれも本プロジェクト無関係)・
+main 先行確認 (**なし**)・自分の remote 分岐移動確認 (**なし**)・受入全項目と
+validate.py の再実測。コード・manifest 側の変更は無し (session5→30 まで 26 回連続で
+同じ結論。session8 の「貼り付け用文案」「環境メモ」は引き続き有効)。
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option`) — red のまま
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** (apps/restic-check/ 配下 7 ファイル)
+- #2: **28 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- push 形態: **fast-forward push でよい** (remote tip は祖先。session28 結論どおり)
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完全に完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら
+  文言判断に従うだけ。来ていなければ再実測して追記で足りる (session8 の文案・環境メモ
+  もそのまま使える)
+- **冒頭チェックは毎回**: fetch → main 先行 (`HEAD..origin/main`) + 自分の分岐移動
+  (`HEAD..origin/project/p-0116`) の両方。diverge したら merge 一択 (rebase 不可 —
+  session28 参照)
+- **GitHub API 走査は AUTOPILOT_GITHUB_TOKEN 付きで**: unauthenticated は 403 rate limit。
+  paging 走査 (per_page=100)、ページごとファイル保存→個別 json.load (session20 回避策)。
+  本セッションもこの手順で問題なし (177 件 = 2 ページ)
