@@ -464,8 +464,49 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   GitHub が計算中で数秒〜十数秒 unknown になる (本日実測: 8 秒待ちで clean に落ち着いた)。
   待って再取得し、dirty が確定したときだけ update-branch → ci 再 green を待つ
 
+### セッション 12 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking 5 件に減少**
+  (P-0092 / P-0116 / P-0157 / P-0161 / P-0174。checked=61)。P-0163 が active を抜けた。
+  固定指示どおり実演習は見送り。コード変更は無し
+- **減少の理由を実測**: P-0163 が **active → in_review へ遷移していた** (読み取り専用
+  `git show origin/ops-state:projects.json`。内訳: delivered 26 / vetoed 2 / stalled 26 /
+  announced 1 / **active 5** / in_review 1)。in_review→active の復帰を 2 例見た後の
+  **逆方向 (active→in_review) 遷移の初観測**で、in_review が双方向の中間状態
+  (=差し戻し/保留表現) である裏付け。in_review は弁判定対象外なので、blocking 減は
+  演習開始条件の前進ではない (0 か否かだけが分岐)
+- 本セッションの実イベント: main がさらに前進 (93d1c431b → cc1c86626。
+  PR #528 telegram-adapter イメージの digest pin)。演習材料の PR #524 は
+  **2 度目の base 前進も無介入で乗り越え**、head=5d24c8932 のまま clean 維持
+  (mergeable_state は unknown を経由せず初手から clean だった)
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 5), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 281 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git fetch origin && git rev-parse origin/main          # cc1c86626 (93d1c431b から前進)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- 当日の手順はセッション 3 固定のまま不変 (--run 背景起動 → 全 zero 確認 → PATCH ready
+  解除 → PUT merge)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。main は 2 度動いたが PR #524 はどちらも無介入で clean を
+  維持 — 「main が動く前提」は実証済みなので過剰な事前点検は不要。
+  unknown 待ちの注意だけ残す: mergeable_state が unknown なら数秒〜十数秒待って再取得、
+  dirty 確定時のみ update-branch → ci 再 green を待つ
+
 ## 発見 (スコープ外。curriculum が拾うもの)
 
+- (セッション 12, ライフサイクル観測の続き) **active → in_review の逆方向遷移を初観測**
+  (P-0163)。セッション 8〜10 で in_review→active を 2 例見ていたので、in_review は
+  双方向に出入りできる中間状態 (=レビュー差し戻し/保留) と確度を上げた。なお in_review
+  へ抜けることで blocking 数が減るが、これは演習開始条件 (announced/active=0) の前進では
+  ない — 台帳の「減少」を弁の開放と読む誤りへの追加の反例
 - (セッション 11, 演習材料の耐久実測) main が初めて動く実イベントで、待機中の
   ドラフト PR #524 が無介入で mergeable_state=clean を維持した。metadata ラベルの
   2 行追加はファイル集合が他と素である限り conflict しない — 演習材料の鮮度維持コストは
