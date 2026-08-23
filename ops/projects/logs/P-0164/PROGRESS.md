@@ -500,7 +500,50 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   unknown 待ちの注意だけ残す: mergeable_state が unknown なら数秒〜十数秒待って再取得、
   dirty 確定時のみ update-branch → ci 再 green を待つ
 
+### セッション 13 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま**、blocking 5 件・checked=61
+  (wrapper 実測 08:00 と同一内訳)。固定指示どおり実演習は見送り。コード変更は無し
+- 本セッションの実イベント: **台帳の総計が完全に不変のまま blocking メンバーだけ
+  入れ替わった**。読み取り専用 `git show origin/ops-state:projects.json` の内訳は
+  delivered 26 / vetoed 2 / stalled 26 / announced 1 / active 5 / in_review 1 で
+  セッション 12 と同一数字。しかし個別状態を実測すると **P-0163 が in_review → active
+  へ復帰** (active→in_review→active の往復が完観測) し、**代わりに P-0174 が active →
+  in_review へ抜けた** (active→in_review 方向の 2 例目)。現在の blocking 内訳:
+  P-0092(announced) / P-0116 / P-0157 / P-0161 / P-0163
+- main は不動 (cc1c86626)。PR #524 は初手から mergeable_state=clean
+  (head=5d24c8932 不変、unknown 待ち無し)、ci + GitGuardian success
+- 前置条件の再実測 (劣化なし):
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 5), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 281 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git fetch origin && git rev-parse origin/main          # cc1c86626 (不動)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- 当日の手順はセッション 3 固定のまま不変 (--run 背景起動 → 全 zero 確認 → PATCH ready
+  解除 → PUT merge)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。main 不動・PR #524 無介入 clean が続き、事前点検は
+  ますます不要。unknown 待ちの注意だけ残す: mergeable_state が unknown なら数秒〜十数秒
+  待って再取得、dirty 確定時のみ update-branch → ci 再 green を待つ。
+  あと blocking 数が前回と同じでも中身は入れ替わるので、「減った/増えた」より「0 か否か」
+  だけを見ること (この原則は今回でさらに強化)
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 13, ライフサイクル観測の続き) **台帳の総計が不変でもメンバーシップは
+  入れ替わる**: セッション 12→13 で active/in_review のカウントは 1 件も変わらなかったが、
+  P-0163 と P-0174 が同時に逆方向へ遷移していた (P-0163: in_review→active 復帰、
+  P-0174: active→in_review)。カウントのスナップショット比較は churn を隠す — 「動きが
+  無かった」という判断は個別プロジェクトの状態照合なしには下せない。併せて
+  active→in_review が 2 例となり in_review 双方向中間状態説の確度を上げたほか、
+  P-0163 単体では active→in_review→active の完全な往復が初観測された
 
 - (セッション 12, ライフサイクル観測の続き) **active → in_review の逆方向遷移を初観測**
   (P-0163)。セッション 8〜10 で in_review→active を 2 例見ていたので、in_review は
