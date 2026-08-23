@@ -352,3 +352,40 @@ grep は「112」が session 番号に誤マッチするので、判定は diff 
 本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
 リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
 docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
+
+### 2026-08-23 セッション12 — セッション11 手順どおりの兆候確認 (main 零新着・動いたブランチ 3 本すべて無関係)
+
+**やったこと**: spec DoD の追加実装は無し。セッション5〜11 と同じく verify 再実測 +
+外部シグナル確認だけをした。main は零新着だったが、p-0115 / p-0143 / p-0144 / ops-state が
+動いたため各々 merge-base diff を実測し、すべて条件 A/B 無関係と確認した (下記 3〜4)。
+
+1. **verify 再実測**: #1 rc=1 / #2 rc=0 / #3 rc=2。セッション3 以降ずっと同一
+   (#1/#3 は verdict=keep ゆえ意図通り failing、#2 green)
+2. **観測環境の再実測** (11 回目の独立実測、結果同じ): `env` の proxmox/pve/tailscale 系無し
+   (rc=1) / `tailscale` `pvesh` `qm` `gh` CLI すべて absent
+3. **origin/main の新着確認**: `git fetch --prune` 後、`8c5cbd7d..origin/main` の commit は
+   **ゼロ**。ただし動いたブランチ 3 本を検出したので各々実測:
+   - `project/p-0143` (8c5cbd7d..50f67ae7): 自 logs のみ追加。docs/terraform/P-0142 paths 該当なし、
+     差分本文の PBS/qm shutdown 言及 **0 件** → 無関係
+   - `project/p-0144` (8c5cbd7d..1bc86ae7): initializer commit、自 logs のみ。
+     差分本文の PBS/qm shutdown 言及 **0 件** → 無関係
+   - `ops-state` (abfa1be1..aa552e1d): heartbeat.json / metrics.jsonl のみ。grep で「P-0142」6 件の
+     ヒットはステータス辞書の `"P-0142": "active"` 列挙という**文字列誤マッチ**
+     (beat 記録そのもの)。docs/terraform 差分 0 行 → 無関係
+4. **project/p-0115 再確認**: 更新されていた (d8a67197..183f3b05、新着 1 commit)。stat 実測は
+   自ログ PROGRESS.md +46 行のみ、新着差分本文の PBS/qm shutdown/docs/backup.md 言及 **0 件**。
+   同 log メッセージ自身も「#56 の新規コメントは 0 件」と実測しており整合
+5. **issue #56 を webfetch で直接読んだ**: 新着コメント無し = 条件 A/B の実施報告は未着
+
+→ verdict は `keep` のまま、inventory への反映対象なし。docs/pbs-retirement.md は書かない。
+
+**次のセッションへの一言**: やり方はセッション5〜12 と同一。main 比較基準は引き続き
+`8c5cbd7d..origin/main` (今回は零新着)。動いたブランチは merge-base からの差分で
+「docs/・terraform/・P-0142 logs への差分」と「PBS/`qm shutdown 112` 言及」の 2 点だけ確認すればよく、
+中身の精読は不要。**罠 2 つ**: (a) log メッセージや heartbeat 内の「112」「P-0142」は session 番号・
+ステータス辞書列挙に誤マッチするので判定は必ず diff 本文側で行う。(b) `grep | head; echo $?` は
+head の rc を返すので grep の成否にならない — ヒット数 (`grep -c`) の値で判定すること。
+verify 再実測 + 上記確認 + 最小ログ追記で終えてよい。
+本プロジェクトが動く唯一の条件は、人間または構築セッションが条件 A/B を実施し、その結果が
+リポジトリ (docs/backup.md 更新や inventory 反映依頼) か issue #56 コメントとして現れること。
+docs/pbs-retirement.md を書いてよいのは判断ルールで verdict が `retire`/`partial` になった後だけ。
