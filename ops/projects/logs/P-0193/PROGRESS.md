@@ -2,9 +2,10 @@
 
 ## 現在の状態
 
-受入 4 項目 **すべて green** (セッション 4, 2026-08-23 自己実測)。レビュー指摘 2 件
+受入 4 項目 **すべて green** (セッション 5, 2026-08-23 再実測)。レビュー指摘 2 件
 (heart 警報配線の未実装 / reporter の rc=2 代役レコード取り扱い) はセッション 4 で解消済み。
-DoD 本体として残っているのは **in-cluster 初回実行の実績** のみ (下記「セッション 4」参照)。
+装置が HEAD コードで動くことは結合予行演習で再実証済み (セッション 5)。
+DoD 本体として残っているのは **in-cluster 初回実行の実績** のみ (merge 待ち)。
 
 - [x] 1. `ops/tools/dashboard_smoke.py` 存在 + py_compile — 実サイトで全 12 検査合格を実測済み
 - [x] 2. `python3 -m unittest ops.tests.test_dashboard_smoke` — 33 本 OK (セッション 2)
@@ -218,6 +219,68 @@ verify 自己実測: 4 項目すべて green。
   heart 側配線は merge 後の最初の fail/stale ビートから自動で効く
   (初回ビートで cursor 未初期化 → 即鳴る。過去分の遡及通知ではないので問題無し)
 
+### セッション 5 (2026-08-23)
+
+レビュー指摘なし・受入 4 項目 green で起動。failing の受入項目が無く、in-cluster
+初回実行は merge 待ちのため、**残る DoD 本体「初回実行」の成功率を上げる事前検証**
+をした。装置側の変更は無し (スコープ維持)。
+
+やったこと:
+
+1. **HEAD コードでの結合予行演習を再実測**: tailnet URL
+   (`https://ops-dashboard.tailae6c2.ts.net/`) に対し本体を実行 → rc=0、全 12 検査
+   合格、result.json (schema:1, ok=true, url=http://ops-dashboard.autopilot.svc) +
+   PNG 産出。LAST HEART '08/23 23:34:57' (29 秒前) でダッシュボード自体も健在。
+   本体の最終変更は 24c914be6 (判定層 unittest 追加) で、初回実測 f15534d2c の
+   コードから触られているため、これで「**装置は HEAD で動く**」が確定。
+   mktemp ディレクトリで実施し後始末済み
+2. **CronJob 初回実行の静的精査** (初回で失敗しそうな点の洗い出し):
+   - DEFAULT_URL = `http://ops-dashboard.autopilot.svc` を確認 — ランナーが
+     --url を渡さない設計と整合
+   - kustomization.yaml は `generatorOptions.disableNameSuffixHash: true` 済みで、
+     configMapGenerator 生成の `dashboard-smoke-tool` はハッシュ無し名でマウント
+     される (ハッシュ付きなら Pod 起動死していた箇所。問題無しを確認)
+   - **emptyDir /tmp への非 root 書き込み**: 本 CronJob に fsGroup は無いが、
+     既存実績 (ops-health-reporter / version-watcher / download-ledger 各 app の
+     CronJob が fsGroup 無し・UID 65534・emptyDir /tmp で稼働中) から other-write
+     が開いており UID 10001 でも書ける。autopilot/deployment.yaml の
+     fsGroup: 10001 は PVC (root:root 所有になりうる) 用で、kubelet 作成の
+     emptyDir とは事情が違う — 追加不要と判断
+   - **chromium の HOME 書き込み**: イメージが `USER 10001` + `HOME=/home/autopilot`
+     を用意 (Dockerfile L79-84、npm/git 用)。fontconfig キャッシュ等も書ける
+   - RBAC + put_configmap: pvc_usage.py 流儀 (GET→resourceVersion 付き PUT /
+     無ければ POST)。update/get は resourceNames ["dashboard-smoke"] 絞り済み。
+     ロジックは test_dashboard_smoke_runner.py 8 本で固定
+3. テスト全件再実測: ops/tests 354 + heart/tests 206 = 560 本 green
+   (`unittest discover -s ops` 全体だと 596 本 green — 差分 36 は ops 配下の
+   他ディレクトリの test_*。両方 OK)
+
+分かったこと / 設計判断:
+
+- in-cluster 初回実行の**真の未知数は 3 つに絞れた**:
+  (a) `seccompProfile: RuntimeDefault` 下での chromium 起動 (worker 環境は
+      seccomp 制約なし相当。--no-sandbox 付きなので通常は動くが、初回まで確証なし)
+  (b) ConfigMap 生成物 `/scripts/dashboard_smoke.py` としての実行 — 内容は drift
+      検査 CI で canonical と同一保証だが、マウント経由での実行は初回
+  (c) ランナーの k8s API 書き込み (PUT/POST) — pvc-usage-reporter 流儀だが、
+      この SA での実績は初回
+  いずれも merge 前に代替実測できない。初回実行時は rc=2 なら fallback レコードの
+  tool_error (stderr 末尾 400 字) に原因が出る
+- 判断: 発見節「tailnet URL 実質解消」は **curriculum 送り**とする。URL 到達性の
+  機械的実測 (HTTP 200) は 2 セッション連続で確認したが、「tailnet に居る人間が
+  見えること」そのものは人間しか確定できず、本装置は代替にならないため
+
+verify 自己実測: 4 項目すべて green。
+
+残っていること (変更なし):
+
+- **in-cluster 初回実行の実績づけのみ** (merge 後)。観察ポイント:
+  (1) `kubectl get jobs -n autopilot` の dashboard-smoke-* 成功、
+  (2) `kubectl get configmap dashboard-smoke -n autopilot` の report.json、
+  (3) 次回 reporter run の latest.json `dashboard_smoke` キー、
+  (4) 落ちた場合は上の未知数 (a)(b)(c) のどれかを rc=2 の tool_error で切り分ける。
+  heart 側警報は merge 後最初の fail/stale ビートから効く (追加作業無し)
+
 ### 実測済みの罠 (次のセッションのあなたは再測しなくてよい)
 
 1. **`--virtual-time-budget` はこのページで死ぬ**: transcript の EventSource (SSE) と
@@ -255,10 +318,10 @@ verify 自己実測: 4 項目すべて green。
 
 ## 次のセッションへの一言
 
-レビュー指摘 2 件は解消済み (heart 警報配線 + reporter の rc=2 取り扱い)。verify 4/4 green。
+レビュー指摘なし・受入 4/4 green・テスト 560 本 green。装置側の追加作業は無し
+(セッション 5 の結合予行演習で HEAD コードでの動作は再実証済み)。
 **残るは in-cluster 初回実行の実績づけ 1 つだけ**: merge 後の CronJob 初回実行を確認する
-(`kubectl get configmap dashboard-smoke -n autopilot` と次回 reporter run の
-latest.json `dashboard_smoke` キー。手順は上「セッション 3」末尾)。Service DNS 到達性・
-chromium の非特権描画・TMPDIR=/tmp の user-data-dir はすべて初回実行で初めて実測になる。
-heart 側の警報は merge 後最初の fail/stale ビートから効くので、装置側の追加作業は無し。
-発見節の「tailnet URL 実質解消」を人間確認で確定させるか curriculum へ出すかも判断すること。
+(手順と観察ポイントは「セッション 5」末尾。落ちたら rc=2 の tool_error を
+未知数 (a) seccomp / (b) ConfigMap マウント実行 / (c) k8s API 書き込みのどれかに切り分ける)。
+Service DNS 到達性・emptyDir 非 root 書き込み・HOME 書き込みは静的精査で担保済み。
+発見節「tailnet URL 実質解消」は curriculum 送りと判断済み。
