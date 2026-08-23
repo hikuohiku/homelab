@@ -544,3 +544,34 @@
   到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
   test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
 - main が動いていれば追い越す (#578 時点の要領どおり)。動いていなければ merge 不要
+
+## セッション 15 (2026-08-23 深夜) — 短絡チェックのみ (セッション 13 の方針どおり)。main 不動・census 未着・変更ゼロ
+
+### やったこと
+
+- **セッション 13 の短絡手順に従い 4 点チェックだけ実施**:
+  V1 green / V2 red (既知 fail-fast rc=2、stderr も wrapper 実測と同一) /
+  V3 green (evidence_path=ops/profiles/private-data/demo.json の全 true キー
+  7 点を機械確認 — 無傷) / census 未着 (rc=1)
+- **main 新着なし**: `git rev-list HEAD..origin/main --count` = 0 (#578 のまま)。
+  ワーキングツリー清潔・origin/project/p-0243 と一致 → 追い越し対象なし。
+  コード行の目視再確認も省略 (セッション 13 の合意どおり)
+- PR 状態は `gh` 未導入で確認できず (runner イメージに無い。merge 判定は wrapper 任せ)
+- **コード変更は今セッションもゼロ**。この記録の追記だけ。unittest 全走見送りの
+  根拠も同一 (セッション 7 の全 454 本 OK 以降、コミット単位のコード差分ゼロ)
+
+### 検証 (全部自分で実走済み)
+
+- spec verify V1 green / V3 green / V2 red (既知 fail-fast rc=2、クラスタ副作用ゼロ)
+- demo.json 完全性確認 (全キー true を assert) / census 未着確認 (rc=1) / main 新着なし確認
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4〜14 から一歩も動いていない**: V2 は本 PR の merge+sync 後の
+  新 runner Pod で自動 green 化する (spawn.py の emptyDir mount 済み)。
+  Pod 内での再走は無駄。やることは「PR merge を待つ」だけ。
+  main 新着がなければ、セッション 13〜15 と同じ「4 点チェック短絡 + ログ追記」でよい
+- census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+  到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+- main が動いていれば追い越す (#578 時点の要領どおり)。動いていなければ merge 不要
