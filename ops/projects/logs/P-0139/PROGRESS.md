@@ -642,3 +642,58 @@ webhook URL は autopilot-writer SA には読めない (RBAC 実測 Forbidden) �
    **#4** (message_id 人間視認 or 判定除外) / on-sync-failed 式の生きた発火検証を
    追加注入で実施するか否か (spec の注入 1 回は消化済みのため要人間裁定)
 3. fired.json / drill fixture は触らない
+
+### セッション 14 (2026-08-23) — 待機状態の全項目再実測 8 回目。merge 未・競合なし (merge-tree で直接証明)・controller エラー新規ゼロ、version-watcher Healthy 収束を確認
+
+**やったこと**:
+
+1. **merge 状況**: 未 merge (`fetch --prune` 後に `git branch -r --contains` が
+   a08db5a9 で origin/project/p-0139 のみ)。main tip = 8c5cbd7d 変化なし
+2. **verify 再実測**: #1 green / #3 = fixture 14 tests OK / #2 の red は既知の
+   `--enable-helm` ゲートのみ (エラー文も前回と同一) / #4 の red は message_id null のみ
+   (delivered: True は生きている)。fired.json 自体は無傷 (触っていない)
+3. **render を本セッションでも再実証** ($HOME/bin/helm v3.18.4 + `--enable-helm`):
+   rc=0 / 27,222 行 / stderr 空。argocd-notifications-cm data は**ちょうど 7 キー**
+   (context, service.webhook.discord, subscriptions, template ×2, trigger ×2) /
+   optional chaining 式 `app.status?.operationState.phase` が render 出力に 1 件 /
+   autopilot フィルタ 2 件 (trigger 2 本それぞれ) / ES discord-webhook render される
+4. **クラスタの merge 前状態が正しいことを再実測**: argocd-notifications-cm data =
+   ['context'] のみ / externalsecret は dex 分のみ SecretSynced=True / drill 残骸
+   (App・ns) とも NotFound
+5. **controller エラー増加ゼロを実測**: pod 名を label で引き直し、`--since-time=
+   2026-08-23T03:46:02Z` で error 0 行 (当該範囲 3,625 行)。pod restarts=19 /
+   startedAt=2026-08-03T14:21:14Z で本セッションでの再起動は無し
+6. **App 状態観測**: 全 15 本中 OutOfSync/Healthy は coder / immich / syncthing /
+   vaultwarden の 4 本 (セッション 9 以降据え置き)。**version-watcher が Synced/Healthy
+   に収束** (セッション 13 出現直後から)。Degraded はゼロで通知対象外
+7. **競合状況を 2 重で確認**: (a) 全リモートブランチの apps/argocd diff を merge-base
+   比較 → 自ブランチ以外 0 行 (ops-health-report が再 push されたがやはり 0 行)、
+   (b) **`git merge-tree --write-tree origin/main project/p-0139` が rc=0**
+   (in-memory merge がコンフリクト無しで完走することの直接証明。初実施)
+
+**分かったこと**:
+
+- 測定上の注意 3 点 (いずれも本セッションで実際に引っかかった):
+  - cm のリソース名は **argocd-notifications-cm**。`argocd-notifications` は NotFound
+    (`kubectl get cm -n argocd` の一覧で名前を引き直してから読む)
+  - 「argocd-notifications-secret 出ず」の判定で部分文字列マッチ
+    (`'name: argocd-notifications-secret' in text`) を使うと**誤検知する**: RBAC の
+    resourceNames と自作 ES の spec.target.name にも同名が出る。kind + metadata.name
+    でアンカーして文書単位で判定する (helm が Secret 本体を出していない結論自体は不変)
+  - rendered cm の block scalar は `|` であって `|-` ではない。
+    `trigger.on-sync-failed: |-` で grep すると存在するのに見つからない
+- verify #4 の message_id について追加確認: delivery_annotation の
+  `1z8h3hJebpW6TgpzuFQQY5MQH-4` 風トークンは Discord message id では無く
+  notifications-engine の content digest (snowflake 型の数値 id と桁も文字種も違う)。
+  controller 側での id 取得経路はやはり存在しない — 人間視認 or 判定除外の裁定は不変
+
+**次のセッションへの一言 (= やることリスト)**:
+
+1. merge 済みか最初に確認 (`git branch -r --contains a08db5a9`)。merge 済みならクラスタ反映を実測:
+   **argocd-notifications-cm** data が 7 キーちょうど (on-sync-failed は `?.` 付き) /
+   externalsecret argocd-notifications-discord-webhook が SecretSynced /
+   controller error 新規ゼロ (since-time 付きで測る) / 全 App Healthy 戻り確認
+2. 未 merge ならやることは無い。裁定事項は不変 3 点: **#2** (sandbox 恒久 red) /
+   **#4** (message_id 人間視認 or 判定除外) / on-sync-failed 式の生きた発火検証を
+   追加注入で実施するか否か (spec の注入 1 回は消化済みのため要人間裁定)
+3. fired.json / drill fixture は触らない
