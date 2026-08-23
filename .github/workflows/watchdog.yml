@@ -10,6 +10,13 @@ name: Watchdog
 # heartbeat.json が ops/rules.json の heartbeat.stale_seconds を超えて古ければ、
 # フィードバック issue #56 に人間宛のコメントを投稿してジョブを失敗させる。
 #
+# P-0211 追加: 同じ発想のもうひとつの盲点 — ops-health-reporter 自身が死ぬと
+# ops-health-report ブランチの更新が止まり、autopilot と人間が共有する健全性情報が
+# 古いまま凍る (heartbeat は生き続けるので P-0027 の検査では鳴らない)。同じ job の
+# 末尾のステップが ops-health-report ブランチの latest.json の鮮度も検査し、古ければ
+# 同じく issue #56 コメント + Discord incident でジョブを失敗させる。判定ロジックは
+# ops/check_health_freshness.py にあり、ops/tests/test_health_freshness.py が守る。
+#
 # **このワークフロー自身は CI の検証対象外**である (release-image.yml と同じ構図、
 # ops/CHARTER.md §5.4)。壊れていても誰も落ちない = 静かに検知しなくなる。だから
 # 変更したら workflow_dispatch (simulate_at に古い時刻) で 1 回実走させて確かめること。
@@ -173,6 +180,104 @@ jobs:
               ;;
             *)
               echo "::error::check_heartbeat_fresh.py が想定外の rc=$rc で終了した (watchdog 自身の故障)"
+              exit 1
+              ;;
+          esac
+
+      # --- P-0211: ops-health-reporter 自身の死の検知 (heartbeat 検査では鳴らない) ---
+
+      - name: Fetch latest.json from ops-health-report
+        # 失敗しても止めない。ブランチが消えた・空になったのも検知対象なので、
+        # ファイルが無い状態でスクリプトに渡して fail-closed に判定させる。
+        # FETCH_HEAD を使うので --single-branch の refspec 罠 (ops/memory/substrate.md) に当たらない
+        run: |
+          set -uo pipefail
+          rm -f "$RUNNER_TEMP/latest.json"
+          if git fetch --no-tags --depth=1 origin ops-health-report; then
+            if ! git show FETCH_HEAD:ops/health/latest.json > "$RUNNER_TEMP/latest.json"; then
+              rm -f "$RUNNER_TEMP/latest.json"
+              echo "::warning::ops-health-report に ops/health/latest.json が無い"
+            fi
+          else
+            echo "::warning::ops-health-report ブランチを fetch できなかった"
+          fi
+          exit 0
+
+      - name: Check health-report freshness and alert
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+
+          set +e
+          python3 ops/check_health_freshness.py \
+            "$RUNNER_TEMP/latest.json" \
+            --body-out "$RUNNER_TEMP/health-body.md" \
+            --run-url "$RUN_URL" | tee "$RUNNER_TEMP/health-verdict.txt"
+          rc=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo
+            echo "## watchdog: ops-health-report freshness"
+            echo
+            echo '```'
+            cat "$RUNNER_TEMP/health-verdict.txt"
+            echo "rc=$rc"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          case "$rc" in
+            0)
+              echo "ops-health-report は新しい。何もしない"
+              ;;
+            3)
+              {
+                echo
+                echo "### 投稿する本文 (ops-health-report 鮮度)"
+                echo
+                cat "$RUNNER_TEMP/health-body.md"
+              } >> "$GITHUB_STEP_SUMMARY"
+
+              # python3 -c のコードは run ブロックの base インデント (10 桁) で書く。
+              # YAML が共通インデントを剥がしたあとに Python ソースとして列 0 に揃う
+              # (heredoc は終端子を列 0 に置けず、case の内側では書けないため -c)
+              python3 -c '
+          import json, pathlib, sys
+          verdict, out = (pathlib.Path(a) for a in sys.argv[1:3])
+          text = (
+              "[incident] ops-health-report ブランチの更新が古くなっています (外部 watchdog 検知)。"
+              "ops-health-reporter の死で健全性情報が凍っている可能性があります。詳細は issue #56 へ。\n\n"
+              + verdict.read_text()[:1200]
+          )
+          out.write_text(json.dumps({"content": text[:1900]}))
+          ' "$RUNNER_TEMP/health-verdict.txt" "$RUNNER_TEMP/discord.json"
+
+              if [ "${DRY_RUN}" = "true" ]; then
+                echo "::warning::dry_run のためコメントは投稿しない"
+              else
+                gh issue comment 56 --repo "${GITHUB_REPOSITORY}" --body-file "$RUNNER_TEMP/health-body.md"
+                # Discord は補助経路。webhook 未設定・送信失敗でも検知の報告 (issue コメントと
+                # job fail) を止めない。curl なら UA 問題がない (Python urllib は Cloudflare に
+                # 403 で弾かれる実測あり — ops/heart/notify.py)
+                if [ -n "${DISCORD_WEBHOOK_URL:-}" ]; then
+                  curl -fsS -X POST \
+                    -H 'Content-Type: application/json' \
+                    -H 'User-Agent: homelab-watchdog/1 (+https://github.com/hikuohiku/homelab)' \
+                    --data-binary @"$RUNNER_TEMP/discord.json" "${DISCORD_WEBHOOK_URL}" \
+                    || echo "::warning::Discord への通知に失敗した (issue コメントは出ている)"
+                else
+                  echo "::warning::DISCORD_WEBHOOK_URL が未設定のため Discord 通知をスキップ"
+                fi
+                echo "::error::ops-health-report ブランチが古い。issue #56 を確認してください"
+                exit 1
+              fi
+              ;;
+            *)
+              echo "::error::check_health_freshness.py が想定外の rc=$rc で終了した (watchdog 自身の故障)"
               exit 1
               ;;
           esac
