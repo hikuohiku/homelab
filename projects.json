@@ -3830,7 +3830,51 @@
         "soft_cap": 1200000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T09:37:41Z",
+        "verify": [
+          {
+            "cmd": "test -s ops/projects/logs/P-0181/memory-evidence.md && grep -qE 'ピーク|p95' ops/projects/logs/P-0181/memory-evidence.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -c \"import sys; s=open('apps/argocd/values.yaml').read(); b=s.split('repoServer')[0]; c=b[b.index('controller'):]; sys.exit(0 if ('resources' in c and '512Mi' not in c) else 1)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_argocd_memory_series",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_argocd_memory_series (unittest.loader._FailedTest.test_argocd_memory_series)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_argocd_memory_series\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_argocd_memory_series'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.001s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "python3 ops/tools/argocd_memory_series.py --check",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-mk00z5ks/repo/ops/tools/argocd_memory_series.py': [Errno 2] No such file or directory\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0182",
@@ -3852,7 +3896,51 @@
         "soft_cap": 1500000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T09:37:41Z",
+        "verify": [
+          {
+            "cmd": "python3 -c \"import json,sys; r=json.load(open('ops/rules.json')); sys.exit(0 if r.get('runner',{}).get('continuation') else 1)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'continuation' ops/heart/reconcile.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_budget_continuation",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_budget_continuation (unittest.loader._FailedTest.test_budget_continuation)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_budget_continuation\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_budget_continuation'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.001s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "test -s ops/projects/logs/P-0182/resume-evidence.json",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0185",
@@ -3873,7 +3961,42 @@
         "soft_cap": 800000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T09:37:41Z",
+        "verify": [
+          {
+            "cmd": "python3 -c \"import json,os; d=json.load(open('ops/stage3/readiness.json')); assert len(d['criteria'])>=5 and d.get('verdict') in ('blocked','ready_for_announce_draft'); assert all(os.path.exists(c['evidence_path']) for c in d['criteria']); assert all(set(('id','criterion','threshold','current_value','evidence_path','pass')) <= set(c) for c in d['criteria'])\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,os; d=json.load(open('ops/stage3/readiness.json')); assert len(d['criteria'])>=5 and d.get('verdict') in ('blocked','ready_for_announce_draft'); assert all(os.path.exists(c['evidence_path']) for c in d['criteria']); assert all(set(('id','criterion','threshold','current_value','evidence_path','pass')) <= set(c) for c in d['criteria'])\n                                ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'ops/stage3/readiness.json'\n"
+          },
+          {
+            "cmd": "test -s ops/stage3/README.md && grep -q 'verdict' ops/stage3/README.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_stage3_readiness",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_stage3_readiness (unittest.loader._FailedTest.test_stage3_readiness)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_stage3_readiness\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_stage3_readiness'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
