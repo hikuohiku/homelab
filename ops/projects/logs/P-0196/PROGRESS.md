@@ -343,3 +343,13 @@ verify 第 1 項 (--plan) も rc=0 で green 継続。**人間の一手
 はまだ来ていない**。
 
 次セッションへの引き継ぎ: セッション 4 の「次セッションへの引き継ぎ」をそのまま丸ごと引き継ぐ (変更点なし)。
+
+## セッション 12 — 2026-08-23: up 再実行 → RBAC 未適用のまま (セッション 5〜11 と同じく変化なし)
+
+冒頭で `up` を実行 → admission probe が未適用を検出 (`SA 'argocd-lab-application-controller' が無い`)
+→ 自力掃除で中断。lab ns 両方 NotFound・rss_series.csv 未存在・working tree 無変更を自分でも確認、
+verify 第 1 項 (`--plan`) も rc=0 で green 継続。**人間の一手
+(`kubectl apply -f ops/projects/logs/argocd-oom-lab/proposed-rbac-for-human.yaml`)
+はまだ来ていない**。
+
+次セッションへの引き継ぎ: セッション 4 の「次セッションへの引き継ぎ」をそのまま丸ごと引き継ぐ (変更点なし)。
