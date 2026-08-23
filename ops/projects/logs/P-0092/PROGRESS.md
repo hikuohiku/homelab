@@ -1243,3 +1243,30 @@ B2 鍵が人間の手で直った兆候 (新規 job の Complete 等) がない�
 「24h 以上 CrashLoop 無し」脚は満たされる、「バックアップ成功」脚は外部要因により
 未達確定。事実を淡々と PROGRESS に記して判定役へ渡すこと。本番適用記録は書かない。
 
+
+## 2026-08-23T19:44Z (セッション 65、開始 2026-08-23T19:43:37Z)
+
+**観察継続。** `date -u` で 2026-08-23T19:43:37Z を確認、窓の満了
+(2026-08-24T16:40:08Z) まで約 20.9h。最小工数で終える。verify 1・2 は自測で
+green 再確認 (27 tests OK、verify 3 は前回規則どおり意図的に未記述)。
+
+- Pod 実測: `immich-postgres-68d65f4b9d-jtbvz` Running / Ready 1/1 / RESTARTS=0 /
+  AGE 3h4m (観察起点 16:40:08Z と整合)。CrashLoop の兆し無し。
+  namespace 全体 (server / ML / valkey) も健全。
+- job 29791785 の状態確認は引き継ぎ指示どおりスキップ (36・37 で二重実測済み、
+  一覧上も Failed のままで変化なし)、jobs 一覧で新規手動 job の有無のみ見た →
+  **無し = B2 鍵が直った兆候は無い** (一覧は scheduled 分のみ:
+  download-ledger / immich-restic-backup / immich-restic-retention /
+  pvc-usage-reporter)。直近の scheduled バックアップ 2 本
+  (29790345 = 25h 前、29791785 = 119m 前) も一覧上 Failed のままで変化なし。
+  エスカレーション内容 (セッション 32 記載) に追加事項なし。
+- PROGRESS 追記はセッション 46 規則どおり `cat >> ... <<'EOF'` を使用
+  (Edit 不使用、破壊なし)。
+
+次のセッションへ: 観察継続のみ。`## 本番適用記録` は絶対に書かない。
+見るのは (1) postgres Pod の RESTARTS=0 維持、(2) 新規手動 job の有無
+(`kubectl get jobs -n immich`)。job 29791785 の状態確認は不要。
+B2 鍵が人間の手で直った兆候 (新規 job の Complete 等) がない限り状況は変わらない。
+**窓満了 (2026-08-24T16:40:08Z) 後の起動なら** セッション 37 引き継ぎどおり:
+「24h 以上 CrashLoop 無し」脚は満たされる、「バックアップ成功」脚は外部要因により
+未達確定。事実を淡々と PROGRESS に記して判定役へ渡すこと。本番適用記録は書かない。
