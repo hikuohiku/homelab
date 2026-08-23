@@ -3425,11 +3425,55 @@
         "broken": []
       },
       "stalled_reason": "adopt_gate_some_pass"
+    },
+    {
+      "id": "P-0157",
+      "title": "#49 は「失敗すら起こらない」形で再発する — 全 restic リポジトリの『最後の成功から何時間』を毎時測り、静停止を最初の 1 時間で捕まえる",
+      "state": "proposed",
+      "branch": "project/p-0157",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "python3 -m unittest ops.tests.test_backup_freshness",
+        "git fetch origin ops-health-report -q && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; f=json.load(sys.stdin).get('backup_freshness'); assert isinstance(f,list) and len(f)>=5 and all(('repo' in x and 'hours_since_success' in x) for x in f)\"",
+        "grep -qE 'backup_fresh' ops/rules.json"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1200000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0161",
+      "title": "段階 3 の錠前を先に鋳造する — 私的データを触る手に外へ伸びる口を持たせない分離 Job プロファイルを作り、偽メールで通す",
+      "state": "proposed",
+      "branch": "project/p-0161",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "test -f ops/profiles/private-data/README.md && grep -qE 'trifecta|三要素' ops/profiles/private-data/README.md",
+        "python3 -m unittest ops.tests.test_private_data_profile",
+        "python3 -c \"import json; d=json.load(open('ops/projects/logs/P-0161/demo.json')); assert d.get('egress_denied') is True and d.get('published_to_branch') and d.get('cleaned_up')\""
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1500000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T05:20:06Z",
-  "last_activity_at": "2026-08-23T05:42:35Z",
+  "last_curriculum_at": "2026-08-23T05:43:46Z",
+  "last_activity_at": "2026-08-23T05:43:46Z",
   "last_critic_at": "2026-08-22T07:23:14Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
