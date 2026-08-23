@@ -35,9 +35,9 @@ spec:
         seccompProfile:
           type: RuntimeDefault
       initContainers:
-        # opencode が MCP サーバを子プロセスとして起動できるよう、返信ツールの
-        # バイナリを共有 emptyDir へ置く。opencode 側のイメージ (autopilot) には
-        # このバイナリが無いため、core イメージから運ぶ
+        # opencode が MCP サーバを子プロセスとして起動できるよう、コアの声
+        # (telegram-adapter mcp) と目 (core-driver mcp) のバイナリを共有 emptyDir へ置く。
+        # opencode 側のイメージ (autopilot) にはどちらも無いため、core イメージから運ぶ
         #
         # 以下 3 箇所 (init 2 つと driver) の core イメージ digest は必ず同じ値にする。
         # ops/check_version_sync.py の "autopilot-core image digest" が一致を検査する。
@@ -45,7 +45,7 @@ spec:
         # OCI index digest を registry API の docker-content-digest で実測したもの
         - name: install-mcp-bin
           image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:5192f68e768da77fe7a52a27e83290d0a73ee96bf9cef4f16064c0db4cd0ad54
-          command: ["sh", "-c", "cp /usr/local/bin/telegram-adapter /mcp/telegram-adapter"]
+          command: ["sh", "-c", "cp /usr/local/bin/telegram-adapter /usr/local/bin/core-driver /mcp/"]
           volumeMounts:
             - name: mcp-bin
               mountPath: /mcp
@@ -97,6 +97,13 @@ spec:
                 secretKeyRef:
                   name: autopilot-core-credentials
                   key: TELEGRAM_ALLOWED_USER_ID
+            # homelab_health が ops-health-report ブランチを読むために使う。
+            # 同じく MCP の子プロセス (core-driver mcp) が継承する
+            - name: AUTOPILOT_GITHUB_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: autopilot-core-credentials
+                  key: AUTOPILOT_GITHUB_TOKEN
             - name: TZ
               value: Asia/Tokyo
           volumeMounts:
