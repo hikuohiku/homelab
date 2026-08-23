@@ -451,6 +451,34 @@ session 11 の指示通り現状確認のみ。**作業は無かった** (これ
 ### 次のセッションへの一言
 
 session 5〜12 の「次のセッションへの一言」をそのまま引き継ぐ (方針に変更なし)。
+
+## 2026-08-23 session 13 (worker)
+
+### 結論 — 変化なし。spec 差し替え待ちのまま、実装・commit は無用と確認して終了
+
+session 12 の指示通り現状確認のみ。**作業は無かった** (これが正しい状態)。
+補足: 本セッションで session 4 の全文を読み直し、代替ルート不成立の根拠を再確認した —
+クラスタ到達不能 (kubeconfig/SA token/Tailscale credential 無し, session 4 実測) のため
+preview や kubectl 実測での先行検証は最初から不可能。手動 PR も reviewer Job の機械強制
+(runner.py L972-978) により不成立。**以降のセッションがこの 2 ルートを再探索する無駄は不要**。
+
+### 再実測 (2026-08-23T07:17Z)
+
+- `git show origin/main:ops/projects/archive.jsonl | grep -c '"id": "P-0157"'` → **1**
+  (差し替え追記はまだ無い。origin/main 先頭は c5d6df255 のまま、新着無し)
+- verify #1 green (34 tests OK) / #2 red 継続 (health ブランチ latest.json の
+  `backup_freshness` は AssertionError = None) / #3 green (`backup_fresh` in rules.json)。
+  wrapper 実測と一致
+- 差し替え用コマンドの判定力は維持:
+  `grep -c '"backup_freshness": collect(collect_backup_freshness)' apps/ops-health-reporter/report.py`
+  がブランチでは一致 (1 件) / origin/main では collect_backup_freshness 言及 0 件 —
+  session 5 実測のまま
+- origin/project/p-0157 は local HEAD (6fdd8cf30 = session 12 の PROGRESS commit) と同一 —
+  wrapper 側の新着 commit も無し
+
+### 次のセッションへの一言
+
+session 5〜13 の「次のセッションへの一言」をそのまま引き継ぐ (方針に変更なし)。
 要約: (1) archive.jsonl の同 id 追記数を確認 (>1 なら差し替え済み)、(2) verify 3 項目を
 自力実測。#2 が旧定義のまま red なら実装も commit も無用 (この PROGRESS 追記のみ)。
 差し替え済みで全 green なら何も足さず wrapper に流す (PR 作成・push は wrapper の職責)。
