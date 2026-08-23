@@ -1400,3 +1400,51 @@ fetch 後に `origin/project/p-0116` が session27 既知の状態から**別系
 - GitHub API 走査は AUTOPILOT_GITHUB_TOKEN 付きで (session15 実踩)、paging はページごと
   ファイル保存→個別 json.load (session20 回避策)。/tmp/opencode は root 所有で読み取り専用、
   一時ファイルは `mktemp /tmp/接頭辞.XXXXXX`
+
+## session29 (P-0116 worker, 2026-08-23)
+
+やったこと: issue #56 の回答再確認 (**なし**)・open PR の確認 (**3 件**: #512 P-0118 +
+#515 P-0128 + #516 P-0126。いずれも本プロジェクト無関係)・main 先行確認 (**なし**)・
+自分の remote 分岐移動確認 (**なし**, behind 0。session28 の merge 分は wrapper が
+push 済みで `up to date` 実測)・受入全項目と validate.py の再実測。コード・manifest 側の
+変更は無し (session5→29 まで 25 回連続で同じ結論。session8 の「貼り付け用文案」
+「環境メモ」は引き続き有効)。
+
+### issue #56 / PR / 冒頭チェックの確認結果
+
+- コメント **177 件** (session28 から増減なし)。`P-0116` / `--include` /
+  `restic-check` 走査で該当 **0 件**、`BusyBox` 2 件の中身を本セッションで全文確認 —
+  2026-08-04T20:20Z (T-0024 busybox version 調査への検証コメント) と
+  2026-08-05T05:35Z (ArgoCD 健全性報告) で、verify #1 文言判断への回答では**ない**。
+  回答は **未着のまま** (最新コメントは 2026-08-23T01:23:30Z の P-0118 question)
+- open PR: **3 件** (#512 `project/p-0118` — Telegram 疎通、#515 `project/p-0128` —
+  B2 download cap の帳簿化と計器、#516 `project/p-0126` — inventory 全対象の定期
+  バージョン確認)。本プロジェクトのものは**無し**
+- fetch 後に `git log HEAD..origin/main` が**空** — rebase 不要
+  (origin/ops-state・project/p-0115/p-0126 移動だが heart/他プロジェクト領域)
+- `git rev-list --count HEAD..origin/project/p-0116` = **0** — remote 分岐の移動なし
+  (session28 の強化チェック項目)
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option`) — red のまま
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** /
+  `find apps/ -name '*.yaml' | xargs grep -lq`: **rc=0**
+  (`apps/restic-check/` 配下 7 ファイルを再実測)
+- #2: **28 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- push 形態: **fast-forward push でよい** (remote tip は祖先。session28 結論どおり)
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完全に完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら
+  文言判断に従うだけ。来ていなければ再実測して追記で足りる (session8 の文案・環境メモ
+  もそのまま使える)
+- **冒頭チェックは毎回**: fetch → main 先行 (`HEAD..origin/main`) + 自分の分岐移動
+  (`HEAD..origin/project/p-0116`) の両方。diverge したら merge 一択 (rebase 不可 —
+  session28 参照)
+- **GitHub API 走査は AUTOPILOT_GITHUB_TOKEN 付きで**: unauthenticated は 403
+  rate limit (session15 実測)。paging 走査 (per_page=100)、ページはファイルごと保存して
+  個別に json.load して extend (session20 実踩の回避策)
+- push は fast-forward で通る見込み (force 不要のはず。diverge 検知時のみ session28 手順)
