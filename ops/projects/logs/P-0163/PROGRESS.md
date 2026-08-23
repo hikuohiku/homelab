@@ -67,3 +67,74 @@ port-forward かを決めてコマンド形に落とす)、失敗時ロールバ
 (**LXC 101 は合格まで停止しない** / 追加した config 差分を抜いて新規インストールに戻す)。
 罠: `/tmp/opencode` はこの環境では書けない (Permission denied、`/tmp/st-cert` を使用)。
 ruff バイナリも無い (py_compile で代用済み)。
+
+## セッション 2 — 2026-08-23: 移行台本 docs/syncthing-migration.md (verify 3 を green 化、3 項目すべて green)
+
+### やったこと
+
+- `docs/syncthing-migration.md` 新設 (395 行)。構成: 全体像 → 前提 → 手順 A (LXC 101 で
+  tar 1 コマンド + パス要確認の事前確認) → 手順 B (PVC 配置、コピペブロック) → 手順 C
+  (受け入れ検証 1 回) → 手順 D (片付け) → ロールバック → check の読み方対処表 → 合格後 → 既知の死角
+- **検証は in-cluster Job に決めた** (port-forward 不採用)。理由: pvc-rw / exercise は PVC への
+  実書き込みを要し、port-forward は REST しか通さない。Job 内ならツール既定の Service DNS
+  (--gui-url / --sync-addr) がそのまま正になり引数不要。restic マニフェストは ConfigMap に同梱して
+  --strict を成立させる (Job 外実行だと restic-coverage が「不明」になるため)
+- **配置スクリプト** (migrate Pod 内で実行): layout を推測でなく実物から検出 (現 cert.pem の位置に
+  合わせる。セッション 1 の「flat/nested 確定待ち」は配置時実測で解消する設計にした)、旧 HOME
+  (`/var/lib/syncthing`) → 新 HOME への folder path 張り替え、`.pristine` 待避 (mv なので所有権ごと)
+  = ロールバック点 + LAYOUT 目印ファイル、identity 3 点 + https 証明書を cp -a、同期フォルダ中身は
+  identity/再生成物以外全部、chown -R 1000:1000、鍵 600 保証
+- **新発見: GUI バインド修正が必須**。LXC の config.xml は `<address>127.0.0.1:8384` が既定。
+  このままだと移行直後に Service/probe が到達できず再起動ループになる。sed で 0.0.0.0:8384 に
+  張り替えるステップを入れた (docs の gui-health 対処表にも反映)
+
+### verify 自己実測
+
+```
+$ test -f docs/syncthing-migration.md && grep -q 'LXC 101' docs/syncthing-migration.md   # rc=0
+$ test -f ops/tools/syncthing_acceptance.py                                              # rc=0
+$ python3 -m unittest ops.tests.test_syncthing_acceptance     # Ran 37 tests ... OK
+$ python3 -m unittest discover -s ops/tests -t .              # Ran 279 tests ... OK (CI 相当)
+```
+
+### 台本の空回し試験 (合成環境での実測)
+
+doc 内の配置スクリプト・ロールバックスクリプトを抽出し、合成ディレクトリ (旧 HOME flat 構成 +
+同期フォルダ 2 個 vs 新規インストール nested 構成) で往復試験した:
+
+- placement rc=0: nested 検出、path 張り替え (/var/lib/syncthing/Sync → /var/syncthing/Sync)、
+  GUI バインド修正、apikey 維持 (exercise が config.xml から読むので必須)、フォルダデータ複製、
+  鍵 600 維持、.pristine に新規インストール側 identity+index-v2+LAYOUT 待避
+- rollback rc=0: 新規インストール状態へ完全復元 (.pristine 解消まで)。**過程でバグ 2 件発見→修正**:
+  (1) mkdir が rm より前だと作ったものを消し直す (順序変更)、(2) LAYOUT 目印を消さないと
+  rmdir が落ちる (rm 追加)。どちらも doc 修正済みで、この記録以降の doc は通過版
+- YAML は PyYAML safe_load、スクリプトは sh -n + 実行で検証
+
+### 分かったこと / 実測
+
+1. **runner 環境は非 root (uid 10001)** — chown 1000:1000 は空回しでは stub に置換して試験した。
+   実機では migrate Pod が root + CHOWN/FOWNER/DAC_OVERRIDE (docs/backup.md 復元試験の教訓どおり)
+   で動く前提。migrate Pod のイメージは python:3.12-alpine (inventory 監視済み・node に cache 済み)
+2. **検証 Job を uid/gid 1000 で動かす**ことで pvc-rw が「本番 Pod と同じ権限で読み書きできるか」の
+  判定になる (root で動かすと所有権問題を見逃す)
+3. 移行直後からピアとの同期は始まりうる (device ID 不変のため接続は自動)。よって台本は rollout 直後に
+   検証する順序。不合格でもロールバックすれば LXC 101 が正であり続け、ピア側データは失われない
+4. `kubectl exec` で stdin スクリプトを流すには `-i` が必要 (無いと heredoc が届かない)
+5. GUI ログイン資格情報は移行後**旧 LXC 101 のもの**になる (config.xml ごと移るため)。docs に記載済み
+
+### 発見 (スコープ外、curriculum 拾い待ち)
+
+- 台本の migrate Pod / acceptance Job の YAML は**実機での空回しがまだ** (合成環境と構文検査のみ)。
+  初回適用時に軽微な手直しが出る可能性はあるが、全操作可逆なので再試行で吸収できる。docs にも明記した
+- exercise は稼働中インスタンスの設定を API 経由で一時変える (ダミーフォルダ追加/削除のみ)。「Git → CI →
+  ArgoCD を通さない変更」に見えうるが、spec DoD 2 が明示要求する演習であり cleanup 付き。レビューで
+  突かれたら spec を根拠に弁護する
+
+### 次のセッションへの一言
+
+verify 3 項目とも green のはず (wrapper 実測を優先)。次はレビュー対応の可能性が高い。残っている未確定:
+(1) 台本 YAML の実機空回し未実施 — レビュー指摘が出たらここが濃厚。(2) `.pristine` 待避は「2 回目以降の
+実行では触らない」設計だが、ロールバック→再配置を繰り返すと pristine が初回のまま保たれる点は意図的
+(戻り先は常に「今日の新規インストール」)。(3) 手順 A の tar パス `/var/lib/syncthing` は依然要確認
+(人間が preflight grep で確かめる形に逃がした)。罠はセッション 1 引き継ぎ: `/tmp/opencode` 書けない、
+ruff 無し (py_compile/sh -n 代用)、一時ファイルは mktemp。
