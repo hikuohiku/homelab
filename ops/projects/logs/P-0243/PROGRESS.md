@@ -620,3 +620,55 @@
   到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
   test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
 - main が動いていれば追い越す (#578 時点の要領どおり)。動いていなければ merge 不要
+
+## セッション 17 (2026-08-23 深夜) — main 追い越し (#579 取り込み) + 短絡チェック。V2 の壁を環境側から実証し直し。コード変更ゼロ
+
+### やったこと
+
+- **main が動いた (#578→#579) ので追い越しを実施**: `git diff $(git merge-base …)
+  origin/main --stat` で中身を確認したところ、#579 の実体は curriculum の不採択案
+  P-0271〜P-0277 を ops/projects/archive.jsonl に +7 行しただけ。
+  **P-0243 自体は archive されておらず生きていることを確認** (archive 行に含まれず、
+  台帳・spawn への影響なし)。コンフリクトなしで merge 完了 (8d2d0f09e)
+- **セッション 13 の短絡手順どおり 4 点チェック**:
+  V1 green / V2 red (既知 fail-fast rc=2、stderr は wrapper 実測と同一) /
+  V3 green / census 未着 (rc=1)
+- **V2 の壁を環境側から再実証** (「本当に Pod 内からはどうにもならないのか」の確認):
+  runner は uid=10001(autopilot)、`/tmp/opencode` は root:root 755 不変、
+  しかも **sudo バイナリ自体がイメージに無い** (`sudo: command not found`)。
+  権限修正の手段が Pod 内に存在しないことが実測で確定 →
+  「merge+sync 後の新 runner Pod (emptyDir mount 済み) を待つしかない」が裏取りされた
+- demo.json 完全性確認はセッション 16 形式で全パス (下記のパス指定の罠に一旦引いたが無傷)
+- コード変更は今セッションもゼロ (この記録の追記と main 追い越しのみ)
+
+### 分かったこと (次セッションへの罠注意)
+
+- **demo.json の対照プローブは `pods.labeled.probe` / `pods.control.probe` 配下**:
+  セッション 16 の引き継ぎ文の「labeled.probe.https_ok」をそのまま
+  `d['labeled']['probe']…` と書くと KeyError で落ちる (実際落ちた。ファイルは無傷)。
+  正しくは `d['pods']['labeled']['probe']['https_ok'] is False` /
+  `d['pods']['control']['probe']['https_ok'] is True`
+- **main が動いていたときの中身確認の手順**: `git diff $(git merge-base HEAD
+  origin/main) origin/main --stat` を先に見ること。HEAD↔main の素 diff だと
+  本 PR の追加ファイル群が全部「削除」表示になって一見大惨事に見えるが、
+  それは自ブランチ側の追加が映っているだけ (#579 で一度誤読しかけた)
+- curriculum の merge が来た回は archive.jsonl の新行に自分の id が無いか目を通す
+  (プロジェクトが archive されたら worker ループの続行前提が崩れるため)
+
+### 検証 (全部自分で実走済み)
+
+- spec verify V1 green / V3 green / V2 red (既知 fail-fast rc=2、クラスタ副作用ゼロ)
+- demo.json 完全性確認 (7 bool キー + pods.*.probe の対照を assert) /
+  census 未着確認 (rc=1) / main 追い越し後の残り新着 = 0 確認
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4〜16 から本質的に不変** (main 追い越し済みが差分): V2 は本 PR の
+  merge+sync 後の新 runner Pod で自動 green 化する (spawn.py の emptyDir mount 済み)。
+  Pod 内での再走・権限 hack は不要と実証済み (sudo 不在まで確認ずみ)。やることは
+  「PR merge を待つ」だけ。main 新着がなければセッション 13〜17 同様の短絡でよい
+- census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+  到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+- main が動いていれば追い越し (手順は今セッションの「罠注意」参照:
+  merge-base diff で中身確認 → P-0243 が archive に入っていないか確認 → merge)
