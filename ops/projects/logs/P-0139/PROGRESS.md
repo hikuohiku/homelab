@@ -745,3 +745,56 @@ webhook URL は autopilot-writer SA には読めない (RBAC 実測 Forbidden) �
    判定除外) / on-sync-failed 式の生きた発火検証を追加注入で実施するか否か
    (spec の注入 1 回は消化済みのため要人間裁定)
 3. fired.json / drill fixture は触らない
+
+### セッション 16 (2026-08-23) — 待機状態の全項目再実測 10 回目。merge 未・**main tip がさらに前進 (95e4671d→c8095f6f) するも merge-tree rc=0**・controller エラー新規ゼロ
+
+**やったこと**:
+
+1. **merge 状況**: 未 merge (`fetch --prune` 後に `git branch -r --contains` が
+   a08db5a9 で origin/project/p-0139 のみ)。**main tip = 95e4671d → c8095f6f に進んだ**
+   (PR #520 curriculum merge。2 セッション連続で main 前進を観測)
+2. **進んだ main に対する競合確認**: `git merge-tree --write-tree origin/main project/p-0139`
+   が rc=0 — 前進後の main でも in-memory merge 完走を直接証明。全リモートブランチの
+   apps/argocd diff を merge-base 比較しても自ブランチ以外 0 行 (133 行は自ブランチのみ)
+3. **verify 再実測**: #1 green / #3 = fixture 14 tests OK / #2 の red は既知の
+   `--enable-helm` ゲートのみ (ES ファイル自体は存在) / #4 の red は message_id null のみ
+   (delivered: True は生きている)。fired.json 自体は無傷 (触っていない)
+4. **render を本セッションでも再実証** ($HOME/bin/helm v3.18.4 + `--enable-helm`):
+   rc=0 / 27,222 行 / stderr 0 バイト (セッション 14・15 と行数一致)。cm data は
+   PyYAML で文書単位に parse し直して **ちょうど 7 キー** を再確認
+   (context / service.webhook.discord / subscriptions / template.discord-app-degraded /
+   template.discord-app-sync-failed / trigger.on-degraded / trigger.on-sync-failed) /
+   ES discord-webhook render される
+5. **クラスタの merge 前状態が正しいことを再実測**: argocd-notifications-cm data =
+   ['context'] のみ / externalsecret は dex 分のみ SecretSynced=True / drill 残骸
+   (App p-0139-drill・ns p-0139-drill-scratch) とも NotFound
+6. **controller エラー増加ゼロを実測**: pod 名を label で引き直し、`--since-time=
+   2026-08-23T03:46:02Z` (セッション 14 の測定点。セッション 15 の窓を含む上位集合) で
+   error 0 行 (当該範囲 4,565 行)。pod restarts=19 据え置き /
+   startedAt=2026-08-03T14:21:14Z で本セッションでの再起動は無し。
+   **次回以降の since-time 起点: 2026-08-23T05:20:55Z**
+7. **App 状態観測**: 全 15 本中 OutOfSync/Healthy は coder / immich / syncthing /
+   vaultwarden の 4 本 (セッション 9 以降据え置き)、version-watcher Synced/Healthy。
+   Degraded はゼロで通知対象外
+
+**分かったこと**:
+
+- render 出力の doc 解析を `---` 文字列分割 + 行頭 `kind:`/`name:` 抽出でやると
+  **0 文書と誤判定する** (block scalar 内の `---` やインデント差で壊れる)。
+  cm の data keys を数えるときは PyYAML の safe_load_all で文書単位に parse して
+  kind + metadata.name でアンカーするのが確実 (本セッションで実測・やり直し)
+- `/tmp/opencode` 書き込み不可・gh CLI 無しは不変 (セッション 15 の教訓どおり mktemp 使用)
+
+**次のセッションへの一言 (= やることリスト)**:
+
+1. merge 済みか最初に確認 (`git branch -r --contains a08db5a9`)。merge 済みならクラスタ反映を実測:
+   **argocd-notifications-cm** data が 7 キーちょうど (on-sync-failed は `?.` 付き) /
+   externalsecret argocd-notifications-discord-webhook が SecretSynced /
+   controller error 新規ゼロ (since-time=`2026-08-23T05:20:55Z` 以降を測る) /
+   全 App Healthy 戻り確認
+2. 未 merge ならやることは無い。main が進んでいても merge-tree rc=0 を毎回取り直すこと
+   (2 セッション連続で main 前進を観測中 — 競合は時間と共に起こりうる)。
+   裁定事項は不変 3 点: **#2** (sandbox 恒久 red) / **#4** (message_id 人間視認 or
+   判定除外) / on-sync-failed 式の生きた発火検証を追加注入で実施するか否か
+   (spec の注入 1 回は消化済みのため要人間裁定)
+3. fired.json / drill fixture は触らない
