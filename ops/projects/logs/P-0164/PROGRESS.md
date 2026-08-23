@@ -258,6 +258,29 @@ $ test -f ops/projects/logs/P-0164/report.json && ...    # rc=1 (弁開放待ち
   打ち消し)」のみ。冒頭で dry-run の弁を見て、開いていれば即日実施してよい。開いて
   いなければ dry-run 確認だけして軽く閉じてよい
 
+### セッション 5 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま** (blocking 6 件: P-0092 / P-0116 /
+  P-0157 / P-0161 / P-0163 / P-0174、セッション 3・4 から不変。checked=61)。
+  セッション 4 の指示「開いていなければ dry-run 確認だけして軽く閉じてよい」に従い
+  実演習は見送り。コード変更は無し (セッション 4 の宣言どおり残作業なし)
+- 前置条件の劣化がないことだけ再実測しておいた (次の「弁が開いた日」に調べ直さなくて済む):
+
+```
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, targets_seen 3 件とも replicas==ready==1
+$ git rev-parse origin/main                              # c5d6df255 (不動)
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- 当日の手順はセッション 3 固定のまま不変 (--run 背景起動 → 全 zero 確認 → PATCH ready
+  解除 → PUT merge)。--notes-file は渡さない (既知の罠)
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  上記の再実測だけして軽く閉じてよい。ラベル撤去 PR は演習完了後の作業であり先行準備は
+  不要 (#524 が merge されるまで打ち消し先が main に存在しない)
+
 ## 発見 (スコープ外。curriculum が拾うもの)
 
 - なし (今回の範囲では)。強いて挙げれば「projects.json の state ライフサイクルに
