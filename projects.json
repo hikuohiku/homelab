@@ -4824,7 +4824,42 @@
         "soft_cap": 2000000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T19:29:50Z",
+        "verify": [
+          {
+            "cmd": "test -s ops/projects/logs/P-0227/failures.md && grep -q '^root_cause:' ops/projects/logs/P-0227/failures.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "test -n \"$(ls ops/projects/logs/P-0227/raw-* 2>/dev/null)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_curriculum_resilience",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_curriculum_resilience (unittest.loader._FailedTest.test_curriculum_resilience)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_curriculum_resilience\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_curriculum_resilience'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0228",
@@ -4848,7 +4883,51 @@
         "soft_cap": 2500000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T19:29:50Z",
+        "verify": [
+          {
+            "cmd": "test -f apps/adguard/kustomization.yaml && test -f apps/adguard/service-tailnet.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'adguard' ops/inventory.json",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "test -s ops/projects/logs/P-0228/dig-proof.txt && grep -q 'BLOCKED_OK' ops/projects/logs/P-0228/dig-proof.txt && grep -q 'RESOLVE_OK' ops/projects/logs/P-0228/dig-proof.txt",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "git fetch origin ops-health-report -q && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); a=[x for x in d['applications'] if x['name']=='adguard']; sys.exit(0 if a and a[0]['sync']=='Synced' and a[0]['health']=='Healthy' else 1)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0231",
@@ -4871,7 +4950,60 @@
         "soft_cap": 1500000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T19:29:50Z",
+        "verify": [
+          {
+            "cmd": "test -f ops/reminders.json && test -f ops/life/reminders.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_reminders",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_reminders (unittest.loader._FailedTest.test_reminders)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_reminders\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_reminders'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "git fetch origin ops-state -q && git show origin/ops-state:reminders.json >/dev/null 2>&1 || git show origin/ops-state:briefing/reminders.txt >/dev/null 2>&1",
+            "ok": false,
+            "rc": 128,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -rq 'reminders' apps/ops-dashboard/app/src/",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "test -s ops/projects/logs/P-0231/render-sample.txt",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
