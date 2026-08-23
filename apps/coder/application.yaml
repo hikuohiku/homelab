@@ -3,6 +3,8 @@ kind: Application
 metadata:
   name: coder
   namespace: argocd
+  labels:
+    p0164.continuity: "2"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
