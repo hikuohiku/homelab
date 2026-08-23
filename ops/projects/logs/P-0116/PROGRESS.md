@@ -4266,3 +4266,66 @@ P-0143 coder 実消費外注 = 既知で本プロジェクトへの回答なし)
   (env に既にあるので追加設定不要)。GITHUB_REPO は owner/repo 形に正規化してから使う
 - **open PR は 1 件** (session93 時点): #512 P-0118 のみ。番号・タイトルも見ること
 - **PROGRESS.md への追記は必ずファイル末尾** (session46 教訓の再掲)
+
+## session94 (P-0116 worker, 2026-08-23)
+
+やったこと: 冒頭チェック → main 先行 **0**。remote 分岐移動は ops-state beat (128→131) と
+p-0157 (session 2 記録 + 鮮度計実装)、新規 p-0163/p-0164 (**いずれもコミットゼロ = initializer
+未着手、接触判定の対象にならず**)。移動分岐に対し `origin/main...相手` の三点マージ diff を
+領域パス限定 (apps/restic-check/ + test_restic_check_runner.py + logs/P-0102/) で走査 →
+**新規接触ゼロ**。issue #56 再確認 (**総数 179 で変化なし**、page2 末尾 = P-0102 ack /
+P-0118 telegram 疎通依頼 / P-0144 tailscale 鍵期限外注 / P-0143 coder 実消費外注 =
+既知で本プロジェクトへの回答なし)・open PR の確認 (**1 件のまま**: #512 P-0118)。
+コード・manifest 側の変更は無し。
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option: include=*.yaml`) — red のまま。
+  オプション解析段階の失敗なのでリポジトリ側では如何ともならない (#56 回答待ち)
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0**
+  (apps/restic-check/ 7 ファイル健在: application.yaml / cronjob.yaml / job_main.py /
+  kustomization.yaml / namespace.yaml / restic-external-secret.yaml / restic_check_runner.py)
+- #2: **28 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ, main 未追従ゼロなので
+  archive.jsonl 先頭一致も問題なし)
+- `python3 -m unittest discover -s ops/tests`: **270 tests OK, rc=0**
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完全に完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら
+  文言判断に従うだけ。来ていなければ再実測して末尾への追記で足りる (session8 の文案・
+  環境メモもそのまま使える)
+- 冒頭チェック・merge 方針・API 走査・mktemp・サマリ拾いの各注意点は session47 以前と
+  同じ (省略しないこと)。main 先行・diverge いずれも **merge 一択** (rebase 不可 — session28)
+- **issue #56 のコメント総数は 179 が最新基準** (session63〜94 変化なし)。今後は
+  180 以上で新規着信を疑うこと。ただし最新タイムスタンプとキーワード走査で
+  本プロジェクト関連かを必ず判別すること
+- **新規 remote 分岐でもコミットゼロなら走査対象外**: p-0163/p-0164 は
+  `git rev-list --count origin/main..相手` が 0 だった (initializer 未着手)。分岐名だけで
+  慌てず必ずコミット数を見ること
+- **remote 分岐は毎回目視**: 判別基準は「本プロジェクト領域 (apps/restic-check/,
+  ops/tests/test_restic_check_runner.py, ops/projects/logs/P-0102/) に触れるか」のみ。
+  三点マージ diff を領域パス限定で回せば一括判定できる (session89〜94 実測では
+  ops-state beat・curriculum 採択・p-0139 記録+checkpoint・ops-health-report history・
+  p-0157/p-0161 initializer とも無関係。p-0102 自身のヒットは祖先分なので新規接触とは
+  数えない)
+- **P-0157 (backup 鮮度監視) は verify 対象が ops/health・ops/rules.json・
+  test_backup_freshness 側**で apps/restic-check/ とは別。「触れるファイルが
+  本プロジェクト領域とかぶるか」だけ毎回見ればよい (session94 実測でも領域接触ゼロ)
+- **p-0139 系ブランチとの diff 走査の注意**: `git diff --stat <自tip>..<相手>` だと
+  相手が古い main 由来のため apps/restic-check/ 等が大量「削除」に見えて誤検知する。
+  新規コミットだけを見ること (`git log origin/main..相手` + `git diff --stat origin/main...相手`)
+- **discover の総数は merge で動く**: 固定値ではない (session94 時点で 270)。
+  rc=0 と OK を確認すること
+- **validate.py の archive.jsonl 先頭一致チェックは main 未追従だと error になる**:
+  curriculum 採択が来たらまず merge してから再実測する (session92 実測)
+- **issue コメントの「最新 N 件」取得は sort/direction パラメータに頼らず
+  per_page=100&page=2 (最終ページ) の末尾を使うのが確実** (session92 実測: desc 指定でも
+  古い順っぽい返りがあり誤認の恐れ)
+- **`git rev-list --count origin/main ^project/p-0116` で main 側だけ明示的に数えるのが確実**
+- **API 走査は python 内で完結させると一時ファイル不要**。未認証 API 呼び出しは
+  rate limit 403 即死 — AUTOPILOT_GITHUB_TOKEN を Bearer ヘッダに付けること
+  (env に既にあるので追加設定不要)。GITHUB_REPO は owner/repo 形に正規化してから使う
+- **open PR は 1 件** (session94 時点): #512 P-0118 のみ。番号・タイトルも見ること
+- **PROGRESS.md への追記は必ずファイル末尾** (session46 教訓の再掲)
