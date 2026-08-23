@@ -42,6 +42,60 @@ def load_health(repo_dir, health_branch):
     return unhealthy, fresh, doc
 
 
+def budget_alert(doc):
+    """latest.json から B2 download cap の警報すべき状態を抽出する (P-0128)。
+
+    report が作る download_budget.budget.status のうち warn / exceed のときだけ
+    {status, reason, daily_avg_bytes, monthly_estimate_bytes} を返す。それ以外
+    (ok/unconfigured/no_data、latest.json 無し・壊れ・download_budget キー無し)
+    は None。unconfigured (cap 実値未設定) と no_data (産出側未稼働) を鳴らさない
+    のは judge() 側と同じ判断 — 鳴らせる状態になったときにだけ既存経路に乗る。
+
+    観測のみを行い判断しない (モジュール冒頭の原則)。鳴らすかどうかの繰り返し
+    抑制は budget_alert_due() が担う。
+    """
+    if not isinstance(doc, dict):
+        return None
+    db = doc.get("download_budget")
+    if not isinstance(db, dict):
+        return None
+    budget = db.get("budget")
+    if not isinstance(budget, dict):
+        return None
+    status = budget.get("status")
+    if status not in ("warn", "exceed"):
+        return None
+
+    def _num(value):
+        # bool は int の派生なので明示的に弾く (download_budget.coerce_bytes と同じ)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return value
+
+    total = db.get("total") if isinstance(db.get("total"), dict) else {}
+    return {
+        "status": status,
+        "reason": budget.get("reason"),
+        "daily_avg_bytes": _num(total.get("daily_avg_bytes")),
+        "monthly_estimate_bytes": _num(db.get("monthly_estimate_bytes")),
+    }
+
+
+def budget_alert_due(alert, prev, today):
+    """警報を今日新規に積むべきか。(alert, cursors の前回記録, today=YYYY-MM-DD)。
+
+    同じ status で同じ日内の再通知を落とす (heart は 120s ビートで回るため、
+    抑制しないと briefing-queue.jsonl と Discord 予算を 1 日で使い潰す)。
+    status が変わったら (warn→exceed への悪化など) その日は再度鳴らす。
+    alert=None は常に False。
+    """
+    if alert is None:
+        return False
+    if not isinstance(prev, dict):
+        return True
+    return not (prev.get("status") == alert.get("status") and prev.get("date") == today)
+
+
 def collect_jobs(k8s, namespace):
     """heart が生んだ Job の実状態。{job_name: {"active":bool,"failed":bool,"succeeded":bool}}"""
     out = {}

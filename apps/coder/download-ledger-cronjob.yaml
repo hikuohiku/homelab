@@ -1,0 +1,388 @@
+# B2 download cap の帳簿・産出側 (P-0128)。
+#
+# 自 namespace の restic backup / retention Job の完了実績を観測し、操作種別ごとの
+# 推定モデルでダウンロード量を見積もって専用 ConfigMap `download-budget` へ書き戻す。
+# 集約側は ops-health-reporter (別 namespace, cluster-wide read-only) が
+# collect_download_budget() で読み、latest.json の download_budget キーに載せる。
+#
+# 帳簿の bytes は restic の転送統計ではない (restic はダウンロード量を表示しない)。
+# 「その操作が 1 回起きたら概ねこれだけ読む」という CronJob 名ごとの推定値で、
+# LEDGER_RULES env に明示する。スクリプト内に既定値は持たず、ルールに無い CronJob は
+# unknown_jobs として記録する (設定忘れを黙って 0 扱いにしない)。キャリブレーション
+# (B2 コンソールの日次グラフとの突き合わせ。管理コンソール作業 = 人間専有) の結果は
+# この env の数値の差し替えだけで反映できる。
+#
+# 推定値の根拠 (桁感であり実測ではない):
+#   - 日次 backup 1 回 ≈ 32 MiB: repo open 時の config / snapshots / index 読み。
+#     index サイズは pack 数に比例しデータ総量には比例しないため、現行規模では
+#     数 MiB〜数十 MiB の桁
+#   - retention (forget --prune) 1 回 ≈ 512 MiB: prune が書き換える pack の読み直し
+#     と index 再読み。削除量依存で大きく揺れる。2026-08-22 の cap 超過日は土曜夜に
+#     全リポジトリの retention が一斉稼働した日であり、この桁がアカウント合計で
+#     cap を超え得ることと辻褄が合う
+#
+# 既知の限界: 失敗した Job の部分的な消費 (index 読みの後で落ちた等) は数えない。
+# pods/log を読めば精度は上げられるが T-0110 で閉じた経路を広げないため、
+# Job 一覧 (completionTime) ベースの観測にとどめる。過小方向の誤差であることは
+# latest.json の読み手に注意を促す (report.py の notes 参照)。
+#
+# スクリプトは apps/{immich,vaultwarden,coder,syncthing}/download-ledger-cronjob.yaml
+# の 4 ファイルで同一であり、ops/check_download_ledger_script_sync.py (CI) が
+# drift を検出する (pvc_usage.py と同じ考え方)。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: download-ledger
+  namespace: coder
+---
+# 自 namespace の Job 一覧の読み取りと、専用 ConfigMap 1 個の update のみ。
+# create を許さないため対象 ConfigMap は下で事前作成する (消されたら 403 で
+# 目立って落ちる。黙って作り直させるより観測点として正しい)。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: download-ledger
+  namespace: coder
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["download-budget"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: download-ledger
+  namespace: coder
+subjects:
+  - kind: ServiceAccount
+    name: download-ledger
+    namespace: coder
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: download-ledger
+---
+# 産出先。中身は download-ledger だけが書く (update に resourceNames 制約)。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: download-budget
+  namespace: coder
+data: {}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: download-ledger-script
+  namespace: coder
+data:
+  download_ledger.py: |
+    """B2 download cap の帳簿・産出側 (P-0128)。
+
+    自 namespace の restic backup / retention Job の完了実績を batch API から
+    観測し、CronJob 名ごとの推定モデル (env LEDGER_RULES) でダウンロード量を
+    見積もって専用 ConfigMap `download-budget` の report.json キーへ書き戻す。
+    集約側は apps/ops-health-reporter/report.py の collect_download_budget()。
+    標準ライブラリのみで動く。
+    """
+
+    import datetime
+    import json
+    import os
+    import ssl
+    import urllib.error
+    import urllib.request
+
+    SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+    K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
+    K8S_PORT = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+    K8S_BASE = "https://{}:{}".format(K8S_HOST, K8S_PORT)
+
+    CONFIGMAP_NAME = "download-budget"
+    # 集計側の窓 (download_budget.DEFAULT_WINDOW_DAYS) は 7 日。収集断や clock skew
+    # で窓が欠けないよう手元にはこの倍を保持し、古いものは書き戻し時に落とす
+    KEEP_DAYS = 14
+    # 万一の肥大化止め。日次 backup 数本の規模では遠く及ばない
+    MAX_RUNS = 1000
+
+    with open(os.path.join(SA_DIR, "namespace")) as f:
+        NAMESPACE = f.read().strip()
+    with open(os.path.join(SA_DIR, "token")) as f:
+        SA_TOKEN = f.read().strip()
+    SSL_CTX = ssl.create_default_context(cafile=os.path.join(SA_DIR, "ca.crt"))
+
+
+    def k8s_request(method, path, body=None):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(
+            K8S_BASE + path,
+            data=data,
+            method=method,
+            headers={
+                "Authorization": "Bearer " + SA_TOKEN,
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, context=SSL_CTX, timeout=15) as resp:
+                raw = resp.read()
+                return resp.status, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            return e.code, (json.loads(raw) if raw else None)
+
+
+    def parse_iso(value):
+        """API のタイムスタンプ (RFC3339) を aware datetime (UTC) へ。失敗時 None。"""
+        if not isinstance(value, str):
+            return None
+        try:
+            dt = datetime.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        if dt.tzinfo is None:
+            return None
+        return dt.astimezone(datetime.timezone.utc)
+
+
+    def parse_rules(spec):
+        """LEDGER_RULES ("cronjob名:bytes,...") を dict へ。
+
+        空要素はスキップ。形が違う・負値は例外で落とす — 黙って 0 扱いにすると
+        帳簿が嘘をつく。起動時に落ちるほうが観測点として正しい。
+        """
+        out = {}
+        for item in spec.split(","):
+            item = item.strip()
+            if not item:
+                continue
+            name, sep, raw = item.partition(":")
+            name = name.strip()
+            if not sep or not name:
+                raise ValueError(
+                    "LEDGER_RULES の要素が name:bytes 形式でない: {!r}".format(item)
+                )
+            value = int(raw)
+            if value < 0:
+                raise ValueError("LEDGER_RULES の bytes が負値: {!r}".format(item))
+            out[name] = value
+        return out
+
+
+    def owner_cronjob_name(job):
+        """CronJob 由来の Job から親 CronJob 名を取る。直接作成された Job は None。
+
+        誰の産物か分からない Job を推定に含めない (kubectl apply で生えた見知らぬ
+        Job まで帳簿に乗ると内訳が汚れる)。
+        """
+        refs = job.get("metadata", {}).get("ownerReferences") or []
+        for ref in refs:
+            if ref.get("kind") == "CronJob" and ref.get("name"):
+                return ref["name"]
+        return None
+
+
+    def completed_runs(jobs, rules, now):
+        """完了 Job を run 記録へ。KEEP_DAYS 外・未完了・owner 無しは対象外。
+
+        戻り値は (runs, unknown_jobs)。unknown_jobs はルールに無い CronJob 名の
+        集合 (現存する Job オブジェクトからのみ。履歴 limit を超えた古い Job は
+        API から消えるので自然に消える)。
+        """
+        oldest = now - datetime.timedelta(days=KEEP_DAYS)
+        runs = []
+        unknown = set()
+        for job in jobs or []:
+            meta = job.get("metadata", {})
+            status = job.get("status", {})
+            conditions = status.get("conditions") or []
+            if not any(
+                c.get("type") == "Complete" and c.get("status") == "True"
+                for c in conditions
+            ):
+                continue
+            completion = parse_iso(status.get("completionTime"))
+            if completion is None or completion < oldest:
+                continue
+            cronjob = owner_cronjob_name(job)
+            if cronjob is None:
+                continue
+            if cronjob not in rules:
+                unknown.add(cronjob)
+                continue
+            runs.append({
+                "date": completion.strftime("%Y-%m-%d"),
+                "job": cronjob,
+                "bytes": rules[cronjob],
+                # Job 名はクラスタ内で一意。収集の重複排除とトレーサビリティの鍵
+                "id": meta.get("name"),
+                "estimated": True,
+            })
+        return runs, sorted(unknown)
+
+
+    def merge_runs(existing, incoming):
+        """既存 runs と今回分を id でマージ (同一 id は今回分を優先)。
+
+        非 dict の壊れた記録は例外にせず落として個数を返す (タプル第 2 要素)。
+        JSON パース失敗ではないため「壊れた帳簿からの再出発」経路には引っかからず、
+        残しておくと sort や集計で毎回同じ場所に当たって帳簿更新が永久停止する
+        (レビュー指摘。実証済み: 'str' object has no attribute 'get')。
+        黙って捨てない — 呼び出し側が payload の dropped_records に出す
+        (unknown_jobs と同じ考え方)。trim_runs も非 dict を落とすので、
+        帳簿へ載る記録はここで除いた場合と変わらない。数だけが残る。
+        id を持たない記録は (date, job, bytes) を代わりの鍵にして残す。
+        """
+        merged = {}
+        dropped = 0
+        for run in list(existing or []) + list(incoming or []):
+            if not isinstance(run, dict):
+                dropped += 1
+                continue
+            key = run.get("id")
+            if not key:
+                key = (run.get("date"), run.get("job"), run.get("bytes"))
+            merged[key] = run
+        out = list(merged.values())
+        out.sort(key=lambda r: (str(r.get("date")), str(r.get("id") or "")))
+        return out, dropped
+
+
+    def trim_runs(runs, today):
+        """KEEP_DAYS 外と上限超過を落とす。ConfigMap の肥大化止め。"""
+        oldest = (today - datetime.timedelta(days=KEEP_DAYS)).strftime("%Y-%m-%d")
+        kept = [
+            r for r in runs
+            if isinstance(r, dict) and isinstance(r.get("date"), str)
+            and r["date"] >= oldest
+        ]
+        return kept[-MAX_RUNS:]
+
+
+    def put_configmap(name, data):
+        path = "/api/v1/namespaces/{}/configmaps/{}".format(NAMESPACE, name)
+        status, existing = k8s_request("GET", path)
+        body = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": name, "namespace": NAMESPACE},
+            "data": data,
+        }
+        if status == 200:
+            body["metadata"]["resourceVersion"] = existing["metadata"]["resourceVersion"]
+            status, resp = k8s_request("PUT", path, body)
+        else:
+            # 対象 ConfigMap は manifest で事前作成済み。ここに来るのは誰かが
+            # 消したときで、create 権限は無いので目立って失敗する (意図どおり)
+            status, resp = k8s_request(
+                "POST", "/api/v1/namespaces/{}/configmaps".format(NAMESPACE), body
+            )
+        if status not in (200, 201):
+            raise RuntimeError("configmap 書き込みに失敗: {} {}".format(status, resp))
+
+
+    def main():
+        rules = parse_rules(os.environ["LEDGER_RULES"])
+        now = datetime.datetime.now(datetime.timezone.utc)
+        status, data = k8s_request(
+            "GET", "/apis/batch/v1/namespaces/{}/jobs".format(NAMESPACE)
+        )
+        if status != 200:
+            raise RuntimeError("jobs の取得に失敗: {} {}".format(status, data))
+        new_runs, unknown = completed_runs(data.get("items"), rules, now)
+
+        # 既存帳簿を読んでマージする (Job 履歴は successfulJobsHistoryLimit で
+        # 消えるため、ConfigMap 側が唯一の長期記憶)。壊れていたら新規分だけで
+        # 再出発する — 壊れた帳簿を引きずるより、今日以降を作り直すほうが良い
+        existing_runs = []
+        status, existing = k8s_request(
+            "GET",
+            "/api/v1/namespaces/{}/configmaps/{}".format(NAMESPACE, CONFIGMAP_NAME),
+        )
+        if status == 200:
+            try:
+                payload = json.loads(existing.get("data", {}).get("report.json", "{}"))
+                if isinstance(payload.get("runs"), list):
+                    existing_runs = payload["runs"]
+            except ValueError:
+                pass
+
+        merged_runs, dropped_records = merge_runs(existing_runs, new_runs)
+        runs = trim_runs(merged_runs, now)
+        report = {
+            "generated_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "namespace": NAMESPACE,
+            "runs": runs,
+            "unknown_jobs": unknown,
+            # 壊れていた既存記録の個数。0 でも常に載せる (payload の形を安定させる)
+            "dropped_records": dropped_records,
+        }
+        put_configmap(CONFIGMAP_NAME, {"report.json": json.dumps(report, ensure_ascii=False)})
+        print(
+            "download-budget ConfigMap を更新しました ({}) runs={} unknown={}".format(
+                report["generated_at"], len(runs), unknown
+            )
+        )
+
+
+    if __name__ == "__main__":
+        main()
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: download-ledger
+  namespace: coder
+spec:
+  # 毎時 :25。health-reporter (:00/:30) と pvc-usage-reporter (:05) とずらした
+  schedule: "25 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 300
+      template:
+        spec:
+          serviceAccountName: download-ledger
+          restartPolicy: Never
+          containers:
+            - name: ledger
+              image: python:3.14-alpine
+              terminationMessagePolicy: FallbackToLogsOnError
+              command: ["python", "/scripts/download_ledger.py"]
+              env:
+                - name: LEDGER_RULES
+                  value: "coder-restic-backup:33554432,coder-restic-retention:536870912,coder-workspace-home-backup:33554432,coder-workspace-home-backup-retention:536870912"
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              # PVC も他 namespace も触らないため特権は不要。root にもならない
+              securityContext:
+                runAsUser: 65534
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 300m
+                  memory: 128Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: script
+              configMap:
+                name: download-ledger-script
+            - name: tmp
+              emptyDir: {}

@@ -11,9 +11,16 @@ import json
 import os
 import re
 import ssl
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+
+# 純関数モジュール (P-0128)。configMapGenerator で report.py と同じ /scripts に載るため、
+# `python /scripts/report.py` 起動時は sys.path[0]=/scripts で解決済み。この append は
+# cluster 外 (CI・検査スクリプト) が importlib でロードしたときの解決用フォールバック
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+import download_budget
 
 SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
 K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
@@ -214,6 +221,48 @@ def collect_pvc_usage():
             # 収集を止めない
             out.append({"namespace": ns, "error": "{}: {}".format(type(e).__name__, e)})
     return out
+
+
+# B2 download cap の帳簿 (P-0128) の集約対象。restic リポジトリのある namespace。
+# coder は postgres / workspace-homes の 2 リポジトリが同じ namespace にあり、
+# syncthing は pvc_usage の対象外だが backup は存在する。産出側 (各 ns の
+# download-ledger CronJob) が専用 ConfigMap `download-budget` の report.json キーに
+# run 記録 ({date: "YYYY-MM-DD", job: 名前, bytes: N} のリスト、UTC 日付) を書く契約。
+# 契約先を pvc-usage-report にしない理由: 既存 pvc-usage-reporter は PUT で data を
+# 全体置換する (apps/*/pvc-usage-cronjob.yaml の put_configmap)。「別 CronJob が同じ
+# ConfigMap に追加キーで書く」設計だと reporter run のたびに帳簿が消え、逆に素朴な
+# PUT で産出側が report.json を吹き飛ばす。専用名にして RBAC の resourceNames に
+# 追加する 1 行で済ませる (configmaps get の resourceNames 追加は T-0110 の
+# pods/log 閉じ込みとは無関係なので整合問題も無い)
+DOWNLOAD_BUDGET_NAMESPACES = ["immich", "vaultwarden", "coder", "syncthing"]
+
+
+def collect_download_budget():
+    """namespace ごとの帳簿を読み、download_budget.build_report() で集約する。
+
+    1 namespace の失敗 (産出側未稼働の ConfigMap 未作成を含む) で他 namespace の
+    収集を止めない (collect_pvc_usage() と同じ思想)。生 runs をレポートに載せず
+    集約後の形だけ出すのは、history jsonl の 1 行が無限に膨らむのを防ぐため
+    (download_budget.build_report の docstring 参照)。
+    """
+    entries = []
+    for ns in DOWNLOAD_BUDGET_NAMESPACES:
+        try:
+            data = k8s_get("/api/v1/namespaces/{}/configmaps/download-budget".format(ns))
+            raw = data.get("data", {}).get("report.json")
+            if not raw:
+                raise KeyError(
+                    "configmap download-budget に report.json キーが無い"
+                    "(産出側がまだ稼働していない)"
+                )
+            payload = json.loads(raw)
+            runs = payload.get("runs") if isinstance(payload, dict) else None
+            if not isinstance(runs, list):
+                raise ValueError("download_budget.json の runs がリストでない")
+            entries.append({"namespace": ns, "runs": runs})
+        except Exception as e:  # noqa: BLE001 — 他 namespace の収集を止めない
+            entries.append({"namespace": ns, "error": "{}: {}".format(type(e).__name__, e)})
+    return download_budget.build_report(entries)
 
 
 def collect_nodes():
@@ -483,6 +532,7 @@ def main():
         "pod_metrics": collect(collect_pod_metrics),
         "node_metrics": collect(collect_node_metrics),
         "pvc_usage": collect(collect_pvc_usage),
+        "download_budget": collect(collect_download_budget),
         "autopilot": collect(collect_autopilot_health),
         "notes": (
             "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 "
@@ -501,6 +551,14 @@ def main():
             "heartbeat.last_end が無い/古い、または exit_code が非 0 なら前回のイテレーションが"
             "異常終了またはハング中の疑い（T-0110）。pods/log は autopilot namespace に閉じた"
             "Role でのみ許可し、心拍行だけを正規表現で抽出している。生ログはここに含まれない。"
+            " download_budget キーは B2 download cap の帳簿（P-0128）。restic バックアップのある "
+            "namespace（immich/vaultwarden/coder/syncthing）の専用 ConfigMap download-budget の "
+            "report.json キーに、download-ledger CronJob が書いた run 記録（{date, job, bytes}、"
+            "UTC 日付）を集計し、直近7日の日次内訳・月次見積もり・cap 判定（ok/warn/exceed/"
+            "unconfigured/no_data）を載せる。bytes は restic の転送統計からではなく操作種別ごとの "
+            "推定モデル（産出側 CronJob の LEDGER_RULES）による推定量。"
+            "cap の実値は B2 コンソールにしか無いため既定は unconfigured（決め打ちしない）。"
+            "産出側がまだ稼働していない namespace は error エントリになる。"
         ),
     }
 
