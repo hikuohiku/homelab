@@ -3445,7 +3445,42 @@
         "soft_cap": 1200000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T05:43:46Z",
+        "verify": [
+          {
+            "cmd": "python3 -m unittest ops.tests.test_backup_freshness",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_backup_freshness (unittest.loader._FailedTest.test_backup_freshness)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_backup_freshness\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_backup_freshness'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.000s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "git fetch origin ops-health-report -q && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; f=json.load(sys.stdin).get('backup_freshness'); assert isinstance(f,list) and len(f)>=5 and all(('repo' in x and 'hours_since_success' in x) for x in f)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,sys; f=json.load(sys.stdin).get('backup_freshness'); assert isinstance(f,list) and len(f)>=5 and all(('repo' in x and 'hours_since_success' in x) for x in f)\n                                                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError\n"
+          },
+          {
+            "cmd": "grep -qE 'backup_fresh' ops/rules.json",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0161",
@@ -3468,7 +3503,42 @@
         "soft_cap": 1500000
       },
       "created": "2026-08-23",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-23T05:43:46Z",
+        "verify": [
+          {
+            "cmd": "test -f ops/profiles/private-data/README.md && grep -qE 'trifecta|三要素' ops/profiles/private-data/README.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m unittest ops.tests.test_private_data_profile",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "E\n======================================================================\nERROR: test_private_data_profile (unittest.loader._FailedTest.test_private_data_profile)\n----------------------------------------------------------------------\nImportError: Failed to import test module: test_private_data_profile\nTraceback (most recent call last):\n  File \"/usr/lib/python3.14/unittest/loader.py\", line 141, in loadTestsFromName\n    module = __import__(module_name)\nModuleNotFoundError: No module named 'ops.tests.test_private_data_profile'\n\n\n----------------------------------------------------------------------\nRan 1 test in 0.002s\n\nFAILED (errors=1)\n"
+          },
+          {
+            "cmd": "python3 -c \"import json; d=json.load(open('ops/projects/logs/P-0161/demo.json')); assert d.get('egress_denied') is True and d.get('published_to_branch') and d.get('cleaned_up')\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json; d=json.load(open('ops/projects/logs/P-0161/demo.json')); assert d.get('egress_denied') is True and d.get('published_to_branch') and d.get('cleaned_up')\n                             ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'ops/projects/logs/P-0161/demo.json'\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
