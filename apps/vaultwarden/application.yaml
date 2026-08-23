@@ -14,6 +14,16 @@ spec:
   destination:
     server: https://kubernetes.default.svc
     namespace: vaultwarden
+  # download-budget ConfigMap の report.json は download-ledger CronJob (P-0128) が
+  # 毎時書き戻す B2 download cap の帳簿であり、Git (data: {}) と一致しないのが正。
+  # このキーのみ差分比較から除外する ([ii] 生成フィールド型の恒久解消、P-0222)。
+  # 帳簿データは無視するだけで消さない。他キー・他オブジェクトは対象外
+  ignoreDifferences:
+    - group: ""
+      kind: ConfigMap
+      name: download-budget
+      jqPathExpressions:
+        - '.data["report.json"]'
   syncPolicy:
     automated:
       prune: true
