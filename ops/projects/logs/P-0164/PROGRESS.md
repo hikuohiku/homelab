@@ -805,7 +805,56 @@ $ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
   消える (curriculum 採択のたびに起きうる。詳細は発見節)。前置条件の unittest 件数は
   固定値でない (281→294 実測) ので「OK か」で判断すること
 
+### セッション 21 (2026-08-23, 弁確認のみ。project/p-0164 checkout, リポジトリルートで実行)
+
+- 冒頭で dry-run を実測 → **弁は閉じたまま、blocking が 2→3 に増加**
+  (P-0092 / P-0161 / **P-0175 新規**。checked=62)。固定指示どおり実演習は見送り
+- 本セッションの実イベントその 1: **blocking 数の増加を初観測**。これまでの推移は
+  減少 (6→5→4→3→2) か不変のみで、「増える」方向は本日が初出。増分は新規プロジェクト
+  **P-0175「秘密の給水塔が止まった日を先に演じる — External Secrets の唯一の上流
+  (Doppler) を一時遮断し、既存の Secret とアプリが何時間持つかを秒で実測する」**が
+  台帳へ active 入場したもの (総計 61→62)。台帳は ops-state のみで伸びており
+  main は不動 — validate.py の archive.jsonl 先頭不一致は今回起きなかった
+  (main が動いていないため。セッション 20 の定型が発火しなかった例)
+- 実イベントその 2: 台帳内訳 (セッション 20 の凍結状態からの差分) は
+  delivered 27 / vetoed 2 / stalled 29 / announced 1 (P-0092) /
+  active 3 (**P-0161, P-0164 自己, P-0175**)。セッション 20 記録の
+  「active 2 (+自己)」への実差分は +1 (P-0175) のみ
+- 小ネタだが構造的に重要: **弁の excluded_self が実データで効いている**。
+  P-0164 自身も台帳では active であり、除外が無ければ自分自身で永遠に弁が開かない。
+  dry-run の `"excluded_self": ["P-0164"]` がその実測表示
+- main 不動 (`git log e0acc7eab..origin/main` 空)。ドラフト PR #524 は初手から
+  mergeable_state=clean・ci/GitGuardian success (head=5d24c8932 不変。
+  base が動いていないので unknown 罠は発火せず)
+
+```
+$ python3 ops/tools/deploy_continuity.py --dry-run       # rc=0, valve ok=false (blocking 3), targets 3/3 ready
+$ python3 -m unittest ops.tests.test_deploy_continuity   # Ran 39 tests OK
+$ python3 -m unittest discover -s ops/tests -t .         # Ran 294 tests OK
+$ python3 ops/validate.py                                # 0 error, 11 warning (既存)
+$ git log e0acc7eab..origin/main                         # 空 = main 不動
+$ GET /pulls/524  → open / draft=true / mergeable_state=clean / head=5d24c8932 不変
+$ GET .../commits/5d24c8932/check-runs → ci success, GitGuardian success
+```
+
+- **次のセッションへの一言**: 同じ。冒頭で dry-run の弁を見るのが最初で最後の分岐。
+  開いていれば即日実施 (手順は PROGRESS セッション 3・4 の固定どおり)、開いていなければ
+  再実測だけして軽く閉じてよい。「0 か否か」だけを見る原則は維持。blocking 数の
+  増減は弁判定への含意ゼロ (減少が進捗でないことはセッション 12〜14 で反例済み、
+  本日は「増加」方向の反例も追加) — 見るのは announced+active==0 かだけ。
+  なお validate.py が archive.jsonl 先頭不一致 error を出したら origin/main を
+  merge すれば消える (curriculum 採択のたび。セッション 20 の発見節参照)
+
 ## 発見 (スコープ外。curriculum が拾うもの)
+
+- (セッション 21, ライフサイクル観測の続き) **blocking 数の増加を初観測** (2→3)。
+  新規 P-0175 の台帳 active 入場による (総計 61→62、ops-state のみで伸び main 不動)。
+  これまで観測された方向は減少 (6→5→4→3→2) か凍結のみで、「塞ぎ手は時間とともに
+  減っていく/減らない」という単調性の期待は双方向に破れた。弁判定は常に
+  dry-run の「announced+active == 0 か」実測一択の原則は不変。
+  併せて **自己除外 (excluded_self) が実データで load-bearing であることを確認**:
+  P-0164 自身も台帳上は active であり、除外ロジックが無ければ演習は永遠に始められない。
+  自タスク unittest 39 / 全体 294 green、targets 3/3 ready、前置条件の劣化無し
 
 - (セッション 20, 受入検証の保守) **validate.py の archive.jsonl 先頭一致検査は、
   main より遅れた長寿命ブランチ上で curriculum 採択のたびに誤爆する**。
