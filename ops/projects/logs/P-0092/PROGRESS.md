@@ -1408,3 +1408,74 @@ B2 鍵が人間の手で直った兆候 (新規 job の Complete 等) がない�
 **窓満了 (2026-08-24T16:40:08Z) 後の起動なら** セッション 37 引き継ぎどおり:
 「24h 以上 CrashLoop 無し」脚は満たされる、「バックアップ成功」脚は外部要因により
 未達確定。事実を淡々と PROGRESS に記して判定役へ渡すこと。本番適用記録は書かない。
+
+## checkpoint (予算上限)
+
+予算ソフト上限到達に伴う**最終セッション** (2026-08-23T20:00Z、wrapper 起動)。
+実装はしていない。git status は clean で未コミット変更無し → 破棄も分割 commit も不要。
+本節の追記 1 件のみをこのセッションで commit する。
+
+### 受入チェックリストのどこまで済んだか
+
+- [x] verify 1: `grep -qE 'cloudnative-vectorchord:16\.14' apps/immich/postgres.yaml`
+  → **green** (最終自測: 本セッション 2026-08-23T20:00Z)
+- [x] verify 2: `python3 -m unittest ops.tests.test_immich_pg_upgrade`
+  → **green** (Ran 27 tests, OK / 同上)
+- [ ] verify 3: `grep -q '^## 本番適用記録' docs/immich-postgres-upgrade.md`
+  → **意図的に未記述**。観察成立の前提が崩れているため (下記)。前倒し執筆は
+  「次のセッションへの一言」で禁止済みの規則
+
+本体の進捗: **manifest の本番適用自体は完了済み** (PR #555、merge commit `2efaadf74`。
+新 Pod 2026-08-23T16:40:08Z 開始 → Ready 44 秒、DB 側 4 手順完了、適用後実測は
+vchord 1.1.1 / server 16.14 / probes=1 / インデックス検索成功 / ArgoCD Healthy。
+詳細は「セッション 2 の実績」節)。DoD の「24 時間以上 CrashLoop 無し」脚は順調に蓄積中 —
+最終実測 (本セッション): `immich-postgres-68d65f4b9d-jtbvz` Running / Ready 1/1 /
+RESTARTS=0 / AGE 3h20m。
+
+### いま止まっている場所と、次に取るべき一手
+
+**止まっている理由**: DoD の「バックアップ成功」脚が外部要因で塞がっている。
+B2 共用 append-only 鍵が 2026-08-21〜22 の間に壊れ (`b2_download_file_by_name: 403`)、
+restic バックアップが immich / vaultwarden / coder / syncthing の 4 アプリ全滅状態
+(詳細・エスカレーション本文は上の「セッション 32」節)。窓内最後の scheduled 実行
+job 29791785 も Failed 実測済み (セッション 36)、次回 scheduled 発火は 2026-08-24T17:45Z
+で窓外 (JST 解釈問題、同 32 節)。**人間が鍵を直して手動 job を回さない限り、窓満了
+(2026-08-24T16:40:08Z) までに「バックアップ成功」は構造的に観測不能**。
+本セッション終了時点でも新規手動 job 無し = 鍵修正の兆候なし。
+
+**再開された worker の一手 (条件分岐)**:
+
+1. `date -u` が 2026-08-24T16:40:08Z を過ぎているか確認。過ぎていなければ
+   「観察継続中」と書いて commit して終わり (既存規則どおり最小工数)
+2. `kubectl get jobs -n immich | grep restic` で新規手動 job (Complete) を探す。
+   あれば = 人間が鍵を直した証拠 → 3 へ。無ければ 4 へ
+3. 鍵修正済みの場合: 上の「窓満了後セッションの手順」(ops-health-report の latest.json
+   確認 → Pod/ログ読み取り → baseline 比較) を全部通してから、
+   docs/immich-postgres-upgrade.md の末尾に `## 本番適用記録` を追記 → commit。
+   verify 3 が green になり器の通常経路へ乗る
+4. 鍵未修正のまま窓満了した場合: **本番適用記録は書かない** (セッション 37 引き継ぎどおり、
+   DoD 未達の節を書くのは完成宣言と同じ)。このファイルに「CrashLoop 無し脚は満たされた /
+   バックアップ成功脚は外部要因により未達」の事実だけを追記して判定役へ渡す。
+   判定役への問いは「B2 鍵復旧 + 手動 restic 成功後の限定再開に価値があるか、それとも
+   stalled 確定か」
+
+**人間への依頼 (エスカレーション、セッション 32 から変更なし)**:
+Backblaze コンソールで共用 append-only 鍵を再発行し、Doppler (homelab/prd) の
+`B2_ACCOUNT_ID_APPEND_ONLY` / `B2_ACCOUNT_KEY_APPEND_ONLY` を更新 (ExternalSecret 再同期)。
+鍵修正後に窓内完成を目指すなら手動 restic 実行
+(`kubectl create job --from=cronjob/immich-restic-backup ...`) が必要だが、これは
+spec の kubectl-write 名目外のため人間承認前提。フィードバック窓口は issue #56。
+
+### 残った不確実性
+
+- B2 append-only 鍵が壊れた正確な原因 (期限切れ or 無効化) は未特定。docs/backup.md に
+  duration 設定の記載がなく外側からは分からない
+- 内蔵日次ダンプ (= 最後の砦のロールバック材料) はローカル PVC 書き込みなので B2 障害と
+  切離し成功し続けている想定だが、最終確認はセッション 2 の当日分
+  (`immich-db-backup-20260823T020000-v3.1.0-pg16.9.sql.gz`)。stalled 期間中も日次で
+  取れ続けているかは再開時に要確認
+- cron 発火のノードローカル (JST) 解釈という結論 (セッション 32) は発火時刻実績からの
+  推定であり、k3s controller-manager の挙動として直接実証したわけではない
+- `ops/inventory.json` の `immich-postgres.current` が `16.9-0.4.3` のまま (spec の
+  DoD 外のため触っていない)。本番は既に 16.14-1.1.1 で動いているので帳簿と実態の乖離が
+  残る — heart 領域の宿題として issue 経由での更新を推奨
