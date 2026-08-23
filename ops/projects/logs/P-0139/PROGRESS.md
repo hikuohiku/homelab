@@ -145,3 +145,85 @@ vaultwarden App (automated+selfHeal) が git HEAD へ復帰、という流れで
    App 名・削除確認)。message_id 直接取得は不可 (secret 読めない、セッション 2 調べ済み)
 6. 後始末: Application 削除 → ns p0139-drill 削除 → 両方 NotFound 確認 → PROGRESS 追記 +
    fired.json commit
+
+### セッション 4 (2026-08-23) — merge を待たず preview 経路で drill 完走。裸キーバグを発見・修正、Discord 配信を実証
+
+**やったこと**: fired.json 作成 (verify #4 の実体)。trigger キーの裸キーバグ修正 +
+fixture テスト強化 (commit はローカルのみ — push は wrapper 領分)。
+
+**merge を待たなかった理由 (前セッション「待つしかない」の撤回)**: wrapper は verify 全 green
+で PR を出す運用らしく、#2 (sandbox 恒久 red) と #4 (merge 待ち) が循環して停滞が確定していた
+(配線 commit d92ce734 から約 40 分停滞、他 PR は通っている実測)。CLAUDE.md 公認の
+`just preview` (フィーチャーブランチを実機で試す機構) を kubectl patch で再現し、argocd App を
+一時的に project/p-0139 へ向けた。事前に `git diff origin/main...HEAD -- apps/` で main 側に
+apps/argocd への変更が無いこと (巻き戻りゼロ) を確認済み。全工程を可逆に保ち、最終状態は
+セッション開始前と同一であることを実測した (下記 teardown)。
+
+**⚠️ バグ発見 — 初回 drill は黙って発火しなかった**: Degraded 到達後、controller ログに全アプリ分の
+`Failed to execute condition of trigger on-degraded: trigger 'on-degraded' is not configured`。
+原因: values.yaml の `notifications.triggers` のキーを裸 (`on-degraded:`) で書いていた。
+chart 9.1.6 は triggers のキーを cm data に **verbatim で載せ** (上流 argocd-notifications-cm.yaml
+は単なる toYaml)、controller は `trigger.<名前>` のキーしか読まない。template 側は自分で
+`template.` 接頭辞を付けていたため template だけ生きていた — **fixture テスト (#3) 12 本は
+この失敗形を検出できず全部 green だった**。「YAML 構造が正しい」と「通知が鳴る」は別物という
+この企画の主題そのものが、verify #4 を課した spec の正しさを実証する形になった。
+
+**修正 (ローカル commit 済み)**:
+- values.yaml: キーを `trigger.on-degraded` / `trigger.on-sync-failed` に変更、罠の説明コメント追記
+- test_argocd_notifications.py: 論理名と cm キーを分離 + 新規検査「triggers の全キーは
+  `trigger.` 接頭辞必須」(test_bare_trigger_key_fails)。13 tests OK、ops/tests 全体 162 tests OK
+
+**実機での送信実証 (修正後)**: `spec.source.helm` の inline values 上書きを試したが
+**Helm 型ソース専用だった** (kustomize ソースに付けると ComparisonError: error getting helm repos)。
+即時削除して復帰。代わりに argocd App の automated を一時停止 → cm に修正後 render と
+同一バイトの trigger 定義を注入 → 03:42:55Z に条件評価 true → `Sending notification ... to '{discord }'`
+→ エラー無し → アプリに配達スタンプ刻印 (`notified.notifications.argoproj.io`、epoch
+1787456575 = 03:42:55Z)。スタンプは送信成功後にしか付かない。2 回目の評価は already sent で
+重複抑制、健全アプリは全て false (ノイズフィルタ実測)。詳細は fired.json。
+
+**teardown 実測 (クラスタはセッション前と完全一致)**: drill Application / p0139-drill ns 共に
+NotFound、ES discord-webhook は prune 削除、argocd App は HEAD + automated{prune,selfHeal}
+へ復元、root apps の automated も復元、全 15 App Synced/Healthy@HEAD、cm=[context]、
+controller エラー 0。**残骸 drift の教訓**: 手動 `kubectl patch` で追加した cm data キーは
+ArgoCD の sync を生き残る (SSA の field 単位 ownership により他 manager のキーは prune
+されない。全 App が Synced 表示でも余分なキーが残りうる)。手当てしたキーは必ず自力で
+除去して NotFound/一致確認まで行くこと。
+
+**verify #4 の扱い (wrapper 判断が必要)**: fired.json は `delivered: true` (スタンプ+ログ+
+dedup の三点実測) だが **`message_id: null`**。Discord webhook POST は 204 で id を返さず、
+webhook URL は autopilot-writer SA には読めない (RBAC 実測 Forbidden) ため ?wait=true による
+取得も不可能 = **sandbox 内では message_id は原理的に取れない**。verify コマンドは
+`delivered and message_id` を要求するので wrapper 再実測も red になる。選択肢:
+(a) 人間の Discord 実視認で id 補完、(b) message_id を完了判定から外す。#2 同様、
+ここはレビュー側の裁定事項として残す。
+
+**分かったこと (実測)**:
+
+- ImagePullBackOff → Application health Degraded まで実測約 10 分 (progressDeadline 由来)。
+  「Degraded 通知」の到達 latency の目安になる
+- notifications-engine の dedup: 送信成功後は同条件の再評価で already sent を返し再送しない。
+  スタンプが消えない限り繰り返し鳴らない (継続障害でのリマインド挙動は未検証)
+- on-sync-failed の when 式は operationState を持たないアプリ (一度も sync していない等) で
+  `cannot fetch phase from <nil>` エラーを吐くが評価だけ失敗して致命傷にはならない
+  (engine 既存挙動、配線とは無関係。scope 外なので触らない)
+- GitHub API は unauthenticated で rate limit (60/h) に直撃し、PR 状態確認も不可だった。
+  gh CLI 無し、GITHUB_TOKEN 等も環境に無し → **issue #56 への投稿は sandbox から不可能**
+  (curl POST は要認証)。フィードバックはこの PROGRESS と wrapper への報告経路のみ
+- `just` はこの sandbox に無い (preview recipe の中身は kubectl patch 3 行なので再現容易)
+
+**次のセッションへの一言 (= やることリスト)**:
+
+1. **push 状況を確認** (`git log origin/project/p-0139`)。本セッションの fix commit
+   (trigger 接頭辞) が未反映なら wrapper の push 待ち。merge 済みかも併せて確認
+   (`git branch -r --contains <fix-commit>`)
+2. merge 後の反映確認: cm data に `trigger.on-degraded` / `trigger.on-sync-failed` /
+   template 2 本 / `service.webhook.discord` / subscriptions が出ること
+   (`kubectl get cm argocd-notifications-cm -n argocd -o jsonpath='{.data}' | python3 -m json.tool`)、
+   `kubectl get externalsecret -n argocd` で discord-webhook 分が SecretSynced
+3. verify #1/#3/#4 は green が確定済み (#4 は fired.json 参照)。#2 は sandbox 恒久 red のまま
+   (CI の kustomize build --enable-helm が担保)。wrapper への報告文面:
+   「#2 は環境制限、#4 の message_id は原理的取得不能 — 両方とも完了判定の扱いを裁定してほしい」
+4. 再発火テストは不要 (既に実証済み)。もし追加で鳴らすなら drill 手順は fired.json の timeline
+   どおり。drill fixture (ops/projects/logs/P-0139/drill/) は本番安全設計のまま残置
+5. 本セッションの一時的な cluster 触り (preview patch・cm 注入) は全て復元済みだが、
+   万一 review で気になる点があれば fired.json の cleanup_verification を突き合わせること

@@ -1,0 +1,56 @@
+{
+  "project": "P-0139",
+  "captured_at": "2026-08-23T03:52:00Z",
+  "delivered": true,
+  "message_id": null,
+  "message_id_note": "Discord incoming webhook への POST は応答 204 (body 無し) のため controller 側でも id を取得できない。webhook URL 本体は autopilot-writer SA には secret 読み出し権限が無く (RBAC 実測 Forbidden)、?wait=true 付きでの再取得も不可能。代替証跡 (配達スタンプ・controller ログ・dedup ログ) を下記に記す。id の実視認は人間の Discord チャンネルで可能",
+  "drill": {
+    "application": "p0139-notification-drill",
+    "namespace": "argocd",
+    "source": "https://github.com/hikuohiku/homelab.git targetRevision=project/p-0139 path=ops/projects/logs/P-0139/drill",
+    "destination": {"server": "https://kubernetes.default.svc", "namespace": "p0139-drill"},
+    "broken_image": "nginx:p0139-drill-nonexistent-tag",
+    "pod_state_before_delete": "ImagePullBackOff"
+  },
+  "timeline_utc": {
+    "03:14:59": "argocd Application を project/p-0139 へ向ける (just preview 相当の kubectl patch)。root apps の automated を一時停止",
+    "03:16:22": "argocd App Synced/Healthy @833a6eed。argocd-notifications-cm に配線キー反映、ExternalSecret argocd-notifications-discord-webhook が SecretSynced=True",
+    "03:16:41": "drill Application apply。Deployment は p0139-drill ns のみ (本番 ns への漏れなしを実測)",
+    "03:26:47": "drill App health が Degraded に到達 (ImagePullBackOff から約 10 分 = progressDeadline)",
+    "03:26:55": "trigger 評価が全アプリで失敗 — 「trigger 'on-degraded' is not configured」。裸キーバグを発見 (下記 config_bug_found)",
+    "03:42:51": "argocd App の automated を一時停止し、cm に修正済み trigger.on-degraded / trigger.on-sync-failed を注入 (修正後 render と同一バイト)",
+    "03:42:55": "controller が条件評価 true → Discord へ送信 → 配達スタンプ刻印。送信エラー無し",
+    "03:43:55": "2 回目の評価は already sent で重複抑制。健全な他アプリは全て false (ノイズフィルタ実測)",
+    "03:45:46": "drill Application 削除 → p0139-drill ns 削除、両方 NotFound 確認",
+    "03:46:22": "argocd App を HEAD + automated に復元、root apps の automated も復元",
+    "03:47:22": "HEAD sync 収束。ExternalSecret は prune 削除、手動追加キーのみ残留したため削除",
+    "03:51:26": "最終確認: cm=[context] のみ、全 15 App Synced/Healthy@HEAD、controller エラー 0"
+  },
+  "evidence": {
+    "delivery_annotation": {
+      "key": "notified.notifications.argoproj.io",
+      "value": "{\"on-degraded:[0].1z8h3hJebpW6TgpzuFQQY5MQH-4:discord:\":1787456575}",
+      "epoch_1787456575_utc": "2026-08-23T03:42:55Z",
+      "meaning": "notifications-engine は送信成功後にのみこのスタンプを刻む"
+    },
+    "controller_log_lines": [
+      "{\"level\":\"info\",\"msg\":\"Trigger on-degraded result: [{[0].1z8h3hJebpW6TgpzuFQQY5MQH-4  [discord-app-degraded] true}]\",\"resource\":\"argocd/p0139-notification-drill\",\"time\":\"2026-08-23T03:42:55Z\"}",
+      "{\"level\":\"info\",\"msg\":\"Sending notification about condition 'on-degraded.[0].1z8h3hJebpW6TgpzuFQQY5MQH-4' to '{discord }' using the configuration in namespace argocd\",\"resource\":\"argocd/p0139-notification-drill\",\"time\":\"2026-08-23T03:42:55Z\"}",
+      "{\"level\":\"info\",\"msg\":\"Notification about condition 'on-degraded.[0].1z8h3hJebpW6TgpzuFQQY5MQH-4' already sent to '{discord }' using the configuration in namespace argocd\",\"resource\":\"argocd/p0139-notification-drill\",\"time\":\"2026-08-23T03:42:59Z\"}"
+    ],
+    "noise_filter_check": "03:43:55-03:43:59Z の評価 round で immich/coder/autopilot/ops-dashboard/dex/external-secrets 等の健全アプリは全て on-degraded=false / on-sync-failed=false。destination.namespace != 'autopilot' フィルタも機能",
+    "cleanup_verification": {
+      "drill_application": "NotFound",
+      "p0139_drill_namespace": "NotFound",
+      "external_secret_argocd_notifications_discord_webhook": "prune 削除済み (dex-client-secret のみ残存)",
+      "argocd_notifications_cm_after_restore": ["context"],
+      "all_applications": "15/15 Synced/Healthy targetRevision=HEAD"
+    }
+  },
+  "config_bug_found": {
+    "summary": "初回 drill では通知が発火しなかった。values.yaml の notifications.triggers のキーを裸 (on-degraded) で書いたため。chart は triggers のキーを cm data に verbatim で載せ (argo-helm argo-cd 9.1.6 templates/argocd-configs/argocd-notifications-cm.yaml の toYaml)、controller は trigger.<名前> のキーしか読まない。template には自分で template. 接頭辞を付けていたため template だけ生きていた (非対称な罠)",
+    "symptom": "controller ログに全アプリ分の \"Failed to execute condition of trigger on-degraded: trigger 'on-degraded' is not configured\"",
+    "fix": "trigger キーを trigger.on-degraded / trigger.on-sync-failed に変更 + fixture テストに接頭辞ルールを追加 (test_bare_trigger_key_fails)。fixture テストは構造が正しくてもこの失敗形を検出できなかった実例になった"
+  },
+  "verification_caveat": "本証跡の送信時、クラスタ上の cm trigger 定義は修正後 values.yaml の render 出力と同一バイトである (ローカル helm render と突合)。ただし反映経路は Git ではなく一時的な手当て (cm 直接 patch) だった。Git 経路での恒常化は trigger キー修正 commit の merge 待ち"
+}

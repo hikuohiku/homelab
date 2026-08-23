@@ -18,6 +18,10 @@ notifier の `$<key>` 参照の不一致、kustomization resources への載せ�
      ExternalSecret target.name (=argocd-notifications-secret) と
      notifications.secret.create: false の整合
   5. ExternalSecret が kustomization.yaml の resources に載っていること
+  6. trigger のキー名に trigger. 接頭辞があること — chart は triggers のキーを cm data に
+     verbatim で載せ、controller は trigger.<名前> のキーしか読まない。裸の on-degraded 等
+     は「trigger '...' is not configured」で黙って発火しない (2026-08-23 合成障害注入中に
+     controller ログで実測した失敗形。verify #4 の drill で初めて露見した)
 
 **既知の死角**: YAML 構造しか見ない。Discord に実際に届いたかは fired.json (合成障害の
 証跡) と controller ログが担う。また render 自体は CI (ci.yml の kustomize build
@@ -35,6 +39,7 @@ ROOT = Path(__file__).resolve().parent.parent.parent
 ARGOCD_DIR = ROOT / "apps" / "argocd"
 
 REQUIRED_TRIGGERS = ("on-degraded", "on-sync-failed")
+TRIGGER_PREFIX = "trigger."
 NOISE_FILTER = "autopilot"
 WEBHOOK_SECRET_NAME = "argocd-notifications-secret"
 WEBHOOK_URL_KEY = "discord-webhook-url"
@@ -65,11 +70,23 @@ def find_problems(notifications: dict, kustomization_resources: list,
     subscriptions = notifications.get("subscriptions") or []
     secret = notifications.get("secret") or {}
 
-    # (1) trigger の存在とノイズフィルタ
+    # (1) trigger キーは trigger.<名前> の形でなければならない (裸キーは controller に無視される)
+    for key in triggers:
+        if not key.startswith(TRIGGER_PREFIX):
+            problems.append(
+                f"notifications.triggers のキー '{key}' に '{TRIGGER_PREFIX}' 接頭辞が無い。"
+                f"chart はキーを cm data に verbatim で載せ、controller は "
+                f"{TRIGGER_PREFIX}<名前> のキーしか読まないため、裸キーは "
+                f"'trigger {key} is not configured' で黙って発火しない"
+            )
+
+    # (2) trigger の存在とノイズフィルタ
     for name in REQUIRED_TRIGGERS:
-        trig = triggers.get(name)
+        trig = triggers.get(TRIGGER_PREFIX + name)
         if not trig:
-            problems.append(f"trigger {name} が values.yaml notifications.triggers に無い")
+            problems.append(
+                f"trigger {TRIGGER_PREFIX + name} が values.yaml notifications.triggers に無い"
+            )
             continue
         conditions = yaml.safe_load(trig)
         for cond in conditions or []:
@@ -81,7 +98,7 @@ def find_problems(notifications: dict, kustomization_resources: list,
                 )
                 break
 
-    # (2) trigger.send → template 参照の整合
+    # (3) trigger.send → template 参照の整合
     for name, trig in triggers.items():
         for cond in yaml.safe_load(trig) or []:
             for send in cond.get("send", []):
@@ -93,7 +110,7 @@ def find_problems(notifications: dict, kustomization_resources: list,
                         f"エラーにもならない"
                     )
 
-    # (3) template → notifier (webhook サービス名) 参照の整合
+    # (4) template → notifier (webhook サービス名) 参照の整合
     service_key = f"service.webhook.{DISCORD_SERVICE}"
     if service_key not in notifiers:
         problems.append(
@@ -131,7 +148,7 @@ def find_problems(notifications: dict, kustomization_resources: list,
                     f"(default の GET だと Discord は受け付けない)"
                 )
 
-    # (4) subscription が全 trigger を購読していること (人間の Discord 1 本のみ)
+    # (5) subscription が全 trigger を購読していること (人間の Discord 1 本のみ)
     subscribed = set()
     for sub in subscriptions:
         if DISCORD_SERVICE in (sub.get("recipients") or []):
@@ -143,14 +160,14 @@ def find_problems(notifications: dict, kustomization_resources: list,
                 f"載っていない。trigger/template を定義しただけでは誰にも届かない"
             )
 
-    # (5) chart 由来の空 Secret との二重管理を防ぐ設定
+    # (6) chart 由来の空 Secret との二重管理を防ぐ設定
     if secret.get("create") is not False:
         problems.append(
             "notifications.secret.create が false でない。chart が argocd-notifications-secret "
             "を空のまま作ると ExternalSecret と同じ名前を取り合う"
         )
 
-    # (6) ExternalSecret の整合と kustomization への配線
+    # (7) ExternalSecret の整合と kustomization への配線
     if external_secret_doc is None:
         problems.append(
             "apps/argocd/discord-webhook-external-secret.yaml が読めない / 存在しない"
@@ -212,7 +229,7 @@ class TestRealRepo(unittest.TestCase):
         """走査そのものが壊れて空を返すと、上のテストは黙って通ってしまう。"""
         notifications = collect_notifications(self.values)
         for name in REQUIRED_TRIGGERS:
-            self.assertIn(name, notifications.get("triggers") or {})
+            self.assertIn(TRIGGER_PREFIX + name, notifications.get("triggers") or {})
         self.assertIn("discord-webhook-external-secret.yaml",
                       self.kustomization.get("resources") or [])
 
@@ -247,12 +264,12 @@ class TestFindProblems(unittest.TestCase):
                 ),
             },
             "triggers": {
-                "on-degraded": (
+                "trigger.on-degraded": (
                     "- when: app.status.health.status == 'Degraded'"
                     " && app.spec.destination.namespace != 'autopilot'\n"
                     "  send: [discord-app-degraded]\n"
                 ),
-                "on-sync-failed": (
+                "trigger.on-sync-failed": (
                     "- when: app.status.operationState.phase in ['Error', 'Failed']"
                     " && app.spec.destination.namespace != 'autopilot'\n"
                     "  send: [discord-app-sync-failed]\n"
@@ -287,7 +304,7 @@ class TestFindProblems(unittest.TestCase):
 
     def test_broken_send_reference_fails(self):
         notifications = self.make_notifications()
-        notifications["triggers"]["on-degraded"] = (
+        notifications["triggers"]["trigger.on-degraded"] = (
             "- when: app.status.health.status == 'Degraded'\n"
             "  send: [no-such-template]\n"
         )
@@ -296,12 +313,22 @@ class TestFindProblems(unittest.TestCase):
 
     def test_missing_noise_filter_fails(self):
         notifications = self.make_notifications()
-        notifications["triggers"]["on-degraded"] = (
+        notifications["triggers"]["trigger.on-degraded"] = (
             "- when: app.status.health.status == 'Degraded'\n"
             "  send: [discord-app-degraded]\n"
         )
         problems = find_problems(notifications, self.RESOURCES, self.ES_DOC)
         self.assertTrue(any("ノイズフィルタ" in p for p in problems))
+
+    def test_bare_trigger_key_fails(self):
+        """接頭辞なしの trigger キーは controller に黙って無視される (2026-08-23 実測の失敗形)。"""
+        notifications = self.make_notifications()
+        notifications["triggers"] = {
+            k[len(TRIGGER_PREFIX):]: v for k, v in notifications["triggers"].items()
+        }
+        problems = find_problems(notifications, self.RESOURCES, self.ES_DOC)
+        self.assertTrue(any("接頭辞" in p for p in problems))
+        self.assertTrue(any("not configured" in p for p in problems))
 
     def test_unsubscribed_trigger_fails(self):
         notifications = self.make_notifications(subscriptions=[])

@@ -112,16 +112,21 @@ notifications:
             {"content": "ArgoCD: アプリ {{.app.metadata.name}} の sync が失敗した {{.context.argocdUrl}}/applications/{{.app.metadata.name}}"}
 
   triggers:
+    # キー名に trigger. 接頭辞が必須: chart は notifications.triggers のキーを cm data に
+    # verbatim で載せる (argo-helm argocd-notifications-cm.yaml の toYaml)。controller は
+    # trigger.<名前> のキーだけを trigger 定義として読むため、裸の on-degraded を置くと
+    # 「trigger 'on-degraded' is not configured」で黙って発火しない (2026-08-23 に合成障害
+    # 注入中に controller ログで実測した失敗形)。subscription 側の参照は接頭辞なしの名前
     # ノイズフィルタ: 器自身 (autopilot ns — autopilot / ops-dashboard / heart 関連) の
     # Application 変化では鳴らさない。autopilot は毎時起動で Job の再試行を繰り返し、
     # 一時的な Degraded / Failed が日常茶飯事なので除外しないと警報疲れになる。
     # Application 全 14 本は argocd ns 在住のため app.metadata.namespace では判別できず、
     # destination.namespace 側で判定する (ops-dashboard / autopilot が destination.namespace:
     # autopilot であることは P-0139 initializer 実測)。
-    on-degraded: |
+    trigger.on-degraded: |
       - when: app.status.health.status == 'Degraded' && app.spec.destination.namespace != 'autopilot'
         send: [discord-app-degraded]
-    on-sync-failed: |
+    trigger.on-sync-failed: |
       - when: app.status.operationState.phase in ['Error', 'Failed'] && app.spec.destination.namespace != 'autopilot'
         send: [discord-app-sync-failed]
 
