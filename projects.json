@@ -5573,7 +5573,7 @@
     {
       "id": "P-0270",
       "title": "tailnet 全端末に DNS 広告除去を開通させる — AdGuard Home を syncthing 実績型 (Deployment + PVC + restic backup + inventory 登録込み) で新設し、「入れたのに誰も見てない」を最初から防ぐ",
-      "state": "active",
+      "state": "in_review",
       "branch": "project/p-0270",
       "irreversible": false,
       "capabilities": [
@@ -5630,12 +5630,17 @@
       "veto_deadline": "2026-08-23T23:18:26Z",
       "spawn_count": 1,
       "job": "runner-p-0270-a1",
-      "drift_count": 0
+      "drift_count": 0,
+      "prs": [
+        580
+      ],
+      "review_requested_at": "2026-08-23T23:53:07Z",
+      "review_retries": 0
     },
     {
       "id": "P-0272",
       "title": "Mission Control が器の状態だけを映して依頼を映していない — 「人間の鍵作業」キューを Next.js 化で失った面に復活させる",
-      "state": "proposed",
+      "state": "active",
       "branch": "project/p-0272",
       "irreversible": false,
       "capabilities": [],
@@ -5686,12 +5691,13 @@
         "verdict": "all_fail",
         "passed": [],
         "broken": []
-      }
+      },
+      "veto_deadline": "2026-08-23T23:53:07Z"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-23T23:50:20Z",
-  "last_activity_at": "2026-08-23T23:50:20Z",
+  "last_activity_at": "2026-08-23T23:53:07Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
