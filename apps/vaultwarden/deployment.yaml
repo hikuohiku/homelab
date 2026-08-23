@@ -35,10 +35,11 @@ spec:
               mountPath: /data
       containers:
         - name: vaultwarden
-          # latest ではなく具体的なバージョンに pin (最新安定版 1.37.1 / alpine variant)
+          # latest ではなく具体的なバージョンに pin (最新安定版 1.37.2 / alpine variant)
           # 1.37.0 が Bitwarden クライアント 2026.7.0+ の対応に必須。
           # 1.37.1 は alpine イメージのビルド不具合 (OpenSSL) 修正を含むため alpine では 1.37.1 を採る。
-          image: vaultwarden/server:1.37.1-alpine
+          # 1.37.2 はクライアント 2026.8.0+ のサポートに必須 (リリースノート Note 冒頭、P-0145)。
+          image: vaultwarden/server:1.37.2-alpine
           terminationMessagePolicy: FallbackToLogsOnError
           securityContext:
             runAsNonRoot: true
