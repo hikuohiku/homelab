@@ -3469,3 +3469,54 @@ P-0143 依頼で session63〜76 と同一。キーワード走査 (P-0116/restic
 - **open PR は 1 件** (session78 時点): #512 P-0118 のみ。
   本プロジェクト無関係。今後の確認では件数だけでなく番号・タイトルを見ること
 - **PROGRESS.md への追記は必ずファイル末尾** (session46 教訓の再掲)
+
+## session79 (P-0116 worker, 2026-08-23)
+
+やったこと: 冒頭チェック → main 先行なし (0 コミット)・remote 分岐移動なし (ops-state /
+ops-health-report / project/p-0139 / p-0143 は移動したが本ブランチ無関係)・issue #56 の
+回答再確認 (**本プロジェクト関連なし**, 総数 **179 で変化なし**・最新は 2026-08-23T04:37:45Z
+hikuohiku の P-0143 依頼。キーワード走査の 0822 以降ヒットは P-0076/P-0080/P-0143 の既知
+無関連コメントのみ)・open PR の確認 (**1 件のまま**: #512 P-0118 のみ)・受入全項目・
+validate.py・discover 全体の再実測。コード・manifest 側の変更は無し (session5→79 まで
+75 回連続で同じ結論。session8 の「貼り付け用文案」「環境メモ」は引き続き有効)。
+
+### 受入再実測 (2026-08-23 本セッション)
+
+- #1 spec 文言どおり: **rc=2** (BusyBox grep `unrecognized option`) — red のまま
+- #1 等価版 `grep -rq 'restic-check' apps/`: **rc=0** (apps/restic-check/ 配下。
+  application.yaml / cronjob.yaml / job_main.py / kustomization.yaml / namespace.yaml /
+  restic-external-secret.yaml / restic_check_runner.py が健在であることも目視確認)
+- #2: **28 tests OK**
+- #3: evidence ok (**5 repos, 全 exit_code==0**)
+- `ops/validate.py`: **0 error / 11 warning** (既存 warning のみ)
+- `python3 -m unittest discover -s ops/tests`: **270 tests OK, rc=0**
+- push 形態: **fast-forward push でよい** (main 先行が無く merge commit も無いので remote tip
+  9ad76db9 から進むだけ)
+
+### 次セッションへの要点
+
+- 変化なし: コード側は完全に完了。#1 のみ heart 回答待ち (#56)。回答が来ていたら
+  文言判断に従うだけ。来ていなければ再実測して末尾への追記で足りる (session8 の文案・
+  環境メモもそのまま使える)
+- 冒頭チェック・merge 方針・API 走査・mktemp・サマリ拾いの各注意点は session47 以前と
+  同じ (省略しないこと。「冒頭チェックは毎回」以下をそのまま守る)。main 先行・diverge
+  いずれも **merge 一択** (rebase 不可 — session28)
+- **issue #56 のコメント総数は 179 が最新基準** (session63〜79 変化なし)。今後は
+  180 以上で新規着信を疑うこと。ただし最新タイムスタンプとキーワード走査で
+  本プロジェクト関連かを必ず判別すること
+- **discover の総数は merge で動く**: 固定値ではない (session79 時点で 270)。
+  rc=0 と OK を確認すること
+- **`git rev-list --count origin/main ^project/p-0116` で main 側だけ明示的に数えるのが
+  確実** (left-right --count の「左自ブランチ/右main」誤読防止。session66 参照)
+- **API 走査は python 内で完結させると一時ファイル不要**: urllib でページごと取得→
+  メモリ内 extend → キーワード判定まで 1 スクリプトで足りる (session61〜79 実測)。
+  ファイル保存が必要になったときだけ mktemp を使う。なお **/tmp/opencode への Write は
+  PermissionDenied になった** (session72 実測) — 一時ファイルが必要なら mktemp 直接
+- **未認証の GitHub API 呼び出しは rate limit 403 で即死する**: AUTOPILOT_GITHUB_TOKEN
+  を Authorization Bearer ヘッダに付けて呼ぶこと (session69 実測。トークンは環境変数に
+  既にあるので追加設定不要)
+- **GITHUB_REPO 環境変数は owner 付きとは限らない**: API URL を組むときは
+  `owner/repo` 形に正規化してから使う (session62 実装。フォールバック付き)
+- **open PR は 1 件** (session79 時点): #512 P-0118 のみ。
+  本プロジェクト無関係。今後の確認では件数だけでなく番号・タイトルを見ること
+- **PROGRESS.md への追記は必ずファイル末尾** (session46 教訓の再掲)
