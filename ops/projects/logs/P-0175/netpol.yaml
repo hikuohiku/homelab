@@ -30,7 +30,7 @@ spec:
             cidr: 10.42.0.0/24 # pod CIDR (node .spec.podCIDR 実測値)。port 制限を付けない。
             # kube-router の実装では Service ClusterIP 行きのパケットは DNAT 後の
             # 宛先 (endpoint の pod IP) で評価されるため、ここには kube-dns の
-            # endpoint (:53) も流れ込む。port を絞ると DNS まで死ぬ (第2版の缺陷)
+            # endpoint (:53) も流れ込む。port を絞ると DNS まで死ぬ (第2版の欠陥)
     - to:
         - ipBlock:
             cidr: 192.168.0.129/32 # node IP。k3s apiserver の endpoint (kube-apiserver は

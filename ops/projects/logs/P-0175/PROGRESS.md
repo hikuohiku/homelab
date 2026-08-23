@@ -112,3 +112,49 @@ RBAC 反映は ArgoCD sync 待ちなので最初の数回は error エントリ�
 実クラスタ実行で証明済み (上記 1)。マージ後最初の CronJob 分で latest.json の
 externalsecrets セクションに RBAC 由来の error エントリが出ないことを確認するのが
 最後の仕上げになる (ArgoCD sync 待ちのため merge 前は不可能)
+
+## セッション3 — ランブックの自己レビューで 3 件の欠陥を解消 (verify 4/4 再々実測 green)
+
+レビュー verdict 無し・failing 項目無しが 2 回続いたため、reviewer の席を自分で務めて
+ブランチ全差分 (runbook / drill-report / netpol.yaml / report.py / tests) を精読した。
+結果、DoD 成果物 (主に人間向けランブック) に 3 件の欠陥を見つけたので解消した。
+
+### やったこと
+
+1. **ランブック §恒久4 の復旧確認コマンドが論理破綻していたのを修正**:
+   `kubectl get externalsecrets -A | grep -v SecretSynced` は成立しない。STATUS 列は
+   正常時も `SecretSynced`、異常時も `SecretSyncedError` であり**どちらも部分文字列
+   `SecretSynced` を含む**ため逆引きすると全行消え、ヘッダだけが常に残って
+   「空になれば復旧完了」が絶対に満たされない (当日のクラスタで実見して確認)。
+   `grep 'SecretSyncedError'`(空なら復旧完了) に修正し、罠の説明を本文に残した
+2. **ランブック §判定3 の疎通 probe を http(80) → https(443) に修正**:
+   旧文は `http://api.doppler.com/` なのに「ESO と同じ条件」と称していた。ESO は
+   TLS/443 で話すので等価ではない。演習と同一手順 (external-secrets ns に
+   doppler-probe busybox:1.36 を起こして exec) で実測したところ、**busybox:1.36 の
+   wget は https を扱える** (内蔵 TLS)。`wget: note: TLS certificate validation not
+   implemented` は常動で異常ではない旨も本文に記載。なお今日は http でも通った
+   (Doppler の :80 が https へリダイレクトし busybox wget が追従するため) が、
+   それを当てにするのは「80 番だけ生きて 443 が死んでいる」状態を見誋るので直結 https に統一
+3. **中国語「缺陷」の混入 2 箇所を日本語「欠陥」に修正** (runbook §応急 /
+   netpol.yaml 第2版コメント)。人間向け文書なので誤字も障害時に読む負担になる
+
+probe Pod は作成→削除まで確認済み (残置物なし、ESO 本体 3 Pod は restarts 0 のまま)。
+
+### 分かったこと (罠と発見)
+
+- `kubectl get externalsecrets -A` の STATUS 値は `SecretSynced` / `SecretSyncedError`
+  と部分一致するペアなので、grep での抽出・除外は必ず Error 側の正引きで行うこと
+- busybox:1.36 wget の https は証明書検証なしの内蔵 TLS。到達性確認には足りる
+  (検証付きにしたい場合は別ツールが必要だが、本ランブックの目的は経路の生死判定のみ)
+- ドキュメント内のコマンドは CI (check_doc_commands 等) では just recipe の drift しか
+  見ない。シェルワンライナーの論理的正しさ (今回の grep -v 破綻) は誰も検査していない
+  — 人間向け手順書を書いたら「そのコマンドを実際に打って期待の表示になるか」を
+  自分で通すしかない
+
+### 次のセッションへの一言
+
+変わらず「レビュー指摘が最優先。無ければやることは無いはず」。コード (report.py /
+tests / rbac) はセッション2 で実機証明済みで今回は不変、成果物側の欠陥は今回で潰した。
+残るのは merge 後の CronJob 確認のみ (merge 前は不可能)。もし再度 verdict 無しで
+回ってきたら、スコープ外の新仕事を作らないこと — 「再演習による追証明」は reviewer が
+明示的に求めたときだけ (生データは作業領域に無く、drill-report.json が一次記録)

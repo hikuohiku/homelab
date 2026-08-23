@@ -48,19 +48,22 @@ External Secrets Operator (ESO) にとって Doppler (`homelab/prd`) は唯一�
    `dial tcp ...:443` 系の文言があればネットワーク層、401/403 系ならトークンの失効、
    「secret not found」系なら Doppler 側のキー削除
 
-3. クラスタ内から Doppler への到達を確かめる (ESO と同じ条件での疎通テスト):
+3. クラスタ内から Doppler への到達を確かめる (ESO と同じ HTTPS/443 での疎通テスト):
 
    ```
    kubectl run doppler-probe -n external-secrets --image=docker.io/library/busybox:1.36 \
      --restart=Never --command -- sleep 120
    kubectl exec -n external-secrets doppler-probe -- \
-     wget -T 8 -O /dev/null http://api.doppler.com/
+     wget -T 8 -O /dev/null https://api.doppler.com/
    kubectl delete pod doppler-probe -n external-secrets
    ```
 
    `Connection refused` / timeout なら経路が死んでいる (NetworkPolicy の取り残しを含む)。
-   HTTP レスポンスが返れば経路は生きているので、Doppler サービス本体の障害かトークンの
-   問題に絞られる
+   レスポンスが返れば経路は生きているので、Doppler サービス本体の障害かトークンの
+   問題に絞られる。`wget: note: TLS certificate validation not implemented` という行は
+   busybox wget の常動で異常ではない (2026-08-23 実機実測)。ESO は TLS (443) で話すため
+   probe も https を使うこと — http (80) で試すと「80 番だけ生きていて 443 が死んでいる」
+   状態を見誤る
 
 4. ESO 本体のログ:
 
@@ -92,7 +95,7 @@ External Secrets Operator (ESO) にとって Doppler (`homelab/prd`) は唯一�
 - egress をいじる変更 (NetworkPolicy の追加・修正) をその場で行わない。
   演習の教訓として、kube-router の NetworkPolicy は Service の ClusterIP ではなく
   DNAT 後の endpoint 側 IP で評価される ([netpol.yaml](../ops/projects/logs/P-0175/netpol.yaml)
-  の v1/v2 缺陷参照)。場当たり的な egress 変更は DNS や K8s API を巻き込んで落とせる
+  の v1/v2 欠陥参照)。場当たり的な egress 変更は DNS や K8s API を巻き込んで落とせる
 - target Secret 未作成の新規ワークロードのデプロイを進めない (立ち上がらず Pending になる)
 
 ## 恒久 — 復旧と事後
@@ -110,11 +113,13 @@ External Secrets Operator (ESO) にとって Doppler (`homelab/prd`) は唯一�
 4. 全員戻ったことを確認:
 
    ```
-   kubectl get externalsecrets -A | grep -v SecretSynced
+   kubectl get externalsecrets -A | grep 'SecretSyncedError'
    ```
 
-   演習日現在、これが空になれば復旧完了 (常設の既知エラーが今後増えた場合は
-   その item を読み替える)
+   エラーのまま残っている item の一覧が出る。これが空になれば復旧完了。
+   逆引き (`grep -v SecretSynced`) では探さないこと — STATUS は正常時も
+   `SecretSynced` という文字を含むため、正常・異常の両方とも消えてしまい
+   何も判別できない。常設の既知エラーが今後増えた場合はその item を読み替える
 
 5. 事後記録: 発生日時・影響 (どの ES がいつエラー化したか)・復旧所要時間を
    Maintenance.md か issue に残す。恒久的な冗長化 (代替プロバイダ併用など) が必要かの
