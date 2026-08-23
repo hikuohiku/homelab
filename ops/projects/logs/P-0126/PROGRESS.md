@@ -122,3 +122,87 @@ dockerhub:library/python。watcher 自身が自分の image も観測対象に�
 `python3 ops/tools/version_watch.py` を手で回して件数を logs に残す (通らなければ
 デプロイ後の初回 CronJob 実行結果を待ち、その旨を書く)。全部通ったら wrapper が
 verify 全 green を実測してレビューへ進む。
+
+### 2026-08-23 セッション3 — 受入3項目目 + dod(3)(4) 完遂。初回実測が偽 drift を暴き、観測ロジックを修正
+
+**やったこと**: verify 3項目目を green にした (commit 2989c6a2)。
+`apps/version-watcher/application.yaml` 新設 (ops-health-reporter 同型)、
+`apps/kustomization.yaml` resources 追加。dod(3): `ops/inventory.json` に
+`version-watcher-image` を単独エントリ (mirrors 無し) で追加 — targets 42→43。
+current "3.14-alpine" は cronjob.yaml の pin と機械照合済み、validate.py /
+check_version_sync.py とも rc=0。verify 3項目 + discover 186 tests + apps root の
+kustomize render を全て自分で実測済み (green)。
+
+**dod(4) 初回 drift 実測の証跡** (2026-08-23、sandbox から unauthenticated で
+`python3 ops/tools/version_watch.py` を実測。観測ロジック修正**後**の値):
+
+```
+summary: {total: 43, ok: 39, drifted: 8, errors: 1, uncomparable: 3}
+drift:
+  argocd-chart              9.1.6      -> 10.4.0   (github:argoproj/argo-helm)
+  tailscale-operator-chart  1.98.9     -> 1.102.3  (github:tailscale/tailscale)
+  vaultwarden               1.37.1-alpine -> 1.37.2 (#49 型の本物のシグナルそのもの)
+  coder                     v2.35.3    -> 2.35.4   (github:coder/coder)
+  k8s-nameserver            v1.98.9    -> 1.102.3  (tailscale と同値で整合)
+  gha-setup-helm-version    v3.21.3    -> 4.2.4    (T-0118 で blocked の既知更新。観測としては正しい)
+  terraform-binary          1.15.8     -> 1.15.9   (github:hashicorp/terraform)
+  claude-code-cli           2.1.223    -> 2.1.241  (npm)
+error: immich-postgres (tensorchord/VectorChord-images に安定リリース無し 404。
+  docstring 既知の死角どおり error 記録。毎晩この 1 行が出るのは想定内)
+```
+
+argocd-chart の latest だけは全体実行の後に行った単発検証 (1 リクエスト) の値で
+置き換えている (理由は下記「修正2」)。sandbox IP の GitHub unauthenticated 枠
+(60/h 共有) を使い切ったので全体再実行はできず、他の github 対象は修正2の影響外
+(release_prefix を持たないので同一コードパス)。デプロイ後の初回 CronJob 実行
+(認証付き) の数値が今後の正。watcher 自身 (version-watcher-image) は drift 無し。
+
+**実測で発見 → このセッションで修正したこと** (spec 内の自分のモジュールの完成。
+スコープ拡大ではない):
+
+- 修正1 (dockerhub): 「最近更新順先頭 100 件」戦略では大型イメージで目的の家族が
+  100 件に入らず、古代タグが最大 core を取って偽 drift を報告していた。実測の
+  誤報: python 系 5 target が「3.14-alpine → 3.6.0a4-alpine」、coder-postgres が
+  「17.10 → 9.6.3」、busybox が「1.38.0 → buildroot-2014.02」。修正: 2 ページ構成 —
+  (a) 家族アンカー: numeric_head(current) で name 絞り込み + startswith フィルタ
+  (部分一致の "19.1" が head "9.1" に引っかかる事故も弾く)、(b) 全体ページ: 従来
+  どおり最近更新順 (新系列の push 検出用)。大きい方の core を採る。数字始まりで
+  ないタグ ("buildroot-*") は両ページで候補外。修正後の非 github 再実測は
+  drifted 10 → 1 (claude-code-cli の実 drift のみ)。実測ケースは全て unit test 化
+- 修正2 (github): inventory の argocd-chart には元々 `release_prefix: "argo-cd-"`
+  があるのに、取得側は repo 全体の releases/latest を取るだけだった。argo-helm は
+  1 repo に複数チャートのリリースが混在し、repo latest は argo-workflows-2.0.2 に
+  なっていた (初回実測で実際に誤値を記録)。prefix 指定がある対象は /releases 一覧
+  から「draft/prerelease 以外の最初の prefix 一致」を選ぶ方式へ変更。実測で
+  argo-cd-10.4.0 を取得 (9.1.6 に対する major drift を正しく検出)
+
+**分かったこと / 罠**:
+
+- Docker Hub の `ordering=-last_updated` は「タグ新設順」ではなく「push/rebuild の
+  更新順」。公式イメージは古いタグも日常的に再 push されるため、この順序で
+  「上流最新」を近似してはいけない (API 利用者への普遍的な罠。curriculum 候補)
+- `numeric_head()` は完全な数字頭部を返す ("1.38.0")。テストフィクスチャ側の URL を
+  短い頭 ("1.38") で作って一度落ちた。anchor URL は numeric_head(current) と
+  完全一致させること
+- 同期コピー再生成のヘッダー切り出しは `copy_lines[1:6]` (5 行)。[1:7] にすると
+  docstring 先頭まで含んで壊れる (一度やった。壊れたまま commit しないこと)
+- sandbox の GitHub unauthenticated 枠 60/h は共有され簡単に枯れる (実測 0/60 を
+  経験、リセット待ちで約 8 分消費)。手動の全体実測は消費枠を見てから回す
+- cronjob.yaml の activeDeadlineSeconds を 900 に引き上げ (dockerhub の 2 リクエスト化
+  で最悪積算が 49×15s=735s になり 600s を超えるため)。cronjob.yaml と watch.py の
+  コメントに積算根拠を書いた
+
+**発見 (spec 外。curriculum が拾うべき候補としてここに記録)**:
+
+- 「正本と apps 側コピーの一致を機械検査する CI step」があると事故らない
+  (セッション2からの持ち越し。今回は手動 diff で担保した)
+- inventory にフィールド (`release_prefix`) が存在しても読む側が対応しないと黙って
+  無視される。TestRealRepo 型の fail-closed 検査は upstream scheme だけでなく
+  「フィールドを持つ target が存在すれば取得側も対応していること」まで見ると強い
+
+**次のセッションへの一言**: verify 3項目は全てこのセッションで green 実測済み
+(wrapper の再実測を待つのみ)。レビュー指摘があればその解消を優先。指摘ゼロで
+merge されたら本プロジェクトは完了で、drift への更新 PR 出しは次のプロジェクト
+(spec 明記)。デプロイ後は初回 CronJob 実行の結果を latest.json の version_drift と
+history jsonl で確認し、sandbox 実測 (上記 8 件) と大きくズレる場合はその差分を
+logs に書くこと。
