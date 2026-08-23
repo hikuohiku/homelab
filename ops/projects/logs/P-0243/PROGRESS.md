@@ -89,3 +89,42 @@
 - セッション 2 の引き継ぎ事項はすべてそのまま有効: P-0203 census 到着時は
   両 NP バイト一致更新 + test_egress_allows_dns_and_nothing_else_yet の
   conscious 更新をセットで。digest pin 化も未処理
+
+## セッション 4 (2026-08-23 深夜) — merge+sync 後の green 化を実測で先取りした。あとは人間レビューと sync を待つだけ
+
+### やったこと
+
+- 受入 3 項目を実走して現状確認: V1 green / V3 green / **V2 red** (fail-fast 0.17 秒・
+  rc=2・クラスタ副作用ゼロ)。セッション 3 診断 (/tmp/opencode が root:root 755 で
+  uid 10001 から不変) をそのまま再現。証拠 demo.json も無傷 (全キー true)
+- **新 Pod テンプレートの効能を事前実証** (本セッションの本体)。spawn.py build_job
+  (e7a45e365) の template.spec から書き込み契約に関わる部分だけを複製した使い捨て
+  Pod (securityContext runAsUser/runAsGroup/fsGroup=10001 + emptyDir 64Mi を
+  /tmp/opencode に mount、image python:3.14-alpine) を autopilot ns に立て、Pod 内で
+  mkstemp プローブ + os.replace を実行 → **writable=true を実測** (7.2 秒、
+  phase=Succeeded/exit 0、掃除の 404 確認込み)。mount 後の /tmp/opencode 実測値:
+  dir_uid=0 / gid=10001 / mode 0777
+- main 動静: PR #571〜#573 が merge 済みだが **P-0203 census はまだ origin/main に無い**
+  → 穴開けタスクは変わらず curriculum 行き。触らない
+- unittest 35 本 (test_private_data_profile + test_stage3_readiness) 全 OK。退行なし
+- 検証スクリプトは捨てた (exfil_drill.py の K8s クライアント/wait_terminal/fetch_result/
+  delete_ignore_404 を import して ~100 行。repo へは入れず、上記の記述だけで再現可能)
+
+### 分かったこと
+
+- fsGroup 配下の emptyDir を既存パスに mount すると、イメージ側の所有者に関係なく
+  ディレクトリが gid=fsGroup のグループ書き込み可になる。runAsUser 10001 は owner でなく
+  group 権で書く (dir_uid=0 のままでも書ける — これが実測で確定)
+- exfil_drill.py の部品 (K8s クライアント他) は import すれば別用途の使い捨て検証 Pod が
+  数十行で作れる。「cluster 内で X を実測したい」時の型として覚えておくと良い
+
+### 次セッションへの引き継ぎ
+
+- **状況は変わっていない**: V2 は merge+sync まで red で正しい。Pod 内でのリトライは
+  無駄。ただし「sync 後に本当に通るのか」の最後の未確認リンクは今回実測済みなので、
+  もう疑う必要はない
+- 人間レビュー向けの一言: emptyDir 修正を却下するなら「V2 が永遠に green にならない」
+  ことを意味する (= 代替案の chmod 1777 方式を実装して検証する義務が生じる)。
+  本セッションの実測が emptyDir 方式の効能の証拠
+- セッション 2/3 の引き継ぎ事項はすべてそのまま有効: census 到着時の両 NP バイト一致
+  更新 + test_egress_allows_dns_and_nothing_else_yet の conscious 更新セット、digest pin 化未処理
