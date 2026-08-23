@@ -31,8 +31,9 @@ health は既存の GitHub トークンで `ops-health-report` ブランチを�
 
 ```
 (1) 人間の書き置き
-    telegram-adapter / ダッシュボード → ops-feedback の inbox
-      → driver が新着を検出 → POST /session/{id}/prompt_async
+    telegram-adapter / ダッシュボード → ops-feedback の inbox（GitHub）
+                                     → NATS の events.raw.*（設計 D16）
+      → driver が両方から拾う → POST /session/{id}/prompt_async
       → コアが telegram_reply で所有者へ直接返す
 
 (2) 健全性の変化 ← 人間に言われずに動く経路
@@ -64,8 +65,26 @@ watcher が要る（設計 D15）。
 なので、体感を変えたいならモデル選択かプロンプトの短さの方が効く。
 driver は「コアへ渡した」ログに `受信から Ns` を出すので、実測で確かめられる。
 
-イベントバス（設計 D16）はまだ無い。ポーリングで代用しており、バスを入れるときは
-driver の入力側だけを差し替えられるようにしてある。
+### バスからの入力（移行中）
+
+publish 側（telegram-adapter）が GitHub と NATS の両方へ書いているので、driver も
+両方から読む。片方だけにすると移行の途中で取りこぼす。GitHub 側を落とすのは
+NATS 経路が確かめられてから。
+
+同じ書き置きが 2 経路で来るので、重複は driver が落とす。鍵はイベントの `id` で、
+これは inbox のファイル名の語幹と同じ値。既存の cursor（`/data/cursor.json`）が
+ファイル名で既読を持っているため、そちらの形に寄せて 1 つの集合で見る。
+**コアが同じ書き置きに 2 回返事をしたら失敗。**
+
+consumer は durable pull（既定 `core-driver`）。位置は server 側に残るので、Pod が
+入れ替わっても続きから読む。ack は**コアへ渡し切った後**で、渡す前に ack すると
+落ちたときにイベントが消える。渡せなければ ack しないので、AckWait 後に再配送される。
+
+ack には `AckSync` を使う。非同期の `Ack` は**権限違反でも nil を返し**、
+「ack したつもりで永久に再配送される」状態になる（2026-08-23 に実サーバで実測）。
+consumer の NKey には `$JS.ACK.>` への publish 権限が要る（`apps/nats/config.yaml`）。
+
+`NATS_URL` / `NATS_NKEY_SEED` が空なら GitHub 側だけで動く（切り戻し構成）。
 
 ## Pod の構成
 
@@ -114,6 +133,11 @@ autopilot イメージを流用しているのは opencode-ai が入っている
 | `CORE_POLL_SECONDS` | `5` | inbox の確認間隔。**人間を待たせる時間はここで決まる** |
 | `CORE_HEALTH_SECONDS` | `120` | 健全性レポートの確認間隔（レポート自体が 30 分周期なので速く見ても無駄） |
 | `CORE_FEEDBACK_BRANCH` | `ops-feedback` | 監視ブランチ |
+| `NATS_URL` | （未設定ならバスを読まない） | `nats://nats.autopilot.svc:4222` |
+| `NATS_NKEY_SEED` | （同上） | consumer の NKey seed（Doppler の `NATS_CONSUMER_NKEY_SEED`） |
+| `NATS_STREAM` | `EVENTS` | 読むストリーム |
+| `NATS_DURABLE` | `core-driver` | durable consumer 名。変えると位置が最初から |
+| `NATS_FILTER_SUBJECT` | `events.raw.>` | 拾う subject |
 
 ## 開発
 

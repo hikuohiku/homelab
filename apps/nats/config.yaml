@@ -49,8 +49,11 @@ data:
         {
           nkey: UB2E2ROEPF2TMEOOCPEU32U4WRMZNNPOEI3EYM57ERGQOSQYPAH64KZO
           permissions: {
-            # JetStream の consumer は $JS.API 経由で読む。pull consumer に必要な分だけ許す
-            publish: { allow: ["$JS.API.>", "_INBOX.>"] }
+            # JetStream の consumer は $JS.API 経由で読む。pull consumer に必要な分だけ許す。
+            # $JS.ACK.> は ack/nak/term の宛先で、$JS.API.> には含まれない。
+            # これが無いと「メッセージは読めるが ack できない」= 同じイベントが
+            # AckWait ごとに永久に再配送される状態になる (2026-08-23 に実測して気づいた)
+            publish: { allow: ["$JS.API.>", "$JS.ACK.>", "_INBOX.>"] }
             subscribe: { allow: ["events.>", "_INBOX.>"] }
           }
         },

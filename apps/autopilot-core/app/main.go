@@ -7,15 +7,17 @@
 // v0 の入力は 2 本:
 //
 //	(1) 人間の書き置き
-//	    telegram-adapter / ダッシュボード → ops-feedback の inbox
-//	      → (この driver が新着を検出) → POST /session/{id}/prompt_async
+//	    telegram-adapter / ダッシュボード → ops-feedback の inbox (GitHub)
+//	                                     → NATS の events.raw.* (設計 D16)
+//	      → (この driver が両方から拾う) → POST /session/{id}/prompt_async
 //	      → コアが telegram_reply MCP ツールで人間へ直接返す
 //
 //	(2) 健全性の変化 (人間に言われずに動く経路)
 //	    ops-health-report の latest.json → 不調なアプリの顔ぶれが変わったら起こす
 //
-// イベントバス (設計 D16) はまだ無い。inbox のポーリングで代用しており、
-// バスを入れるときはこの driver の入力側だけを差し替えられるようにしてある。
+// (1) の経路が 2 本あるのは移行の途中だから。publish 側が両方に書いているので
+// consumer も両方から読み、重複は cursor で落とす (bus.go の冒頭を参照)。
+// GitHub 側を落とすのは NATS 経路が確かめられてから。
 //
 // 設計上の要点:
 //
@@ -127,6 +129,24 @@ func unseen(names []string, seen map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// seenKey は経路によらない既読の鍵を返す。
+//
+// 同じ書き置きが 2 経路で来る: GitHub は inbox のファイル名 ("<id>.json")、NATS は
+// イベントの id ("<id>")。telegram-adapter が両方に同じ id を使うので、片方の形に
+// 寄せれば 1 つの集合で重複を落とせる。ファイル名の形に寄せるのは、既存の
+// /data/cursor.json がその形で既読を持っているため — id 側に揃えると、
+// 移行の瞬間に「全部未読」に見えて過去の書き置きに一斉に返事をする。
+func seenKey(idOrName string) string {
+	s := strings.TrimSpace(idOrName)
+	if s == "" {
+		return ""
+	}
+	if strings.HasSuffix(s, ".json") {
+		return s
+	}
+	return s + ".json"
 }
 
 // pruneSeen は既読集合を上限まで削る (名前順で新しい方を残す)。
@@ -434,6 +454,20 @@ func runDriver() {
 	ctx := context.Background()
 	c.waitForOpencode(ctx)
 
+	// バスからの入力。設定が無ければ nil で、その場合は GitHub 側だけを読む。
+	//
+	// 繋がらないときに落とさないのは、この driver が所有者の「止めて」を運ぶ唯一の
+	// 経路だから。NATS の不調で driver ごと crashloop すると、生きている GitHub 経路
+	// まで止まる (移行の目的は可用性を上げることで、下げることではない)。
+	// 繋がるまで周期的に試み、その間はログで鳴らし続ける。
+	bus := connectBusOrLog()
+	if bus != nil {
+		defer bus.close()
+	} else {
+		log.Print("バス無しで開始 (未設定か、繋げなかった)。GitHub の inbox だけを読む")
+	}
+	lastBusRetry := time.Now()
+
 	cursorPath := filepath.Join(cfg.stateDir, "cursor.json")
 	healthCursorPath := filepath.Join(cfg.stateDir, "health-cursor.json")
 	seen, hadCursor := loadSeen(cursorPath)
@@ -498,16 +532,100 @@ func runDriver() {
 			log.Printf("コアへ渡した: %s (%s, %d chars%s)", name, n.Source, len(n.Body), lagSuffix(n.Received))
 		}
 
+		// バスから来たぶん。GitHub 経路と同じ書き置きが来るが、cursor が重複を落とす。
+		// Fetch は wait の間ブロックするので、バスがあるときはこれがループの間合いを
+		// 兼ねる (末尾の sleep を省く)。イベントが来た瞬間に返るため、
+		// 待たされる時間はポーリング間隔ではなく publish からの実時間になる
+		paced := false
+		if bus == nil && time.Since(lastBusRetry) >= busRetryInterval {
+			lastBusRetry = time.Now()
+			// 未設定なら (nil, nil) が返るだけなので、この再試行は何もしない
+			if b := connectBusOrLog(); b != nil {
+				bus = b
+			}
+		}
+		if bus != nil {
+			msgs, err := bus.fetch(16, time.Duration(cfg.pollSeconds)*time.Second)
+			if err != nil {
+				// 繋がらない間も GitHub 経路は生きている。止めずにログだけ残す
+				log.Printf("バスから読めない (継続): %v", err)
+			} else {
+				paced = true
+				if c.consumeBus(ctx, sessionID, msgs, seen, cursorPath) {
+					sessionID = ""
+				}
+			}
+		}
+
 		// 人間の書き置きを捌いてから、自発的な気づきを見る。
 		// 順序は「人を待たせない」を優先。健全性は 30 分周期のレポートを見ているので
 		// inbox と同じ速さで叩く意味が無く、独自の間隔で間引く
-		if time.Since(lastHealthCheck) >= time.Duration(cfg.healthSeconds)*time.Second {
+		//
+		// セッションを張り直す途中 (sessionID == "") では話しかけない。投げても
+		// 失敗するだけで、健全性 cursor を進めないまま無駄に GitHub を叩く
+		if sessionID != "" && time.Since(lastHealthCheck) >= time.Duration(cfg.healthSeconds)*time.Second {
 			c.watchHealth(ctx, sessionID, healthCursorPath)
 			lastHealthCheck = time.Now()
 		}
 
-		time.Sleep(time.Duration(cfg.pollSeconds) * time.Second)
+		if !paced {
+			time.Sleep(time.Duration(cfg.pollSeconds) * time.Second)
+		}
 	}
+}
+
+// consumeBus は fetch 済みのイベントを 1 件ずつコアへ渡す。
+//
+// 守っている順序: prompt が成功 → cursor を保存 → ack。逆にすると、
+//   - ack が先だと、落ちたときにイベントが消える (誰も再送してくれない)
+//   - cursor 保存が ack より後だと、ack 直後に落ちた場合に cursor へ残らず、
+//     同じ書き置きが GitHub 経路から未読として上がって二重に返事をする
+//
+// prompt に失敗したら ack しない。AckWait 後に再配送され、次の周回で再試行になる。
+// 戻り値は「セッションを張り直すべきか」。
+func (c *client) consumeBus(ctx context.Context, sessionID string, msgs []busMessage,
+	seen map[string]bool, cursorPath string) bool {
+	for _, m := range msgs {
+		var n note
+		if err := json.Unmarshal(m.data(), &n); err != nil {
+			// 壊れたイベントは再配送しても直らない。落として次へ
+			log.Printf("バスのイベントが JSON として壊れている (捨てる): %v", err)
+			_ = m.term()
+			continue
+		}
+		key := seenKey(n.ID)
+		if key == "" {
+			// id が無いものは重複排除できない = 二重返信の芽。受け取らない
+			log.Print("バスのイベントに id が無い (捨てる)")
+			_ = m.term()
+			continue
+		}
+		if seen[key] {
+			// GitHub 経路が先に拾ったぶん。ack して黙って流す
+			_ = m.ack()
+			continue
+		}
+		if strings.TrimSpace(n.Body) == "" {
+			seen[key] = true
+			_ = saveSeen(cursorPath, pruneSeen(seen, maxSeen))
+			_ = m.ack()
+			continue
+		}
+		if err := c.prompt(ctx, sessionID, buildPrompt(n)); err != nil {
+			log.Printf("%s: コアへ渡せない (ack しないので再配送される): %v", key, err)
+			return true
+		}
+		seen[key] = true
+		if err := saveSeen(cursorPath, pruneSeen(seen, maxSeen)); err != nil {
+			log.Printf("cursor を保存できない: %v", err)
+		}
+		if err := m.ack(); err != nil {
+			// ここで失敗しても再配送を cursor が落とすので実害は無いが、黙らせない
+			log.Printf("%s: ack に失敗 (重複排除で吸収される): %v", key, err)
+		}
+		log.Printf("コアへ渡した (bus): %s (%s, %d chars%s)", key, n.Source, len(n.Body), lagSuffix(n.Received))
+	}
+	return false
 }
 
 // lagSuffix は書き置きの受信時刻から今までの遅れを返す。
