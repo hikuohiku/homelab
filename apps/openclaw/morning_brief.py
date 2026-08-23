@@ -185,8 +185,10 @@ def backup_freshness(pvc_usage, now=None):
 def last_json_line(raw_bytes):
     """history jsonl (複数行) の末尾から辿り、最初に JSON として読めた行を返す。
 
-    末尾の空行は無視。1 行も読めなければ None。history は 1 行 1 スナップショット
-    の追記専用ファイルなので「前日の最終状態」は最終行で近似する。
+    末尾の空行・壊れた行は無視してさらに前を辿る (途中の壊れ行があっても
+    直近の完全なスナップショットを「前日の最終状態」として使う)。
+    1 行も読めなければ None。history は 1 行 1 スナップショットの追記専用
+    ファイルなので最終行で近似する。
     """
     if not raw_bytes:
         return None
@@ -198,7 +200,7 @@ def last_json_line(raw_bytes):
         try:
             return json.loads(line)
         except json.JSONDecodeError:
-            return None
+            continue
     return None
 
 
@@ -275,12 +277,16 @@ def brief_lines(merges=None, current_apps=None, prev_apps=None, backup=None,
     これが送信文の構造そのもの。「3 行を超えない」はここで構造的に担保される
     (行生成器が 3 個しか無いため)。テストで機械にも固定する。
     """
+    # 前日データが無い (None)・空 ([] も同義) のときは比較不能なので変化を出さず
+    # summary 表示に落とす。素の prev_apps を health_changes に渡すと全アプリが
+    # 「?→X」の擬似的な新規出現に見えてしまい、障害でも無い日に誇張した変化を見せる
+    prev_usable = bool(prev_apps)
     lines = [
         line_delivered(merges),
         line_health(
-            health_changes(current_apps, prev_apps),
+            health_changes(current_apps, prev_apps) if prev_usable else [],
             current_apps=current_apps,
-            prev_available=prev_apps is not None,
+            prev_available=prev_usable,
         ),
         line_backup(backup, stale_after_hours=stale_after_hours),
     ]

@@ -189,6 +189,12 @@ class LastJsonLineTest(unittest.TestCase):
         raw = b'{"v": 1}\n{"v": 2}\n'
         self.assertEqual(mb.last_json_line(raw), {"v": 2})
 
+    def test_broken_line_is_skipped_and_earlier_line_wins(self):
+        # 途中 (たとえば末尾直前) に壊れ行があっても、その前の完全な
+        # スナップショットを「最終状態」として使う
+        self.assertEqual(mb.last_json_line(b'{"v": 1}\n{"torn"\n'), {"v": 1})
+        self.assertEqual(mb.last_json_line(b'{"a": "}\n{"b": 2}\n'), {"b": 2})
+
     def test_trailing_blank_lines_are_skipped(self):
         raw = b'{"v": 1}\n\n\n'
         self.assertEqual(mb.last_json_line(raw), {"v": 1})
@@ -268,6 +274,21 @@ class BriefContractTest(unittest.TestCase):
                               current_apps=[app("new-app", "Healthy")],
                               prev_available=False)
         self.assertEqual(line, "健全性: new-app ?→Healthy")
+
+    def test_missing_prev_falls_back_to_summary_not_pseudo_additions(self):
+        # 前日 history が無い日は「比較不能」で summary 表示に落ちる。
+        # prev=None を素通しすると全アプリが「?→X」の擬似新規出現になり、
+        # 障害でも無い日に変化を誇張して見せることになる (session 3 で実測した bug)
+        apps = [app("coder", "Healthy"), app("immich", "Degraded")]
+        for prev in (None, []):  # 空リストも「比較できるデータ無し」と同義
+            lines = mb.brief_lines(current_apps=apps, prev_apps=prev)
+            health = [line for line in lines if line.startswith("健全性")]
+            self.assertEqual(len(health), 1)
+            self.assertEqual(health[0], "健全性: 2 アプリ中 1 が非 Healthy")
+            self.assertNotIn("?→", health[0])
+        all_healthy = [app("coder", "Healthy")]
+        lines = mb.brief_lines(current_apps=all_healthy, prev_apps=None)
+        self.assertIn("健全性: 1 アプリすべて Healthy", lines)
 
     def test_backup_line_variants(self):
         self.assertIsNone(mb.line_backup(None))

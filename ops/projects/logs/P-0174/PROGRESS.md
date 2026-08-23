@@ -65,3 +65,43 @@ verify 2 項目とも green 自力実測 (`test -f` OK、unittest 26 tests OK)�
 - rules.json は ruleset の人間レビュー必須パス (ファイル冒頭注記) — レビューで
   時間がかかる可能性のある唯一の変更。
 - 発見: なし (スコープ外の問題には遭遇しなかった)。
+
+## 2026-08-23 session 3
+
+レビュー指摘なし (「reviewer セッションが verdict を書かなかった」) で verify 全項目 green 継続のため、
+自己レビューを実施し 2 件の欠陥を発見・修正した。
+
+### やったこと
+
+1. **Bug 修正: 前日 history が無い日の健全性行が擬似追加に化ける**
+   - `brief_lines` が prev_apps をそのまま `health_changes` へ渡していたため、prev=None
+     (前日 history ファイル無し = reporter 停止日など) のとき全アプリが
+     「coder ?→Healthy」の擬似的な新規出現として列挙されていた。session 2 の意図
+     「history 無い日は summary 表示に落とす」は `line_health` 単体では実現しているが、
+     `brief_lines` 経由では死んでいた (summary 枝は changes==[] のときしか発火しないが、
+     prev=None では changes が非空になる)。dry-run の実データでは偶然 prev があり顕在化せず。
+   - 修正: `prev_usable = bool(prev_apps)` (None も [] も比較不能扱い) で変化計算を
+     スキップし summary 表示へ。出力文面自体を assert する回帰テスト追加 (28 tests)。
+2. **Bug 修正: last_json_line が壊れ行で即 None を返す**
+   - docstring「末尾から辿り、最初に JSON として読めた行を返す」に対し、実装は最初の
+     壊れ行で即諦めていた。docstring 通りに壊れ行を飛ばして前を辿るよう修正
+     (末尾の壊れ行の直前にある完全スナップショットを「前日の最終状態」に使える)。
+     既存テストは単一行入力のみで影響なし。フォールバックのテスト追加。
+3. verify 自力実測: unittest 28 tests OK / `kubectl kustomize apps/openclaw` 通過 /
+   validate.py 0 error / live API で --dry-run 再確認 (3 行出力、送信なし)。
+
+### 分かったこと / 決めたこと
+
+- 純関数の契約テストだけでは組み合わせの死に枝 (summary 枝が brief_lines 経由では
+  決して発火しない) を検出できない。「行生成器の各経路を通したときの出力文面」を
+  compose レベルで assert するテストが必要だった (追加済み)。
+- CronJob は openclaw-credentials Secret 依存。external-secret.yaml 注記 (2026-08-22)
+  では TELEGRAM_BOT_TOKEN / TELEGRAM_ALLOWED_USER_ID が Doppler 未登録の可能性があり、
+  未登録なら Pod は CreateContainerConfigError で fail-loud する (仕様どおり)。
+  merge 後・初回送信前に Secret 同期状態を確認すること。
+
+### 次のセッションへの一言
+
+- 既知の未解決問題なし。残務はレビュー対応の想定。
+- 発見: ops/validate.py の warning 11 件 (backlog refs が指す ops/dashboard/* 不在 +
+  todo 0 件警告) — 本プロジェクト外の既存問題。curriculum が拾うべきだが P-0174 とは無関係。
