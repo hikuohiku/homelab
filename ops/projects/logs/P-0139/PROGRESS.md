@@ -367,3 +367,47 @@ webhook URL は autopilot-writer SA には読めない (RBAC 実測 Forbidden) �
    **#4** (message_id 人間視認 or 判定除外) / on-sync-failed 式の生きた発火検証を追加注入で
    実施するか否か (spec の注入 1 回は消化済みのため要人間裁定)
 3. fired.json / drill fixture は触らない
+
+### セッション 8 (2026-08-23) — 待機状態の全項目再実測 2 回目。新規発見ゼロ、merge と裁定待ちのまま変化なし
+
+**やったこと**:
+
+1. **merge 状況**: 未 merge (`fetch --prune` 後に `git branch -r --contains` が
+   1a193e89 / a08db5a9 とも origin/project/p-0139 のみ)。main tip = 8c5cbd7d 変化なし。
+   新規に動いたリモートブランチ (ops-health-report / ops-state / p-0116 / p-0142 / p-0144)
+   のうち apps/ に触るのは p-0116 (734 行) のみだが **apps/argocd への触りゼロ** →
+   競合余地は引き続きなし (diff origin/main...HEAD -- apps/ は本企画 3 ファイル +109 行のみ)
+2. **verify 再実測**: #1 green / #3 = fixture 14 tests OK + ops.tests 全体 163 OK /
+   #2 の red は既知の `--enable-helm` ゲートのみ (ES ファイル自体は存在) /
+   #4 の red は message_id null のみ (delivered: True は生きている)。
+   **red の理由が前セッションから一つも変質していない**
+3. **helm PATH render を本セッションでも再実証** ($HOME/bin/helm v3.18.4 残置を再利用):
+   rc=0 / 27,222 行 / stderr 空 / cm ちょうど 7 キー (セッション 7 記録と同一集合) /
+   trigger.on-sync-failed 内に `?.` 反映 / ES 2 本 (dex + discord-webhook) と controller
+   Deployment を render / argocd-notifications-secret が出ない (secret.create: false 有効)
+4. **クラスタの merge 前状態が正しいことを再実測**: cm data = ['context'] のみ /
+   externalsecret は dex 分のみ SecretSynced / drill 残骸 (App・ns) とも NotFound /
+   argocd App Synced/Healthy / **notified.* 配達スタンプは全 15 App でゼロ** —
+   スタンプは drill Application オブジェクト自体に刻まれており、teardown の App 削除と
+   共に消えたのが正しい姿 (残骸 drift ではない。セッション 4 の手当て記録と整合)
+5. **controller エラー増加ゼロを実測**: pod 名を label で引き直し、既知窓終端 +1 秒の
+   `--since-time=2026-08-23T03:46:02Z` で error 0 行 (セッション 7 の教訓どおり境界 +1 秒起点)
+
+**分かったこと**:
+
+- 新規発見ゼロ。観測メモ: coder / immich / syncthing / vaultwarden の 4 App が
+  OutOfSync/Healthy (rev はいずれも main tip)。Degraded では無く本件の通知対象外で、
+  リソース単位の OutOfSync も出ていない (軽微な drift or sync 間隔待ち)。追跡は scope 外
+- $HOME/bin/helm は複数セッションを跨いで生存している (セッション 3 導入分 v3.18.4)。
+  render 再実証は mktemp ダウンロード不要で PATH に足すだけでよい
+
+**次のセッションへの一言 (= やることリスト)**:
+
+1. merge 済みか最初に確認 (`git branch -r --contains a08db5a9`)。merge 済みならクラスタ反映を実測:
+   cm data が 7 キーちょうど (on-sync-failed は `?.` 付き) / externalsecret
+   argocd-notifications-discord-webhook が SecretSynced / controller error 新規ゼロ /
+   全 App Healthy 戻り確認 (OutOfSync 4 本が自然解消しているかも見る)
+2. 未 merge ならやることは無い。裁定事項は不変 3 点: **#2** (sandbox 恒久 red) /
+   **#4** (message_id 人間視認 or 判定除外) / on-sync-failed 式の生きた発火検証を追加注入で
+   実施するか否か (要人間裁定)
+3. fired.json / drill fixture は触らない
