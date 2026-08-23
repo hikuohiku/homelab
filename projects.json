@@ -2774,7 +2774,7 @@
     {
       "id": "P-0126",
       "title": "上流の新バージョンを誰も見ていない日が 17 日以上続いている — inventory 全対象の registry/release を毎晩機械で見にいく watcher を置き、#49 型の静放置を二度と成立させない",
-      "state": "merging",
+      "state": "soaking",
       "branch": "project/p-0126",
       "irreversible": false,
       "capabilities": [],
@@ -2835,7 +2835,11 @@
       ],
       "review_requested_at": "2026-08-23T02:32:52Z",
       "review_retries": 0,
-      "merging_since": "2026-08-23T02:51:27Z"
+      "merging_since": "2026-08-23T02:51:27Z",
+      "soak": {
+        "until": "2026-08-23T03:29:16Z",
+        "baseline_unhealthy": []
+      }
     },
     {
       "id": "P-0128",
@@ -3022,7 +3026,8 @@
       },
       "veto_deadline": "2026-08-23T02:58:04Z",
       "spawn_count": 1,
-      "job": "runner-p-0141-a1"
+      "job": "runner-p-0141-a1",
+      "drift_count": 0
     },
     {
       "id": "P-0142",
