@@ -85,7 +85,11 @@ type projectsDoc struct {
 }
 
 // terminalStates は heart の statefiles.TERMINAL_STATES と同値。
-var terminalStates = map[string]bool{"delivered": true, "stalled": true, "vetoed": true}
+// rejected (採択されなかった案) は projects.json に載らないが、載っても
+// スロットを食わないよう終端として数える。
+var terminalStates = map[string]bool{
+	"delivered": true, "stalled": true, "vetoed": true, "rejected": true,
+}
 
 // freeSlots は heart の reconcile.py と同じ数え方で空きスロットを返す。
 // 拒否権窓で待っている announced はスロットを使っていないので数えない。

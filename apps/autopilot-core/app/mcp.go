@@ -5,16 +5,21 @@
 //	homelab_applications — ArgoCD Application の sync/health を live で (k8s API 直読み)
 //	homelab_pods         — 全 namespace の Pod を live で
 //	homelab_events       — 直近の Warning 系 Event を live で
+//	homelab_proposals    — 過去のプロジェクト案の要点 (採否 / 棄却理由 / 改善示唆)
 //	request_task         — 実装依頼を heart のパイプラインに載せる (bus へ publish)
 //	dispatch_task        — いま着手してほしい仕事を heart に同期で要求する (admission gate)
 //
-// 読み取りはすべて引数を取らない。汎用の HTTP fetch や kubectl を与えるのではなく
+// 読み取りは homelab_proposals (件数と cell の絞り込み) を除いて引数を取らない。
+// その 1 つだけ引数があるのは、返す母数が数百件あって全部は文脈に載らないため。
+// 汎用の HTTP fetch や kubectl を与えるのではなく
 // 用途を固定した窓を開けるだけにしてあるのは、コアが到達できる先を設定ではなく
 // コードで縛るため。新しい credential も RBAC も要らない:
 //
 //   - status はクラスタ内の ops-dashboard (認証不要・read-only の API)
 //   - health は k8s API の ConfigMap (autopilot/ops-health-report) を読む。読むだけで、
 //     コアに ConfigMap を書く権限は無い (設計 D29)
+//   - proposals は Project CR を read-only の ClusterRole (autopilot-project-reader)
+//     で読む。**要点だけ**を返す (spec 全文は 390 件ぶんあり、文脈に載らない)
 //   - live の 3 つは k8s API を read-only の ClusterRole (autopilot-reader) で直読みする。
 //     トークンは projected volume で**このサイドカーにだけ** mount してあり、
 //     opencode コンテナからは見えない (k8s.go の冒頭を参照)
@@ -129,6 +134,34 @@ func toolDefs() []toolDef {
 			InputSchema: noArgsSchema(),
 		},
 		{
+			Name: "homelab_proposals",
+			Description: "過去のプロジェクト案を新しい順に返す (id / title / cell / 採否 / 棄却理由 / 改善示唆)。" +
+				"**立案する前に必ずこれを読むこと。** 棄却案の reject_reason は判定役が残した死因で、" +
+				"同型の案を出し直すならそれに応答して乗り越えた形にする義務がある。" +
+				"why / dod / verify は返さない (全文は文脈に載らない)。" +
+				fmt.Sprintf("既定 %d 件、最大 %d 件。", proposalsDefaultLimit, proposalsMaxLimit),
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"limit": map[string]any{
+						"type": "integer",
+						"description": fmt.Sprintf(
+							"返す件数。既定 %d、最大 %d。", proposalsDefaultLimit, proposalsMaxLimit),
+					},
+					"cell": map[string]any{
+						"type": "string",
+						"description": "cell の要素で絞る (領域: k8s / storage / observability / security / " +
+							"life-prep / self、種類: repair / prevent / feature / investigate / experiment)。" +
+							"空なら絞らない。",
+					},
+					"rejected_only": map[string]any{
+						"type":        "boolean",
+						"description": "棄却された案だけに絞る。死因をまとめて読むときに使う。",
+					},
+				},
+			},
+		},
+		{
 			Name: "request_task",
 			Description: "実装・変更の依頼を heart のタスク依頼キューに載せる。" +
 				"あなたはこれで起票できるが、実装するのは heart 配下の runner であり、" +
@@ -213,6 +246,27 @@ func (s *mcpServer) fetchHealth(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return clip(raw), nil
+}
+
+// fetchProposals は過去案の台帳 (Project CR) を要点だけ返す。
+// 引数が壊れていても落とさず既定で答える — 立案の途中で「読めなかった」を
+// 返すと、生成役は過去案を知らないまま案を書き切ってしまう。
+func (s *mcpServer) fetchProposals(ctx context.Context, args json.RawMessage) (string, error) {
+	var p struct {
+		Limit        int    `json:"limit"`
+		Cell         string `json:"cell"`
+		RejectedOnly bool   `json:"rejected_only"`
+	}
+	if len(args) > 0 {
+		_ = json.Unmarshal(args, &p)
+	}
+	k, err := s.kubeAPI()
+	if err != nil {
+		return "", err
+	}
+	return k.proposals(ctx, proposalsQuery{
+		Cell: p.Cell, Limit: p.Limit, Rejected: p.RejectedOnly,
+	})
 }
 
 func clip(s string) string {
@@ -339,6 +393,8 @@ func (s *mcpServer) callTool(ctx context.Context, name string, args json.RawMess
 		body, err = s.fetchHealth(ctx)
 	case "homelab_applications", "homelab_pods", "homelab_events":
 		body, err = s.callKube(ctx, name)
+	case "homelab_proposals":
+		body, err = s.fetchProposals(ctx, args)
 	case "request_task":
 		body, err = s.requestTask(args)
 		if err != nil {

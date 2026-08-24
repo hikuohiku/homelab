@@ -967,6 +967,48 @@ class TestArchiveAdoption(unittest.TestCase):
         self.assertEqual(d["projects"][0]["state"], "delivered")
 
 
+class TestRejected(unittest.TestCase):
+    """rejected は「動かすべきもの」ではない (設計 state-out-of-git 4b-1)。
+
+    棄却案は Project CR にだけ置き、projects.json には載せない。それでも万一
+    ここへ流れ込んだときに一斉着手が起きないことを遷移表として固定しておく —
+    間違えたときの被害が「250 件の Job が同時に立つ」なので、実装の都合
+    (TERMINAL_STATES に入れた) ではなく仕様として押さえる。
+    """
+
+    def rejected(self, **kw):
+        # 棄却案は branch を持たない。空文字が通るのは終端だからで、
+        # そこが崩れると validate_projects が先に落ちる
+        return project(state="rejected", branch="", **kw)
+
+    def test_rejected_is_terminal(self):
+        from ops.heart import statefiles
+
+        self.assertIn("rejected", statefiles.PROJECT_STATES)
+        self.assertIn("rejected", statefiles.TERMINAL_STATES)
+
+    def test_rejected_never_moves_and_spawns_nothing(self):
+        d, actions = reconcile.decide(doc(self.rejected()), facts(), RULES, NOW)
+        self.assertEqual(d["projects"][0]["state"], "rejected")
+        self.assertNotIn("spawn", kinds(actions))
+        self.assertNotIn("announce", kinds(actions))
+        self.assertNotIn("run_adopt_gate", kinds(actions))
+
+    def test_rejected_does_not_occupy_a_slot(self):
+        """棄却案が並列度を食うと、台帳が増えるほど器が止まる。"""
+        rejects = [
+            self.rejected(id=f"P-0{n:03d}")
+            for n in range(RULES["runner"]["max_concurrent"] + 5)
+        ]
+        _, actions = reconcile.decide(doc(*rejects), facts(), RULES, NOW)
+        self.assertIn("spawn_curriculum", kinds(actions))
+
+    def test_rejected_with_an_empty_branch_passes_validation(self):
+        from ops.heart import statefiles
+
+        self.assertEqual(statefiles.validate_projects(doc(self.rejected())), [])
+
+
 class TestCurriculum(unittest.TestCase):
     def test_idle_spawns_curriculum(self):
         d, actions = reconcile.decide(doc(), facts(), RULES, NOW)

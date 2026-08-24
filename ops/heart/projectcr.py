@@ -70,7 +70,14 @@ def plan(doc, existing, namespace, terminal_states):
         cur = by_name.get(cr["metadata"]["name"])
         if cur is None or not _same(cur, cr):
             write.append(cr)
-    orphans = sorted(set(by_name) - {cr["metadata"]["name"] for cr in desired})
+    # 棄却案の CR は projects.json に居ないのが正常なので、orphan に数えない
+    # (数えると毎ビート 250 件の名前をログに吐く)
+    wanted = {cr["metadata"]["name"] for cr in desired}
+    orphans = sorted(
+        name for name, item in by_name.items()
+        if name not in wanted
+        and (item.get("spec") or {}).get("state") != "rejected"
+    )
     return write, orphans
 
 
@@ -81,3 +88,85 @@ def _same(current, desired):
     if any(cur_labels.get(k) != v for k, v in want_labels.items()):
         return False
     return current.get("spec") == desired["spec"]
+
+
+# --- 棄却案 (設計 state-out-of-git「棄却された案も CR にする」) ---
+
+# 1 ビートに取り込む棄却案の上限。台帳には 250 件超あり、初回は全件が「新規」に
+# なる。まとめて送ると 1 ビートの中に 250 回の PATCH が入り、その間 heart は他に
+# 何もしない (ビートは 120s)。分割すれば 1 時間ほどで収束し、収束後は
+# plan_rejected が 0 件を返すので恒常的な費用にはならない
+REJECTED_BATCH_LIMIT = 25
+
+# 棄却は定義上つねに終端。labels() へ渡す終端集合をここで閉じておくと、
+# projectcr が statefiles を import せずに済む (この島は純関数だけで保つ)
+REJECTED_TERMINAL = ("rejected",)
+
+# 棄却案が持たないフィールドの既定値。REQUIRED_PROJECT_FIELDS を state ごとに
+# 変えない代わりにここで埋める (理由は statefiles.py の同定数のコメント)。
+# branch が空文字なのは「枝が一度も切られなかった」の素直な表現で、
+# validate_projects の「非終端は project/ で始まること」は終端なので当たらない
+REJECTED_BRANCH = ""
+
+
+def latest_records(records):
+    """id ごとに最後の行だけを残す (facts.load_adopted_specs と同じ規則)。
+
+    台帳は追記のみで、同じ id が複数行あるときは後の行が現在の判断
+    (実際 P-0028 / P-0029 は棄却の行の後に採択の行が積まれている)。
+    """
+    out = {}
+    for rec in records:
+        if isinstance(rec, dict) and rec.get("id"):
+            out[rec["id"]] = rec
+    return out
+
+
+def to_rejected_project(record):
+    """台帳の棄却行を projects.json の 1 エントリと同じ形にする (純関数)。
+
+    形を揃えるのは to_cr / CRD / バックアップを 1 本のままにしておくため。
+    立案時の spec は丸ごと `spec` に載る — reject_reason / improve_hint は
+    そこに居て、これが判定の教師信号が生成へ戻る唯一の経路
+    (ops/runner/runner.py build_archive_records)。
+    """
+    proposed_at = str(record.get("proposed_at") or "")
+    return {
+        "id": record["id"],
+        "title": record.get("title", ""),
+        "state": "rejected",
+        "branch": REJECTED_BRANCH,
+        "irreversible": bool(record.get("irreversible")),
+        "capabilities": list(record.get("capabilities") or []),
+        "touches_apps": bool(record.get("touches_apps")),
+        "verify": list(record.get("verify") or []),
+        "confidence": record.get("confidence", "unsure"),
+        # 予算は消費していない。採択案と同じキーで 0 を置く
+        "budget": {"used_tokens": 0},
+        # created は日付だけ。proposed_at が無い古い行では空文字になる
+        "created": proposed_at[:10],
+        "spec": dict(record),
+    }
+
+
+def plan_rejected(records, existing, namespace, live_ids, limit=REJECTED_BATCH_LIMIT):
+    """台帳の棄却行のうち、まだ CR になっていないものを最大 limit 件返す (純関数)。
+
+    live_ids (= projects.json に居る id) は **必ず飛ばす**。採択されたものは
+    projects.json 側が正で、そちらの CR を棄却で上書きすると走行中の
+    プロジェクトの状態が消える。
+
+    既にある CR は中身を比べない — 棄却案は二度と変わらないので、毎ビート
+    250 件分の spec を突き合わせる意味が無い (名前の有無だけを見る)。
+    """
+    have = {(item.get("metadata") or {}).get("name") for item in existing}
+    out = []
+    for pid, rec in sorted(latest_records(records).items()):
+        if rec.get("adopted") or pid in live_ids:
+            continue
+        if cr_name(pid) in have:
+            continue
+        out.append(to_cr(to_rejected_project(rec), namespace, REJECTED_TERMINAL))
+        if len(out) >= limit:
+            break
+    return out

@@ -41,6 +41,10 @@ from .gh import Gh, GhError
 from .notify import Notifier, veto_footer
 from .statefiles import TERMINAL_STATES, StateFiles, migrate_plan, now_iso
 
+# Project CR の書き込み失敗を人間に鳴らすまでの連続ビート数 (note_cr_failures)。
+# 120s/beat なので 5 ビート ≒ 10 分。瞬断は黙って通り、スキーマの穴は鳴る
+CR_FAIL_ALERT_BEATS = 5
+
 _stop = False
 
 
@@ -113,6 +117,8 @@ class Heart:
         # admission gate は run() で起こす (単体テストで Heart を作るだけのときは
         # ポートを掴まない)。None のままでも heart は従来どおり回る
         self.gate = None
+        # Project CR の書き込みが連続して失敗しているビート数 (note_cr_failures)
+        self.cr_fail_streak = 0
 
     def k8s_client(self):
         if self.k8s is None:
@@ -676,9 +682,10 @@ class Heart:
         # 二重書き (設計 state-out-of-git Phase 4a)。git 側の写しはそのまま残し、
         # 同じ内容を Project CR にも置く。CR が壊れてもビートは止めない
         try:
-            self.sync_project_crs(doc)
+            self.sync_project_crs(doc, notifier, now)
         except Exception as e:  # noqa: BLE001 — CR はまだ写し。正は projects.json
             log(f"project CR sync failed: {e}")
+            self.note_cr_failures(1, notifier, now)
         # usage は heartbeat に載せる。ダッシュボードの唯一の metrics 利用が
         # 「最終行の usage」だけで、そのために 8.9 MB の metrics.jsonl を
         # 20 秒ごとに fetch していた (設計 state-out-of-git Phase 1)
@@ -698,14 +705,21 @@ class Heart:
             self.state_dir, self.cfg.state_branch, f"heart: beat {i}"
         )
 
-    def sync_project_crs(self, doc):
-        """projects.json の写しを Project CR にも書く (設計 state-out-of-git Phase 4a)。
+    def sync_project_crs(self, doc, notifier=None, now=None):
+        """projects.json の写しと、台帳の棄却案を Project CR に書く。
+
+        Phase 4a で始めた二重書きに、4b-1 で棄却案の取り込みを足した
+        (設計 state-out-of-git「棄却された案も CR にする」)。
 
         **正はまだ projects.json** なので、ここが失敗してもビートは落とさない。
-        今 CR を読む者は居ないので、例外を上げて器を止める理由が無い。読み手を
-        CR へ移す 4b までは、失敗はログに出して次のビートでやり直す。
-
         変わった CR だけを送る。消えたプロジェクトは消さない (projectcr.plan)。
+
+        棄却案の入り口を **1 回きりの移行スクリプトにしていない**理由: 器の外に
+        kubectl を持った人間が居ない前提で回っており、手で流す前提の経路は
+        「誰も流さないまま 4b-2 に進む」で終わる。毎ビート台帳を突き合わせれば
+        取り込みは自力で収束し、restic からの復元後もひとりでに埋め直る。
+        4b-2 で台帳の書き込みを止めるときは、読み先を archive.jsonl から
+        curriculum の result.json に差し替えるだけで plan_rejected は動く。
         """
         k8s = self.k8s_client()
         existing = k8s.list_custom(
@@ -714,8 +728,16 @@ class Heart:
         write, orphans = projectcr.plan(
             doc, existing, self.cfg.namespace, TERMINAL_STATES
         )
+        # 棄却案は projects.json に居ない (居させない) ので、台帳から直接引く。
+        # 1 ビートの取り込み件数は REJECTED_BATCH_LIMIT で抑える
+        rejected = projectcr.plan_rejected(
+            facts.load_archive_records(self.repo_dir),
+            existing,
+            self.cfg.namespace,
+            {p["id"] for p in doc.get("projects", [])},
+        )
         failed = 0
-        for cr in write:
+        for cr in write + rejected:
             try:
                 k8s.apply_custom(
                     projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL,
@@ -724,11 +746,47 @@ class Heart:
             except Exception as e:  # noqa: BLE001 — 1 件の失敗で残りを諦めない
                 failed += 1
                 log(f"project CR apply failed: {cr['metadata']['name']}: {e}")
-        if write or orphans:
+        if write or rejected or orphans:
             log(
-                f"project CR sync: applied={len(write) - failed} failed={failed} "
+                f"project CR sync: applied={len(write) + len(rejected) - failed} "
+                f"failed={failed} rejected={len(rejected)} "
                 f"orphans={','.join(orphans) if orphans else '-'}"
             )
+        self.note_cr_failures(failed, notifier, now)
+
+    def note_cr_failures(self, failed, notifier=None, now=None):
+        """CR の書き込み失敗が続いていることを人間に届ける。
+
+        1 回の失敗は API の瞬断でよくある。**続く**失敗はスキーマの穴で、
+        2026-08-24 に `.spec.spec.budget` が未宣言だったために P-0353 の CR が
+        毎ビート 500 で拒否され続けた (誰も鳴らさなかったので気づくのに丸一日
+        かかった)。CR が正になる 4b-2 の後、これは静かなデータ欠損そのものになる。
+
+        指標に載せずに通知にしたのは、metrics.jsonl が PVC 内で読み手が居らず、
+        「載せた」が「届く」にならないため。連続 CR_FAIL_ALERT_BEATS ビートごとに
+        1 回だけ鳴らす (毎ビート鳴らすと通知が壊れた側になる)。
+        数えるのはプロセス内だけで、再起動で 0 に戻る — 失敗が続いていれば
+        すぐまた積み上がるので、状態として持ち出す価値が無い。
+        """
+        if failed:
+            self.cr_fail_streak += 1
+        else:
+            self.cr_fail_streak = 0
+            return
+        if self.cr_fail_streak % CR_FAIL_ALERT_BEATS:
+            return
+        text = (
+            f"Project CR の書き込みが {self.cr_fail_streak} ビート連続で失敗しています。"
+            "CRD のスキーマに未宣言のフィールドがあると server-side apply は 500 で拒否します "
+            "(apps/autopilot/crd-project.yaml)。heart のログに失敗した CR 名が出ています"
+        )
+        if notifier is None:
+            log(f"[cr-alert] {text}")
+            return
+        if self.cfg.shadow:
+            log(f"[shadow] notify[incident] {text[:80]}")
+        else:
+            notifier.send("incident", text, now)
 
     def prune_metrics(self, now):
         """保持窓より古い指標行を落とす。行数が変わったときだけ書き直す。"""

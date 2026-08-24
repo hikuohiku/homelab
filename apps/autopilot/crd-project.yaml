@@ -3,9 +3,10 @@
 # ここに置くのは **CRD だけ**。CR 本体は heart が毎ビート書くもので、ArgoCD が
 # 管理する定義ではない (git に置くと ArgoCD が「余計な CR」を消しにいく)。
 #
-# 段階: 今は 4a — heart が projects.json と CR の両方に書き、正はまだ git 側。
-# 読み手 (dashboard / runner / core / facts.py) の切り替えと projects.json の
-# 停止は 4b。CR が正になれる前提は k3s のデータストアがバックアップに乗ること。
+# 段階: 今は 4b-1 — heart が projects.json と CR の両方に書き、台帳の棄却案も
+# state: rejected の CR として取り込む。正はまだ git 側。読み手
+# (dashboard / runner / core / facts.py) の切り替えと projects.json /
+# archive.jsonl の停止は 4b-2。
 #
 # コントローラは無い。heart が唯一の書き手で、あとは全員読むだけ (RBAC は
 # rbac.yaml)。status サブリソースも置かない — 調停する者が居ないので、
@@ -75,7 +76,7 @@ spec:
                   type: string
                 title:
                   type: string
-                # statefiles.PROJECT_STATES と一致。rejected を足すときは両方
+                # statefiles.PROJECT_STATES と一致。片方だけ動かさないこと
                 state:
                   type: string
                   enum:
@@ -88,6 +89,9 @@ spec:
                     - delivered
                     - stalled
                     - vetoed
+                    # 採択されなかった案 (4b-1)。状態機械には入らない終端で、
+                    # reject_reason / improve_hint を次の立案へ返すために残す
+                    - rejected
                 branch:
                   type: string
                 irreversible:
@@ -220,7 +224,12 @@ spec:
                   type: string
                 requested_by:
                   type: string
-                # --- 立案時の spec。棄却案を CR にする 4b でここが主役になる ---
+                # --- 立案時の spec。棄却案の CR ではここが主役 (4b-1) ---
+                # **未宣言のフィールドは静かに落ちない。server-side apply が
+                # 500 で丸ごと拒否する** — 2026-08-24、ここに budget が無いために
+                # P-0353 の CR が毎ビート書けなかった。台帳 (archive.jsonl) と
+                # projects.json の実データ全件をこのスキーマに照らすテストが
+                # ops/heart/tests/test_project_cr.py に居る
                 spec:
                   type: object
                   properties:
@@ -259,4 +268,23 @@ spec:
                     request_id:
                       type: string
                     _note_verify:
+                      type: string
+                    # 立案時の予算希望。projects.json 側の budget (実消費) とは
+                    # 別物で、キーも違う (soft_cap_tokens)
+                    budget:
+                      type: object
+                      properties:
+                        soft_cap_tokens:
+                          type: integer
+                        used_tokens:
+                          type: integer
+                    # --- 棄却案だけが持つもの (runner.build_archive_records) ---
+                    # 判定の教師信号が生成に戻る唯一の経路。ここを落とすと
+                    # 生成役は死因を知らずに同型再提案を繰り返す
+                    reject_reason:
+                      type: string
+                    improve_hint:
+                      type: string
+                    # id 衝突を手で直したときの記録 (台帳に 3 行ある)
+                    _renumbered:
                       type: string

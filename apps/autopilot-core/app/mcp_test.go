@@ -72,11 +72,13 @@ func TestToolsListKeepsWindowsNarrow(t *testing.T) {
 			}
 		}
 	}
-	// 窓は増えたが、増えたのはすべて「引数を取らない読み取り」。
+	// 窓は増えたが、読み取りの引数は homelab_proposals の絞り込み (件数 / cell /
+	// 採否) だけで、宛先や URL は誰も選べない。
 	// ここに引数付きの汎用ツール (kubectl / http fetch) が混ざったら失敗させる
 	want := []string{
 		"homelab_status", "homelab_health",
 		"homelab_applications", "homelab_pods", "homelab_events",
+		"homelab_proposals",
 		"request_task", "dispatch_task",
 	}
 	if len(parsed.Tools) != len(want) {

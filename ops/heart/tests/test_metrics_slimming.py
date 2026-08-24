@@ -53,12 +53,19 @@ class TerminalNowCompatTest(unittest.TestCase):
     def _summary(self, last_rec):
         return metrics.summarize_beats([last_rec], T0 + timedelta(minutes=1))
 
+    def _expected(self, **counts):
+        """終端の内訳は TERMINAL_STATES の全項目を持つ。
+
+        rejected (4b-1) は projects.json に載らない state なので常に 0 だが、
+        欄自体は他の終端と同じように出る。
+        """
+        from ops.heart.statefiles import TERMINAL_STATES
+
+        return {s: counts.get(s, 0) for s in TERMINAL_STATES}
+
     def test_new_record_uses_terminal_counts(self):
         rec = metrics.beat_record(T0, 1, doc({"P-1": "delivered", "P-2": "active"}))
-        self.assertEqual(
-            self._summary(rec)["terminal_now"],
-            {"delivered": 1, "stalled": 0, "vetoed": 0},
-        )
+        self.assertEqual(self._summary(rec)["terminal_now"], self._expected(delivered=1))
 
     def test_old_record_counts_from_projects(self):
         old = {
@@ -66,10 +73,7 @@ class TerminalNowCompatTest(unittest.TestCase):
             "beat": 1,
             "projects": {"P-1": "delivered", "P-2": "active"},
         }
-        self.assertEqual(
-            self._summary(old)["terminal_now"],
-            {"delivered": 1, "stalled": 0, "vetoed": 0},
-        )
+        self.assertEqual(self._summary(old)["terminal_now"], self._expected(delivered=1))
 
     def test_both_forms_agree(self):
         states = {"P-1": "delivered", "P-2": "stalled", "P-3": "active",
