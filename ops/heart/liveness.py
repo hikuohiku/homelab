@@ -36,18 +36,30 @@ def is_stale(heartbeat_at, now, max_age):
     return age > max_age
 
 
+def heartbeat_path(data_dir):
+    """heartbeat.json の場所。新しい置き場 (PVC の state/) を優先する。
+
+    4b-2b で ops-state の checkout から state/ へ移した。**移行前の置き場も見る**
+    — 新しいイメージの最初のビートが済むまではまだ古い方にしかなく、そこで
+    「無い = stale」に倒すと起動直後に再起動を繰り返す。
+    """
+    new = data_dir / "state" / "heartbeat.json"
+    if new.exists():
+        return new
+    return data_dir / "ops-state" / "heartbeat.json"
+
+
 def check(data_dir=None, beat_seconds=None, now=None):
     """heartbeat.json を読んで新鮮なら True。無い/壊れているは stale (False) 扱いにする。
 
-    「無い」を「元気」と誤読しない — clone 直後で ops-state がまだ同期されていない
-    起動直後の一瞬を除けば、heartbeat.json が無いのは異常のはずだから。
+    「無い」を「元気」と誤読しない — PVC がまだ空の起動直後の一瞬を除けば、
+    heartbeat.json が無いのは異常のはずだから。
     """
     data_dir = Path(data_dir or os.environ.get("HEART_DATA_DIR", "/data"))
     beat_seconds = int(beat_seconds or os.environ.get("HEART_BEAT_SECONDS", "120"))
     now = now or datetime.now(timezone.utc)
-    path = data_dir / "ops-state" / "heartbeat.json"
     try:
-        with open(path) as f:
+        with open(heartbeat_path(data_dir)) as f:
             doc = json.load(f)
         at = doc["at"]
     except (OSError, ValueError, KeyError):

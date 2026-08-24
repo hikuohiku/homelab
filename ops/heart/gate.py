@@ -17,7 +17,9 @@
 
   - **cluster 内のみ**。ClusterIP Service だけで、Ingress も Tailscale も通さない
   - **認証を持たない**。同一 namespace の NetworkPolicy で送信元を
-    app=autopilot-core の Pod に限る (apps/autopilot/heart-service.yaml)。
+    app=autopilot-core と app=ops-dashboard の Pod に限る
+    (apps/autopilot/heart-service.yaml)。ダッシュボードが読むのは
+    GET /healthz だけで、POST /dispatch を打つ口はコードのどこにも無い。
     トークンを置かないのは、置けば ops/rules.json の
     allowed_autopilot_doppler_keys に鍵を足すことになり、そこは人間レビュー必須の
     パスだから — 認証を足すなら人間の判断を通す
@@ -41,9 +43,9 @@ LLM なので迂回でき、機械の判定として意味を成さないため�
 
 ## スレッドと単一書き手
 
-heart は ops-state の単一書き手であり続ける。gate スレッドは **git を触らない** —
-書くのは /data (PVC) の inbox と台帳だけで、projects.json / audit.jsonl への
-反映は必ずビート側が行う (audit.jsonl も PVC に居るが、書き手はビートだけ)。gate が直に作るのは k8s Job だけで、それは
+heart は Project CR の単一書き手であり続ける。gate スレッドは **CR も git も
+触らない** — 書くのは /data (PVC) の inbox と台帳だけで、doc / audit.jsonl への
+反映は必ずビート側が行う。gate が直に作るのは k8s Job だけで、それは
 決定論的な名前 + 409 冪等 (spawn.create) なので二重に作れない。
 """
 
@@ -129,7 +131,7 @@ class AdmissionGate:
 
     # --- ビートとの受け渡し ---
 
-    def update(self, doc, rules, now, shadow):
+    def update(self, doc, rules, now, shadow, usage=None):
         """ビートの終わりに heart が呼ぶ。判定に使う状態の写しを差し替える。
 
         写しの鮮度そのものが安全装置になっている (reconcile.admit の state_stale)。
@@ -149,9 +151,12 @@ class AdmissionGate:
                 "at": now_iso(now),
                 "stop_engaged": bool(doc.get("stop_engaged")),
                 # doc の全体にかかる値で、Project CR には載らない (CR は 1 件 1
-                # プロジェクト)。読み手 (コアの shadow) が git を読まずに済むよう
-                # /healthz に出す — 設計 state-out-of-git 4b-2a
+                # プロジェクト)。読み手 (コアの shadow とダッシュボード) が git を
+                # 読まずに済むよう /healthz に出す — 設計 state-out-of-git 4b-2a/4b-2b
                 "last_curriculum_at": doc.get("last_curriculum_at") or "",
+                # 当日の使用量。ダッシュボードは ops-state の heartbeat.json から
+                # 読んでいたが、git を離れたのでここに移した (4b-2b)
+                "usage": dict(usage) if isinstance(usage, dict) else {},
                 "shadow": bool(shadow),
                 "running": running,
                 "max_concurrent": rules["runner"]["max_concurrent"],
@@ -224,6 +229,8 @@ class AdmissionGate:
             # (起動直後) ときは既定値で、ok=False が「まだ判断材料が無い」を示す
             "stop_engaged": bool(snapshot and snapshot.get("stop_engaged")),
             "last_curriculum_at": (snapshot or {}).get("last_curriculum_at", ""),
+            # 当日の使用量 (ダッシュボードの表示用。4b-2b)
+            "usage": (snapshot or {}).get("usage", {}),
         }
 
     # --- Job 作成 (非同期) ---

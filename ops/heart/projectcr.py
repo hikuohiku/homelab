@@ -1,11 +1,11 @@
-"""projects.json のエントリを Project CR の姿に変換する (設計 state-out-of-git Phase 4a)。
+"""doc のエントリを Project CR の姿に変換する (設計 state-out-of-git Phase 4)。
 
 ここは純関数だけ。k8s を叩くのは呼び出し側 (heart.beat) で、CRD は
 apps/autopilot/crd-project.yaml。
 
-4b-2a で **読み手は全員 CR を読む**ようになった (下段の「読み出し」)。書き込みは
-projects.json / archive.jsonl にも残っているので、git 側は正しい写しのまま。
-書き込みを止めるのが 4b-2b。
+4b-2a で読み手が全員 CR に移り、**4b-2b で git 側の書き込みが止まった**。
+プロジェクトの記録の正はここにあり、外に出るのは restic のバックアップ
+(apps/autopilot-projects-backup) だけになった。
 """
 
 GROUP = "autopilot.homelab.hikuohiku.dev"
@@ -54,12 +54,11 @@ def plan(doc, existing, namespace, terminal_states):
     リソースにも API 呼び出しが要る (server-side apply 自体は no-op でも、
     ビートあたり 112 リクエストは無駄)。
 
-    消えたプロジェクト (CR にあるが doc に無い) は **消さない**。git 側が正で
-    ある間、CR の削除だけが片道の操作で、doc の一時的な欠落 (checkout の失敗や
-    部分的な書き込み) がそのまま記録の消失になる。終端も含めて CR は残すのが
-    設計の前提でもある (「終端 CR は消さない — live set は selector で切る」)。
-    ここでは名前を返すだけで、呼び出し側はログに出す。削除条件は CR が正になる
-    4b で決める。
+    消えたプロジェクト (CR にあるが doc に無い) は **消さない**。CR が正に
+    なった今、削除は取り返しのつかない唯一の操作で、doc の一時的な欠落
+    (PVC の欠落・部分的な書き込み) がそのまま記録の消失になる。終端も含めて
+    CR は残すのが設計の前提でもある (「終端 CR は消さない — live set は
+    selector で切る」)。ここでは名前を返すだけで、呼び出し側はログに出す。
     """
     desired = [to_cr(p, namespace, terminal_states) for p in doc.get("projects", [])]
     by_name = {}
@@ -130,7 +129,7 @@ def to_rejected_project(record):
     形を揃えるのは to_cr / CRD / バックアップを 1 本のままにしておくため。
     立案時の spec は丸ごと `spec` に載る — reject_reason / improve_hint は
     そこに居て、これが判定の教師信号が生成へ戻る唯一の経路
-    (ops/runner/runner.py build_archive_records)。
+    (ops/runner/runner.py build_proposal_records)。
     """
     proposed_at = str(record.get("proposed_at") or "")
     return {
@@ -154,9 +153,11 @@ def to_rejected_project(record):
 def plan_rejected(records, existing, namespace, live_ids, limit=REJECTED_BATCH_LIMIT):
     """台帳の棄却行のうち、まだ CR になっていないものを最大 limit 件返す (純関数)。
 
-    live_ids (= projects.json に居る id) は **必ず飛ばす**。採択されたものは
-    projects.json 側が正で、そちらの CR を棄却で上書きすると走行中の
-    プロジェクトの状態が消える。
+    records は凍結された git の台帳と、4b-2b 以降 heart が PVC に積んだ新しい行の
+    連結 (heart.rejected_records)。
+
+    live_ids (= doc に居る id) は **必ず飛ばす**。採択されたものは doc 側が正で、
+    そちらの CR を棄却で上書きすると走行中のプロジェクトの状態が消える。
 
     既にある CR は中身を比べない — 棄却案は二度と変わらないので、毎ビート
     250 件分の spec を突き合わせる意味が無い (名前の有無だけを見る)。
@@ -226,7 +227,7 @@ def proposal_digest(items):
     """立案役が読む「過去に何が出て、なぜ落ちたか」を新しい順で返す (純関数)。
 
     **棄却案を含む唯一の読み出し**。reject_reason / improve_hint は判定の教師信号が
-    生成に戻る唯一の経路 (ops/runner/runner.py build_archive_records) なので、
+    生成に戻る唯一の経路 (ops/runner/runner.py build_proposal_records) なので、
     ここを痩せさせると同型再提案が常態化する。
 
     why / dod / verify は載せない — 立案が要るのは「既出か」と「死因」だけで、

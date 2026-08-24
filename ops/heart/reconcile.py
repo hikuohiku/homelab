@@ -47,10 +47,6 @@ QUOTA_WAIT_MAX_HOURS = 24
 # 自己観測 (critic) の間隔。指標 (状態別滞留・アイドル率) は日次の粒度で足り、
 # それより短くしても同じ 24h の窓を読み直すだけになる (P-0045)
 CRITIC_INTERVAL_HOURS = 24
-# 1 回の curriculum PR に載せる台帳の遅延追記 (backfill) の上限。env 経由で
-# 渡すので上限を置く。溢れた分は次の curriculum が拾う
-ARCHIVE_BACKFILL_LIMIT = 20
-
 # 「まだ一度も記録していない」と「None を記録した」を区別する番人
 _UNSET = object()
 
@@ -300,30 +296,6 @@ def _register_spec(doc, spec, now):
     )
 
 
-def _archive_backfill(doc, facts, limit=ARCHIVE_BACKFILL_LIMIT):
-    """main の archive.jsonl にまだ載っていない採択 spec を返す (純関数)。
-
-    dispatch の正が ops-state に移った結果、採択は台帳への追記を待たずに
-    動き出す (D32)。台帳が欠落しないよう、次の curriculum Job にまとめて
-    渡して同じ PR で追記させる。即時 dispatch の P-9NNN もここで拾われる。
-
-    見るのは facts["archived_ids"] (= 台帳に載っている採択 id) で、
-    adopted_specs ではない。4b-2a で adopted_specs の読み先が Project CR に
-    移り、**CR は doc の写しなので「まだ台帳に無い」を判定できなくなった**
-    (全件が「載っている」に見えて backfill が永久に空になる)。
-    """
-    in_archive = set(facts.get("archived_ids") or [])
-    out = []
-    for p in doc["projects"]:
-        spec = p.get("spec")
-        if not isinstance(spec, dict) or not spec.get("id"):
-            continue
-        if spec["id"] in in_archive:
-            continue
-        out.append(spec)
-    return out[:limit]
-
-
 def _critic_due(doc, now):
     """日次の自己観測 (critic Job) を spawn してよいか。純関数。
 
@@ -401,21 +373,19 @@ def decide(doc, facts, rules, now):
             _register_spec(doc, spec, now)
             existing_ids.add(spec["id"])
 
-    # --- curriculum の採択は台帳 PR を待たずに登録する (設計 rev3 D32) ---
-    # spec は result.json に載っている。ここで projects.json (= dispatch の正) に
-    # 登録した時点で採択ゲート → 予告 → 着手が始まり、main への PR・CI・merge は
-    # 台帳の追記として非同期に流れる (下の curriculum 節が merge を進める)。
-    # **意味論の変更**: 台帳 PR を人間が close しても採択は取り消されない。
-    # 取り消しは veto (予告窓) で行う — 窓は従来どおり効いている。
-    # 同じ result を毎ビート読み直すので、登録は PR 番号で 1 度に畳む。
-    # **この位置で登録する** — 下の curriculum 節はプロジェクトの状態機械より後ろに
-    # あり、そこで登録すると採択ゲートの実測が 1 ビート遅れる
+    # --- curriculum の採択を登録する (設計 rev3 D32 / state-out-of-git 4b-2b) ---
+    # spec は result.json に載っている。ここで doc に登録した時点で採択ゲート →
+    # 予告 → 着手が始まる。台帳 PR はもう存在しない (4b-2b で archive.jsonl への
+    # 追記を止めた) ので、採択は git の何も待たない。
+    # 同じ result を毎ビート読み直すので、登録は result.json の書き込み時刻で
+    # 1 度に畳む。**PR 番号では畳めない** — 番号が常に無い今、None 同士が
+    # 一致して次の立案が丸ごと落ちる
     cur_facts = facts.get("curriculum") or {}
     if (
         cur_facts.get("state") == "curriculum_done"
-        # 既定値は None でなく番人にする — PR 番号が None のときに
+        # 既定値は None でなく番人にする — at を持たない古い result.json で
         # 「登録済み」と読み違えて 1 ラウンド丸ごと落とさないため
-        and doc.get("curriculum_registered_pr", _UNSET) != cur_facts.get("pr")
+        and doc.get("curriculum_registered_at", _UNSET) != cur_facts.get("at")
     ):
         adopted = [
             s for s in (cur_facts.get("adopted_specs") or []) if s.get("id")
@@ -433,7 +403,7 @@ def decide(doc, facts, rules, now):
         done = tasks.done_ids(adopted)
         if done:
             actions.append(_action("mark_task_requests_done", ids=done))
-        doc["curriculum_registered_pr"] = cur_facts.get("pr")
+        doc["curriculum_registered_at"] = cur_facts.get("at")
 
     # --- 既読化 (ack P-NNNN): 終端プロジェクトの墓標を要対応キューから下げる ---
     # 状態は変えない (歴史は残す)。ダッシュボードが acknowledged を隠す
@@ -862,27 +832,16 @@ def decide(doc, facts, rules, now):
                 )
 
     # --- curriculum: 立案結果の取り込みと次の立案 ---
-    cur = facts.get("curriculum")  # {"state","pr","adopted_specs","pr_merged","pr_open","checks_green","pr_unknown"}
+    cur = facts.get("curriculum")  # {"state","at","adopted_specs","records","error"}
     curriculum_pending = False
     if cur and cur.get("state") == "curriculum_done":
+        # 採択の登録と依頼の処理済み化は decide の冒頭で済んでおり、棄却案の
+        # 写しは heart.record_rejected が consume より先に取っている。ここで
+        # 待つものはもう無い (4b-2b で台帳 PR が消えた) ので即座に消費する。
+        # ただし **次の立案はこのビートでは起こさない** (pending のまま) —
+        # 消費と立案を同じビートに重ねない従来の間合いをそのまま残す
         curriculum_pending = True
-        # 採択の登録と依頼の処理済み化は decide の冒頭で済んでいる (D32)。
-        # ここは台帳 PR の後始末だけ — merge するか、諦めて結果を捨てるか
-        if cur.get("pr_unknown"):
-            pass  # PR の状態が観測できないビートでは merge/破棄の判断をしない
-        elif cur.get("pr_merged"):
-            actions.append(_action("consume_curriculum"))
-            curriculum_pending = False
-        elif cur.get("pr_open") and cur.get("checks_green"):
-            actions.append(_action("merge_pr", "system", pr=cur["pr"]))
-        elif cur.get("pr") is None or (
-            not cur.get("pr_open") and not cur.get("pr_merged")
-        ):
-            # PR が無い、または merge されずに close された。結果 (result.json) を
-            # 破棄する。採択は既に projects.json に登録済みなので、これは台帳への
-            # 追記が流れなかったというだけ — 次の curriculum の backfill が拾う
-            actions.append(_action("consume_curriculum"))
-            curriculum_pending = False
+        actions.append(_action("consume_curriculum"))
     elif cur and cur.get("state") == "error":
         actions.append(_action("consume_curriculum"))
         actions.append(
@@ -937,11 +896,7 @@ def decide(doc, facts, rules, now):
     if curriculum_idle and gap_ok and not stop_all:
         doc["last_curriculum_at"] = now_iso(now)
         actions.append(
-            _action(
-                "spawn_curriculum", adopt_limit=free_slots,
-                # 台帳の遅延追記をこの Job の PR にまとめて載せる (D32)
-                archive_backfill=_archive_backfill(doc, facts),
-            )
+            _action("spawn_curriculum", adopt_limit=free_slots)
         )
 
     # --- 活動の記録 (critic の due 判定の材料) ---

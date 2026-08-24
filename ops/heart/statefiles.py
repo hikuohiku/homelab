@@ -1,13 +1,14 @@
 """状態ファイルの読み書きと検証。
 
-書き手は heart だけ (単一書き手)。置き場は 2 つあり、同じクラスで扱う:
+書き手は heart だけ (単一書き手)。置き場はすべて PVC で、同じクラスで扱う
+(設計 state-out-of-git Phase 3 / 4b-2b。**git には 1 バイトも出ない**):
 
-  - ops-state ブランチの checkout — projects.json / heartbeat.json。
-    外から見える状態。push 前に必ず validate_projects() を通す。main の CI からは
-    見えないので、ここでの検証が唯一のゲート。壊れた状態を push すると次のビートの
-    自分が読めなくなる — 検証は自分を守るためにある
-  - PVC の作業ディレクトリ — WORK_FILES。heart しか読まないので git に出さない
-    (設計 state-out-of-git Phase 3)
+  - state/ — projects.json / heartbeat.json。projects.json はビートの作業用の
+    写しで、外から見える正は Project CR。heartbeat.json は livenessProbe 用。
+    save_projects は必ず validate_projects() を通す。壊れた doc を書くと次の
+    ビートの自分が読めなくなる — 検証は自分を守るためにある
+  - work/ — WORK_FILES (キュー・監査・カーソル)。heart しか読まない
+  - metrics/ — 保持窓ぶんの指標
 """
 
 import json
@@ -212,9 +213,10 @@ class StateFiles:
     def write_heartbeat(self, beat, now=None, usage=None):
         """生存と、当日の使用量。
 
-        usage を載せるのはダッシュボードのため。metrics.jsonl が git から
-        出た (設計 state-out-of-git Phase 1) 後、ダッシュボードが要る指標は
-        これだけなので、既に毎ビート書いている heartbeat に相乗りさせる。
+        読み手は livenessProbe (ops/heart/liveness.py) だけになった — 外から
+        見える生存は Lease、ダッシュボードの使用量は gate の /healthz に移った
+        (設計 state-out-of-git Phase 7 / 4b-2b)。usage はここにも残す:
+        ビートの中で 1 度しか計算しない値で、消す理由が無い。
         """
         doc = {"beat": beat, "at": now_iso(now), "writer": "heart"}
         if usage is not None:

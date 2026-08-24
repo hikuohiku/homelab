@@ -10,7 +10,10 @@
 #
 #   1. ClusterIP のみ。Ingress も Tailscale Ingress も付けない = cluster 外から
 #      到達できない
-#   2. NetworkPolicy で送信元を autopilot-core の Pod に限る
+#   2. NetworkPolicy で送信元を autopilot-core と ops-dashboard の Pod に限る。
+#      ダッシュボードが読むのは GET /healthz だけ (「止めて」と当日の使用量。
+#      Project CR には載らない doc 全体の値で、これが読めるようになったので
+#      ダッシュボードは ops-state ブランチを引かなくなった — 4b-2b)
 #
 # 2 のポリシーは heart の Pod への **すべての** ingress を閉じる。閉じて困るものは
 # 今のところ無い（heart が開けている listen はこのゲートだけで、liveness は
@@ -49,6 +52,9 @@ spec:
         - podSelector:
             matchLabels:
               app: autopilot-core
+        - podSelector:
+            matchLabels:
+              app: ops-dashboard
       ports:
         - port: gate
           protocol: TCP

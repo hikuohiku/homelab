@@ -118,20 +118,5 @@ class Gh:
             "POST", f"/repos/{self.repo}/issues/{issue}/comments", {"body": body}
         )
 
-    def ensure_branch(self, branch, base="main"):
-        try:
-            self.request("GET", f"/repos/{self.repo}/git/ref/heads/{branch}")
-            return False
-        except GhError as e:
-            if e.status != 404:
-                raise
-        base_ref = self.request("GET", f"/repos/{self.repo}/git/ref/heads/{base}")
-        self.request(
-            "POST",
-            f"/repos/{self.repo}/git/refs",
-            {"ref": f"refs/heads/{branch}", "sha": base_ref["object"]["sha"]},
-        )
-        return True
-
     def delete_branch(self, branch):
         self.request("DELETE", f"/repos/{self.repo}/git/refs/heads/{branch}")

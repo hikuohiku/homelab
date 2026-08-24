@@ -4,11 +4,11 @@
 (apps/autopilot/ の bootstrap ConfigMap が clone → exec する)。
 
 1 ビート (既定 120s):
-  1. main を最新化・ops-state を最新化
+  1. main を最新化 (**読むだけ**。git への書き込みはビートに 1 つも無い)
   2. 事実収集 (health / Job / PVC の result / PR / フィードバック 2 経路)
   3. reconcile.decide() — 判断はすべて純関数側
   4. actions 実行 (shadow モードでは記録のみ)
-  5. 指標追記・heartbeat・ops-state push
+  5. 指標追記・heartbeat・Project CR の更新・Lease の更新
 
 heartbeat は旧 loop.sh と同じ書式で stdout に出す。ops-health-reporter の
 HEARTBEAT_RE (report.py) がこれを拾って自己ハング検知に使うため、
@@ -46,6 +46,17 @@ from .statefiles import TERMINAL_STATES, StateFiles, migrate_plan, now_iso
 # 120s/beat なので 5 ビート ≒ 10 分。瞬断は黙って通り、スキーマの穴は鳴る
 CR_FAIL_ALERT_BEATS = 5
 
+# CR の取りこぼし (migrate_projects_doc) を鳴らし直す間隔。毎ビート鳴らすと
+# 通知が壊れた側になり、鳴らさないと静かに移行が止まったままになる
+PARITY_ALERT_BEATS = 60
+
+# 通知に載せる取りこぼし id の上限 (全部載せると Discord の 1900 字を越える)
+PARITY_ALERT_IDS = 10
+
+# 棄却案の台帳 (PVC)。git の ops/projects/archive.jsonl への追記を止めた 4b-2b
+# 以後、新しい死因はここに積み、次のビートが Project CR に移す
+REJECTED_LEDGER_FILE = "curriculum-rejected.jsonl"
+
 _stop = False
 
 
@@ -68,12 +79,12 @@ def log(msg):
 def spec_env(project):
     """projects.json に載っている spec を Job の env にも積む。
 
-    spec の正は ops-state の projects.json で、runner はそこから読む
-    (設計 rev3 D32)。env はその写しで、runner の読み先の最後段になる:
+    spec の正は Project CR で、runner はそこを読めない (worker はトークンを
+    automount しない)。env がその写しで、runner の唯一の読み先になる:
 
-    - 即時 dispatch は **Job 作成がビートの commit より先**なので、走り出しの
-      瞬間だけ ops-state にまだ載っていない。そこを env が埋める
-    - GitHub API が読めないビートでも走り出せる
+    - 即時 dispatch は **Job 作成がビートの CR 更新より先**なので、走り出しの
+      瞬間はまだ CR に載っていない。そこを env が埋める
+    - k8s API が読めないビートでも走り出せる
 
     経路は違うが**書き手が heart だけ**という性質は同じで、Job の spec に
     固定される env は runner のブランチからは書き換えられない。
@@ -102,13 +113,19 @@ class Heart:
         self.cfg = config.load(repo_dir)
         self.repo_dir = self.cfg.repo_dir
         self.repo_url = f"https://github.com/{self.cfg.repo}.git"
+        # 移行前の ops-state ブランチの checkout (設計 state-out-of-git 4b-2b で
+        # git から切り離した)。**もう fetch も push もしない** — 残っているのは
+        # PVC 上の最後の写しで、doc を PVC へ移すときの読み元としてだけ使う
         self.state_dir = self.cfg.data_dir / "ops-state"
+        # プロジェクトの doc (projects.json) と heartbeat.json の置き場。
+        # 外から見える正は Project CR で、ここはビートの作業用の写し
+        self.doc_dir = self.cfg.data_dir / "state"
+        self.docs = StateFiles(self.doc_dir)
         # 指標は git に出さない (設計 state-out-of-git Phase 1)。PVC 上に
         # 保持窓ぶんだけ置く。誰も読み戻さないので、消えても判断は狂わない
         self.metrics_store = StateFiles(self.cfg.data_dir / "metrics")
         # heart しか読まない作業ファイル (キュー・監査・カーソル) は git に出さない
-        # (設計 state-out-of-git Phase 3)。ops-state に残るのは外から見える
-        # projects.json / heartbeat.json だけ
+        # (設計 state-out-of-git Phase 3)
         self.work_dir = self.cfg.data_dir / "work"
         self.work = StateFiles(self.work_dir)
         self.transcripts = self.cfg.data_dir / "transcripts"
@@ -120,6 +137,8 @@ class Heart:
         self.gate = None
         # Project CR の書き込みが連続して失敗しているビート数 (note_cr_failures)
         self.cr_fail_streak = 0
+        # doc を PVC へ移せずにいるビート数 (migrate_projects_doc の守り)
+        self.parity_gap_streak = 0
 
     def k8s_client(self):
         if self.k8s is None:
@@ -215,13 +234,6 @@ class Heart:
                                 "ADOPT_LIMIT": a.get("adopt_limit", 2),
                                 "TASK_REQUESTS": tasks.for_env(
                                     self.work.read_jsonl(tasks.QUEUE_FILE)
-                                ),
-                                # 台帳 (archive.jsonl) にまだ載っていない採択 spec。
-                                # 着手はもう台帳を待たないので、動き出した spec を
-                                # この Job の PR にまとめて載せる (設計 rev3 D32)
-                                "ARCHIVE_BACKFILL_JSON": json.dumps(
-                                    a.get("archive_backfill") or [],
-                                    ensure_ascii=False,
                                 ),
                                 **history,
                             },
@@ -499,17 +511,16 @@ class Heart:
         # rules/models は main から毎ビート読み直す (PR で変えたものが再起動なしで効く)
         self.cfg = config.load(self.repo_dir)
 
-        self.gh.ensure_branch(self.cfg.state_branch)
-        gitutil.sync_state_branch(self.state_dir, self.repo_url, self.cfg.state_branch)
-        sf = StateFiles(self.state_dir)
         self.migrate_work_files()
         # Notifier の outbox / sent は PVC 側 (設計 state-out-of-git Phase 3)
         notifier = Notifier(
             self.cfg.discord_webhook, self.work, self.cfg.rules, self.gh,
             self.cfg.feedback_issue,
         )
+        self.migrate_projects_doc(notifier, now)
+        sf = self.doc_store()
 
-        doc = sf.load_projects()
+        doc = self.load_doc()
         cursors = self.work.load_cursors()
 
         # --- 観測。失敗した項目は None (「無い」と区別する。decide が保守的に扱う) ---
@@ -583,9 +594,7 @@ class Heart:
         except Exception as e:  # noqa: BLE001 — 観測失敗。判断はしない
             log(f"Project CR を読めない (このビートの採択登録は見送る): {e}")
             adopted_specs_by_id = {}
-        curriculum = facts.collect_curriculum(
-            self.cfg.data_dir, adopted_specs_by_id, self.gh
-        )
+        curriculum = facts.collect_curriculum(self.cfg.data_dir)
         critic = facts.collect_critic(self.cfg.data_dir)
         adopted_specs = list(adopted_specs_by_id.values())
         usage_info = metrics.daily_usage(self.transcripts, now)
@@ -611,11 +620,6 @@ class Heart:
             "curriculum": curriculum,
             "critic": critic,
             "adopted_specs": adopted_specs,
-            # 台帳 (main の archive.jsonl) に既に載っている採択 id。
-            # **台帳の欠落検知はここだけが git を見る** — 4b-2a では台帳への
-            # 書き込みが残っているので、何がまだ載っていないかは git 側にしか
-            # 答えが無い。台帳を止める 4b-2b でこの facts ごと消える
-            "archived_ids": sorted(facts.load_archived_ids(self.repo_dir)),
             "commands": commands,
             "processed_commands": processed_commands,
             # 即時 dispatch (設計 rev3 Phase D) の結末。gate スレッドが
@@ -698,9 +702,9 @@ class Heart:
         if len(merged) != len(queue):
             self.work.rewrite_jsonl(tasks.QUEUE_FILE, merged)
             log(f"task requests queued: total={len(merged)}")
-        gitutil.commit_and_push_state(
-            self.state_dir, self.cfg.state_branch, f"heart: beat {i} decide"
-        )
+        # 棄却案は curriculum の結果から台帳 (PVC) へ移す。**consume より先**に
+        # 写しを取らないと、result.json が退避された時点で死因が消える
+        self.record_rejected(f.get("curriculum"))
 
         # --- 二段目: 副作用の実行と、その結果 (job 名等) の永続化 ---
         self.execute(actions, doc, sf, notifier, now)
@@ -733,23 +737,19 @@ class Heart:
         )
         self.metrics_store.append_jsonl("metrics.jsonl", record)
         self.prune_metrics(now)
-        # 経過措置: 旧ダッシュボードのイメージは ops-state の metrics.jsonl の
-        # 最終行から usage を読む。全履歴 (8.9 MB) を置く必要は無いので
-        # **最新の 1 行だけ**に切り詰める。新イメージを pin したらこの行ごと消す
-        # (設計 state-out-of-git Phase 1)
-        sf.rewrite_jsonl("metrics.jsonl", [record])
         sf.save_projects(doc)
-        # 二重書き (設計 state-out-of-git Phase 4a)。git 側の写しはそのまま残し、
-        # 同じ内容を Project CR にも置く。CR が壊れてもビートは止めない
+        # プロジェクトの正 (設計 state-out-of-git 4b-2b)。git 側の写しは凍結され、
+        # 外から見えるのはここだけになった。**書けなければ記録が止まる**ので、
+        # 失敗が続けば note_cr_failures が人間を叩く
         try:
             self.sync_project_crs(doc, notifier, now)
-        except Exception as e:  # noqa: BLE001 — CR はまだ写し。正は projects.json
+        except Exception as e:  # noqa: BLE001 — 1 ビートの失敗ではビートを止めない
             log(f"project CR sync failed: {e}")
             self.note_cr_failures(1, notifier, now)
-        # usage は heartbeat に載せる。ダッシュボードの唯一の metrics 利用が
-        # 「最終行の usage」だけで、そのために 8.9 MB の metrics.jsonl を
-        # 20 秒ごとに fetch していた (設計 state-out-of-git Phase 1)
-        sf.write_heartbeat(i, now, usage=usage_info)
+        # usage はダッシュボードが gate の /healthz から読む (4b-2b)。
+        # heartbeat.json は PVC に残る — livenessProbe (ops/heart/liveness.py) が
+        # 「止まったまま死んだ」を検知する唯一の材料だから
+        self.docs.write_heartbeat(i, now, usage=usage_info)
         # 生存はクラスタの中の Lease でも示す (設計 state-out-of-git Phase 7)。
         # **ここに置くこと自体が仕様**で、ビートが最後まで通ったときにしか
         # renewTime は進まない。プロセスが生きていても止まっていれば古くなる
@@ -758,15 +758,162 @@ class Heart:
         # この写しの鮮度そのものが安全装置で、ビートが詰まればゲートは自動的に
         # 閉じる (reconcile.DISPATCH_SNAPSHOT_MAX_AGE_SECONDS)
         if self.gate is not None:
-            self.gate.update(doc, self.cfg.rules, now, self.cfg.shadow)
+            self.gate.update(doc, self.cfg.rules, now, self.cfg.shadow, usage=usage_info)
         if not self.cfg.shadow:
             notifier.flush_outbox(now)
         self.prune_audit(now)
         removed = metrics.rotate_transcripts(self.transcripts, self.cfg.rules, now)
         if removed:
             log(f"rotated {removed} old transcript files")
-        gitutil.commit_and_push_state(
-            self.state_dir, self.cfg.state_branch, f"heart: beat {i}"
+
+    # --- doc の置き場 (設計 state-out-of-git 4b-2b) ---
+
+    def doc_store(self):
+        """projects.json を読み書きする StateFiles。
+
+        移行が済むまでは ops-state の checkout 側を使い続ける。**移行が止まった
+        ビートで PVC の空 doc に切り替えない** — 切り替えた瞬間に全プロジェクトを
+        忘れ、次の save が「1 件も無い」を正として書き出すことになる。
+        """
+        if (self.doc_dir / "projects.json").exists():
+            return self.docs
+        if (self.state_dir / "projects.json").exists():
+            return StateFiles(self.state_dir)
+        return self.docs
+
+    def load_doc(self):
+        """プロジェクトの doc を読む。読み先は PVC → 移行前の checkout → CR。
+
+        最後の CR からの復元は **PVC ごと失われた後の唯一の道**。git 側の写しが
+        凍結された今、ここが空の doc を返すと器は全プロジェクトを忘れる。
+        CR が読めないときは例外を上げて次のビートに任せる (空で走り出さない)。
+        トップレベルの値 (stop_engaged / last_curriculum_at など) は CR に載らない
+        ので復元されない — 失うのは「止めて」の保持だけで、記録ではない。
+        """
+        store = self.doc_store()
+        if (store.dir / "projects.json").exists():
+            return store.load_projects()
+        items = self.k8s_client().list_custom(
+            projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL,
+            label_selector=projectcr.NOT_REJECTED_SELECTOR,
+        )
+        projects = projectcr.projects_from_items(items)
+        log(f"projects.json が無い。Project CR から {len(projects)} 件を復元する")
+        return {"version": 1, "projects": projects, "chores": []}
+
+    def cr_gap(self, doc):
+        """git 側が知っている id のうち、まだ CR になっていないものを返す。
+
+        突き合わせるのは 2 つ: 移行前の projects.json のプロジェクトと、台帳
+        (archive.jsonl) の全行。**件数ではなく id で見る** — 数が合っていても
+        中身がずれていたら取りこぼしは残る。
+        """
+        items = self.k8s_client().list_custom(
+            projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL
+        )
+        have = {
+            (item.get("metadata") or {}).get("name") for item in items
+        }
+        want = {projectcr.cr_name(p["id"]) for p in doc.get("projects", []) if p.get("id")}
+        want |= {
+            projectcr.cr_name(rec["id"])
+            for rec in facts.load_archive_records(self.repo_dir)
+            if rec.get("id")
+        }
+        return sorted(want - have)
+
+    def migrate_projects_doc(self, notifier=None, now=None):
+        """projects.json を ops-state の checkout から PVC へ移す (4b-2b)。
+
+        **CR が git 側の全 id を持っていることを確かめるまで移さない。** ここが
+        この段の唯一の安全装置で、取りこぼしたまま git を離れると、CR にならな
+        かったプロジェクトは restic のバックアップにも乗らないまま静かに消える。
+        揃っていなければ移行を見送り、人間に言う — 見送っている間も heart は
+        従来どおり checkout 側の doc で回り (push はしない)、毎ビートの
+        sync_project_crs / plan_rejected が穴を埋めるので自力で収束する。
+
+        コピーしてから消す (作業ファイルの移行と同じ規律)。消すのは metrics.jsonl
+        だけで、projects.json は checkout 側にも残す — 戻す判断が要るときの
+        最後の写しになる (もう push されないので git 側は凍結されたまま)。
+        """
+        src = self.state_dir / "projects.json"
+        if (self.doc_dir / "projects.json").exists() or not src.exists():
+            return
+        with open(src) as f:
+            doc = json.load(f)
+        try:
+            missing = self.cr_gap(doc)
+        except Exception as e:  # noqa: BLE001 — 読めないことを「揃っている」に倒さない
+            log(f"CR の突き合わせに失敗 (移行を見送る): {e}")
+            missing = ["(CR を読めなかった)"]
+        if missing:
+            self.note_parity_gap(missing, notifier, now)
+            return
+        self.parity_gap_streak = 0
+        self.doc_dir.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, self.doc_dir / "projects.json")
+        # heartbeat.json は写さない。毎ビート書き直すもので、古い写しを上書きで
+        # 置くと livenessProbe が一瞬 stale を見る (再起動の空振りになる)
+        # 経過措置で最新 1 行だけ置いていた指標 (設計 Phase 1)。読み手はもう居ない
+        stale_metrics = self.state_dir / "metrics.jsonl"
+        if stale_metrics.exists():
+            stale_metrics.unlink()
+        log(f"projects.json を PVC へ移した ({len(doc.get('projects', []))} 件)")
+
+    def note_parity_gap(self, missing, notifier=None, now=None):
+        """CR の取りこぼしを人間に届ける。毎ビート鳴らさず、続いていることは残す。"""
+        self.parity_gap_streak += 1
+        log(
+            f"Project CR に {len(missing)} 件の取りこぼしがある。git 側の doc を"
+            f"使い続ける: {', '.join(missing[:PARITY_ALERT_IDS])}"
+        )
+        if self.parity_gap_streak % PARITY_ALERT_BEATS != 1:
+            return
+        text = (
+            f"Project CR に git 側の記録が {len(missing)} 件足りません。"
+            "揃うまで projects.json の移行 (state-out-of-git 4b-2b) を見送っています: "
+            + ", ".join(missing[:PARITY_ALERT_IDS])
+        )
+        if notifier is None or self.cfg.shadow:
+            log(f"[cr-parity] {text}")
+            return
+        notifier.send("incident", text, now)
+
+    def record_rejected(self, curriculum):
+        """curriculum が落とした案を PVC の台帳へ写す (設計 4b-2b)。
+
+        git の archive.jsonl への追記を止めた代わりの置き場。ここに落ちた行を
+        次のビートの plan_rejected が Project CR にする。**CR にするまで消さない**
+        ので、CR の書き込みが失敗しても死因 (reject_reason / improve_hint) は残る。
+        """
+        records = (curriculum or {}).get("records") or []
+        rejected = [
+            r for r in records
+            if isinstance(r, dict) and r.get("id") and not r.get("adopted")
+        ]
+        if not rejected:
+            return
+        have = {
+            r.get("id") for r in self.work.read_jsonl(REJECTED_LEDGER_FILE)
+        }
+        added = 0
+        for rec in rejected:
+            if rec["id"] in have:
+                continue
+            self.work.append_jsonl(REJECTED_LEDGER_FILE, rec)
+            have.add(rec["id"])
+            added += 1
+        if added:
+            log(f"棄却案 {added} 件を PVC の台帳に記録した")
+
+    def rejected_records(self):
+        """棄却案の全部。凍結された git の台帳 + PVC に積んだ新しい行。
+
+        git 側を読み続けるのは、**過去 277 件の死因が今もそこにしか無い**から。
+        書き込みは止めたので中身は変わらず、CR への取り込みが済めば差分は 0 になる。
+        """
+        return facts.load_archive_records(self.repo_dir) + self.work.read_jsonl(
+            REJECTED_LEDGER_FILE
         )
 
     def renew_lease(self, beat, now):
@@ -789,20 +936,19 @@ class Heart:
             log(f"lease renew failed: {e}")
 
     def sync_project_crs(self, doc, notifier=None, now=None):
-        """projects.json の写しと、台帳の棄却案を Project CR に書く。
+        """doc のプロジェクトと棄却案を Project CR に書く。
 
-        Phase 4a で始めた二重書きに、4b-1 で棄却案の取り込みを足した
-        (設計 state-out-of-git「棄却された案も CR にする」)。
+        4b-2b で **CR が正になった**。git 側の写しは凍結されたので、ここに書け
+        なかったものは restic のバックアップにも乗らない。だから失敗が続けば
+        note_cr_failures が人間を叩く (1 回の失敗は API の瞬断でよくある)。
+        1 ビートの失敗ではビートを止めない — 次のビートが同じ CR を送り直す。
 
-        **正はまだ projects.json** なので、ここが失敗してもビートは落とさない。
         変わった CR だけを送る。消えたプロジェクトは消さない (projectcr.plan)。
 
         棄却案の入り口を **1 回きりの移行スクリプトにしていない**理由: 器の外に
         kubectl を持った人間が居ない前提で回っており、手で流す前提の経路は
-        「誰も流さないまま 4b-2 に進む」で終わる。毎ビート台帳を突き合わせれば
+        「誰も流さないまま次に進む」で終わる。毎ビート台帳を突き合わせれば
         取り込みは自力で収束し、restic からの復元後もひとりでに埋め直る。
-        4b-2 で台帳の書き込みを止めるときは、読み先を archive.jsonl から
-        curriculum の result.json に差し替えるだけで plan_rejected は動く。
         """
         k8s = self.k8s_client()
         existing = k8s.list_custom(
@@ -811,10 +957,10 @@ class Heart:
         write, orphans = projectcr.plan(
             doc, existing, self.cfg.namespace, TERMINAL_STATES
         )
-        # 棄却案は projects.json に居ない (居させない) ので、台帳から直接引く。
+        # 棄却案は doc に居ない (居させない) ので、台帳から直接引く。
         # 1 ビートの取り込み件数は REJECTED_BATCH_LIMIT で抑える
         rejected = projectcr.plan_rejected(
-            facts.load_archive_records(self.repo_dir),
+            self.rejected_records(),
             existing,
             self.cfg.namespace,
             {p["id"] for p in doc.get("projects", [])},
@@ -886,7 +1032,7 @@ class Heart:
         受理済みの依頼をまとめて失う。PVC 側に既にあるものは移行済みなので
         触らない = 何度呼んでも同じ (移行が済めばこのメソッドは何もしない)。
 
-        ops-state からの削除は次の commit_and_push_state が git に反映する。
+        4b-2b 以降、消すのは PVC 上の checkout からだけ (git へは反映されない)。
         """
         copy, remove = migrate_plan(_names(self.state_dir), _names(self.work_dir))
         if not remove:

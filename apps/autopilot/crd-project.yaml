@@ -3,18 +3,18 @@
 # ここに置くのは **CRD だけ**。CR 本体は heart が毎ビート書くもので、ArgoCD が
 # 管理する定義ではない (git に置くと ArgoCD が「余計な CR」を消しにいく)。
 #
-# 段階: 今は 4b-2a — **読み手は全員ここを読む** (dashboard / runner / core /
-# heart の facts / curriculum の入力)。heart は projects.json と archive.jsonl にも
-# 書き続けており、git 側は正しい写しのまま。書き込みを止めるのが 4b-2b で、
-# それまでは読み手が壊れても書き込み側は無傷で戻せる。
+# 段階: 4b-2b — **読み手も書き手もここだけ**。git 側の写し (ops-state の
+# projects.json / main の archive.jsonl) は凍結され、更新されない。
+# **ここに書けなかったものは restic のバックアップにも乗らない**
+# (apps/autopilot-projects-backup)。書き込み失敗が続けば heart が人間に鳴らす。
 #
 # コントローラは無い。heart が唯一の書き手で、あとは全員読むだけ (RBAC は
 # rbac.yaml)。status サブリソースも置かない — 調停する者が居ないので、
 # spec と status に分ける意味が無い。
 #
-# spec は ops-state の projects.json の 1 エントリを **キー名そのまま**載せる。
-# 名前を付け替えないのは、二重書きの間 2 つの表現が同じものだと目で確認できる
-# ようにするため (spec.spec が入れ子になるのはその代償)。
+# spec は heart の doc (projects.json) の 1 エントリを **キー名そのまま**載せる。
+# 名前を付け替えないのは、doc から CR への復元・CR から doc への復元がどちらも
+# 素直に書けるようにするため (spec.spec が入れ子になるのはその代償)。
 # x-kubernetes-preserve-unknown-fields は使わない。構造スキーマは未知フィールドを
 # 黙って落とすので、heart 側でフィールドを増やしたらここも増やすこと
 # (ops/heart/tests/test_project_cr.py が実データの全キーを覆えているか検査する)。
@@ -278,7 +278,7 @@ spec:
                           type: integer
                         used_tokens:
                           type: integer
-                    # --- 棄却案だけが持つもの (runner.build_archive_records) ---
+                    # --- 棄却案だけが持つもの (runner.build_proposal_records) ---
                     # 判定の教師信号が生成に戻る唯一の経路。ここを落とすと
                     # 生成役は死因を知らずに同型再提案を繰り返す
                     reject_reason:

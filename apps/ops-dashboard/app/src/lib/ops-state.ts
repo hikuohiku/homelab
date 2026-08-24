@@ -1,15 +1,14 @@
-import { execFile } from "node:child_process";
-import { mkdir, readFile } from "node:fs/promises";
-import { promisify } from "node:util";
+import { readFile } from "node:fs/promises";
 import { kubeGet } from "./kubernetes";
 import type { Project } from "./types";
 
-const exec = promisify(execFile);
-const REPOSITORY = process.env.HOMELAB_REPOSITORY ?? "https://github.com/hikuohiku/homelab.git";
-const CACHE_DIR = process.env.OPS_STATE_CACHE_DIR ?? "/tmp/mission-control-state";
 const LOCAL_DIR = process.env.OPS_STATE_DIR;
 const REFRESH_MS = Number(process.env.OPS_STATE_REFRESH_MS ?? 20_000);
 const NAMESPACE = process.env.AUTOPILOT_NAMESPACE ?? "autopilot";
+// heart の admission gate。**読むのは GET /healthz だけ** (POST /dispatch は
+// ここから打たない)。到達は同一 namespace の NetworkPolicy が許した経路のみ
+const HEART_HEALTHZ =
+  process.env.HEART_HEALTHZ_URL ?? `http://autopilot-heart.${NAMESPACE}.svc:8099/healthz`;
 
 // Project CR (設計 state-out-of-git 4b-2a)。プロジェクトの読み先はここに移った。
 // **棄却案 (state: rejected) はサーバ側で外す** — 250 件を超える終端の山で、
@@ -19,12 +18,19 @@ const PROJECTS_PATH =
   `/apis/autopilot.homelab.hikuohiku.dev/v1/namespaces/${NAMESPACE}/projects` +
   `?labelSelector=${encodeURIComponent("state!=rejected")}&limit=500`;
 
+// heart の生存 (設計 state-out-of-git Phase 7)。**ビートが最後まで通ったときだけ**
+// renewTime が進むので、これは「プロセスが生きているか」ではなく「ビートが
+// 回っているか」を表す。beat 番号は注記 (判定には使わない)
+const LEASE_PATH =
+  `/apis/coordination.k8s.io/v1/namespaces/${NAMESPACE}/leases/autopilot-heart`;
+const BEAT_ANNOTATION = "autopilot.homelab.hikuohiku.dev/beat";
+
 interface DailyUsage {
   cost_usd?: number; tokens?: number; sessions?: number; empty_sessions?: number;
 }
 
-// 心拍と「止めて」は **まだ ops-state ブランチ**。heartbeat の移設 (Lease 化) は
-// 設計の Phase 7 で、この段では触っていない
+// 4b-2b で読み先が git から離れた: 心拍は Lease、「止めて」と使用量は
+// heart の /healthz。ダッシュボードは git を一切触らない
 interface HeartState {
   heartbeat: { beat?: number; at?: string; usage?: DailyUsage };
   stopEngaged: boolean;
@@ -64,6 +70,18 @@ export function projectsFromCrs(doc: { items?: ProjectCr[] }): Project[] {
   return projects.sort((a, b) => a.id.localeCompare(b.id));
 }
 
+/** Lease から心拍を読む (純関数)。renewTime が「最後にビートが通った時刻」。 */
+export function heartbeatFromLease(lease: {
+  metadata?: { annotations?: Record<string, string> };
+  spec?: { renewTime?: string };
+}): { beat?: number; at?: string } {
+  const beat = Number(lease.metadata?.annotations?.[BEAT_ANNOTATION]);
+  return {
+    beat: Number.isFinite(beat) && beat > 0 ? beat : undefined,
+    at: lease.spec?.renewTime,
+  };
+}
+
 async function loadProjects(): Promise<Project[]> {
   if (LOCAL_DIR) {
     const text = await readFile(`${LOCAL_DIR}/projects.json`, "utf8");
@@ -72,24 +90,15 @@ async function loadProjects(): Promise<Project[]> {
   return projectsFromCrs(await kubeGet(PROJECTS_PATH));
 }
 
-async function git(args: string[]): Promise<string> {
-  const result = await exec("git", args, {
-    cwd: CACHE_DIR,
-    timeout: 30_000,
-    maxBuffer: 16 * 1024 * 1024,
-    env: { ...process.env, GIT_TERMINAL_PROMPT: "0" },
+/** heart の /healthz。doc 全体にかかる値 (Project CR には載らない) の唯一の口。 */
+async function loadGateHealth(): Promise<{ stopEngaged: boolean; usage: DailyUsage }> {
+  const response = await fetch(HEART_HEALTHZ, {
+    cache: "no-store",
+    signal: AbortSignal.timeout(10_000),
   });
-  return result.stdout;
-}
-
-async function ensureRepository(): Promise<void> {
-  await mkdir(CACHE_DIR, { recursive: true });
-  try {
-    await git(["rev-parse", "--git-dir"]);
-  } catch {
-    await git(["init"]);
-    await git(["remote", "add", "origin", REPOSITORY]);
-  }
+  if (!response.ok) throw new Error(`heart /healthz ${response.status}`);
+  const doc = (await response.json()) as { stop_engaged?: boolean; usage?: DailyUsage };
+  return { stopEngaged: Boolean(doc.stop_engaged), usage: doc.usage ?? {} };
 }
 
 async function loadHeart(): Promise<HeartState> {
@@ -103,23 +112,14 @@ async function loadHeart(): Promise<HeartState> {
       stopEngaged: Boolean(parseJson<{ stop_engaged?: boolean }>(projectsText, {}).stop_engaged),
     };
   }
-  await ensureRepository();
-  // main はもう引かない: archive.jsonl による題名補完が CR の spec.spec に移った
-  await git([
-    "fetch", "--quiet", "--no-tags", "--depth=1", "origin",
-    "+refs/heads/ops-state:refs/remotes/origin/ops-state",
-  ]);
-  const [projectsText, heartbeatText] = await Promise.all([
-    git(["show", "origin/ops-state:projects.json"]),
-    git(["show", "origin/ops-state:heartbeat.json"]),
-  ]);
+  const [lease, health] = await Promise.all([kubeGet(LEASE_PATH), loadGateHealth()]);
   return {
-    heartbeat: parseJson(heartbeatText, {}),
-    stopEngaged: Boolean(parseJson<{ stop_engaged?: boolean }>(projectsText, {}).stop_engaged),
+    heartbeat: { ...heartbeatFromLease(lease), usage: health.usage },
+    stopEngaged: health.stopEngaged,
   };
 }
 
-// 読み先が 2 つ (CR と ops-state) になったので、片方の失敗でもう片方まで
+// 読み先が 2 つ (CR と heart) になったので、片方の失敗でもう片方まで
 // 巻き添えにしない。**黙って空を返さない** — プロジェクト 0 件は「全部終わった」に
 // 見えるので、直近の写しがあれば警告つきで出し、無ければ取得失敗だと言い切る
 async function refresh(): Promise<OpsState> {
@@ -148,7 +148,7 @@ async function refreshOnce(): Promise<OpsState> {
     heart = await loadHeart();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    warnings.push(`ops-state 更新失敗: ${message}`);
+    warnings.push(`heart の状態 (Lease / healthz) 取得失敗: ${message}`);
   }
   const value: OpsState = {
     projects,

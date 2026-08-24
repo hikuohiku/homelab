@@ -27,9 +27,9 @@ from ops.heart.statefiles import WORK_FILES, StateFiles, migrate_plan
 
 REPO = Path(__file__).resolve().parents[3]
 
-# ops-state に残ってよいもの。metrics.jsonl は旧ダッシュボード向けの経過措置で、
-# 最新 1 行だけが載る (設計 Phase 1)
-KEPT_IN_GIT = ("projects.json", "heartbeat.json", "metrics.jsonl")
+# 移行前の checkout に残ってよいもの。projects.json は 4b-2b で PVC の state/ へ
+# 移るが、戻すときの最後の写しとして checkout 側にも残す
+KEPT_IN_GIT = ("projects.json", "heartbeat.json")
 
 
 class MigratePlanTest(unittest.TestCase):
@@ -66,9 +66,6 @@ class MigrateBeatTest(unittest.TestCase):
     def _beat(self, n=1):
         patches = [
             mock.patch.object(gitutil, "sync_main", lambda *a, **k: None),
-            mock.patch.object(gitutil, "sync_state_branch", lambda *a, **k: None),
-            mock.patch.object(gitutil, "commit_and_push_state", lambda *a, **k: None),
-            mock.patch.object(type(self.h.gh), "ensure_branch", lambda *a, **k: None),
             mock.patch.object(Heart, "k8s_client", lambda self: None),
             mock.patch.object(facts, "load_health", lambda *a, **k: ([], True, None)),
             mock.patch.object(facts, "load_adopted_specs", lambda *a, **k: {}),
@@ -94,6 +91,9 @@ class MigrateBeatTest(unittest.TestCase):
     def seed_state_branch(self):
         """移行前の ops-state。heart が今まで書いてきたものを一通り置く。"""
         sf = StateFiles(self.h.state_dir)
+        # doc は checkout 側にあるまま。CR の突き合わせができない (k8s を
+        # 潰している) ので 4b-2b の移行は見送られ、ここが読み書きされ続ける
+        sf.save_projects({"version": 1, "projects": [], "chores": []})
         sf.save_cursors(
             {
                 "issue_comments_since": "2026-08-20T00:00:00Z",
@@ -149,6 +149,7 @@ class MigrateBeatTest(unittest.TestCase):
         self.assertFalse((self.h.state_dir / "cursors.json").exists())
 
     def test_beat_writes_work_files_to_pvc_not_to_git(self):
+        self.seed_state_branch()
         self._beat(1)
         for name in WORK_FILES:
             self.assertFalse(

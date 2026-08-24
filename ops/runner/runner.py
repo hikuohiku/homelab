@@ -420,14 +420,18 @@ def sh(args, cwd=None, check=True, timeout=300):
     return p
 
 
-def build_archive_records(proposals, adopted):
-    """全案を archive.jsonl の行レコードへ整形する (純粋関数。P-0210)。
+def build_proposal_records(proposals, adopted):
+    """全案を 1 案 1 行のレコードへ整形する (純粋関数。P-0210)。
+
+    置き場は git の台帳から result.json → Project CR に移った (4b-2b)。形は
+    変えていない — 棄却案の CR (projectcr.to_rejected_project) がこの行を
+    そのまま `spec` に載せる。
 
     判定役の scores を id で引き、**棄却案だけ** に reject_reason / improve_hint を
     転記する (採択案は触らない)。判定の教師信号が生成に戻る唯一の経路で、
     ここが切れていると生成役は死因を知らず同型再提案を繰り返す。
     scores 側の欠落 (旧契約の出力・判定役の書き忘れ) は転記を飛ばすだけで落とさない —
-    案自体は採否にかかわらず archive に残すのがこの関数の責務。
+    案自体は採否にかかわらず残すのがこの関数の責務。
     """
     adopted_ids = {a.get("id") for a in adopted.get("adopted", [])}
     scores_by_id = {
@@ -1227,91 +1231,17 @@ class Runner:
         except ValueError as e:
             self.write_result("error", error=f"curriculum output parse: {e}")
             return 1
-        records = build_archive_records(proposals, adopted)
-        # 採択 spec は **result.json に載せて heart に直接渡す** (設計 rev3 D32)。
-        # heart はこれを ops-state の projects.json に登録し、そこから着手する。
-        # 下の PR は台帳 (archive.jsonl) への追記で、着手を待たせない
-        adopted_records = [r for r in records if r.get("adopted")]
-        pr = self.fix_to_archive(records)
+        records = build_proposal_records(proposals, adopted)
+        # **立案の出力は result.json が全部持つ** (設計 state-out-of-git 4b-2b)。
+        # 採択案は heart が doc に登録して着手し、棄却案は heart が Project CR に
+        # する。git への PR はもう作らない — 台帳 (archive.jsonl) は凍結された
         self.write_result(
-            "curriculum_done", pr=pr,
+            "curriculum_done",
             adopted=[a.get("id") for a in adopted.get("adopted", [])],
-            adopted_specs=adopted_records,
+            adopted_specs=[r for r in records if r.get("adopted")],
+            records=records,
         )
         return 0
-
-    def archive_backfill_records(self):
-        """heart が env で渡す「まだ台帳に無い採択 spec」(設計 rev3 D32)。
-
-        dispatch の正が ops-state に移ったので、採択は archive.jsonl を待たずに
-        動き出す。台帳に欠落を残さないため、動き出した spec は次の curriculum の
-        PR に**まとめて**載せる (非同期・バッチ)。
-
-        台帳の検査 (ops/validate.py check_projects_archive) を満たさない行は
-        落とす — 1 行でも欠けると CI が赤になり、以後どの案も台帳に載らなくなる。
-        """
-        raw = os.environ.get("ARCHIVE_BACKFILL_JSON", "").strip()
-        if not raw:
-            return []
-        try:
-            specs = json.loads(raw)
-        except ValueError:
-            return []
-        if not isinstance(specs, list):
-            return []
-        out = []
-        for spec in specs:
-            if not isinstance(spec, dict):
-                continue
-            cell = spec.get("cell")
-            if not (
-                re.match(r"^P-\d{4}$", str(spec.get("id", "")))
-                and spec.get("verify")
-                and isinstance(cell, list) and len(cell) == 2
-                and "irreversible" in spec
-            ):
-                log(f"archive backfill: 台帳の形を満たさない spec を落とす: {spec.get('id')}")
-                continue
-            rec = dict(spec)
-            rec["adopted"] = True
-            rec.setdefault("proposed_at", now_iso())
-            out.append(rec)
-        return out
-
-    def fix_to_archive(self, records):
-        """全案 (採択・棄却) と backfill を archive.jsonl に追記する PR を作る。
-
-        この PR は**台帳**であって、着手の前提ではない (設計 rev3 D32)。
-        採択 spec の正は ops-state の projects.json 側にある。
-        """
-        date = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        branch = f"heart/curriculum-{date}"
-        sh(["git", "checkout", "--quiet", "-B", branch, "origin/main"],
-           cwd=self.repo_dir)
-        path = self.repo_dir / "ops" / "projects" / "archive.jsonl"
-        backfill = self.archive_backfill_records()
-        lines = list(records) + backfill
-        with open(path, "a") as f:
-            for rec in lines:
-                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-        sh(["git", "add", str(path)], cwd=self.repo_dir)
-        sh(["git", "commit", "--quiet", "-m",
-            f"curriculum: {len(records)} 案 "
-            f"(採択 {sum(1 for r in records if r['adopted'])}"
-            + (f", 台帳追記 {len(backfill)}" if backfill else "")
-            + ")"], cwd=self.repo_dir)
-        sh(["git", "push", "--quiet", "-u", "origin", branch], cwd=self.repo_dir)
-        pr = self.gh.request(
-            "POST", f"/repos/{self.repo}/pulls",
-            {"title": f"curriculum: プロジェクト立案 {date}",
-             "head": branch, "base": "main",
-             "body": "curriculum Job による立案の**台帳追記**。全案 (棄却含む) を "
-                     "ops/projects/archive.jsonl に追記する。\n\n"
-                     "着手はこの PR を待たない — 採択 spec は result.json 経由で "
-                     "heart が ops-state の projects.json に登録し、そこから "
-                     "予告・着手する (設計 rev3 D32)。"},
-        )
-        return pr["number"]
 
     # --- 単発モード (Phase 3 で spawn 配線) ---
     def mode_oneshot(self, prompt_name):

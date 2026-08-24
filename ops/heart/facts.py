@@ -489,8 +489,9 @@ def collect_dispatches(data_dir):
 def load_archive_records(repo_dir):
     """main の archive.jsonl の全行 (採否を問わない) をそのまま返す。
 
-    棄却行の取り込み先はここ (設計 state-out-of-git「棄却された案も CR にする」)。
-    採否で絞らないのは、reject_reason / improve_hint を持つのが棄却行だけだから。
+    **4b-2b で追記は止まった。** このファイルはもう増えないが、2026-08-24 までの
+    棄却案 277 件の死因は今もここにしか無いので読み続ける — 中身が Project CR に
+    移りきれば差分は 0 になり、読んでも何も起きなくなる。
     壊れた行は黙って飛ばす — 1 行の破損で台帳全体を読めなくしない。
     """
     path = repo_dir / "ops" / "projects" / "archive.jsonl"
@@ -507,21 +508,6 @@ def load_archive_records(repo_dir):
             except ValueError:
                 continue
     return records
-
-
-def load_archived_ids(repo_dir):
-    """main の archive.jsonl に **採択行として載っている** id の集合。
-
-    残る用途は 1 つだけ: 台帳にまだ無い採択 spec を次の curriculum の PR に
-    まとめて載せる backfill (reconcile._archive_backfill)。台帳の書き込みは
-    4b-2a ではまだ続いているので、その欠落検知は git 側を見る必要がある。
-    採否の判断そのものは CR (load_adopted_specs) に移った。
-    """
-    return {
-        rec["id"]
-        for rec in load_archive_records(repo_dir)
-        if rec.get("adopted") and rec.get("id")
-    }
 
 
 def load_adopted_specs(k8s, namespace):
@@ -563,9 +549,16 @@ def collect_critic(data_dir):
     return {"state": result.get("state"), "error": result.get("error")}
 
 
-def collect_curriculum(data_dir, adopted_specs, gh):
-    """curriculum Job の結果 (/data/projects/system/result.json) と、その採択 PR の
-    状態・採択 spec を観測する。無ければ None。"""
+def collect_curriculum(data_dir):
+    """curriculum Job の結果 (/data/projects/system/result.json) を観測する。無ければ None。
+
+    4b-2b で **PR を見なくなった**。立案の出力は台帳 PR ではなく result.json が
+    全部持っている: 採択案は `adopted_specs`、棄却案を含む全案は `records`。
+    棄却案は heart が PVC の台帳へ写し、次のビートが Project CR にする。
+
+    取り込み済みの判定は `at` (result.json の書き込み時刻) で行う。PR 番号は
+    もう無く、同じ立案を二度登録しない鍵はこれになった。
+    """
     path = data_dir / "projects" / "system" / "result.json"
     if not path.exists():
         return None
@@ -574,42 +567,19 @@ def collect_curriculum(data_dir, adopted_specs, gh):
             result = json.load(f)
     except (OSError, ValueError):
         return None
-    out = {"state": result.get("state"), "pr": result.get("pr"),
-           "error": result.get("error")}
+    out = {
+        "state": result.get("state"),
+        "at": result.get("at"),
+        "error": result.get("error"),
+    }
     if result.get("state") != "curriculum_done":
         return out
-    # 採択 spec は result.json に載っている (設計 rev3 D32)。**PR の状態を見る前**に
-    # 拾うのが要点で、着手はもう main への PR / CI / merge を待たない。
-    # PR の状態が読めないビート (pr_unknown) でも登録だけは進む
     out["adopted_specs"] = [
         s for s in (result.get("adopted_specs") or []) if isinstance(s, dict) and s.get("id")
     ]
-    pr_num = result.get("pr")
-    out["pr_merged"] = False
-    out["pr_open"] = False
-    out["checks_green"] = False
-    if pr_num is not None:
-        try:
-            pr = gh.pr(pr_num)
-            out["pr_merged"] = bool(pr.get("merged_at"))
-            out["pr_open"] = pr.get("state") == "open"
-            if out["pr_open"]:
-                sha = pr.get("head", {}).get("sha")
-                runs = gh.pr_combined_status(sha).get("check_runs", [])
-                out["checks_green"] = bool(runs) and all(
-                    r.get("status") == "completed"
-                    and r.get("conclusion") == "success"
-                    for r in runs
-                )
-        except Exception:
-            # PR の状態が読めないビートでは merge/破棄の判断をしない
-            out["pr_unknown"] = True
-            return out
-    if out["pr_merged"] and not out["adopted_specs"]:
-        # 後方互換: adopted_specs を持たない古い result.json (D32 より前の
-        # curriculum Job が書いたもの)。読み先は台帳から CR へ移った (4b-2a) が、
-        # 「merge されてから spec を引く」という意味論は変えていない
-        adopted_ids = result.get("adopted") or []
-        specs = adopted_specs or {}
-        out["adopted_specs"] = [specs[i] for i in adopted_ids if i in specs]
+    # 全案 (採択・棄却)。reject_reason / improve_hint を持つのは棄却行だけで、
+    # ここが判定の教師信号が生成に戻る唯一の経路
+    out["records"] = [
+        r for r in (result.get("records") or []) if isinstance(r, dict) and r.get("id")
+    ]
     return out

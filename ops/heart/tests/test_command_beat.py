@@ -23,7 +23,6 @@ from unittest import mock
 from ops.heart import facts, gitutil, spawn, tasks
 from ops.heart.heart import Heart
 from ops.heart.notify import Notifier
-from ops.heart.statefiles import StateFiles
 
 REPO = Path(__file__).resolve().parents[3]
 
@@ -42,6 +41,9 @@ class CommandBeatTest(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         self.h = Heart(REPO)
+        # doc の置き場は PVC (設計 state-out-of-git 4b-2b)。空の doc を先に
+        # 置く — 無いと load_doc が Project CR からの復元に落ちる
+        self.h.docs.save_projects({"version": 1, "projects": [], "chores": []})
 
     def write_command(self, command_id, body="ストリームが太っている", **kw):
         doc = {
@@ -60,9 +62,6 @@ class CommandBeatTest(unittest.TestCase):
     def _beat(self, n=1):
         patches = [
             mock.patch.object(gitutil, "sync_main", lambda *a, **k: None),
-            mock.patch.object(gitutil, "sync_state_branch", lambda *a, **k: None),
-            mock.patch.object(gitutil, "commit_and_push_state", lambda *a, **k: None),
-            mock.patch.object(type(self.h.gh), "ensure_branch", lambda *a, **k: None),
             mock.patch.object(Heart, "k8s_client", lambda self: None),
             mock.patch.object(facts, "load_health", lambda *a, **k: ([], True, None)),
             mock.patch.object(facts, "load_adopted_specs", lambda *a, **k: {}),
@@ -116,7 +115,7 @@ class CommandBeatTest(unittest.TestCase):
 
     def test_stop_engaged_defers_until_resume(self):
         # 人間が止めている間は実行しない。台帳にも刻まないので依頼は消えない
-        sf = StateFiles(self.h.state_dir)
+        sf = self.h.docs
         doc = sf.load_projects()
         doc["stop_engaged"] = True
         sf.save_projects(doc)
@@ -127,9 +126,9 @@ class CommandBeatTest(unittest.TestCase):
         self.assertEqual(self.ledger(), [])
 
         # 再開 (stop_engaged を落とす) すると次のビートで拾い直す
-        doc = StateFiles(self.h.state_dir).load_projects()
+        doc = self.h.docs.load_projects()
         doc["stop_engaged"] = False
-        StateFiles(self.h.state_dir).save_projects(doc)
+        self.h.docs.save_projects(doc)
         self._beat(2)
         self.assertEqual(len(self.queue()), 1)
         self.assertEqual(len(self.ledger()), 1)

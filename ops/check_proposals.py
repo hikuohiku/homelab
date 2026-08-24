@@ -72,7 +72,7 @@ def check_proposals(data, quota):
             errors.append(f"{where}: 必須キー不足 {sorted(missing)}")
 
         if not isinstance(pid, str) or not ID_RE.match(pid):
-            errors.append(f"{where}: id は P-NNNN 形式であること (archive.jsonl 最大 id + 連番)")
+            errors.append(f"{where}: id は P-NNNN 形式であること (過去案の最大 id + 連番)")
         elif pid in seen_ids:
             errors.append(f"{where}: id が重複している")
         else:

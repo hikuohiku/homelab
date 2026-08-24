@@ -15,7 +15,7 @@ class Config:
         self.repo_dir = Path(repo_dir)
         self.rules = rules
         self.models = models
-        # shadow: spawn / merge / Discord 送信 / ops-state push 以外の副作用を殺し、
+        # shadow: spawn / merge / Discord 送信以外の副作用を殺し、
         # 判断だけを実データで回す並走検証モード (プラン Phase 1)
         self.mode = env.get("HEART_MODE", "shadow")
         self.namespace = env.get("HEART_NAMESPACE", "autopilot")
@@ -25,7 +25,6 @@ class Config:
         )
         self.discord_webhook = env.get("DISCORD_WEBHOOK_URL", "")
         self.data_dir = Path(env.get("HEART_DATA_DIR", "/data"))
-        self.state_branch = env.get("HEART_STATE_BRANCH", "ops-state")
         # 健全性レポートの置き場所 (設計 state-out-of-git Phase 5)。ops-health-reporter が
         # 30 分ごとに同じ namespace の ConfigMap を上書きする。GitHub を経由しない
         self.health_configmap = env.get("HEALTH_CONFIGMAP", "ops-health-report")

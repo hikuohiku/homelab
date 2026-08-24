@@ -21,7 +21,7 @@ function BeatDiagram() {
       <line x1={272} y1={85} x2={318} y2={85} className="arch-edge--signal" markerEnd="url(#arr-beat)" />
       <rect x={330} y={40} width={240} height={90} rx={2} className="arch-node arch-node--accent" />
       <text x={450} y={80} textAnchor="middle" className="arch-title">状態機械</text>
-      <text x={450} y={104} textAnchor="middle" className="arch-sub">ops-state ブランチを前進させる</text>
+      <text x={450} y={104} textAnchor="middle" className="arch-sub">Project CR を前進させる</text>
       <line x1={572} y1={85} x2={618} y2={85} className="arch-edge--signal" markerEnd="url(#arr-beat)" />
       <rect x={630} y={40} width={240} height={90} rx={2} className="arch-node arch-node--accent" />
       <text x={750} y={80} textAnchor="middle" className="arch-title">Job を起こす</text>
@@ -86,15 +86,15 @@ function LifeDiagram() {
 }
 
 const STATE_LAYERS = [
-  { name: "ops-state ブランチ", desc: "稼働の帳簿。heartbeat・projects・journal。書き手は heart のみ", tone: "accent" },
+  { name: "Project CR (クラスタ)", desc: "プロジェクトの正。書き手は heart のみ (RBAC で強制)。restic で B2 へ backup", tone: "accent" },
   { name: "main ブランチ", desc: "コードと manifest の正体。変更は Git → CI → ArgoCD の一本道だけ", tone: "blue" },
   { name: "PVC autopilot-data", desc: "transcript の生ログ。エピソード記憶であり失敗の教師信号になる", tone: "amber" },
 ] as const;
 
 function StateLayers() {
   return (
-    <svg className="arch-svg" viewBox="0 0 900 240" role="img" aria-label="状態の置き場所: ops-state ブランチ、main ブランチ、PVC の 3 層">
-      <title>状態の置き場所 — 帳簿 / 正体 / 生ログの 3 層</title>
+    <svg className="arch-svg" viewBox="0 0 900 240" role="img" aria-label="状態の置き場所: Project CR、main ブランチ、PVC の 3 層">
+      <title>状態の置き場所 — 状態 / 定義 / 生ログの 3 層</title>
       {STATE_LAYERS.map((layer, i) => (
         <g key={layer.name}>
           <rect x={25} y={15 + i * 80} width={850} height={56} rx={2} className={`arch-node arch-node--${layer.tone}`} />
@@ -160,7 +160,7 @@ const BLOCKS = [
     id: "state",
     num: "03",
     heading: "状態の置き場所",
-    body: "稼働の帳簿は ops-state ブランチに heart だけが書く。homelab 本体への変更は Git → CI → ArgoCD を通るものしかない。生の記録は PVC に落ちる。",
+    body: "プロジェクトの正はクラスタの Project CR で、heart だけが書ける。homelab 本体への変更は Git → CI → ArgoCD を通るものしかない。生の記録は PVC に落ちる。",
     diagram: <StateLayers />,
   },
   {

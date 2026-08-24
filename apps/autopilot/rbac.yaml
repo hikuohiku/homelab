@@ -283,6 +283,12 @@ subjects:
   - kind: ServiceAccount
     name: autopilot-core
     namespace: autopilot
+  # Mission Control (apps/ops-dashboard)。心拍の表示用。ここが読めるように
+  # なったので、ダッシュボードは ops-state ブランチを引かなくなった
+  # (設計 state-out-of-git 4b-2b)
+  - kind: ServiceAccount
+    name: ops-dashboard
+    namespace: autopilot
 ---
 # Project CR (設計 state-out-of-git Phase 4)。**書き手は heart だけ**。
 # 「heart が唯一の書き手」は ops-state の時代は慣習でしかなく、Job が push するのを

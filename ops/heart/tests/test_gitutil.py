@@ -26,16 +26,10 @@ class TestCloneArgs(unittest.TestCase):
         args = gitutil.clone_args(URL, "/work/repo")
         self.assertFalse([a for a in args if a.startswith("--depth")])
 
-    def test_all_refs_unless_asked(self):
+    def test_all_refs(self):
         """--single-branch は remote.origin.fetch を 1 本に固定し、以後 fetch しても
-        origin/ops-state が生えない (P-0014)。既定では付けない。"""
+        他の ref が生えない (P-0014)。どの経路でも付けない。"""
         self.assertNotIn("--single-branch", gitutil.clone_args(URL, "/work/repo"))
-
-    def test_single_branch_when_asked(self):
-        args = gitutil.clone_args(URL, "/state", branch="ops-state", single_branch=True)
-        self.assertIn("--single-branch", args)
-        self.assertEqual(args[args.index("--branch") + 1], "ops-state")
-        self.assertIn("--filter=blob:none", args)
 
 
 class TestCloneCallSites(unittest.TestCase):
@@ -53,18 +47,9 @@ class TestCloneCallSites(unittest.TestCase):
         self.assertEqual(args[0][:3], ["clone", "--quiet", "--filter=blob:none"])
         self.assertNotIn("--single-branch", args[0])
 
-    def test_state_branch_clones_blobless_single(self):
-        with mock.patch.object(Path, "is_dir", return_value=False), \
-                mock.patch.object(Path, "mkdir"):
-            args = self.calls(
-                lambda: gitutil.sync_state_branch("/work/state", URL, "ops-state")
-            )
-        self.assertIn("--filter=blob:none", args[0])
-        self.assertIn("--single-branch", args[0])
-
     def test_adopt_gate_clones_blobless_with_all_refs(self):
-        """採択ゲートは origin/main と origin/ops-state の両方が見えること
-        (verify に `git show origin/ops-state:projects.json` を持つ spec がある)。"""
+        """採択ゲートは main 以外の ref も見えること (過去の spec の verify に
+        `git show origin/ops-state:projects.json` を持つものがある)。"""
         args = self.calls(lambda: adoptgate.clone_fresh(URL, "/tmp/x/repo"))
         self.assertIn("--filter=blob:none", args[0])
         self.assertNotIn("--single-branch", args[0])
