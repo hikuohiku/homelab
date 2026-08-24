@@ -104,6 +104,7 @@ DECLARED_DOPPLER_KEYS = frozenset(
         "DEX_ARGOCD_CLIENT_SECRET",
         "GOOGLE_OAUTH_CLIENT_ID",
         "GOOGLE_OAUTH_CLIENT_SECRET",
+        "IMMICH_API_KEY",  # immich 管理 API キー (P-0361, checksum CronJob が x-api-key で使用)
         "IMMICH_DB_PASSWORD",
         "TAILSCALE_CLIENT_ID",
         "TAILSCALE_CLIENT_SECRET",
@@ -128,6 +129,7 @@ DECLARED_SECRET_TARGETS = frozenset(
         "coder-restic-credentials",
         "dex-google-oauth",
         "github-health-reporter-token",
+        "immich-api-key",  # immich 管理 API キー (P-0361)
         "immich-postgres-credentials",
         "immich-restic-backup-credentials",
         "immich-restic-credentials",
