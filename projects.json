@@ -6228,7 +6228,7 @@
     {
       "id": "P-0302",
       "title": "提供者の揺れをプロジェクトの死に換算しない — network_error 死に実署名フィクスチャ・checkpoint・上限付き自動 respawn を与える",
-      "state": "active",
+      "state": "stalled",
       "branch": "project/p-0302",
       "irreversible": false,
       "capabilities": [],
@@ -6303,12 +6303,13 @@
       "spawn_count": 4,
       "job": "runner-p-0302-a4",
       "drift_count": 0,
-      "restart_count": 2
+      "restart_count": 2,
+      "stalled_reason": "human_stop"
     },
     {
       "id": "P-0304",
       "title": "AdGuard が自分の設定を書き戻して堕ちる夜を、立ち上がりの門で止める — YAML 構文検証ゲートと last-known-good ローテーション (PVC 手術はしない)",
-      "state": "active",
+      "state": "stalled",
       "branch": "project/p-0304",
       "irreversible": false,
       "capabilities": [],
@@ -6373,13 +6374,14 @@
       "spawn_count": 4,
       "job": "runner-p-0304-a4",
       "drift_count": 0,
-      "restart_count": 2
+      "restart_count": 2,
+      "stalled_reason": "human_stop"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T10:53:15Z",
-  "last_activity_at": "2026-08-24T10:53:15Z",
+  "last_activity_at": "2026-08-24T12:57:52Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
-  "stop_engaged": false
+  "stop_engaged": true
 }
