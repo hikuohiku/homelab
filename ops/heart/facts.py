@@ -526,6 +526,12 @@ def collect_curriculum(data_dir, repo_dir, gh):
            "error": result.get("error")}
     if result.get("state") != "curriculum_done":
         return out
+    # 採択 spec は result.json に載っている (設計 rev3 D32)。**PR の状態を見る前**に
+    # 拾うのが要点で、着手はもう main への PR / CI / merge を待たない。
+    # PR の状態が読めないビート (pr_unknown) でも登録だけは進む
+    out["adopted_specs"] = [
+        s for s in (result.get("adopted_specs") or []) if isinstance(s, dict) and s.get("id")
+    ]
     pr_num = result.get("pr")
     out["pr_merged"] = False
     out["pr_open"] = False
@@ -547,7 +553,9 @@ def collect_curriculum(data_dir, repo_dir, gh):
             # PR の状態が読めないビートでは merge/破棄の判断をしない
             out["pr_unknown"] = True
             return out
-    if out["pr_merged"]:
+    if out["pr_merged"] and not out["adopted_specs"]:
+        # 後方互換: adopted_specs を持たない古い result.json (D32 より前の
+        # curriculum Job が書いたもの) は、従来どおり merge 後の台帳から読む
         adopted_ids = result.get("adopted") or []
         specs = load_adopted_specs(repo_dir)
         out["adopted_specs"] = [specs[i] for i in adopted_ids if i in specs]

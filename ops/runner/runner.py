@@ -43,6 +43,10 @@ DEFAULT_QUOTA_WAIT_SECONDS = 900
 MIN_QUOTA_WAIT_SECONDS = 60
 QUOTA_WAIT_MARGIN_SECONDS = 30
 STDERR_TAIL_CHARS = 2000
+
+# dispatch の正が載るブランチ (設計 rev3 D32)。書き手は heart だけ
+OPS_STATE_BRANCH = "ops-state"
+
 STDERR_KEEP_LINES = 400
 
 # 1 つのセッション枠で見逃す連続異常終了の上限。worker ループの
@@ -685,28 +689,81 @@ class Runner:
         path.write_text(json.dumps(cfg))
 
     def load_spec(self):
-        """main の ops/projects/archive.jsonl から自分の採択 spec を読む。
-        (main に固定されたものが唯一の仕様 — runner ブランチからは改竄不能)
+        """自分の採択 spec を読む。読み先は 3 つで、この順に見る (設計 rev3 D32)。
 
-        コアが即時 dispatch したプロジェクト (P-9NNN、設計 rev3 Phase D) は
-        main の PR/CI/merge を経由しないので archive.jsonl に spec が無い。
-        その場合だけ heart が Job の env に載せた spec を読む。**env は Job の
-        spec で固定され、runner のブランチからは書き換えられない**ので、
-        改竄不能という性質は archive.jsonl 経由と変わらない。
+        (1) **ops-state ブランチの projects.json** — dispatch の正。書き手は
+            heart だけ (単一書き手・直 push) なので、runner のブランチからは
+            改竄できない。ここが正になったことで、採択から着手までの経路から
+            main への PR と CI と merge が消えた
+        (2) main の ops/projects/archive.jsonl — 台帳。ops-state に spec を
+            持たない過去のプロジェクト (この変更より前に登録されたもの) が
+            ここから読める (後方互換)。読むのは clone 直後 = origin/main の
+            内容で、プロジェクトブランチの中身ではない
+        (3) heart が Job の env に載せた spec (HEART_SPEC_JSON) — 即時 dispatch
+            は Job 作成が ops-state への commit より **先** なので、走り出しの
+            瞬間だけ (1) にまだ載っていない。env は Job の spec で固定され、
+            runner のブランチからは書き換えられないので性質は変わらない
+
+        どれもプロジェクトブランチ上のファイルを読まない。ブランチに偽の
+        archive.jsonl / projects.json を置いても spec は変わらない。
         """
-        path = self.repo_dir / "ops" / "projects" / "archive.jsonl"
-        if not path.exists():
-            return self.spec_from_env()
+        return (
+            self.spec_from_ops_state()
+            or self.spec_from_archive()
+            or self.spec_from_env()
+        )
+
+    def spec_from_ops_state(self):
+        """ops-state の projects.json から自分の spec を読む。無ければ {}。
+
+        GitHub API で 1 ファイルだけ読む (clone / fetch しない)。ops-state は
+        ビートごとに commit される長い履歴を持ち、Job 起動のたびに引くと
+        node の負荷が増えるため。読めないビート (API 障害) は {} を返し、
+        台帳と env の読み先へ落ちる。
+        """
+        try:
+            raw = self.gh.file_at_ref("projects.json", OPS_STATE_BRANCH)
+        except (GhError, OSError) as e:
+            log(f"ops-state の projects.json を読めない: {e}")
+            return {}
+        if not raw:
+            return {}
+        try:
+            doc = json.loads(raw)
+        except ValueError:
+            return {}
+        for p in doc.get("projects", []):
+            if p.get("id") != self.project_id:
+                continue
+            spec = p.get("spec")
+            # id の食い違う spec は受け取らない (spec_from_env と同じ理由)
+            if isinstance(spec, dict) and spec.get("id") == self.project_id:
+                return spec
+            return {}
+        return {}
+
+    def spec_from_archive(self):
+        """main の ops/projects/archive.jsonl (台帳) から読む。無ければ {}。
+
+        作業ツリーのファイルではなく **origin/main に固定された内容**を読む
+        (prompt_text(from_main=True) と同じ理由)。プロジェクトブランチに偽の
+        archive.jsonl を置いても spec は変わらない。
+        """
+        p = sh(
+            ["git", "show", "origin/main:ops/projects/archive.jsonl"],
+            cwd=self.repo_dir, check=False,
+        )
+        if p.returncode != 0:
+            return {}
         spec = {}
-        with open(path) as f:
-            for line in f:
-                try:
-                    rec = json.loads(line)
-                except ValueError:
-                    continue
-                if rec.get("id") == self.project_id and rec.get("adopted"):
-                    spec = rec  # 後の行 (最新) を優先
-        return spec or self.spec_from_env()
+        for line in p.stdout.splitlines():
+            try:
+                rec = json.loads(line)
+            except ValueError:
+                continue
+            if rec.get("id") == self.project_id and rec.get("adopted"):
+                spec = rec  # 後の行 (最新) を優先
+        return spec
 
     def spec_from_env(self):
         """heart が Job の env に載せた spec (即時 dispatch 用)。無ければ {}。
@@ -1204,37 +1261,89 @@ class Runner:
         except ValueError as e:
             self.write_result("error", error=f"curriculum output parse: {e}")
             return 1
-        pr = self.fix_to_archive(proposals, adopted)
+        records = build_archive_records(proposals, adopted)
+        # 採択 spec は **result.json に載せて heart に直接渡す** (設計 rev3 D32)。
+        # heart はこれを ops-state の projects.json に登録し、そこから着手する。
+        # 下の PR は台帳 (archive.jsonl) への追記で、着手を待たせない
+        adopted_records = [r for r in records if r.get("adopted")]
+        pr = self.fix_to_archive(records)
         self.write_result(
             "curriculum_done", pr=pr,
             adopted=[a.get("id") for a in adopted.get("adopted", [])],
+            adopted_specs=adopted_records,
         )
         return 0
 
-    def fix_to_archive(self, proposals, adopted):
-        """全案 (採択・棄却) を archive.jsonl に追記する PR を作る。
-        採択 spec は adopted: true で固定され、runner はこれしか信用しない。"""
+    def archive_backfill_records(self):
+        """heart が env で渡す「まだ台帳に無い採択 spec」(設計 rev3 D32)。
+
+        dispatch の正が ops-state に移ったので、採択は archive.jsonl を待たずに
+        動き出す。台帳に欠落を残さないため、動き出した spec は次の curriculum の
+        PR に**まとめて**載せる (非同期・バッチ)。
+
+        台帳の検査 (ops/validate.py check_projects_archive) を満たさない行は
+        落とす — 1 行でも欠けると CI が赤になり、以後どの案も台帳に載らなくなる。
+        """
+        raw = os.environ.get("ARCHIVE_BACKFILL_JSON", "").strip()
+        if not raw:
+            return []
+        try:
+            specs = json.loads(raw)
+        except ValueError:
+            return []
+        if not isinstance(specs, list):
+            return []
+        out = []
+        for spec in specs:
+            if not isinstance(spec, dict):
+                continue
+            cell = spec.get("cell")
+            if not (
+                re.match(r"^P-\d{4}$", str(spec.get("id", "")))
+                and spec.get("verify")
+                and isinstance(cell, list) and len(cell) == 2
+                and "irreversible" in spec
+            ):
+                log(f"archive backfill: 台帳の形を満たさない spec を落とす: {spec.get('id')}")
+                continue
+            rec = dict(spec)
+            rec["adopted"] = True
+            rec.setdefault("proposed_at", now_iso())
+            out.append(rec)
+        return out
+
+    def fix_to_archive(self, records):
+        """全案 (採択・棄却) と backfill を archive.jsonl に追記する PR を作る。
+
+        この PR は**台帳**であって、着手の前提ではない (設計 rev3 D32)。
+        採択 spec の正は ops-state の projects.json 側にある。
+        """
         date = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
         branch = f"heart/curriculum-{date}"
         sh(["git", "checkout", "--quiet", "-B", branch, "origin/main"],
            cwd=self.repo_dir)
         path = self.repo_dir / "ops" / "projects" / "archive.jsonl"
-        records = build_archive_records(proposals, adopted)
+        backfill = self.archive_backfill_records()
+        lines = list(records) + backfill
         with open(path, "a") as f:
-            for rec in records:
+            for rec in lines:
                 f.write(json.dumps(rec, ensure_ascii=False) + "\n")
         sh(["git", "add", str(path)], cwd=self.repo_dir)
         sh(["git", "commit", "--quiet", "-m",
             f"curriculum: {len(records)} 案 "
-            f"(採択 {sum(1 for r in records if r['adopted'])})"], cwd=self.repo_dir)
+            f"(採択 {sum(1 for r in records if r['adopted'])}"
+            + (f", 台帳追記 {len(backfill)}" if backfill else "")
+            + ")"], cwd=self.repo_dir)
         sh(["git", "push", "--quiet", "-u", "origin", branch], cwd=self.repo_dir)
         pr = self.gh.request(
             "POST", f"/repos/{self.repo}/pulls",
             {"title": f"curriculum: プロジェクト立案 {date}",
              "head": branch, "base": "main",
-             "body": "curriculum Job による立案。採択 spec の固定 (heart が CI green で merge し、"
-                     "merge 後に projects.json へ登録・予告する)。\n\n全案 (棄却含む) を "
-                     "ops/projects/archive.jsonl に追記。"},
+             "body": "curriculum Job による立案の**台帳追記**。全案 (棄却含む) を "
+                     "ops/projects/archive.jsonl に追記する。\n\n"
+                     "着手はこの PR を待たない — 採択 spec は result.json 経由で "
+                     "heart が ops-state の projects.json に登録し、そこから "
+                     "予告・着手する (設計 rev3 D32)。"},
         )
         return pr["number"]
 

@@ -30,7 +30,8 @@ class Gh:
         self._token = token
         self.repo = repo
 
-    def request(self, method, path, body=None, accept="application/vnd.github+json"):
+    def request_bytes(self, method, path, body=None,
+                      accept="application/vnd.github+json"):
         req = urllib.request.Request(
             API + path,
             data=json.dumps(body).encode() if body is not None else None,
@@ -43,10 +44,33 @@ class Gh:
         )
         try:
             with urllib.request.urlopen(req, timeout=30) as resp:
-                data = resp.read()
-                return json.loads(data) if data else None
+                return resp.read()
         except urllib.error.HTTPError as e:
             raise GhError(e.code, e.read().decode(errors="replace")) from e
+
+    def request(self, method, path, body=None, accept="application/vnd.github+json"):
+        data = self.request_bytes(method, path, body, accept)
+        return json.loads(data) if data else None
+
+    def file_at_ref(self, path, ref):
+        """ブランチ上のファイル 1 本を生のまま読む。無ければ None。
+
+        git の object を落とさずに 1 リクエストで済ませる。ops-state は
+        ビートごとに commit される長い履歴を持つので、読み手 (runner) が
+        起動のたびに clone / fetch すると node の負荷がそのぶん増える。
+        """
+        q = urllib.parse.quote
+        try:
+            data = self.request_bytes(
+                "GET",
+                f"/repos/{self.repo}/contents/{q(path)}?ref={q(ref)}",
+                accept="application/vnd.github.raw",
+            )
+        except GhError as e:
+            if e.status == 404:
+                return None
+            raise
+        return (data or b"").decode(errors="replace")
 
     def open_prs(self):
         prs = []
