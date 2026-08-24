@@ -1,15 +1,15 @@
 {
   "version": 1,
-  "_comment": "各役のモデル指定の単一情報源。heart が Job spawn 時に環境変数 CLAUDE_MODEL として注入し、runner が claude -p --model に渡す。『無指定でアカウント既定に任せる』をやめる (再設計の決定 #8)。triage は初期実装がキーワードルールなのでモデルを持たない。値の変更は PR 経由。2026-08-22: opencode go 定額へ移行 (opus 全役時代は名目 $100/日)。provider/model 形式は runner が opencode run で実行する。ox-alpha-free の無料期間 (終了日は非公表。opencode docs は『Free for a limited time』のみ) が終わったら opencode go 内の別モデルへ差し替えること (inventory: opencode-cli)。差し替え候補: deepseek-v4-flash / mimo-v2.5 / qwen3.7-plus (安い順)。既知の罠: Go の利用上限に達すると ox-alpha-free までブロックされる (opencode#44173) ので、セッションが軒並み usage_limit で死ぬときはまずここを疑う。core は常駐コア (apps/autopilot-core) のモデルで、Deployment の CORE_MODEL env と ops/check_version_sync.py が一致を検査する",
+  "_comment": "各役のモデル指定の単一情報源。heart が Job spawn 時に環境変数 CLAUDE_MODEL として注入し、runner が claude -p --model に渡す。『無指定でアカウント既定に任せる』をやめる (再設計の決定 #8)。triage は初期実装がキーワードルールなのでモデルを持たない。値の変更は PR 経由。2026-08-22: opencode go 定額へ移行 (opus 全役時代は名目 $100/日)。provider/model 形式は runner が opencode run で実行する。2026-08-25: ox-alpha-free から deepseek-v4-flash へ全役差し替え (所有者判断)。ox-alpha-free は無料期間の終了日が非公表で、実際に混雑で接続困難になる日が出ていた (2026-08-24 実測) ため、期限切れを待たずに定額側の常用モデルへ寄せた。次の候補は mimo-v2.5 / qwen3.7-plus (安い順)。既知の罠: Go の利用上限に達すると ox-alpha-free までブロックされる (opencode#44173) ので、セッションが軒並み usage_limit で死ぬときはまずここを疑う。core は常駐コア (apps/autopilot-core) のモデルで、Deployment の CORE_MODEL env と ops/check_version_sync.py が一致を検査する",
   "roles": {
-    "project": "opencode-go/ox-alpha-free",
-    "review": "opencode-go/ox-alpha-free",
-    "curriculum_generate": "opencode-go/ox-alpha-free",
-    "curriculum_judge": "opencode-go/ox-alpha-free",
-    "consolidation": "opencode-go/ox-alpha-free",
-    "critic": "opencode-go/ox-alpha-free",
-    "chore": "opencode-go/ox-alpha-free",
-    "core": "opencode-go/ox-alpha-free",
+    "project": "opencode-go/deepseek-v4-flash",
+    "review": "opencode-go/deepseek-v4-flash",
+    "curriculum_generate": "opencode-go/deepseek-v4-flash",
+    "curriculum_judge": "opencode-go/deepseek-v4-flash",
+    "consolidation": "opencode-go/deepseek-v4-flash",
+    "critic": "opencode-go/deepseek-v4-flash",
+    "chore": "opencode-go/deepseek-v4-flash",
+    "core": "opencode-go/deepseek-v4-flash",
     "triage": "keyword"
   }
 }

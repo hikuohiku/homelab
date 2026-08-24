@@ -240,9 +240,9 @@ spec:
             - name: OPENCODE_URL
               value: http://127.0.0.1:4096
             # ops/models.json の役と揃える運用 (機械検査は未整備)。
-            # ox-alpha-free の無料期間が終わったら同じ go 定額の別モデルへ差し替える
+            # 2026-08-25 に ox-alpha-free から差し替え。次候補は mimo-v2.5 / qwen3.7-plus
             - name: CORE_MODEL
-              value: opencode-go/ox-alpha-free
+              value: opencode-go/deepseek-v4-flash
             - name: CORE_STATE_DIR
               value: /data
             # 人間を待たせる時間はここで決まる (inbox に載ってからコアが読むまで)。
