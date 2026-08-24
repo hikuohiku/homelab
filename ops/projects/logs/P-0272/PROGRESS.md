@@ -117,3 +117,35 @@ parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に�
 green と出力 JSON を貼るだけ (掃除は不要、中身は空)。まだ root 所有なら依頼がまだ届いていないので、
 この PROGRESS のセッション 2 「wrapper への依頼」節をそのまま参照させること。
 コードに触れる必要は依然ゼロ。parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
+
+### 2026-08-24 セッション 4 — 環境は依然未修正 (3 セッション連続)。全 verify を再実測して証跡を更新
+
+**状況**: レビュー指摘なし、failing は verify 1 のみ。`ls -ld /tmp/opencode` →
+**依然 `root:root drwxr-xr-x`、mtime も 08-22 07:41 不変、NOT_WRITABLE 実測**
+(uid=10001(autopilot)、sudo 無し)。セッション 2 以来の wrapper への依頼は 3 度目も未処理。
+
+**本セッションの実測 (証跡。すべてセッション 3 と同一結果 = 再現性確認)**:
+
+- verify 1 (spec 通り): 同一トレースの PermissionError、rc=1。
+  ディレクトリ内は今も空 → chown されれば即 green、掃除不要
+- verify 1 のロジック部 (mktemp 書き先に変えた同一 assert 文): **green**。出力 JSON は
+  T-0107/T-0140/T-0141/T-0148 の 4 件、全キー揃い、age_days=18 (created 2026-08-06 join 済み)、
+  古い順 (T-0107 先頭)
+- verify 2: rc=0 green / verify 3: unittest 10 tests OK / TS ミラー (`npm test`): pass 10 fail 0
+- ブランチ差分の再確認 (`git diff --stat` merge-base..HEAD): 触っているのは
+  apps/ops-dashboard/app 配下 + ops/tools/human_tasks.py + ops/tests (fixture 含む) +
+  本帳簿のみ。deployment.yaml 未触碰、DoD (4) 準拠のまま
+
+**やったこと**: 上記の再実測とこの記録のみ。コード変更ゼロ。
+
+**分かったこと / 罠**: 新規なし。
+
+**発見 (spec 外)**: 新規なし。ただし固定パス問題で worker が 3 セッション連続で
+実質停止しており、curriculum 議論 (セッション 2 記載) に緊急性が加わった程度の継続観測。
+
+**次のセッションへ一言**: 変わらずまず `ls -ld /tmp/opencode`。書けるなら verify 1 実行して
+green を貼るだけ。まだ root 所有なら**この依頼は wrapper の通常経路では届いていない**ということなので、
+(1) 受入コマンドを root で実行してもらう、(2) 以降の spec の受入で固定パス /tmp/opencode を避ける、
+のどちらかを curriculum/人間に明示的に持ち上げることが望ましい。worker 側に打てる手は
+相変わらずゼロ (書き先を変える抜け道は verify の assert がパス直読みのため存在しない)。
+parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
