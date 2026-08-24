@@ -386,7 +386,7 @@ export default function Home() {
       <div className="status-line" id="top">
         <span>JST {jstClock(now)}</span>
         <span>RUNNING <strong>{snapshot?.agents.length ?? "—"}</strong></span>
-        <span>TODAY <strong>${snapshot?.todayCostUsd.toFixed(2) ?? "—"}</strong> / {snapshot?.todaySessions ?? "—"} sessions</span>
+        <span>TODAY <strong>{snapshot ? compactNumber(snapshot.todayTokens) : "—"}</strong> tokens / {snapshot?.todaySessions ?? "—"} sessions{snapshot && snapshot.todayEmptySessions > 0 ? ` (${snapshot.todayEmptySessions} empty)` : ""} / <strong>${snapshot?.todayCostUsd.toFixed(2) ?? "—"}</strong></span>
         <span>LAST HEART {formatDate(snapshot?.heart.at)}</span>
         <span className="status-line__readonly">READ ONLY</span>
       </div>

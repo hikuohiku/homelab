@@ -89,7 +89,9 @@ export async function getSnapshot(): Promise<Snapshot> {
       stopEngaged: state.stopEngaged,
     },
     todayCostUsd: Number(usage.cost_usd ?? 0),
+    todayTokens: Number(usage.tokens ?? 0),
     todaySessions: Number(usage.sessions ?? 0),
+    todayEmptySessions: Number(usage.empty_sessions ?? 0),
     warnings,
   };
 }

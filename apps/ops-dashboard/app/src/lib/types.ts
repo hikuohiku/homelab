@@ -89,6 +89,9 @@ export interface Snapshot {
   attention: AttentionItem[];
   heart: HeartStatus;
   todayCostUsd: number;
+  todayTokens: number;
   todaySessions: number;
+  /** そのうち使用量イベントを 1 つも残さずに終わったセッション数 */
+  todayEmptySessions: number;
   warnings: string[];
 }

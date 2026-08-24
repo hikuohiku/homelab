@@ -5,12 +5,9 @@
 """
 
 import json
-import re
 from datetime import datetime, timedelta, timezone
 
 from .statefiles import TERMINAL_STATES, now_iso, parse_iso
-
-RESULT_RE = re.compile(r'"type"\s*:\s*"result"')
 
 # ビート 1 回に帰属させる持続時間の上限。実測のビート間隔は中央値 65s / 最大 78s
 # (2026-08-10) なので、これを超える空きは「間隔のばらつき」ではなく heart が
@@ -25,29 +22,85 @@ WORKING_STATES = ("active", "in_review", "merging", "soaking")
 WAITING_STATES = ("announced", "proposed")
 
 
+def transcript_usage_from_event(ev):
+    """1 イベントから (cost_usd, tokens) を読む。両エンジン対応の純関数。
+
+    ops/runner/runner.py の consume_stream_event と**同じ解釈**でなければならない
+    (実測形の出典もそちら)。heart は常駐、runner は Job 側の wrapper なので
+    import で結ばず、両者が一致することを test_metrics.py の契約テストで固定する。
+
+    claude:   type=result の total_cost_usd / usage.input_tokens+output_tokens
+    opencode: type=step_finish の part.cost / part.tokens {input, output}
+    """
+    if not isinstance(ev, dict):
+        return 0.0, 0
+    etype = ev.get("type")
+    if etype == "result":
+        u = ev.get("usage") or {}
+        return (
+            _num(ev.get("total_cost_usd")),
+            int(_num(u.get("input_tokens")) + _num(u.get("output_tokens"))),
+        )
+    if etype == "step_finish":
+        part = ev.get("part") or {}
+        t = part.get("tokens") or {}
+        return (
+            _num(part.get("cost")),
+            int(_num(t.get("input")) + _num(t.get("output"))),
+        )
+    return 0.0, 0
+
+
+def _num(v):
+    try:
+        return float(v or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
 def scan_transcript_costs(transcripts_dir, day):
-    """当日分 transcript の result イベントから total_cost_usd を合計する。
-    ファイル名は <YYYY-MM-DD>T...jsonl (runner/loop が日付プレフィクスで書く)。"""
+    """当日分 transcript から (cost_usd, tokens, sessions, empty_sessions) を数える。
+
+    ファイル名は `<YYYY-MM-DD>T...jsonl` (runner.transcript_path / loop.sh が
+    日付プレフィクスで書く。2026-08-24 に live の実物で確認済み)。
+
+    定額プランでは part.cost が 0 で出るので、コストだけ見ていると「何も走って
+    いない」と区別がつかない。トークンも併せて数えるのはそのため。
+
+    sessions は**ファイル数**で数える (1 transcript = 1 セッション)。使用量
+    イベントを 1 つも残さずに死んだセッションも走ったことに変わりはない。
+    そういうセッションは実際に多い (2026-08-23 は 88 本中 82 本が出力ゼロで
+    network_error 終了) ので、empty_sessions として別に数え、「何本走ったか」と
+    「そのうち何本が空振りか」を取り違えないようにする。"""
     total = 0.0
+    tokens = 0
     sessions = 0
+    empty = 0
     if not transcripts_dir.is_dir():
-        return total, sessions
+        return total, tokens, sessions, empty
     for path in transcripts_dir.rglob(f"{day}*.jsonl"):
+        file_cost = 0.0
+        file_tokens = 0
         try:
             with open(path, errors="replace") as f:
+                sessions += 1
                 for line in f:
-                    if '"result"' not in line:
+                    if '"result"' not in line and '"step_finish"' not in line:
                         continue
                     try:
                         ev = json.loads(line)
                     except ValueError:
                         continue
-                    if ev.get("type") == "result":
-                        total += float(ev.get("total_cost_usd") or 0.0)
-                        sessions += 1
+                    cost, tok = transcript_usage_from_event(ev)
+                    file_cost += cost
+                    file_tokens += tok
         except OSError:
             continue
-    return total, sessions
+        total += file_cost
+        tokens += file_tokens
+        if file_tokens == 0 and file_cost == 0.0:
+            empty += 1
+    return total, tokens, sessions, empty
 
 
 def _beat_at(rec):
@@ -196,15 +249,26 @@ def summarize_stalled(projects_doc):
 
 
 def daily_usage(transcripts_dir, now=None):
-    """当日の名目コスト合計とセッション数。**計測だけで、判断はしない。**
+    """当日の名目コスト・トークン・セッション数。**計測だけで、判断はしない。**
+
+    集計の入力は当日の transcript (claude の `result` と opencode の `step_finish`
+    の両方)。sessions は transcript のファイル数、empty_sessions はそのうち
+    使用量イベントを 1 つも残さずに終わった本数。
 
     2026-08-24 まではこの値で新規 spawn を止めるサーキットブレーカーがあったが、
     定額移行済みで名目コストが実請求と一致せず、仕事を止める根拠にならないので
-    廃止した。値は metrics.jsonl とダッシュボードの表示用に残す。"""
+    廃止した。値は metrics.jsonl とダッシュボードの表示用に残す。定額では
+    cost_usd が 0 のまま張り付くので、実際に動いていたかは tokens で見る。"""
     now = now or datetime.now(timezone.utc)
     day = now.strftime("%Y-%m-%d")
-    cost, sessions = scan_transcript_costs(transcripts_dir, day)
-    return {"day": day, "cost_usd": round(cost, 4), "sessions": sessions}
+    cost, tokens, sessions, empty = scan_transcript_costs(transcripts_dir, day)
+    return {
+        "day": day,
+        "cost_usd": round(cost, 4),
+        "tokens": tokens,
+        "sessions": sessions,
+        "empty_sessions": empty,
+    }
 
 
 def rotate_transcripts(transcripts_dir, rules, now=None):

@@ -9,11 +9,16 @@ const CACHE_DIR = process.env.OPS_STATE_CACHE_DIR ?? "/tmp/mission-control-state
 const LOCAL_DIR = process.env.OPS_STATE_DIR;
 const REFRESH_MS = Number(process.env.OPS_STATE_REFRESH_MS ?? 20_000);
 
+interface DailyUsage {
+  cost_usd?: number; tokens?: number; sessions?: number; empty_sessions?: number;
+}
+
 interface OpsState {
   projects: Project[];
   heartbeat: { beat?: number; at?: string };
-  // usage は当日の消費量の計測 (2026-08-24 以前は breaker キー。過去の state も読む)
-  metrics: { usage?: { cost_usd?: number; sessions?: number }; breaker?: { cost_usd?: number; sessions?: number } };
+  // usage は当日の消費量の計測 (2026-08-24 以前は breaker キー。過去の state も読む)。
+  // tokens は 2026-08-24 の集計修正で追加 (定額では cost_usd が 0 のまま張り付く)
+  metrics: { usage?: DailyUsage; breaker?: DailyUsage };
   stopEngaged: boolean;
   warning?: string;
 }
