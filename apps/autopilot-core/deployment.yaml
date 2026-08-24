@@ -55,7 +55,7 @@ spec:
         #
         # ConfigMap は read-only mount なので、opencode が書ける場所へ配置し直す
         - name: bootstrap-workdir
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:17062b5dd1af087f48564e9d845228892153694aba50fbbc425488e2237b44f4
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:0d8b95724b46e0e6cf234d1fa01774f585c3b1465baa98d43b23a17304495d60
           command: ["sh", "-c", "cp /config/opencode.json /config/AGENTS.md /work/"]
           volumeMounts:
             - name: config
@@ -121,7 +121,7 @@ spec:
         # opencode.json の headers にトークンを置くのは**逆効果**で、GET /config が
         # {env:...} 展開後の値をそのまま返すためコアから丸見えになる。
         - name: telegram-adapter
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:17062b5dd1af087f48564e9d845228892153694aba50fbbc425488e2237b44f4
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:0d8b95724b46e0e6cf234d1fa01774f585c3b1465baa98d43b23a17304495d60
           terminationMessagePolicy: FallbackToLogsOnError
           command: ["/usr/local/bin/telegram-adapter", "mcp", "--listen", "127.0.0.1:4097"]
           env:
@@ -155,7 +155,7 @@ spec:
         # seed はここにだけ置く。この 2 つを消せば request_task が「経路が無い」と返り、
         # 読み取りツールは動き続ける
         - name: core-driver-mcp
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:17062b5dd1af087f48564e9d845228892153694aba50fbbc425488e2237b44f4
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:0d8b95724b46e0e6cf234d1fa01774f585c3b1465baa98d43b23a17304495d60
           terminationMessagePolicy: FallbackToLogsOnError
           command: ["/usr/local/bin/core-driver", "mcp", "--listen", "127.0.0.1:4098"]
           env:
@@ -187,7 +187,7 @@ spec:
 
         # --- イベントを渡す係 ---
         - name: driver
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:17062b5dd1af087f48564e9d845228892153694aba50fbbc425488e2237b44f4
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:0d8b95724b46e0e6cf234d1fa01774f585c3b1465baa98d43b23a17304495d60
           terminationMessagePolicy: FallbackToLogsOnError
           env:
             - name: AUTOPILOT_GITHUB_TOKEN
