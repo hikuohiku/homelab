@@ -5,6 +5,8 @@ export type AgentRole =
   | "critic"
   | "consolidation"
   | "chore"
+  | "core"
+  | "heart"
   | "unknown";
 
 export type TranscriptKind =
@@ -43,6 +45,9 @@ export interface AgentSnapshot {
   podPhase: string;
   recentAction: string;
   transcriptAvailable: boolean;
+  // 常駐組 (heart/resident label 付き Deployment)。Job と区別するバッジと
+  // Ready 表示に使う
+  resident?: boolean;
 }
 
 export interface Project {

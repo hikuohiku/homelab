@@ -15,6 +15,9 @@ metadata:
   namespace: autopilot
   labels:
     app: autopilot-heart
+    # Mission Control (ops-dashboard) の「常駐」列挙用。
+    # この label を付けた Deployment はエージェントライブに住人として載る
+    heart/resident: "true"
 spec:
   replicas: 1
   # heart は ops-state ブランチの単一書き手。旧 autopilot と同じ理由で常に高々 1 つ

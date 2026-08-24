@@ -15,8 +15,20 @@ export interface RunningJob {
   podPhase: string;
 }
 
+// heart/resident: "true" label を持つ Deployment = 常駐エージェント (住人)。
+// 短命 Job と違い transcript を持たず、Ready 状態で「応答可能か」を表す
+export interface Resident {
+  id: string;
+  role: AgentRole;
+  replicas: number;
+  readyReplicas: number;
+  podPhase: string;
+  startedAt: string;
+}
+
 export interface KubeSnapshot {
   jobs: RunningJob[];
+  residents: Resident[];
   heartReady: boolean;
   warning?: string;
 }
@@ -67,7 +79,7 @@ function jobIsRunning(job: JsonObject): boolean {
   return Boolean(job.status?.startTime) && !job.status?.completionTime && Number(job.status?.failed ?? 0) === 0;
 }
 
-export function parseKubeSnapshot(jobDoc: JsonObject, podDoc: JsonObject, deployment: JsonObject): KubeSnapshot {
+export function parseKubeSnapshot(jobDoc: JsonObject, podDoc: JsonObject, deployment: JsonObject): Pick<KubeSnapshot, "jobs" | "heartReady"> {
   const podByJob = new Map<string, JsonObject>();
   for (const pod of podDoc.items ?? []) {
     const jobName = pod.metadata?.labels?.["job-name"];
@@ -95,17 +107,52 @@ export function parseKubeSnapshot(jobDoc: JsonObject, podDoc: JsonObject, deploy
   return { jobs, heartReady: desired > 0 && ready >= desired };
 }
 
+// 常駐 Deployment 名から役割を推定する。次の住人が増えたとき label だけで
+// 載り、ここは best-effort (未知の名前は unknown) でよい
+function residentRoleFromName(name: string): AgentRole {
+  if (name.includes("heart")) return "heart";
+  if (name.includes("core")) return "core";
+  return "unknown";
+}
+
+export function parseResidents(deploymentListDoc: JsonObject, podDoc: JsonObject): Resident[] {
+  const pods: JsonObject[] = podDoc.items ?? [];
+  return (deploymentListDoc.items ?? [])
+    .filter((d: JsonObject) => String(d.metadata?.labels?.["heart/resident"] ?? "") === "true")
+    .map((d: JsonObject): Resident => {
+      // pod は ReplicaSet 経由で間接的にしか紐づかないので、pod template の
+      // selector label で突き合わせる
+      const selector: Record<string, string> = d.spec?.selector?.matchLabels ?? {};
+      const pod = pods.find((p) => Object.entries(selector)
+        .every(([key, value]) => p.metadata?.labels?.[key] === value));
+      return {
+        id: String(d.metadata.name),
+        role: residentRoleFromName(String(d.metadata.name)),
+        replicas: Number(d.spec?.replicas ?? 1),
+        readyReplicas: Number(d.status?.readyReplicas ?? 0),
+        podPhase: String(pod?.status?.phase ?? "Unknown"),
+        startedAt: String(d.metadata.creationTimestamp ?? new Date().toISOString()),
+      };
+    })
+    .sort((a: Resident, b: Resident) => a.id.localeCompare(b.id));
+}
+
+export function buildKubeSnapshot(jobDoc: JsonObject, podDoc: JsonObject, heartDoc: JsonObject, residentListDoc: JsonObject): KubeSnapshot {
+  return { ...parseKubeSnapshot(jobDoc, podDoc, heartDoc), residents: parseResidents(residentListDoc, podDoc) };
+}
+
 export async function getKubeSnapshot(): Promise<KubeSnapshot> {
   try {
-    const [jobs, pods, heart] = await Promise.all([
+    const [jobs, pods, heart, residents] = await Promise.all([
       kubeGet(`/apis/batch/v1/namespaces/${NAMESPACE}/jobs?limit=200`),
       kubeGet(`/api/v1/namespaces/${NAMESPACE}/pods?limit=200`),
       kubeGet(`/apis/apps/v1/namespaces/${NAMESPACE}/deployments/autopilot-heart`),
+      kubeGet(`/apis/apps/v1/namespaces/${NAMESPACE}/deployments?labelSelector=${encodeURIComponent("heart/resident=true")}`),
     ]);
-    return parseKubeSnapshot(jobs, pods, heart);
+    return buildKubeSnapshot(jobs, pods, heart, residents);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    return { jobs: [], heartReady: false, warning: message };
+    return { jobs: [], residents: [], heartReady: false, warning: message };
   }
 }
 
