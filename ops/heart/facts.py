@@ -12,15 +12,31 @@ from . import dispatch, gitutil, tasks, triage
 from .statefiles import parse_iso
 
 
-def load_health(repo_dir, health_branch):
-    """ops-health-report ブランチの latest.json。(unhealthy_apps, fresh, raw)
+HEALTH_KEY = "latest.json"
+# generated_at がこれより古ければ観測を信じない (fail-closed)。reporter は 30 分
+# ごとに書くので、1 時間止まっていれば産出側が死んでいる
+HEALTH_FRESH_SECONDS = 3600
+
+
+def load_health(k8s, namespace, configmap):
+    """同じ namespace の ConfigMap にある latest.json。(unhealthy_apps, fresh, raw)
+
+    ops-health-reporter (CronJob) が 30 分ごとに上書きする。以前は GitHub の
+    ops-health-report ブランチを読んでいたが、書き手も読み手もクラスタの中なので
+    往復をやめた (設計 state-out-of-git Phase 5)。
 
     unhealthy_apps は Synced/Healthy でない Application 名のリスト。
     観測に失敗したら None (「全部 unhealthy」でも「全部 healthy」でもない)。
     既知の Degraded (T-0106 等) をここで隠さない — soak の合否は decide 側が
     「merge 時点の baseline から悪化したか」で判定する (レビュー指摘 [6])。
     """
-    raw = gitutil.show(repo_dir, f"origin/{health_branch}", "ops/health/latest.json")
+    if k8s is None:
+        return None, False, None
+    try:
+        cm = k8s.get_configmap(namespace, configmap)
+    except Exception:  # noqa: BLE001 — 読めないことは「健全」でも「不健全」でもない
+        return None, False, None
+    raw = (cm.get("data") or {}).get(HEALTH_KEY)
     if raw is None:
         return None, False, None
     try:
@@ -32,7 +48,7 @@ def load_health(repo_dir, health_branch):
     if generated:
         try:
             age = datetime.now(timezone.utc) - parse_iso(generated)
-            fresh = age.total_seconds() < 3600
+            fresh = age.total_seconds() < HEALTH_FRESH_SECONDS
         except ValueError:
             pass
     unhealthy = [

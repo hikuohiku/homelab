@@ -1,11 +1,14 @@
-"""クラスタ内から ArgoCD/Pod/PVC/Node の状態を集め、GitHub の専用ブランチへ書き戻す。
+"""クラスタ内から ArgoCD/Pod/PVC/Node の状態を集め、クラスタ内の ConfigMap へ書き戻す。
 
-標準ライブラリのみで動く（イメージに pip install を要求しない）。
-k8s API へは ServiceAccount トークン（自動マウント）、GitHub API へは
-Doppler 経由の GITHUB_HEALTH_REPORTER_TOKEN（Contents: Read and write のみ）で到達する。
+書き先は autopilot namespace の ConfigMap ops-health-report で、読み手 (heart / 常駐コア)
+と同じ namespace に置く。以前は GitHub の ops-health-report ブランチを経由していたが、
+書き手も読み手もクラスタの中にいるので往復する理由が無く、GitHub が落ちると器の健全性
+情報が止まっていた（設計 docs/design/state-out-of-git Phase 5）。
+
+標準ライブラリのみで動く（イメージに pip install を要求しない）。k8s API へは
+ServiceAccount トークン（自動マウント）で到達する。GitHub の credential はもう要らない。
 """
 
-import base64
 import datetime
 import json
 import os
@@ -665,22 +668,26 @@ def collect_autopilot_health():
     return result
 
 
-def github_request(method, path, token, body=None):
-    url = "https://api.github.com" + path
+# 健全性レポートの置き場所。読み手 (heart / 常駐コア) と同じ namespace に置く。
+# 値は latest.json キーに JSON 文字列 1 本。過去分は持たない（最新 1 点のみ）
+HEALTH_NAMESPACE = "autopilot"
+HEALTH_CONFIGMAP = "ops-health-report"
+HEALTH_KEY = "latest.json"
+
+
+def k8s_request(method, path, body=None):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(
-        url,
+        K8S_BASE + path,
         data=data,
         method=method,
         headers={
-            "Authorization": "Bearer " + token,
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "homelab-ops-health-reporter",
+            "Authorization": "Bearer " + SA_TOKEN,
             "Content-Type": "application/json",
         },
     )
     try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
+        with urllib.request.urlopen(req, context=SSL_CTX, timeout=15) as resp:
             raw = resp.read()
             return resp.status, (json.loads(raw) if raw else None)
     except urllib.error.HTTPError as e:
@@ -688,96 +695,35 @@ def github_request(method, path, token, body=None):
         return e.code, (json.loads(raw) if raw else None)
 
 
-def ensure_branch(token, repo, branch, base_branch):
-    status, _ = github_request("GET", "/repos/{}/git/ref/heads/{}".format(repo, branch), token)
-    if status == 200:
-        return
-    status, base = github_request(
-        "GET", "/repos/{}/git/ref/heads/{}".format(repo, base_branch), token
-    )
-    if status != 200:
-        raise RuntimeError("base branch ref の取得に失敗: {} {}".format(status, base))
-    base_sha = base["object"]["sha"]
-    status, resp = github_request(
-        "POST",
-        "/repos/{}/git/refs".format(repo),
-        token,
-        {"ref": "refs/heads/{}".format(branch), "sha": base_sha},
-    )
-    if status not in (200, 201):
-        raise RuntimeError("branch 作成に失敗: {} {}".format(status, resp))
+def put_configmap(namespace, name, data, request=None):
+    """GET → resourceVersion 付き PUT、無ければ POST 作成（dashboard-smoke と同じ形）。
 
-
-def put_file(token, repo, branch, path, content_bytes, message):
-    status, existing = github_request(
-        "GET", "/repos/{}/contents/{}?ref={}".format(repo, path, branch), token
-    )
-    sha = existing.get("sha") if status == 200 and isinstance(existing, dict) else None
-    payload = {
-        "message": message,
-        "content": base64.b64encode(content_bytes).decode(),
-        "branch": branch,
+    ConfigMap は git に宣言しない。宣言すると ArgoCD の selfHeal が毎回書き戻し、
+    30 分ごとの更新と綱引きになる。RBAC は create と、この名前だけの get/update。
+    """
+    call = request or k8s_request
+    path = "/api/v1/namespaces/{}/configmaps/{}".format(namespace, name)
+    status, existing = call("GET", path)
+    body = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": name, "namespace": namespace},
+        "data": data,
     }
-    if sha:
-        payload["sha"] = sha
-    status, resp = github_request(
-        "PUT", "/repos/{}/contents/{}".format(repo, path), token, payload
-    )
-    if status not in (200, 201):
-        raise RuntimeError("{} の書き込みに失敗: {} {}".format(path, status, resp))
-
-
-def get_raw_content(token, repo, path, ref):
-    # Contents API の JSON レスポンスは 1MB を超えると content フィールドを返さない。
-    # raw メディアタイプで直接バイト列を取得すればこの上限を回避できる
-    req = urllib.request.Request(
-        "https://api.github.com/repos/{}/contents/{}?ref={}".format(repo, path, ref),
-        headers={
-            "Authorization": "Bearer " + token,
-            "Accept": "application/vnd.github.raw+json",
-            "User-Agent": "homelab-ops-health-reporter",
-        },
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=15) as resp:
-            return resp.status, resp.read()
-    except urllib.error.HTTPError as e:
-        return e.code, e.read()
-
-
-def append_line(token, repo, branch, path, line_bytes, message):
-    status, meta = github_request(
-        "GET", "/repos/{}/contents/{}?ref={}".format(repo, path, branch), token
-    )
-    if status == 200 and isinstance(meta, dict):
-        sha = meta.get("sha")
-        raw_status, existing = get_raw_content(token, repo, path, branch)
-        if raw_status != 200:
-            raise RuntimeError("{} の既存内容取得に失敗: {}".format(path, raw_status))
-    elif status == 404:
-        sha, existing = None, b""
+    if status == 200 and isinstance(existing, dict):
+        body["metadata"]["resourceVersion"] = existing["metadata"]["resourceVersion"]
+        status, resp = call("PUT", path, body)
     else:
-        raise RuntimeError("{} のメタデータ取得に失敗: {} {}".format(path, status, meta))
-
-    payload = {
-        "message": message,
-        "content": base64.b64encode(existing + line_bytes).decode(),
-        "branch": branch,
-    }
-    if sha:
-        payload["sha"] = sha
-    status, resp = github_request(
-        "PUT", "/repos/{}/contents/{}".format(repo, path), token, payload
-    )
+        status, resp = call(
+            "POST", "/api/v1/namespaces/{}/configmaps".format(namespace), body
+        )
     if status not in (200, 201):
-        raise RuntimeError("{} への追記に失敗: {} {}".format(path, status, resp))
+        raise RuntimeError("configmap 書き込みに失敗: {} {}".format(status, resp))
 
 
 def main():
-    token = os.environ["GITHUB_TOKEN"]
-    repo = os.environ.get("GITHUB_REPO", "hikuohiku/homelab")
-    branch = os.environ.get("REPORT_BRANCH", "ops-health-report")
-    base_branch = os.environ.get("BASE_BRANCH", "main")
+    namespace = os.environ.get("HEALTH_NAMESPACE", HEALTH_NAMESPACE)
+    name = os.environ.get("HEALTH_CONFIGMAP", HEALTH_CONFIGMAP)
 
     generated_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     report = {
@@ -798,9 +744,9 @@ def main():
             "(pod_metrics/node_metrics)。PVC の実ディスク使用量は namespace ごとの pvc-usage-reporter "
             "CronJob が ConfigMap に書いた値を pvc_usage として集約（immich/vaultwarden/coder のみ。"
             "Coder workspace ごとの動的 PVC は対象外、T-0078 参照）。RBAC は get/list/(configmaps のみ get) "
-            "で、write 系の verb は含まない。このファイルは最新1点のみで上書きされる。ピーク値の傾向を"
-            "見るには ops/health/history/YYYY-MM-DD.jsonl（1行1回分、このレポートと同じ内容）を辿ること"
-            "（T-0083）。 nodes[].allocatable/capacity の ephemeral-storage は kubelet が一時ストレージ "
+            "で、write 系の verb は含まない。この ConfigMap (autopilot/ops-health-report の "
+            "latest.json キー) は最新1点のみで上書きされ、履歴は持たない。"
+            " nodes[].allocatable/capacity の ephemeral-storage は kubelet が一時ストレージ "
             "監視用に計算する値であり、ルートファイルシステムの全体サイズとは別物（node01 の root "
             "ファイルシステムは実際には約252GiBあるが、この値は約48.9GiBしか出ない）。ディスク容量の "
             "確認にこの値を使わないこと（T-0079, issue #56 2026-08-05 15:45:04 参照）。"
@@ -837,27 +783,14 @@ def main():
         ),
     }
 
-    ensure_branch(token, repo, branch, base_branch)
-    put_file(
-        token,
-        repo,
-        branch,
-        "ops/health/latest.json",
-        json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8"),
-        "health report {}".format(generated_at),
+    put_configmap(
+        namespace,
+        name,
+        {HEALTH_KEY: json.dumps(report, ensure_ascii=False, indent=2)},
     )
-    print("ops/health/latest.json を {} ブランチへ書き込みました ({})".format(branch, generated_at))
-
-    history_path = "ops/health/history/{}.jsonl".format(generated_at[:10])
-    append_line(
-        token,
-        repo,
-        branch,
-        history_path,
-        (json.dumps(report, ensure_ascii=False) + "\n").encode("utf-8"),
-        "health report history {}".format(generated_at),
+    print(
+        "{}/{} の {} を更新しました ({})".format(namespace, name, HEALTH_KEY, generated_at)
     )
-    print("{} に追記しました ({})".format(history_path, generated_at))
 
 
 if __name__ == "__main__":

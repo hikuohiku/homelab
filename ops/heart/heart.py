@@ -463,9 +463,15 @@ class Heart:
         cursors = self.work.load_cursors()
 
         # --- 観測。失敗した項目は None (「無い」と区別する。decide が保守的に扱う) ---
-        unhealthy_apps, health_fresh, health_doc = facts.load_health(
-            self.repo_dir, self.cfg.health_branch
-        )
+        try:
+            unhealthy_apps, health_fresh, health_doc = facts.load_health(
+                self.k8s_client(), self.cfg.namespace, self.cfg.health_configmap
+            )
+        except Exception as e:
+            # クライアントすら作れない (Pod の外・トークン欠落) ときもビートは続ける。
+            # 観測不能は「健全」ではないので health_fresh=False のまま decide に渡る
+            log(f"health report の読み取りに失敗 (観測不能として扱う): {e}")
+            unhealthy_apps, health_fresh, health_doc = None, False, None
         # B2 download cap の帳簿の警報すべき状態 (P-0128)。warn/exceed のときだけ
         # 中身があり、それ以外は None (budget_alert_due が繰り返しを落とす)
         budget = facts.budget_alert(health_doc)

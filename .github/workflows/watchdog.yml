@@ -10,12 +10,13 @@ name: Watchdog
 # heartbeat.json が ops/rules.json の heartbeat.stale_seconds を超えて古ければ、
 # フィードバック issue #56 に人間宛のコメントを投稿してジョブを失敗させる。
 #
-# P-0211 追加: 同じ発想のもうひとつの盲点 — ops-health-reporter 自身が死ぬと
-# ops-health-report ブランチの更新が止まり、autopilot と人間が共有する健全性情報が
-# 古いまま凍る (heartbeat は生き続けるので P-0027 の検査では鳴らない)。同じ job の
-# 末尾のステップが ops-health-report ブランチの latest.json の鮮度も検査し、古ければ
-# 同じく issue #56 コメント + Discord incident でジョブを失敗させる。判定ロジックは
-# ops/check_health_freshness.py にあり、ops/tests/test_health_freshness.py が守る。
+# P-0211 で足した「ops-health-reporter 自身の死」の検知 (末尾 2 ステップ) は
+# **止めてある** (if: false)。健全性レポートは GitHub の ops-health-report ブランチ
+# ではなくクラスタ内の ConfigMap に移り (設計 docs/design/state-out-of-git Phase 5)、
+# ここから読む先がもう無いため。鮮度の判定自体は失われていない — heart が
+# ops/heart/facts.py:load_health() で generated_at を見て、古ければ health_fresh=False
+# として soak を fail-closed に倒す。ステップと ops/check_health_freshness.py の撤去は
+# Phase 7 (沈黙の通知をコア → Telegram へ移す段) でまとめて行う。
 #
 # **このワークフロー自身は CI の検証対象外**である (release-image.yml と同じ構図、
 # ops/CHARTER.md §5.4)。壊れていても誰も落ちない = 静かに検知しなくなる。だから
@@ -187,6 +188,8 @@ jobs:
       # --- P-0211: ops-health-reporter 自身の死の検知 (heartbeat 検査では鳴らない) ---
 
       - name: Fetch latest.json from ops-health-report
+        # Phase 5 で読み先が ConfigMap に移ったため停止中。撤去は Phase 7
+        if: false
         # 失敗しても止めない。ブランチが消えた・空になったのも検知対象なので、
         # ファイルが無い状態でスクリプトに渡して fail-closed に判定させる。
         # FETCH_HEAD を使うので --single-branch の refspec 罠 (ops/memory/substrate.md) に当たらない
@@ -204,6 +207,8 @@ jobs:
           exit 0
 
       - name: Check health-report freshness and alert
+        # Phase 5 で読み先が ConfigMap に移ったため停止中。撤去は Phase 7
+        if: false
         env:
           GH_TOKEN: ${{ github.token }}
           DRY_RUN: ${{ inputs.dry_run }}

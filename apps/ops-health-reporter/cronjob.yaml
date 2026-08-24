@@ -30,17 +30,11 @@ spec:
               terminationMessagePolicy: FallbackToLogsOnError
               command: ["python", "/scripts/report.py"]
               env:
-                - name: GITHUB_TOKEN
-                  valueFrom:
-                    secretKeyRef:
-                      name: github-health-reporter-token
-                      key: token
-                - name: GITHUB_REPO
-                  value: hikuohiku/homelab
-                - name: REPORT_BRANCH
+                # 書き先はクラスタ内の ConfigMap。GitHub の credential はもう要らない
+                - name: HEALTH_NAMESPACE
+                  value: autopilot
+                - name: HEALTH_CONFIGMAP
                   value: ops-health-report
-                - name: BASE_BRANCH
-                  value: main
                 - name: PYTHONDONTWRITEBYTECODE
                   value: "1"
               securityContext:

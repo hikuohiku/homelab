@@ -26,7 +26,9 @@ class Config:
         self.discord_webhook = env.get("DISCORD_WEBHOOK_URL", "")
         self.data_dir = Path(env.get("HEART_DATA_DIR", "/data"))
         self.state_branch = env.get("HEART_STATE_BRANCH", "ops-state")
-        self.health_branch = env.get("HEALTH_BRANCH", "ops-health-report")
+        # 健全性レポートの置き場所 (設計 state-out-of-git Phase 5)。ops-health-reporter が
+        # 30 分ごとに同じ namespace の ConfigMap を上書きする。GitHub を経由しない
+        self.health_configmap = env.get("HEALTH_CONFIGMAP", "ops-health-report")
         self.feedback_branch = env.get("FEEDBACK_BRANCH", "ops-feedback")
         self.feedback_issue = int(env.get("FEEDBACK_ISSUE", "56"))
         # イベントバス経由の書き置きが落ちてくる場所 (同じ Pod のサイドカーが書く。

@@ -13,7 +13,8 @@
 // コードで縛るため。新しい credential も RBAC も要らない:
 //
 //   - status はクラスタ内の ops-dashboard (認証不要・read-only の API)
-//   - health は driver が既に持つ GitHub トークンで ops-health-report ブランチを読む
+//   - health は k8s API の ConfigMap (autopilot/ops-health-report) を読む。読むだけで、
+//     コアに ConfigMap を書く権限は無い (設計 D29)
 //   - live の 3 つは k8s API を read-only の ClusterRole (autopilot-reader) で直読みする。
 //     トークンは projected volume で**このサイドカーにだけ** mount してあり、
 //     opencode コンテナからは見えない (k8s.go の冒頭を参照)
@@ -201,19 +202,17 @@ func (c *client) fetchStatus(ctx context.Context) (string, error) {
 	return clip(string(raw)), nil
 }
 
-func (c *client) fetchHealth(ctx context.Context) (string, error) {
-	branch := envOr("CORE_HEALTH_BRANCH", "ops-health-report")
-	path := envOr("CORE_HEALTH_PATH", "ops/health/latest.json")
-	status, raw, err := c.github(ctx,
-		fmt.Sprintf("/repos/%s/contents/%s?ref=%s", c.cfg.repo, path, branch),
-		"application/vnd.github.raw")
+// fetchHealth は ops-health-reporter が ConfigMap に書いたレポートをそのまま返す。
+func (s *mcpServer) fetchHealth(ctx context.Context) (string, error) {
+	k, err := s.kubeAPI()
 	if err != nil {
 		return "", err
 	}
-	if status != http.StatusOK {
-		return "", fmt.Errorf("health レポートを読めない (status=%d)", status)
+	raw, err := k.healthReport(ctx)
+	if err != nil {
+		return "", err
 	}
-	return clip(string(raw)), nil
+	return clip(raw), nil
 }
 
 func clip(s string) string {
@@ -337,7 +336,7 @@ func (s *mcpServer) callTool(ctx context.Context, name string, args json.RawMess
 	case "homelab_status":
 		body, err = s.client.fetchStatus(ctx)
 	case "homelab_health":
-		body, err = s.client.fetchHealth(ctx)
+		body, err = s.fetchHealth(ctx)
 	case "homelab_applications", "homelab_pods", "homelab_events":
 		body, err = s.callKube(ctx, name)
 	case "request_task":

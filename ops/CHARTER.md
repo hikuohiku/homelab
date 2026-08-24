@@ -44,17 +44,18 @@ VISION が「何になろうとしているか」、この CHARTER が「どう�
 イベントは順不同で届きうるので、次の判断がその PR の状態に依存するなら届いたイベントを鵜呑みにせず
 一度 `get_status` で裏を取る。
 
-**homelab の実際の健全性を読む（T-0015/T-0075 で確立）**: `ops-health-reporter` CronJob（`apps/ops-health-reporter/`）が
-30 分毎にクラスタ内から ArgoCD の sync/health・異常 Pod・PVC・Node の状態を集め、`ops-health-report` という
-main とは別のブランチの `ops/health/latest.json` に書き戻している。手順3（backlog/journal を読む）と
-同じタイミングで `git fetch origin ops-health-report && git show origin/ops-health-report:ops/health/latest.json`
-を実行し、`generated_at` が直近（30〜60分以内）であることと、`applications` が全て `Synced`/`Healthy` か、
-`pod_issues` に見慣れない異常が無いかを確認する。auto-merge した変更が実際に反映されて健全かを、
-クラスタに直接到達できないこのクラウドサンドボックスからでも確認できる（T-0010 が求めていた経路）。
-ブランチが無い・`generated_at` が古い場合は CronJob 側の異常を疑い、調査タスクを起票する。
+**homelab の実際の健全性を読む（T-0015/T-0075 で確立、Phase 5 で移設）**: `ops-health-reporter` CronJob（`apps/ops-health-reporter/`）が
+30 分毎にクラスタ内から ArgoCD の sync/health・異常 Pod・PVC・Node の状態を集め、**`autopilot` namespace の
+ConfigMap `ops-health-report`（`latest.json` キー）** に書いている（以前は同名の GitHub ブランチだった。
+書き手も読み手もクラスタ内なので往復をやめた — `docs/design/state-out-of-git/architecture.md` Phase 5）。
+`kubectl -n autopilot get configmap ops-health-report -o jsonpath='{.data.latest\.json}'` で読める
+（heart は `ops/heart/facts.py:load_health()`、常駐コアは `homelab_health` ツールが同じものを読む）。
+`generated_at` が直近（30〜60分以内）であることと、`applications` が全て `Synced`/`Healthy` か、
+`pod_issues` に見慣れない異常が無いかを確認する。ConfigMap が無い・`generated_at` が古い場合は
+CronJob 側の異常を疑い、調査タスクを起票する。
 PVC 実使用量・コンテナ/ノードの実メモリ・CPU 使用量は `pvc_usage`/`pod_metrics`/`node_metrics` に
-含まれる（T-0077/T-0080）。**`latest.json` は最新1点のみで上書きされる。** ピーク値の傾向を見たいときは
-`ops/health/history/YYYY-MM-DD.jsonl`（1行1回分、T-0083）を辿る。値の妥当性は単点観測では判断できない
+含まれる（T-0077/T-0080）。**`latest.json` は最新1点のみで上書きされ、履歴は持たない**（旧
+`ops/health/history/*.jsonl` は GitHub ブランチと共に廃止）。値の妥当性は単点観測では判断できない
 （issue #56, 2026-08-05 07:25:18 の指摘。アイドル時の数字だけで memory limits 等を決めない）。
 
 **起動直後に「前回の自分は正常に終わったか」も同じ `latest.json` の `autopilot` キーで確認する**（T-0110）。
@@ -70,7 +71,7 @@ PVC 実使用量・コンテナ/ノードの実メモリ・CPU 使用量は `pvc
 **バックアップ CronJob 自身が「取れているはず」と主張しているだけでは足りない**
 （経緯: ops/CHARTER-history.md#2-実行サイクル--immich-バックアップの実在確認-t-0068）。
 `pvc_usage` の immich エントリには `backup_listing`（`dir`/`files`: `name`/`bytes`/`mtime` の配列、
-または取得失敗時は `error`）が追加されている（T-0068 フォローアップ, run #49）。ops-health-report
+または取得失敗時は `error`）が追加されている（T-0068 フォローアップ, run #49）。健全性レポート
 を読むたびに、immich の `backup_listing.files` が空でないこと・最新ファイルの `mtime` が直近
 24時間以内であることを確認する。空または古いままなら immich 内蔵バックアップの異常を疑い、
 T-0068 のバックアップは実質機能していないとみなして調査タスクを起票する。
@@ -656,7 +657,7 @@ CRD やオブジェクトの実体を確認したいなら、chart がレンダ�
   ClusterRole に含めていない。`kubectl auth can-i get pods --subresource=log` は `no`。ログが
   要る調査（restic のハング原因など）は自分では完結できず、構築セッション（Coder ワークスペース、
   より広い kubectl 権限を持つ）に issue #56 経由で頼む）。ArgoCD/cluster の健全性は
-  `ops-health-report` ブランチ（30分毎の断面、履歴が要るとき用）と、この直接 kubectl
+  ConfigMap `autopilot/ops-health-report`（30分毎の断面）と、この直接 kubectl
   （いま・ここの断面が要るとき用）の両方が使える
 - **`restic` CLI はイメージに入っているが、この Pod に B2/restic の credential は無い**
   （`apps/autopilot/external-secret.yaml` は `CLAUDE_CODE_OAUTH_TOKEN`/`AUTOPILOT_GITHUB_TOKEN`

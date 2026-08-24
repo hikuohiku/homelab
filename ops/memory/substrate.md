@@ -139,8 +139,9 @@ autopilot namespace の Pod (heart / runner / reviewer / …) が動く環境の
   (退役済み `autopilot` を指したままだった drift が P-0011 の発端) — verified_at: 2026-08-08
 - report.py のログ取得は `sinceSeconds=7200`。ビート周期 (`HEART_BEAT_SECONDS`, 既定 120s) を
   大きく変えるならここも見直す — verified_at: 2026-08-08
-- ops-health-report ブランチの `ops/health/latest.json` は最新 1 点のみ (上書き)。
-  傾向は `ops/health/history/YYYY-MM-DD.jsonl` — verified_at: 2026-08-05
+- 健全性レポートは ConfigMap `autopilot/ops-health-report` の `latest.json` キー。
+  最新 1 点のみ (上書き) で履歴は持たない。GitHub の同名ブランチ経由は Phase 5 で廃止
+  (書き手も読み手もクラスタ内) — verified_at: 2026-08-25
 - coder / immich / vaultwarden の ArgoCD `Degraded` について (2026-08-22 に P-0111 が訂正):
   旧注記「T-0106 由来・鍵登録で自然解消する」は半分だけ正しかった。ExternalSecret は
   2026-08-07 の作成時から一度も SecretSyncedError になっておらず、鍵は最初から通っていた。

@@ -60,6 +60,9 @@ class K8s:
             "?propagationPolicy=Foreground",
         )
 
+    def get_configmap(self, namespace, name):
+        return self.request("GET", f"/api/v1/namespaces/{namespace}/configmaps/{name}")
+
     def list_pods(self, namespace, label_selector=None):
         path = f"/api/v1/namespaces/{namespace}/pods"
         if label_selector:

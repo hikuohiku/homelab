@@ -5,7 +5,7 @@
 # 履歴を読む git だけに絞ってあるので、器のレベルで着手できない (config.yaml)。
 #
 # 目は 3 つある:
-#   (1) ops-dashboard / ops-health-report — 既存の 2 ツール
+#   (1) ops-dashboard / 健全性レポート (ConfigMap) — 既存の 2 ツール
 #   (2) k8s API の read (live)            — core-driver-mcp サイドカーだけがトークンを持つ
 #   (3) main の作業コピー /data/repo      — driver が保ち、opencode には read-only で渡す
 apiVersion: apps/v1
@@ -39,8 +39,8 @@ spec:
       # (rbac.yaml)。**automountServiceAccountToken は false のまま**にすること。
       # true に戻すと全コンテナにトークンが配られ、bash を開けたコアが
       # /var/run/secrets/... から API server を叩けてしまう。
-      # トークンは下の kube-api-access (projected) を core-driver-mcp にだけ
-      # volumeMounts する形で渡している — volumeMounts はコンテナ単位なので、
+      # トークンは下の kube-api-access (projected) を core-driver-mcp と driver に
+      # だけ volumeMounts する形で渡している — volumeMounts はコンテナ単位なので、
       # opencode コンテナからは見えないまま k8s API へ到達できる
       serviceAccountName: autopilot-core
       automountServiceAccountToken: false
@@ -181,9 +181,9 @@ spec:
         # homelab_events / request_task。GitHub トークンと NATS の seed はここにだけ置く。
         # この 2 つを消せば request_task が「経路が無い」と返り、読み取りツールは動き続ける。
         #
-        # k8s API のトークン (kube-api-access) も**このコンテナにだけ** mount する。
-        # 権限は ClusterRole `autopilot-reader` の get/list だけで、Secret も
-        # 書き込み動詞も含まれない (rbac.yaml)
+        # k8s API のトークン (kube-api-access) は opencode コンテナには mount しない。
+        # 権限は ClusterRole `autopilot-reader` の get/list と、健全性レポートの
+        # ConfigMap 1 個の get だけで、Secret も書き込み動詞も含まれない (rbac.yaml)
         - name: core-driver-mcp
           image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:f9afede153954fd94cfe2bd55907628ee1219120e72bf675b10b4d3f3d8e2d34
           terminationMessagePolicy: FallbackToLogsOnError
@@ -292,6 +292,12 @@ spec:
           volumeMounts:
             - name: state
               mountPath: /data
+            # 健全性レポート (autopilot/ops-health-report の ConfigMap) を読むため。
+            # opencode コンテナには依然として配らない — volumeMounts はコンテナ単位で、
+            # 秘密とトークンをコアの本体から物理的に離す構図はそのまま
+            - name: kube-api-access
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
           resources:
             requests:
               cpu: 10m
@@ -314,7 +320,8 @@ spec:
             claimName: autopilot-core-state
         # k8s API 用の短命トークン。automountServiceAccountToken: false のまま
         # **必要なコンテナにだけ** 配るための形 (kubelet が既定で作るものと同じ中身)。
-        # volumeMounts しているのは core-driver-mcp だけ
+        # volumeMounts しているのは core-driver-mcp と driver の 2 つで、
+        # opencode コンテナには配らない
         - name: kube-api-access
           projected:
             defaultMode: 0444

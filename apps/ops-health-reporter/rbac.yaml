@@ -80,3 +80,37 @@ subjects:
   - kind: ServiceAccount
     name: ops-health-reporter
     namespace: ops-health-reporter
+---
+# 健全性レポートの書き先 (autopilot namespace の ConfigMap ops-health-report)。
+# reporter は ops-health-reporter namespace に居るので、書き込みだけを autopilot 側へ
+# 越境させる最小の Role を持つ。create は RBAC で名前を絞れないため対象名を含まない
+# (dashboard-smoke / pvc-usage-reporter と同じ形)。update をこの 1 名に絞るのは、
+# この namespace に heart へ流れ込む ConfigMap (autopilot-config = プロンプト類) が
+# あるためで、無差別な update 許可はプロンプト注入経路になりうる。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ops-health-reporter-health-writer
+  namespace: autopilot
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["ops-health-report"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ops-health-reporter-health-writer
+  namespace: autopilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ops-health-reporter-health-writer
+subjects:
+  - kind: ServiceAccount
+    name: ops-health-reporter
+    namespace: ops-health-reporter
