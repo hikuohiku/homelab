@@ -388,6 +388,65 @@ def _dashboard_smoke_summary(payload, now):
     return out
 
 
+# immich のアセット整合性検証 (P-0361) の集約対象。産出側 (immich ns の週次 CronJob
+# immich-checksum) が専用 ConfigMap `immich-checksum-report` の report.json キーに、
+# immich の integrity checksum ジョブの結果を書く契約。pvc-usage-report への追加キーに
+# しない理由は download-budget / dashboard-smoke と同じ (既存 writer の PUT が data 全体
+# 置換のため)。ConfigMap 自体は manifest に事前作成しない (ArgoCD 管理外。pvc-usage-reporter
+# と同じ形) — reporter RBAC 側はこの名前の get を resourceNames に追加済み (rbac.yaml 参照)
+CHECKSUM_NAMESPACE = "immich"
+CHECKSUM_CONFIGMAP = "immich-checksum-report"
+# 産出側 (immich_checksum_check.build_report / error_report) が書く status の取りうる値。
+# 判定ロジックの正は ops/tools/immich_checksum_check.py (DEFAULT_MISMATCH_THRESHOLD=None
+# 設計: 閾値未設定は unconfigured を正直に返す)。代役レコード (産出側自身の失敗) は error。
+# ここで再判定せず、産出側が書いた status をそのまま載せる契約
+CHECKSUM_STATUSES = ("ok", "fail", "unconfigured", "error")
+
+
+def collect_checksum():
+    """immich namespace の immich-checksum-report ConfigMap を読み、checksum 節に載せる (P-0361)。
+
+    report.json の形 (産出側の build_report / error_report 契約):
+      {generated_at, namespace, status, reason, ok, checksum_mismatch,
+       missing_file, untracked_file, job?}  — status は ok / fail / unconfigured /
+      error (代役レコード)。産出側が既に閾値判定済みなので、集約側はそれをそのまま
+      latest.json に載せる (再判定しない。判定ロジックの正は ops/tools/immich_checksum_check.py)。
+
+    産出側未稼働 (ConfigMap 未作成)・記録破損 (JSON でない・形が契約外) は例外にせず
+    no_data で正直に出す (collect_dashboard_smoke と同じ思想)。status が未知値の記録は
+    「検出ゼロ」と「帳簿の壊れ」を区別できるよう no_data に落とす。
+    """
+    try:
+        data = k8s_get(
+            "/api/v1/namespaces/{}/configmaps/{}".format(
+                CHECKSUM_NAMESPACE, CHECKSUM_CONFIGMAP
+            )
+        )
+        raw = data.get("data", {}).get("report.json")
+        if not raw:
+            raise KeyError(
+                "configmap immich-checksum-report に report.json キーが無い"
+                "(産出側がまだ稼働していない)"
+            )
+        payload = json.loads(raw)
+        if not isinstance(payload, dict):
+            raise ValueError("report.json が dict でない")
+        status = payload.get("status")
+        if status not in CHECKSUM_STATUSES:
+            raise ValueError(
+                "report.json の status が未知値: {!r} (期待 {})".format(
+                    status, "/".join(CHECKSUM_STATUSES)
+                )
+            )
+        return payload
+    except Exception as e:  # noqa: BLE001 — 未稼働・破損で他の収集を止めない
+        return {
+            "status": "no_data",
+            "reason": "configmap immich-checksum-report を読めない",
+            "error": "{}: {}".format(type(e).__name__, e),
+        }
+
+
 def collect_dashboard_smoke():
     """autopilot namespace の dashboard-smoke ConfigMap を読み、要約を返す (P-0193)。
 
@@ -739,6 +798,7 @@ def main():
         "externalsecrets": collect(collect_externalsecrets),
         "autopilot": collect(collect_autopilot_health),
         "dashboard_smoke": collect(collect_dashboard_smoke),
+        "checksum": collect(collect_checksum),
         "notes": (
             "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 "
             "(pod_metrics/node_metrics)。PVC の実ディスク使用量は namespace ごとの pvc-usage-reporter "
@@ -780,6 +840,14 @@ def main():
              "成功日は記録のみで通知予算を消費しない。readiness probe は HTTP 200 しか見ないため、"
              "この検査だけが「実際に描画したときだけ見える破綻」を拾う。スクリーンショット実体は保存せず "
              "記録しない。"
+             " checksum キーは immich のアセット整合性検証 (P-0361)。immich ns の週次 CronJob "
+             "immich-checksum が immich の integrity checksum ジョブを API トリガーし、専用 ConfigMap "
+             "immich-checksum-report の report.json キーへ結果 (status は ok / fail / unconfigured / "
+             "error、checksum_mismatch / missing_file / untracked_file 件数) を書く。集約側はそれを"
+             "そのまま載せる (再判定しない)。status の意味: ok は閾値未満の不一致、fail は閾値以上 "
+             "(原本の腐りを検出)、unconfigured は閾値未設定 (rules.json の checksum.mismatch_threshold "
+             "を設定すること)、error は産出側自身の失敗 (代役レコード)、no_data は産出側未稼働・"
+             "記録破損。判定ロジックの正は ops/tools/immich_checksum_check.py。"
         ),
     }
 

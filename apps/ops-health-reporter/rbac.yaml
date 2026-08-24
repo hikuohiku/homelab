@@ -28,7 +28,14 @@ rules:
     # DOWNLOAD_BUDGET_NAMESPACES コメント参照)。resourceNames の追加分だけ権限が増える
     # dashboard-smoke (P-0193) は autopilot ns の描画スモーク CronJob が書く
     # Mission Control 描画断言の記録 (report.py 参照)
-    resourceNames: ["pvc-usage-report", "download-budget", "dashboard-smoke"]
+    # immich-checksum-report (P-0361) は immich ns の週次 checksum CronJob が書く
+    # アセット整合性検証の記録 (report.py 参照)
+    resourceNames: [
+      "pvc-usage-report",
+      "download-budget",
+      "dashboard-smoke",
+      "immich-checksum-report",
+    ]
     verbs: ["get"]
   - apiGroups: ["apps"]
     resources: ["deployments"]
