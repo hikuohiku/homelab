@@ -320,7 +320,8 @@
       "mirrors": [
         "apps/coder/pvc-usage-cronjob.yaml",
         "apps/vaultwarden/pvc-usage-cronjob.yaml",
-        "apps/vaultwarden/restic-backup-cronjob.yaml"
+        "apps/vaultwarden/restic-backup-cronjob.yaml",
+        "apps/k3s-backup/restic-backup-cronjob.yaml"
       ],
       "upstream": "dockerhub:library/python",
       "policy": "auto",
@@ -492,6 +493,18 @@
       "policy": "auto",
       "note": "P-0270 で新設。他5ファイルと同じタグ (0.19.1) を使う設計。同一ファイル内に adguard-restic-backup と adguard-restic-retention の2箇所。check_version_sync.py の GROUPS に6ファイル目として登録済み（vaultwarden-restic-image の note 参照）。タグを上げるときは6ファイル全部を揃えること",
       "observability_impact": "adguard の restic バックアップ・retention CronJob が使用。壊れるとバックアップが取れなくなるが adguard 本体の可用性には影響しない"
+    },
+    {
+      "id": "k3s-datastore-restic-image",
+      "kind": "image",
+      "name": "restic/restic (backup CronJob)",
+      "current": "0.19.1",
+      "file": "apps/k3s-backup/restic-backup-cronjob.yaml",
+      "match": "restic/restic:",
+      "upstream": "github:restic/restic",
+      "policy": "auto",
+      "note": "docs/design/state-out-of-git Phase 0 で新設。他6ファイルと同じタグ (0.19.1) を使う設計。同一ファイル内に k3s-restic-backup と k3s-restic-retention の2箇所。check_version_sync.py の GROUPS に7ファイル目として登録済み（vaultwarden-restic-image の note 参照）。タグを上げるときは7ファイル全部を揃えること",
+      "observability_impact": "k3s の状態ストア (kine/sqlite) とサーバートークンの backup・retention CronJob が使用。壊れるとクラスタの状態を戻す手段が失われる。アプリ PVC の backup 6 本とは別に、node01 全損時の唯一の復元元になる"
     },
     {
       "id": "nats",

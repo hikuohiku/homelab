@@ -237,6 +237,44 @@ vaultwarden 方式（online backup API を叩く initContainer）は**採らな�
 > インデックスが再構築されることは**まだ実機で試していない**（T-0140 未着手で同期フォルダが
 > 空のため、再スキャンすべき実データが無い）。実データ移行後に確認すべき事項。
 
+## k3s 状態ストアの restic バックアップ (2026-08-24)
+
+`apps/k3s-backup/restic-backup-cronjob.yaml`。**ここまでの 6 本と違い、対象は PVC ではなく
+ホスト上のファイル**。
+
+- **なぜ足したか**: `docs/design/state-out-of-git/architecture.md` が「プロジェクトの記録を
+  `Project` CR に移す」と決めた。移した瞬間、記録の唯一の実体はクラスタになり、
+  この文書の方針転換（2026-08-05「クラスタは揮発してよい」）が成り立たなくなる。
+  設計書は自らこれを **Phase 4 の前提条件** に指定している
+- **k3s の状態ストアは kine/sqlite**。`nix/images/proxmox-cloud/configuration.nix` の
+  `services.k3s` は `--cluster-init` も `--datastore-endpoint` も持たず、`kube-system` に
+  etcd Pod も無い。したがって **`k3s etcd-snapshot` は使えない**
+- **何を取るか**: `/var/lib/rancher/k3s/server/db/state.db` の一貫コピーと
+  `/var/lib/rancher/k3s/server/token`。トークンはデータストア内の bootstrap データ
+  （クラスタ CA）を復号する鍵で、nix にも Doppler にも無い。**state.db だけでは戻せない**
+- **一貫スナップショット**: vaultwarden (T-0069) と同じ SQLite Online Backup API
+  （`sqlite3.Connection.backup`）を initContainer で回し、emptyDir へ落としてから restic に
+  渡す。`state.db-wal` / `state.db-shm` は渡さない
+- **hostPath は 2 本だけ**（`db` ディレクトリと `token` ファイル、いずれも readOnly）。
+  `server` ディレクトリごと持ち込むと `tls/` の秘密鍵まで container から見えるため
+- **スケジュール**: backup 毎日 02:30 JST / retention 毎週**水曜** 05:30 JST。
+  保持世代は既存 6 本と同じ `--keep-daily 7 --keep-weekly 4 --keep-monthly 6`。
+  retention だけ日曜の帯から外したのは、2026-08-22 の B2 download cap 超過が
+  「土曜の夜に全リポジトリの prune が一斉に走った」形だったため（P-0216 / PR #556）
+- **リポジトリパス**: `b2:$(RESTIC_B2_BUCKET):k3s-datastore`。Doppler への新規登録は不要
+- **復元手順**: `docs/k3s-datastore-recovery.md`
+
+> **未確認**: `state.db` の実サイズを測っていない（このクラスタを触れる環境が無い）。
+> 数百 MB になりうる前提で頻度は保守的に日次のままにしてある。復元試験も未実施。
+
+### `test_backup_coverage.py` の穴（PVC ではない対象）
+
+`ops/tests/test_backup_coverage.py` が守るのは「**PVC を宣言しているアプリ**には配線済みの
+restic backup CronJob がある」だけで、k3s の状態ストアのように **PVC ではない対象** は
+最初からこの検査に映らない。既知の死角（helm がレンダリングする PVC、Terraform が動的に
+作る PVC）に 3 つ目が加わった形で、`apps/k3s-backup/` の backup が消えてもテストは通る。
+ホスト上のファイルを掬う backup を今後増やすなら、この文書が引き続き唯一の記録になる。
+
 ## 復元試験（T-0071）
 
 人間の新方針（issue #56, 2026-08-05 04:40:59「試したことのないバックアップは、バックアップでは

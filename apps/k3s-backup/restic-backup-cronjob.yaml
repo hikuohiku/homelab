@@ -1,0 +1,282 @@
+# k3s の状態ストア (クラスタの正) を restic で Backblaze B2 へバックアップする。
+#
+# なぜ要るか: 既存 6 本の restic backup はすべて **アプリの PVC** が対象で、k3s 自身の
+# データストアを掬っているものは 1 つも無い。これは事故ではなく前提で、docs/backup.md の
+# 方針転換 (2026-08-05) が「k8s より上を IaC で完全に記述し、クラスタは揮発してよい」と
+# 決めている。docs/design/state-out-of-git/architecture.md はその前提をひっくり返す
+# (プロジェクトの記録を CR に移すと、唯一の実体がクラスタになる) ので、Phase 4 に進む
+# 前提条件としてここを埋める。
+#
+# 何を掬うか:
+#   1. /var/lib/rancher/k3s/server/db/state.db — kine (sqlite) のデータストア本体。
+#      configuration.nix の services.k3s は --cluster-init も --datastore-endpoint も
+#      持たないため etcd ではない。したがって `k3s etcd-snapshot` は使えない
+#   2. /var/lib/rancher/k3s/server/token — サーバートークン。データストアの中の
+#      bootstrap データ (CA 鍵など) はこのトークン由来の鍵で暗号化されている。
+#      **state.db だけ戻しても新品の k3s では開かない。** nix にも Doppler にも
+#      pin されておらず node01 の初回起動時に生成された値しか無いので、ここで一緒に取る
+#
+# 一貫スナップショット: 稼働中の k3s が書いている state.db をそのままコピーすると、
+# WAL (state.db-wal) と本体が torn になる。vaultwarden (T-0069) と同じく initContainer で
+# SQLite Online Backup API (sqlite3.Connection.backup) を使い、emptyDir へ一貫コピーして
+# から restic に渡す。**-wal / -shm は restic に渡さない** — 一貫コピー済みの本体と
+# 同時に取った保証が無いファイルを混ぜると、復元時にどちらが正か判断できなくなる。
+#
+# hostPath: PVC ではなくホスト上のファイルなので、既存 6 本の PVC マウント型は真似できない。
+# db ディレクトリとトークンファイルだけを readOnly で個別に持ち込む
+# (server ディレクトリごと持ち込むと tls/ の秘密鍵まで container から見えるため)。
+# nodeSelector は付けない: node01 単一ノードなので今は常に正しく、将来ノードが増えたときは
+# hostPath type の検査に失敗して Job が落ちる方が、Pending で黙って止まるより見つけやすい。
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k3s-restic-sqlite-backup-script
+  namespace: k3s-backup
+data:
+  # apps/vaultwarden/restic-backup-cronjob.yaml の同名スクリプトと同じ内容
+  # (SRC_DB / DST_DB を env で受けるだけの汎用形)。流儀を割らないためコピーで揃える。
+  sqlite_backup.py: |
+    """SQLite Online Backup API (sqlite3.Connection.backup) で db.sqlite3 を一貫コピーする。
+
+    読み取り専用でマウントした PVC 上の db.sqlite3 から、稼働中でも安全に
+    (WAL/-shm との不整合を起こさずに) 別ディレクトリへ一貫性のあるコピーを作る。
+    標準ライブラリの sqlite3 モジュールのみで動く。
+    """
+
+    import os
+    import sqlite3
+
+    SRC_DB = os.environ["SRC_DB"]
+    DST_DB = os.environ["DST_DB"]
+
+
+    def main():
+        src = sqlite3.connect("file:{}?mode=ro".format(SRC_DB), uri=True)
+        dst = sqlite3.connect(DST_DB)
+        with dst:
+            src.backup(dst)
+        dst.close()
+        src.close()
+        print("backup complete: {} -> {}".format(SRC_DB, DST_DB))
+
+
+    if __name__ == "__main__":
+        main()
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: k3s-restic-backup
+  namespace: k3s-backup
+spec:
+  # JST で評価される (node01 の time.timeZone)。既存 backup 帯
+  # (2:45 immich / 3:10 coder / 3:20 adguard / 3:30 workspace-home / 3:40 vaultwarden /
+  #  3:55 syncthing) の手前、2:30 に置く。
+  #
+  # 頻度が日次である根拠: B2 の download cap は 2026-08-22 に一度これで backup が全滅して
+  # いる (P-0216 / PR #556)。ダウンロード消費は「リポジトリを開くたびの config/snapshots/
+  # index 読み」が主で、1 回あたりの桁はデータ量ではなく実行回数に比例する
+  # (P-0128 の帳簿の推定: 日次 backup 1 回 ≈ 32 MiB)。7 本目を足す以上、既存 6 本と同じ
+  # 日次に揃えるのが cap への追加負荷が読める唯一の選び方で、時間毎にすると同じ根拠で
+  # 24 倍になる。RPO は 24 時間。
+  #
+  # **state.db の実サイズは分からない** (このクラスタを触れる環境で測っていない)。
+  # 数百 MB になりうるという前提で、頻度は保守的に日次のままにしてある。実測が取れて
+  # 「小さくて cap に効かない」と分かったら、そのときに頻度を上げるかを判断する。
+  schedule: "30 2 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      # 既存 backup CronJob (immich / vaultwarden / adguard) と同じ値
+      activeDeadlineSeconds: 3600
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          initContainers:
+            - name: sqlite-snapshot
+              image: python:3.14-alpine
+              terminationMessagePolicy: FallbackToLogsOnError
+              command: ["python", "/scripts/sqlite_backup.py"]
+              env:
+                - name: SRC_DB
+                  value: /mnt/k3s-db/state.db
+                - name: DST_DB
+                  value: /staging/state.db
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              # /var/lib/rancher/k3s/server 配下は root 所有の 0700。所有権に関わらず読む
+              # 必要があるため既存 backup CronJob と同じ最小権限パターンを使う: 読み取り時の
+              # 権限チェック回避のみ許可し、フルの root 権限は持たせない。
+              # 書き込みは readOnly: true でも構造的に禁止している
+              securityContext:
+                runAsUser: 0
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                  add: ["DAC_READ_SEARCH"]
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 300m
+                  memory: 256Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: k3s-db
+                  mountPath: /mnt/k3s-db
+                  readOnly: true
+                - name: staging
+                  mountPath: /staging
+          containers:
+            - name: restic-backup
+              image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  restic snapshots >/dev/null 2>&1 || restic init
+                  restic unlock
+                  restic backup /staging/state.db /mnt/k3s-server/token
+              # credential は backup 専用の append-only 鍵。削除権限つきの
+              # k3s-backup-restic-credentials は下の retention CronJob だけが使う
+              env:
+                - name: RESTIC_B2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: k3s-backup-restic-backup-credentials
+                      key: RESTIC_B2_BUCKET
+                # bucket 名の後ろの "k3s-datastore" がリポジトリパスの区切り。既存は
+                # vaultwarden / immich / coder-postgres / coder-workspace-homes / syncthing / adguard
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):k3s-datastore"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: k3s-backup-restic-backup-credentials
+                      key: RESTIC_PASSWORD
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: k3s-backup-restic-backup-credentials
+                      key: B2_ACCOUNT_ID
+                - name: B2_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: k3s-backup-restic-backup-credentials
+                      key: B2_ACCOUNT_KEY
+              securityContext:
+                runAsUser: 0
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+                  add: ["DAC_READ_SEARCH"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                # memory limits は入れない (実測が無い。既存 6 本の backup CronJob と同型)
+                limits:
+                  cpu: 500m
+              volumeMounts:
+                - name: staging
+                  mountPath: /staging
+                  readOnly: true
+                - name: k3s-token
+                  mountPath: /mnt/k3s-server/token
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: k3s-restic-sqlite-backup-script
+            # type を明示して、パスが無いノードでは Pod が起動せず Job が失敗する形にする
+            # (黙って空をバックアップするより、落ちて気づく方がよい)
+            - name: k3s-db
+              hostPath:
+                path: /var/lib/rancher/k3s/server/db
+                type: Directory
+            - name: k3s-token
+              hostPath:
+                path: /var/lib/rancher/k3s/server/token
+                type: File
+            - name: staging
+              emptyDir: {}
+---
+# 古い世代を刈る (restic forget --prune)。hostPath には触れないためマウント不要。
+#
+# 保持世代は既存 6 本と同じ --keep-daily 7 --keep-weekly 4 --keep-monthly 6。
+# **曜日だけ既存とずらして水曜にしてある**: 2026-08-22 の B2 download cap 超過は
+# 「土曜の夜に全リポジトリの retention が一斉に走った」ことで起きており (P-0128 の推定で
+# prune 1 回 ≈ 512 MiB)、7 本目を同じ日曜の帯に積むのは同じ形の再発を招く。
+# 日曜 (immich 3:45 / vaultwarden 4:00 / coder 4:10 / workspace-home 4:30 /
+# syncthing 4:50 / adguard 5:10) から独立した水曜 5:30 に置く。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: k3s-restic-retention
+  namespace: k3s-backup
+spec:
+  schedule: "30 5 * * 3"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          containers:
+            - name: restic-forget
+              image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  restic snapshots >/dev/null 2>&1 || { echo "repository not initialized yet, skipping"; exit 0; }
+                  restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+              env:
+                - name: RESTIC_B2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: k3s-backup-restic-credentials
+                      key: RESTIC_B2_BUCKET
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):k3s-datastore"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: k3s-backup-restic-credentials
+                      key: RESTIC_PASSWORD
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: k3s-backup-restic-credentials
+                      key: B2_ACCOUNT_ID
+                - name: B2_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: k3s-backup-restic-credentials
+                      key: B2_ACCOUNT_KEY
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m

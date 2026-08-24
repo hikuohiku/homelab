@@ -129,6 +129,8 @@ DECLARED_SECRET_TARGETS = frozenset(
         "immich-postgres-credentials",
         "immich-restic-backup-credentials",
         "immich-restic-credentials",
+        "k3s-backup-restic-backup-credentials",
+        "k3s-backup-restic-credentials",
         "operator-oauth",
         "ops-dashboard-github-token",
         "autopilot-core-credentials",
