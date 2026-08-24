@@ -7140,7 +7140,7 @@
     {
       "id": "P-9010",
       "title": "人間の声を運ぶバスが『消える』前提で動いている — NATS JetStream の耐久性を初めて実測する",
-      "state": "proposed",
+      "state": "stalled",
       "branch": "project/p-9010",
       "irreversible": false,
       "capabilities": [],
@@ -7213,12 +7213,13 @@
           "! grep -qE 'TELEGRAM_BOT_TOKEN|AUTOPILOT_GITHUB_TOKEN|DISCORD_WEBHOOK' docs/security/nats-durability.md"
         ],
         "broken": []
-      }
+      },
+      "stalled_reason": "adopt_gate_some_pass"
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-24T22:25:45Z",
-  "last_activity_at": "2026-08-24T22:35:40Z",
+  "last_curriculum_at": "2026-08-24T22:36:54Z",
+  "last_activity_at": "2026-08-24T22:36:54Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false,
