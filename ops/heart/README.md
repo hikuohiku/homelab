@@ -98,6 +98,16 @@ curriculum Job --result.json (spec 全文)--> heart --> ops-state/projects.json 
 - **意味論の変更**: 台帳 PR を close しても採択は取り消されない。取り消しは veto
   (予告窓) で行う
 
+### 棄却案は Project CR にも入る (設計 state-out-of-git 4b-1)
+
+台帳の `adopted: false` 行は毎ビート `state: rejected` の Project CR に取り込まれる
+(`heart.sync_project_crs` → `projectcr.plan_rejected`、1 ビート 25 件ずつ)。
+`rejected` は終端なので状態機械は触らず、`projects.json` にも載らない。
+
+立案役 / 判定役はこの CR を MCP の `homelab_proposals` で読む。**台帳のファイルは
+もう読ませていない** — 4b-2 で `archive.jsonl` の書き込みを止めても、
+`reject_reason` / `improve_hint` が生成に戻る経路は切れない。
+
 ## 原則 (実装の理由)
 
 - **判断は reconcile.py の純関数だけ**。heart.py は観測と実行。テストは遷移表

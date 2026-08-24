@@ -276,7 +276,8 @@ subjects:
   - kind: ServiceAccount
     name: ops-dashboard
     namespace: autopilot
-  # 常駐コア。プロジェクトの状態を人間に話すために読む
+  # 常駐コア。プロジェクトの状態を人間に話すために読む。MCP の homelab_proposals
+  # (過去案の要点) もここを通る — 立案役が棄却理由を読む唯一の経路 (4b-1)
   - kind: ServiceAccount
     name: autopilot-core
     namespace: autopilot

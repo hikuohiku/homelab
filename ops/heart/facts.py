@@ -486,24 +486,36 @@ def collect_dispatches(data_dir):
     return out
 
 
-def load_adopted_specs(repo_dir):
-    """main の archive.jsonl から採択済み spec を {id: spec} で返す (同 id は最後の行が有効)。"""
-    specs = {}
+def load_archive_records(repo_dir):
+    """main の archive.jsonl の全行 (採否を問わない) をそのまま返す。
+
+    棄却行の取り込み先はここ (設計 state-out-of-git「棄却された案も CR にする」)。
+    採否で絞らないのは、reject_reason / improve_hint を持つのが棄却行だけだから。
+    壊れた行は黙って飛ばす — 1 行の破損で台帳全体を読めなくしない。
+    """
     path = repo_dir / "ops" / "projects" / "archive.jsonl"
     if not path.exists():
-        return specs
+        return []
+    records = []
     with open(path) as f:
         for line in f:
             line = line.strip()
             if not line:
                 continue
             try:
-                rec = json.loads(line)
+                records.append(json.loads(line))
             except ValueError:
                 continue
-            if rec.get("adopted") and rec.get("id"):
-                specs[rec["id"]] = rec
-    return specs
+    return records
+
+
+def load_adopted_specs(repo_dir):
+    """main の archive.jsonl から採択済み spec を {id: spec} で返す (同 id は最後の行が有効)。"""
+    return {
+        rec["id"]: rec
+        for rec in load_archive_records(repo_dir)
+        if rec.get("adopted") and rec.get("id")
+    }
 
 
 def collect_critic(data_dir):

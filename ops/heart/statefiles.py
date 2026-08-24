@@ -53,10 +53,25 @@ PROJECT_STATES = (
     "delivered",
     "stalled",
     "vetoed",
+    # 採択されなかった案 (設計 state-out-of-git「棄却された案も CR にする」)。
+    # **状態機械には一度も入らない**入り口専用の終端で、reject_reason /
+    # improve_hint を次の立案へ返すためだけに存在する。projects.json には
+    # 載せない (載せると 250 件超の墓標が毎ビート git を往復する) — 置き場は
+    # Project CR だけ
+    "rejected",
 )
-TERMINAL_STATES = ("delivered", "stalled", "vetoed")
+# 終端 = decide() の状態機械が触らないもの。rejected をここに入れるのが
+# 「棄却案が一斉に着手される」ことへの唯一の歯止め (reconcile.py の
+# `if state in TERMINAL_STATES: continue`)
+TERMINAL_STATES = ("delivered", "stalled", "vetoed", "rejected")
 CHORE_STATES = ("queued", "running", "done", "failed")
 
+# 必須フィールドは **state で変えない**。CRD の required は spec 直下の静的な
+# 一覧で、state ごとに変えるには CEL (x-kubernetes-validations) が要る。
+# 棄却案は branch も created も持たないが、そこに既定値 (branch は空文字、
+# created は proposed_at の日付) を入れるほうが、スキーマを条件分岐させるより
+# 壊れ方が読みやすい。空の branch が通るのは終端だけ — validate_projects の
+# 「非終端は project/ で始まること」がそのまま歯止めになっている
 REQUIRED_PROJECT_FIELDS = (
     "id",
     "title",

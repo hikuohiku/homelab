@@ -398,3 +398,178 @@ func shortRev(rev string) string {
 	}
 	return rev
 }
+
+// --- 過去案の台帳 (Project CR) ---
+//
+// 立案役 (planner) と判定役 (judge) は bash: deny のサブエージェントで、これまで
+// 作業コピーの ops/projects/archive.jsonl を read して過去案を見ていた。台帳が
+// Project CR へ移る (設計 state-out-of-git 4b) と読めなくなるので、その口をここに開ける。
+//
+// **要点だけを返す。** 392 件の spec 全文はコアの文脈を食い潰すうえ、立案が要るのは
+// 「何が既に出ていて、なぜ落ちたか」だけ。why / dod / verify は返さない。
+// **read のみ**で、コアに CR を書く権限は無い (設計 D29。ClusterRole は
+// autopilot-project-reader の get/list/watch)。
+
+const (
+	projectsAPIPath = "/apis/autopilot.homelab.hikuohiku.dev/v1/namespaces/%s/projects?limit=1000"
+	// proposalsDefaultLimit は cell を絞らないときの既定件数。
+	// 直近から数えて、生成役が「既出」を判断できる程度の窓
+	proposalsDefaultLimit = 40
+	// proposalsMaxLimit は引数で指定できる件数の上限
+	proposalsMaxLimit = 100
+	// proposalsReasonChars は reject_reason / improve_hint の切り詰め長。
+	// 死因は 1〜2 文で書かれる契約 (ops/prompts/curriculum-judge.md)
+	proposalsReasonChars = 300
+	// proposalsEnvelopeBytes は件数・note 等の外枠に見込む余白。
+	// 残りが行に使える予算になる
+	proposalsEnvelopeBytes = 1200
+)
+
+type projectList struct {
+	Items []struct {
+		Spec struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+			State string `json:"state"`
+			Spec  struct {
+				Cell         []string `json:"cell"`
+				Adopted      *bool    `json:"adopted"`
+				ProposedAt   string   `json:"proposed_at"`
+				ProposedBy   string   `json:"proposed_by"`
+				RejectReason string   `json:"reject_reason"`
+				ImproveHint  string   `json:"improve_hint"`
+			} `json:"spec"`
+		} `json:"spec"`
+	} `json:"items"`
+}
+
+type proposalRow struct {
+	ID           string   `json:"id"`
+	Title        string   `json:"title"`
+	Cell         []string `json:"cell,omitempty"`
+	Adopted      bool     `json:"adopted"`
+	State        string   `json:"state"`
+	ProposedAt   string   `json:"proposed_at,omitempty"`
+	ProposedBy   string   `json:"proposed_by,omitempty"`
+	RejectReason string   `json:"reject_reason,omitempty"`
+	ImproveHint  string   `json:"improve_hint,omitempty"`
+}
+
+// proposalsQuery は絞り込み。cell が空なら全件から直近 limit 件。
+type proposalsQuery struct {
+	Cell     string
+	Limit    int
+	Rejected bool // 棄却案だけに絞る (教師信号を読むとき)
+}
+
+// proposals は過去案を新しい順に要点だけ返す。
+func (k *kubeClient) proposals(ctx context.Context, q proposalsQuery) (string, error) {
+	namespace := envOr("CORE_PROJECTS_NAMESPACE", "autopilot")
+	var list projectList
+	if err := k.get(ctx, fmt.Sprintf(projectsAPIPath, namespace), &list); err != nil {
+		return "", err
+	}
+	rows := make([]proposalRow, 0, len(list.Items))
+	for _, it := range list.Items {
+		s := it.Spec
+		// adopted は棄却案の spec にしか無いので、state から決める。
+		// rejected 以外はすべて「採択されて動いた案」
+		adopted := s.State != "rejected"
+		if s.Spec.Adopted != nil {
+			adopted = *s.Spec.Adopted
+		}
+		rows = append(rows, proposalRow{
+			ID:           s.ID,
+			Title:        s.Title,
+			Cell:         s.Spec.Cell,
+			Adopted:      adopted,
+			State:        s.State,
+			ProposedAt:   s.Spec.ProposedAt,
+			ProposedBy:   s.Spec.ProposedBy,
+			RejectReason: truncate(s.Spec.RejectReason, proposalsReasonChars),
+			ImproveHint:  truncate(s.Spec.ImproveHint, proposalsReasonChars),
+		})
+	}
+	total := len(rows)
+	rows = filterProposals(rows, q)
+	matched := len(rows)
+	// 新しい順。id は P-NNNN の採番順なので、桁が揃っている限り辞書順でよい
+	sort.Slice(rows, func(i, j int) bool { return rows[i].ID > rows[j].ID })
+	limit := clampProposalLimit(q.Limit)
+	truncated := false
+	if len(rows) > limit {
+		rows, truncated = rows[:limit], true
+	}
+	// 件数で切っても、題名と死因が長ければ応答の上限に当たる。clip に任せると
+	// **JSON の途中で切れて丸ごと読めなくなる** ので、ここで行数を落とす
+	rows, overflowed := fitProposals(rows, maxToolResultBytes-proposalsEnvelopeBytes)
+	truncated = truncated || overflowed
+	return encodeTool(map[string]any{
+		"fetched_at": k.stamp(),
+		"total":      total,
+		"matched":    matched,
+		"returned":   len(rows),
+		"truncated":  truncated,
+		"note": "過去案の要点だけ (why / dod / verify は含まない)。新しい順。" +
+			"棄却案の reject_reason / improve_hint は判定役が残した死因で、同型の再提案を避けるために読む",
+		"proposals": rows,
+	})
+}
+
+// filterProposals は cell / 採否の絞り込み (純関数)。
+func filterProposals(rows []proposalRow, q proposalsQuery) []proposalRow {
+	cell := strings.ToLower(strings.TrimSpace(q.Cell))
+	if cell == "" && !q.Rejected {
+		return rows
+	}
+	out := rows[:0:0]
+	for _, r := range rows {
+		if q.Rejected && r.Adopted {
+			continue
+		}
+		if cell != "" && !hasCell(r.Cell, cell) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+func hasCell(cells []string, want string) bool {
+	for _, c := range cells {
+		if strings.ToLower(c) == want {
+			return true
+		}
+	}
+	return false
+}
+
+// fitProposals は予算に収まる行数まで落とす (純関数)。
+// 返り値の 2 つめは落としたかどうか。1 件も入らないときも 1 件は返す —
+// 「全部落ちた」より「1 件だけ返って truncated」の方が読み手に優しい。
+func fitProposals(rows []proposalRow, budget int) ([]proposalRow, bool) {
+	used := 0
+	for i, r := range rows {
+		raw, err := json.Marshal(r)
+		if err != nil {
+			return rows[:i], true
+		}
+		// MarshalIndent は字下げのぶん膨らむので余裕を見る
+		used += len(raw)*7/5 + 8
+		if used > budget && i > 0 {
+			return rows[:i], true
+		}
+	}
+	return rows, false
+}
+
+// clampProposalLimit は件数上限を握る。0 以下は既定、上限超えは上限。
+func clampProposalLimit(n int) int {
+	if n <= 0 {
+		return proposalsDefaultLimit
+	}
+	if n > proposalsMaxLimit {
+		return proposalsMaxLimit
+	}
+	return n
+}

@@ -224,7 +224,9 @@ class CuriculumPromptsStayInSync(unittest.TestCase):
             "5〜10 案",
             "cell",
             "verify",
-            "archive.jsonl",
+            # 過去案の読み先。台帳のファイルから Project CR (MCP ツール) へ移った
+            # (設計 state-out-of-git 4b-1)
+            "homelab_proposals",
             "reject_reason",
             "proposed_by",
             "request_id",
@@ -244,8 +246,22 @@ class CuriculumPromptsStayInSync(unittest.TestCase):
             "reject_reason",
             "失格条件",
             "adopted",
+            "homelab_proposals",
         ):
             self.assertIn(needle, prompt, f"判定役の指示から {needle} が落ちている")
+
+    def test_neither_role_reads_the_ledger_file_any_more(self):
+        """過去案の正は Project CR に移った (設計 state-out-of-git 4b-1)。
+
+        指示に archive.jsonl が残っていると、4b-2 でファイルが消えた後に
+        「読めなかった」まま案を書き切る — 教師信号が静かに切れる形。
+        """
+        for name in ("planner", "judge"):
+            self.assertNotIn(
+                "archive.jsonl",
+                self.agents[name]["prompt"],
+                f"{name} の指示がまだ台帳のファイルを読ませている",
+            )
 
 
 class CoreDispatchPolicy(unittest.TestCase):
