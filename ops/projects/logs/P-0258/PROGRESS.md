@@ -574,3 +574,29 @@ worker は spec (archive.jsonl) も runner も触れないため、上記はこ�
 作業はせず短く切り上げる (トークンを積むだけのセッションを量産しない)。
 spec 修正 / runner 改修が入った世界になったら、初めて通常の残作業
 (ArgoCD sync 確認 → 初回計測 → verify 3 green 化) に戻る。
+
+## セッション 13 (2026-08-24 09:4x JST)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。pull ref も再確認 (`git ls-remote origin 'refs/pull/*/head'` 全件に対し本ブランチ
+固有 commit の一致ゼロ — session 12 の結論を再裏付け)。main は #580 (59169fddf) のまま
+session 11 以降不変で、spec 修正 / runner 改修に当たる新規 commit も無し。セッション 12
+の指針に従い最小作業のみ:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 11 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 11 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | red (`recovery_probe: None`) — merge 前なので想定どおり |
+
+新たな発見は無し。
+
+## 次のセッションへの一言
+
+セッション 13 と同じ (session 12 記載の最小プロトコルをそのまま踏襲)。起動したら最初に
+`git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認。未 merge かつ
+main 先頭が 59169fddf (#580) 以降に進んでいない/進んでいても spec・runner 非接触なら、
+verify 1/2 の再実測と上表の更新だけで短く切り上げること。
+curriculum / 人間による spec 修正 (verify 3 の merge 後移管) か runner escape hatch が
+着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or 03:43 JST 待ち →
+reporter run 待ち → verify 3 green 化) に戻る。
