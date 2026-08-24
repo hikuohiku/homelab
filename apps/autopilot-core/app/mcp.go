@@ -13,7 +13,8 @@
 // コードで縛るため。新しい credential も RBAC も要らない:
 //
 //   - status はクラスタ内の ops-dashboard (認証不要・read-only の API)
-//   - health は driver が既に持つ GitHub トークンで ops-health-report ブランチを読む
+//   - health はクラスタ内の ConfigMap ops-health-report を読む (設計 state-out-of-git
+//     Phase 5)。ConfigMap に届かないときだけ ops-health-report ブランチに落ちる
 //   - live の 3 つは k8s API を read-only の ClusterRole (autopilot-reader) で直読みする。
 //     トークンは projected volume で**このサイドカーにだけ** mount してあり、
 //     opencode コンテナからは見えない (k8s.go の冒頭を参照)
@@ -201,6 +202,29 @@ func (c *client) fetchStatus(ctx context.Context) (string, error) {
 	return clip(string(raw)), nil
 }
 
+// fetchHealth は健全性レポートを取る。正はクラスタ内の ConfigMap で、そこへ届かない
+// ときだけ GitHub のブランチに落ちる (ブランチ経路は設計 Phase 7 で消える)。
+// **どちらも取れなければエラーにする** — 取れなかったことを「異常なし」に化けさせない。
+func (s *mcpServer) fetchHealth(ctx context.Context) (string, error) {
+	k, err := s.kubeAPI()
+	if err == nil {
+		raw, cmErr := k.healthReport(ctx,
+			envOr("CORE_HEALTH_NAMESPACE", "ops-health-reporter"),
+			envOr("CORE_HEALTH_CONFIGMAP", "ops-health-report"),
+			envOr("CORE_HEALTH_KEY", "latest.json"))
+		if cmErr == nil {
+			return clip(raw), nil
+		}
+		err = cmErr
+	}
+	log.Printf("health: ConfigMap から読めないのでブランチに落ちる: %v", err)
+	raw, branchErr := s.client.fetchHealth(ctx)
+	if branchErr != nil {
+		return "", fmt.Errorf("health レポートを ConfigMap からもブランチからも読めない (%v / %w)", err, branchErr)
+	}
+	return raw, nil
+}
+
 func (c *client) fetchHealth(ctx context.Context) (string, error) {
 	branch := envOr("CORE_HEALTH_BRANCH", "ops-health-report")
 	path := envOr("CORE_HEALTH_PATH", "ops/health/latest.json")
@@ -337,7 +361,7 @@ func (s *mcpServer) callTool(ctx context.Context, name string, args json.RawMess
 	case "homelab_status":
 		body, err = s.client.fetchStatus(ctx)
 	case "homelab_health":
-		body, err = s.client.fetchHealth(ctx)
+		body, err = s.fetchHealth(ctx)
 	case "homelab_applications", "homelab_pods", "homelab_events":
 		body, err = s.callKube(ctx, name)
 	case "request_task":

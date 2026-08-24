@@ -80,3 +80,36 @@ subjects:
   - kind: ServiceAccount
     name: ops-health-reporter
     namespace: ops-health-reporter
+---
+# レポートの正の置き場 (ConfigMap ops-health-report) を書くための唯一の write
+# (設計 state-out-of-git Phase 5)。cluster-wide ではなく自 namespace に閉じた Role で、
+# 上書きできるのは 1 つの名前だけ。create を resourceNames で縛れないのは対象が
+# まだ存在しないため — その分 update 側を名前で絞ってある
+# (apps/immich/pvc-usage-cronjob.yaml の pvc-usage-reporter と同型)。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ops-health-reporter-report-writer
+  namespace: ops-health-reporter
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["ops-health-report"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ops-health-reporter-report-writer
+  namespace: ops-health-reporter
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ops-health-reporter-report-writer
+subjects:
+  - kind: ServiceAccount
+    name: ops-health-reporter
+    namespace: ops-health-reporter

@@ -19,8 +19,9 @@ metadata:
 #   3. 同じ判断を ops-health-reporter (apps/ops-health-reporter/rbac.yaml) で既にしている。
 #      読む対象が同じなので、ルールもそちらに揃える
 #
-# なお autopilot の一次情報源は ops-health-reporter が書き戻す ops-health-report ブランチ
-# （CHARTER §2）で、この API 直読みはその補助。ブランチが古いときの原因切り分けに使う。
+# なお autopilot の一次情報源は ops-health-reporter が書く ConfigMap ops-health-report
+# （設計 state-out-of-git Phase 5）で、この API 直読みはその補助。レポートが古いときの
+# 原因切り分けに使う。
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -44,6 +45,12 @@ rules:
   - apiGroups: ["metrics.k8s.io"]
     resources: ["pods", "nodes"]
     verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    # 健全性レポートの正 (設計 state-out-of-git Phase 5)。ops-health-reporter が書き、
+    # heart と常駐コアが読む。名前で縛るので ConfigMap 一般は読めないまま
+    resourceNames: ["ops-health-report"]
+    verbs: ["get"]
   # Secret は意図的に含めない。ExternalSecret の同期状態（status）は上の
   # externalsecrets で読めるので、値そのものを読む必要は無い
 ---

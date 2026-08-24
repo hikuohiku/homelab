@@ -463,8 +463,15 @@ class Heart:
         cursors = self.work.load_cursors()
 
         # --- 観測。失敗した項目は None (「無い」と区別する。decide が保守的に扱う) ---
+        # 正はクラスタ内の ConfigMap (設計 state-out-of-git Phase 5)。k8s に届かない
+        # ときだけ ops-health-report ブランチに落ちる
+        try:
+            health_k8s = self.k8s_client()
+        except Exception as e:
+            log(f"k8s client unavailable (health は ブランチ経路に落ちる): {e}")
+            health_k8s = None
         unhealthy_apps, health_fresh, health_doc = facts.load_health(
-            self.repo_dir, self.cfg.health_branch
+            self.repo_dir, self.cfg.health_branch, health_k8s
         )
         # B2 download cap の帳簿の警報すべき状態 (P-0128)。warn/exceed のときだけ
         # 中身があり、それ以外は None (budget_alert_due が繰り返しを落とす)

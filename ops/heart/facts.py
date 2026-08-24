@@ -12,27 +12,42 @@ from . import dispatch, gitutil, tasks, triage
 from .statefiles import parse_iso
 
 
-def load_health(repo_dir, health_branch):
-    """ops-health-report ブランチの latest.json。(unhealthy_apps, fresh, raw)
+# 健全性レポートの正の置き場 (設計 state-out-of-git Phase 5)。ops-health-reporter が
+# 書き、heart と常駐コアがクラスタ内で読む。ブランチ経路は Phase 7 で消える
+HEALTH_CONFIGMAP_NAMESPACE = "ops-health-reporter"
+HEALTH_CONFIGMAP = "ops-health-report"
+HEALTH_CONFIGMAP_KEY = "latest.json"
+HEALTH_PATH = "ops/health/latest.json"
+HEALTH_FRESH_SECONDS = 3600
+
+# 「観測できなかった」を表す。unhealthy_apps=None は「全部 unhealthy」でも
+# 「全部 healthy」でもない (decide 側が保守的に扱う)
+HEALTH_UNKNOWN = (None, False, None)
+
+
+def parse_health(raw, now=None):
+    """レポート JSON 1 本を (unhealthy_apps, fresh, doc) にする (純関数)。
 
     unhealthy_apps は Synced/Healthy でない Application 名のリスト。
-    観測に失敗したら None (「全部 unhealthy」でも「全部 healthy」でもない)。
-    既知の Degraded (T-0106 等) をここで隠さない — soak の合否は decide 側が
-    「merge 時点の baseline から悪化したか」で判定する (レビュー指摘 [6])。
+    読めなければ HEALTH_UNKNOWN。既知の Degraded (T-0106 等) をここで隠さない —
+    soak の合否は decide 側が「merge 時点の baseline から悪化したか」で判定する
+    (レビュー指摘 [6])。
     """
-    raw = gitutil.show(repo_dir, f"origin/{health_branch}", "ops/health/latest.json")
-    if raw is None:
-        return None, False, None
+    if not raw:
+        return HEALTH_UNKNOWN
     try:
         doc = json.loads(raw)
     except ValueError:
-        return None, False, None
+        return HEALTH_UNKNOWN
+    if not isinstance(doc, dict):
+        return HEALTH_UNKNOWN
+    now = now or datetime.now(timezone.utc)
     generated = doc.get("generated_at")
     fresh = False
     if generated:
         try:
-            age = datetime.now(timezone.utc) - parse_iso(generated)
-            fresh = age.total_seconds() < 3600
+            age = now - parse_iso(generated)
+            fresh = age.total_seconds() < HEALTH_FRESH_SECONDS
         except ValueError:
             pass
     unhealthy = [
@@ -41,6 +56,55 @@ def load_health(repo_dir, health_branch):
         if app.get("sync") != "Synced" or app.get("health") != "Healthy"
     ]
     return unhealthy, fresh, doc
+
+
+def pick_health(primary, fallback):
+    """2 経路の観測からどちらを採るか (純関数)。
+
+    fresh な方が勝つ。両方 fresh でなければ doc を持っている方 (primary 優先) を
+    fresh=False のまま返し、どちらも読めなければ HEALTH_UNKNOWN。
+    **「読めなかった」を「健全」に倒さない** — 空の unhealthy_apps を捏造しない。
+    """
+    if primary[1]:
+        return primary
+    if fallback[1]:
+        return fallback
+    if primary[2] is not None:
+        return primary
+    if fallback[2] is not None:
+        return fallback
+    return HEALTH_UNKNOWN
+
+
+def read_health_configmap(
+    k8s,
+    namespace=HEALTH_CONFIGMAP_NAMESPACE,
+    name=HEALTH_CONFIGMAP,
+    key=HEALTH_CONFIGMAP_KEY,
+):
+    """ConfigMap からレポートの生 JSON を取る。読めなければ None (例外は投げない)。"""
+    if k8s is None:
+        return None
+    try:
+        cm = k8s.get_configmap(namespace, name)
+    except Exception:  # noqa: BLE001 — 到達不能も 403 も「読めない」に畳む
+        return None
+    data = cm.get("data") if isinstance(cm, dict) else None
+    raw = data.get(key) if isinstance(data, dict) else None
+    return raw if isinstance(raw, str) else None
+
+
+def load_health(repo_dir, health_branch, k8s=None, now=None):
+    """健全性レポート。(unhealthy_apps, fresh, raw)
+
+    正はクラスタ内の ConfigMap (設計 state-out-of-git Phase 5)。読めない、あるいは
+    古いときだけ ops-health-report ブランチに落ちる。ブランチ経路は Phase 7 で消える。
+    """
+    primary = parse_health(read_health_configmap(k8s), now)
+    if primary[1]:
+        return primary
+    branch_raw = gitutil.show(repo_dir, f"origin/{health_branch}", HEALTH_PATH)
+    return pick_health(primary, parse_health(branch_raw, now))
 
 
 def budget_alert(doc):

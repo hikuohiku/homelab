@@ -1,4 +1,9 @@
-"""クラスタ内から ArgoCD/Pod/PVC/Node の状態を集め、GitHub の専用ブランチへ書き戻す。
+"""クラスタ内から ArgoCD/Pod/PVC/Node の状態を集め、同じクラスタの ConfigMap へ書く。
+
+正の置き場は ConfigMap `ops-health-report` (自 namespace)。読み手 (heart / autopilot-core)
+も同じクラスタの中に居るので、GitHub を経由する理由が無い (設計 state-out-of-git Phase 5)。
+ops-health-report ブランチへの書き込みは当面残す — 外側の番人
+(ops/check_health_freshness.py) がまだそれを読んでいるため。撤去は Phase 7。
 
 標準ライブラリのみで動く（イメージに pip install を要求しない）。
 k8s API へは ServiceAccount トークン（自動マウント）、GitHub API へは
@@ -29,7 +34,16 @@ K8S_BASE = "https://{}:{}".format(K8S_HOST, K8S_PORT)
 
 with open(os.path.join(SA_DIR, "token")) as f:
     SA_TOKEN = f.read().strip()
+with open(os.path.join(SA_DIR, "namespace")) as f:
+    NAMESPACE = f.read().strip()
 SSL_CTX = ssl.create_default_context(cafile=os.path.join(SA_DIR, "ca.crt"))
+
+# レポートの正の置き場 (設計 state-out-of-git Phase 5)。書けるのは自 namespace の
+# この 1 個だけ (rbac.yaml の ops-health-reporter-report-writer)
+HEALTH_CONFIGMAP = "ops-health-report"
+HEALTH_CONFIGMAP_KEY = "latest.json"
+# ConfigMap の上限は 1 MiB。超えたら API に弾かれるので、その前に理由の分かる形で落とす
+HEALTH_CONFIGMAP_MAX_BYTES = 900 * 1024
 
 
 def k8s_get(path):
@@ -38,6 +52,62 @@ def k8s_get(path):
     )
     with urllib.request.urlopen(req, context=SSL_CTX, timeout=15) as resp:
         return json.load(resp)
+
+
+def k8s_request(method, path, body=None):
+    """k8s API を JSON で叩く。(status, body)。HTTPError も status として返す。"""
+    req = urllib.request.Request(
+        K8S_BASE + path,
+        data=json.dumps(body).encode("utf-8") if body is not None else None,
+        method=method,
+        headers={
+            "Authorization": "Bearer " + SA_TOKEN,
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, context=SSL_CTX, timeout=15) as resp:
+            return resp.status, json.load(resp)
+    except urllib.error.HTTPError as e:
+        return e.code, e.read().decode("utf-8", errors="replace")
+
+
+def put_health_configmap(namespace, name, key, payload):
+    """レポートを ConfigMap に置く。無ければ作り、あれば data ごと置き換える。返り値は動詞。
+
+    apps/immich/pvc-usage-cronjob.yaml の put_configmap と同型。GET で存在を見てから
+    POST/PUT を分けるのは、create を resourceNames で縛れないぶん update 側を
+    1 つの名前に絞ってあるため (rbac.yaml)。
+    """
+    size = len(payload.encode("utf-8"))
+    if size > HEALTH_CONFIGMAP_MAX_BYTES:
+        raise RuntimeError(
+            "レポートが {} bytes で ConfigMap に収まらない (上限 {})".format(
+                size, HEALTH_CONFIGMAP_MAX_BYTES
+            )
+        )
+    body = {
+        "apiVersion": "v1",
+        "kind": "ConfigMap",
+        "metadata": {"name": name, "namespace": namespace},
+        "data": {key: payload},
+    }
+    path = "/api/v1/namespaces/{}/configmaps/{}".format(namespace, name)
+    status, resp = k8s_request("GET", path)
+    if status == 200:
+        verb = "更新"
+        status, resp = k8s_request("PUT", path, body)
+    elif status == 404:
+        verb = "作成"
+        status, resp = k8s_request(
+            "POST", "/api/v1/namespaces/{}/configmaps".format(namespace), body
+        )
+    else:
+        raise RuntimeError("configmap の存在を確認できない: {} {}".format(status, resp))
+    if status not in (200, 201):
+        raise RuntimeError("configmap の{}に失敗: {} {}".format(verb, status, resp))
+    return verb
 
 
 def k8s_get_text(path):
@@ -798,7 +868,10 @@ def main():
             "(pod_metrics/node_metrics)。PVC の実ディスク使用量は namespace ごとの pvc-usage-reporter "
             "CronJob が ConfigMap に書いた値を pvc_usage として集約（immich/vaultwarden/coder のみ。"
             "Coder workspace ごとの動的 PVC は対象外、T-0078 参照）。RBAC は get/list/(configmaps のみ get) "
-            "で、write 系の verb は含まない。このファイルは最新1点のみで上書きされる。ピーク値の傾向を"
+            "で、write 系の verb は含まない (唯一の write は自 namespace の ConfigMap ops-health-report 1 個)。"
+            "同じ内容を ConfigMap ops-health-reporter/ops-health-report の latest.json キーにも書いており、"
+            "クラスタ内の読み手 (heart / autopilot-core) はそちらを正として読む。ブランチ側は外側の番人が"
+            "読むためのもので、Phase 7 で畳む。このファイルは最新1点のみで上書きされる。ピーク値の傾向を"
             "見るには ops/health/history/YYYY-MM-DD.jsonl（1行1回分、このレポートと同じ内容）を辿ること"
             "（T-0083）。 nodes[].allocatable/capacity の ephemeral-storage は kubelet が一時ストレージ "
             "監視用に計算する値であり、ルートファイルシステムの全体サイズとは別物（node01 の root "
@@ -837,13 +910,37 @@ def main():
         ),
     }
 
+    payload = json.dumps(report, ensure_ascii=False, indent=2)
+
+    # 正はこちら。読み手 (heart / autopilot-core) は同じクラスタの中に居る
+    configmap_error = None
+    try:
+        verb = put_health_configmap(
+            NAMESPACE, HEALTH_CONFIGMAP, HEALTH_CONFIGMAP_KEY, payload
+        )
+        print(
+            "ConfigMap {}/{} を{}しました ({})".format(
+                NAMESPACE, HEALTH_CONFIGMAP, verb, generated_at
+            )
+        )
+    except Exception as e:  # noqa: BLE001 — 正が書けなくてもブランチ側は書き切る
+        configmap_error = e
+        print(
+            "ConfigMap {}/{} への書き込みに失敗: {}: {}".format(
+                NAMESPACE, HEALTH_CONFIGMAP, type(e).__name__, e
+            ),
+            file=sys.stderr,
+        )
+
+    # ブランチへの二重書き。外側の番人 (ops/check_health_freshness.py) がまだ
+    # これを読んでいるので Phase 7 まで残す
     ensure_branch(token, repo, branch, base_branch)
     put_file(
         token,
         repo,
         branch,
         "ops/health/latest.json",
-        json.dumps(report, ensure_ascii=False, indent=2).encode("utf-8"),
+        payload.encode("utf-8"),
         "health report {}".format(generated_at),
     )
     print("ops/health/latest.json を {} ブランチへ書き込みました ({})".format(branch, generated_at))
@@ -859,6 +956,9 @@ def main():
     )
     print("{} に追記しました ({})".format(history_path, generated_at))
 
+    # 正が書けなかった起動は成功と呼ばない (ブランチが書けていても読み手は ConfigMap を見る)
+    return 1 if configmap_error is not None else 0
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

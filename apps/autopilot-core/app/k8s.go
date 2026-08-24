@@ -128,6 +128,26 @@ func (k *kubeClient) stamp() string {
 	return now().UTC().Format(time.RFC3339)
 }
 
+// --- 健全性レポート ---
+
+// healthReport は ops-health-reporter が書いたレポートを ConfigMap から読む。
+// 両端が同じクラスタの中に居るので GitHub を経由しない (設計 state-out-of-git Phase 5)。
+// 中身は加工せず生の JSON のまま返す (要約はコアの仕事)。
+func (k *kubeClient) healthReport(ctx context.Context, namespace, name, key string) (string, error) {
+	var cm struct {
+		Data map[string]string `json:"data"`
+	}
+	path := fmt.Sprintf("/api/v1/namespaces/%s/configmaps/%s", namespace, name)
+	if err := k.get(ctx, path, &cm); err != nil {
+		return "", err
+	}
+	raw := cm.Data[key]
+	if strings.TrimSpace(raw) == "" {
+		return "", fmt.Errorf("ConfigMap %s/%s に %s が無い", namespace, name, key)
+	}
+	return raw, nil
+}
+
 // --- ArgoCD Application ---
 
 type appList struct {

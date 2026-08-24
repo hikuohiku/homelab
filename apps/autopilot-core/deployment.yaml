@@ -5,7 +5,7 @@
 # 履歴を読む git だけに絞ってあるので、器のレベルで着手できない (config.yaml)。
 #
 # 目は 3 つある:
-#   (1) ops-dashboard / ops-health-report — 既存の 2 ツール
+#   (1) ops-dashboard / ops-health-report — 既存の 2 ツール (後者はクラスタ内の ConfigMap)
 #   (2) k8s API の read (live)            — core-driver-mcp サイドカーだけがトークンを持つ
 #   (3) main の作業コピー /data/repo      — driver が保ち、opencode には read-only で渡す
 apiVersion: apps/v1

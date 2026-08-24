@@ -81,7 +81,7 @@ opencode の permission は **マッチするルールが無いと既定が `ask
       → コアが telegram_reply で所有者へ直接返す
 
 (2) 健全性の変化 ← 人間に言われずに動く経路
-    ops-health-report の latest.json
+    ConfigMap ops-health-report の latest.json（読めないときだけ同名ブランチ）
       → 不調なアプリの顔ぶれが変わったら driver が起こす
       → コアが homelab_health で詳細を見て所有者に知らせる
 ```

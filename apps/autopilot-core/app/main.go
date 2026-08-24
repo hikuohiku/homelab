@@ -48,6 +48,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -207,6 +208,21 @@ func buildPrompt(n note) string {
 type client struct {
 	cfg  *config
 	http *http.Client
+	// kube は健全性レポートを ConfigMap から読むための口 (設計 state-out-of-git
+	// Phase 5)。最初に使うときだけ作り、作れなかった理由は覚えておく
+	kube    *kubeClient
+	kubeErr error
+	kubeMu  sync.Mutex
+}
+
+func (c *client) kubeAPI() (*kubeClient, error) {
+	c.kubeMu.Lock()
+	defer c.kubeMu.Unlock()
+	if c.kube != nil || c.kubeErr != nil {
+		return c.kube, c.kubeErr
+	}
+	c.kube, c.kubeErr = newKubeClient()
+	return c.kube, c.kubeErr
 }
 
 func newClient(cfg *config) *client {
@@ -774,12 +790,8 @@ func orNone(xs []string) string {
 // watchHealth は健全性の変化を見て、変わっていればコアを起こす。
 // 起こしたときだけ true を返す。
 func (c *client) watchHealth(ctx context.Context, sessionID, cursorPath string) bool {
-	branch := envOr("CORE_HEALTH_BRANCH", "ops-health-report")
-	path := envOr("CORE_HEALTH_PATH", "ops/health/latest.json")
-	status, raw, err := c.github(ctx,
-		fmt.Sprintf("/repos/%s/contents/%s?ref=%s", c.cfg.repo, path, branch),
-		"application/vnd.github.raw")
-	if err != nil || status != http.StatusOK {
+	raw, err := c.readHealthReport(ctx)
+	if err != nil {
 		// 読めないことは異常の不在を意味しない。黙って次の周回に回す
 		// (ここで騒ぐと、レポート未生成の間ずっと鳴り続ける)
 		return false
@@ -809,6 +821,35 @@ func (c *client) watchHealth(ctx context.Context, sessionID, cursorPath string) 
 	_ = saveHealthCursor(cursorPath, current)
 	log.Printf("健全性の変化をコアへ渡した: %s → %s", orNone(previous), orNone(current))
 	return true
+}
+
+// readHealthReport はレポートの生 JSON を取る。正はクラスタ内の ConfigMap で、
+// そこへ届かないときだけ GitHub のブランチに落ちる (設計 state-out-of-git Phase 5。
+// ブランチ経路は Phase 7 で消える)。
+func (c *client) readHealthReport(ctx context.Context) ([]byte, error) {
+	k, err := c.kubeAPI()
+	if err == nil {
+		raw, cmErr := k.healthReport(ctx,
+			envOr("CORE_HEALTH_NAMESPACE", "ops-health-reporter"),
+			envOr("CORE_HEALTH_CONFIGMAP", "ops-health-report"),
+			envOr("CORE_HEALTH_KEY", "latest.json"))
+		if cmErr == nil {
+			return []byte(raw), nil
+		}
+		err = cmErr
+	}
+	branch := envOr("CORE_HEALTH_BRANCH", "ops-health-report")
+	path := envOr("CORE_HEALTH_PATH", "ops/health/latest.json")
+	status, raw, ghErr := c.github(ctx,
+		fmt.Sprintf("/repos/%s/contents/%s?ref=%s", c.cfg.repo, path, branch),
+		"application/vnd.github.raw")
+	if ghErr != nil {
+		return nil, fmt.Errorf("ConfigMap もブランチも読めない (%v / %w)", err, ghErr)
+	}
+	if status != http.StatusOK {
+		return nil, fmt.Errorf("ConfigMap もブランチも読めない (%v / status=%d)", err, status)
+	}
+	return raw, nil
 }
 
 func loadHealthCursor(path string) ([]string, bool) {
