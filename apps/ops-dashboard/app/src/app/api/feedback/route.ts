@@ -1,13 +1,26 @@
-// 書き置き (人間フィードバック) の投稿口。旧 server.py の POST /feedback の移植。
+// 書き置き (人間フィードバック) の投稿口。
 //
-// 一次保管場所はリポジトリ内の構造化データ (ops-feedback ブランチの
-// ops/feedback/inbox/<id>.json、1 件 1 ファイル)。heart がそれを読んで台帳へ
-// 取り込む。main へは直 push できない (ruleset) ため専用ブランチへ Contents API で
-// 書く。1 件 1 ファイルなので read-modify-write が無く、同時投稿でも衝突しない。
-// この経路は autopilot に依存しない — heart が死んでいても書き置きは残る。
-// トークンはこのプロセスの中だけで使い、応答に一切出さない。
+// 保管先は 2 つ。NATS (events.raw.homelab.dashboard → bus-sidecar → heart) と、
+// 従来からの GitHub ops-feedback ブランチ (ops/feedback/inbox/<id>.json)。
+// 両方に同じ id で書く。heart の既読 cursor は両経路で同じ鍵を持つので、
+// 二重に処理されることはない。
+//
+// なぜ両書きか: 一次保管を GitHub からクラスタ内へ移す途中 (設計
+// state-out-of-git Phase 6)。先に GitHub を落とすと、バスが届いていない間の
+// 「止めて」が宙に浮く。バスが実際に通ったことを確かめてから GitHub 側を落とす。
+//
+// 片方でも保存できれば受理する。両方落ちたときだけ失敗を返して issue #56 へ誘導する
+// (黙って捨てない)。トークンと NKey seed はこのプロセスの中だけで使い、応答に出さない。
 
-import { randomBytes } from "node:crypto";
+import { busConfigured, publishNote } from "@/lib/feedback-bus";
+import {
+  buildNote,
+  decideOutcome,
+  MAX_BODY_CHARS,
+  newNoteId,
+  normalizeKind,
+  type RouteResult,
+} from "@/lib/feedback-note";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -18,8 +31,6 @@ const BASE_BRANCH = process.env.FEEDBACK_BASE_BRANCH ?? "main";
 const INBOX_DIR = (process.env.FEEDBACK_DIR ?? "ops/feedback/inbox").replace(/^\/+|\/+$/g, "");
 const ISSUE = process.env.FEEDBACK_ISSUE ?? "56";
 const API = (process.env.GITHUB_API ?? "https://api.github.com").replace(/\/+$/, "");
-// 旧 server.py / build.py の textarea maxlength と揃える
-const MAX_BODY_CHARS = 20000;
 
 const ISSUE_URL = `https://github.com/${REPO}/issues/${ISSUE}`;
 
@@ -58,14 +69,34 @@ async function ensureBranch(): Promise<void> {
   }
 }
 
-function newNoteId(): string {
-  const now = new Date();
-  const stamp = now.toISOString().replace(/[-:]/g, "").slice(0, 15).replace("T", "-");
-  return `${stamp}-${randomBytes(3).toString("hex")}`;
+/**
+ * GitHub 側へ保存する。id は呼び出し元が決めた 1 つだけを使う (バスと鍵を揃えるため。
+ * ここで振り直すと、同じ書き置きが 2 つの鍵で heart に届いて 2 回処理される)。
+ * 422 = 同じパスが既にある = 自分の再送なので成功として扱う。
+ */
+async function saveToGithub(note: object, id: string): Promise<void> {
+  await ensureBranch();
+  const path = `${INBOX_DIR}/${id}.json`;
+  const put = await gh("PUT", `/repos/${REPO}/contents/${path}`, {
+    message: `feedback ${id} (ops-dashboard)`,
+    content: Buffer.from(`${JSON.stringify(note, null, 1)}\n`, "utf8").toString("base64"),
+    branch: BRANCH,
+  });
+  if (put.status === 200 || put.status === 201 || put.status === 422) return;
+  throw new Error(`保存に失敗 (${put.status})`);
+}
+
+async function attempt(run: () => Promise<void>): Promise<RouteResult> {
+  try {
+    await run();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+  }
 }
 
 export async function POST(request: Request): Promise<Response> {
-  if (!token()) {
+  if (!busConfigured() && !token()) {
     return Response.json(
       { error: `保存経路が未設定です。代わりに ${ISSUE_URL} へ直接コメントしてください`, issueUrl: ISSUE_URL },
       { status: 503 },
@@ -76,9 +107,7 @@ export async function POST(request: Request): Promise<Response> {
   try {
     const payload = (await request.json()) as { body?: unknown; kind?: unknown };
     body = typeof payload.body === "string" ? payload.body.trim() : "";
-    // kind は heart の tasks.KIND_TASK_REQUEST と揃える。許可リスト外は無視して
-    // ただの書き置き扱い (勝手な種別を発明させない)
-    kind = payload.kind === "task-request" ? "task-request" : undefined;
+    kind = normalizeKind(payload.kind);
   } catch {
     return Response.json({ error: "JSON body {body: string} が必要です" }, { status: 400 });
   }
@@ -86,36 +115,23 @@ export async function POST(request: Request): Promise<Response> {
   if (body.length > MAX_BODY_CHARS) {
     return Response.json({ error: `本文が長すぎます (上限 ${MAX_BODY_CHARS} 文字)` }, { status: 400 });
   }
-  try {
-    await ensureBranch();
-    // 422 = 同じパスが既にある (乱数衝突)。id を振り直して 1 度だけやり直す
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      const note = {
-        id: newNoteId(),
-        source: "ops-dashboard",
-        received: new Date().toISOString().replace(/\.\d+Z$/, "Z"),
-        ...(kind ? { kind } : {}),
-        body,
-      };
-      const path = `${INBOX_DIR}/${note.id}.json`;
-      const put = await gh("PUT", `/repos/${REPO}/contents/${path}`, {
-        message: `feedback ${note.id} (${note.source})`,
-        content: Buffer.from(`${JSON.stringify(note, null, 1)}\n`, "utf8").toString("base64"),
-        branch: BRANCH,
-      });
-      if (put.status === 200 || put.status === 201) {
-        return Response.json({ id: note.id });
-      }
-      if (put.status !== 422 || attempt > 0) {
-        throw new Error(`保存に失敗 (${put.status})`);
-      }
-    }
-    throw new Error("保存に失敗 (id 再試行も 422)");
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    return Response.json(
-      { error: `${message}。代わりに ${ISSUE_URL} へ直接コメントしてください`, issueUrl: ISSUE_URL },
-      { status: 502 },
-    );
-  }
+
+  const now = new Date();
+  const id = newNoteId(now);
+  const note = buildNote(id, body, kind, now);
+
+  // バスを先に試す。heart に一番速く届く経路で、移行後もこれだけが残る
+  const bus = busConfigured()
+    ? await attempt(() => publishNote(note))
+    : ({ ok: false, reason: "未設定" } as RouteResult);
+  const github = token()
+    ? await attempt(() => saveToGithub(note, id))
+    : ({ ok: false, reason: "GITHUB_TOKEN 未設定" } as RouteResult);
+
+  const outcome = decideOutcome(bus, github);
+  if (outcome.ok) return Response.json({ id });
+  return Response.json(
+    { error: `保存に失敗 (${outcome.reason})。代わりに ${ISSUE_URL} へ直接コメントしてください`, issueUrl: ISSUE_URL },
+    { status: 502 },
+  );
 }
