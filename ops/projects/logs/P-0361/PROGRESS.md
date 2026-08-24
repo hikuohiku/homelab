@@ -97,8 +97,48 @@
    有効/無効も確認すること
 4. 実機で checkpoint 再開が v3.1.0 で正しく動くか (issue #29487 / PR #29516 の修正) を確認する
 
+### 2026-08-24 (worker #3) — verify 項目 4 を green にした (report.py checksum 集約 + rbac)
+
+**やったこと**:
+- `apps/ops-health-reporter/report.py` に `collect_checksum()` を追加。immich ns の
+  専用 ConfigMap `immich-checksum-report` の report.json を読み、latest.json の
+  `checksum` 節へ載せる。**status は産出側が判定済みの ok/fail/unconfigured/error を
+  そのまま通す契約** (集約側で再判定しない。判定の正は ops/tools/immich_checksum_check.py)。
+  産出側未稼働・記録破損 (JSON でない・dict でない・status 未知値) は例外にせず
+  no_data で正直に出す (collect_dashboard_smoke と同じ思想。未知 status は「検出ゼロ」
+  と「帳簿の壊れ」を区別できるよう no_data に落とす)
+- `apps/ops-health-reporter/rbac.yaml` の configmaps resourceNames に
+  `immich-checksum-report` を 1 行追加 (worker #2 の「次への一言」の指針どおり)
+- report の `notes` に checksum 節の説明を追記
+- `ops/tests/test_report_checksum.py` (11 テスト) を新規作成。dashboard-smoke と同じ
+  AST 抽出方式で collect_checksum の契約 (パス・status 素通し・no_data 分岐) を固定
+- `python3 -m unittest discover -s ops/tests -t .` → 579 テスト全部 green
+
+**受入検証**: 項目 4 を自分で実測 → green
+(`grep -q 'checksum' apps/ops-health-reporter/report.py` → rc=0)。
+
+**次への一言**:
+1. **残り verify 1 件**: (3) `docs/immich-checksum.md` を作る。上流ソースから確定した
+   API 形・認証・queue 完了検知・summary の読み方は worker #2 の PROGRESS に全部ある。
+   **実機での確定 (DoD 1) と時間実測 (DoD 5) はまだ** — このサンドボックスには
+   tailscale/kubectl が無い。docs には「上流ソースから確定」の事実と、実機確認が必要な
+   箇所 (timeLimit 実値・checkpoint 再開の実機挙動・内蔵 cron の有効/無効) を明記して
+   書ける。ただし PROJECT.md は「API 形・挙動は実測でしか書かない (P-0035 の流儀)」と
+   言っている — docs の本文は上流ソース根拠と実機待ち項目の区別を明示する形で書くこと
+2. **DoD 3 (未着手)**: rules.json に `checksum.mismatch_threshold` を追加し、CronJob の
+   `MISMATCH_THRESHOLD` env を設定する。現状は未設定で report の status が unconfigured
+   を正直に返す (worker #2 が CronJob を unconfigured 前提で実装済み)
+3. **DoD 5 / 実機**: Doppler の `IMMICH_API_KEY` 登録 (人間) → CronJob を走らせ、対象
+   アセット数・所要時間・結果を PROGRESS に残す。system config の timeLimit と内蔵 cron
+   の有効/無効も確認すること
+4. 実機で checkpoint 再開が v3.1.0 で正しく動くか (issue #29487 / PR #29516 の修正) を確認する
+
 ## 発見
 
+- (2026-08-24, worker #3) `test_health_report_path.py` は reader ClusterRole
+  (ops-health-reporter-reader) の resourceNames を検証していない — 産出 ConfigMap を
+  resourceNames に足しても既存 CI は落ちない (足し忘れも検出されない)。dashboard-smoke
+  と同じく、ここは docs と人が守る
 - (2026-08-24, worker #2) immich の内蔵 checksum cron は既定 enabled (03:00 UTC, timeLimit 1h)。
   実機の system config で有効性と timeLimit を確認すること。
 - (2026-08-24) サンドボックスに pip / ruff が無い。CI 側 (`ops/`) の ruff F821 は
