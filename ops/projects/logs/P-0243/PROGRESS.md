@@ -768,3 +768,67 @@
   test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
 - main 追い越しの手順はセッション 17 の「罠注意」参照 (merge-base diff で中身確認)
 - 生死が気になったら archive.jsonl ではなく ops-state:projects.json の `state` を見る
+
+## セッション 20 (2026-08-24) — main #580 を追い越し (inventory 自動解決・コンフリクトなし), heart 時限爆弾テスト 2 件を「main 側起因」と実証, コード変更ゼロ
+
+### やったこと
+
+- **fetch 先行 (セッション 18 の教訓どおり) → main 新着 = 6 コミット (#580, P-0270
+  AdGuard Home 新設)**。本 PR との差分重複は `ops/inventory.json` のみだったため、
+  セッション 6/7/17 の前例どおり origin/main を merge (コンフリクトなし・自動解決。
+  merge 後 `json.load` で inventory.json の妥当性確認済み)
+- **merge 後に検証一式を再走**:
+  - spec verify V1 green / V3 green / V2 red (既知 fail-fast rc=2。stderr も wrapper
+    実測と同一。書き込みプローブで中断・クラスタ接触前なので副作用ゼロ)
+  - ops/tests 全 OK / runner tests 全 OK / validate.py: error 0, warning 11 (既存問題)
+  - **heart tests のみ FAILED (failures=2)** — 詳細は下記「発見」。それ以外は退行なし
+- census 未着を再確認 (`git ls-tree -r origin/main | grep -c egress` = 0) /
+  fetch 後 ops-state:projects.json で P-0243 `state: active`・spawn_count=1 を確認 /
+  本 PR 差分 14 ファイル不変・spawn.py emptyDir mount 無傷を実読確認
+- demo.json 完全性チェック全パス (セッション 17 形式)。**ただし数え方の罠を 1 つ
+  学んだ** (下記「罠注意」)
+
+### 発見 (仕様外 — curriculum / 週次点検が拾うこと)
+
+- **main 側の heart テストに時限爆弾がある**: `ops/heart/tests/test_budget_alert_beat.py`
+  と `test_dashboard_smoke_alert_beat.py` が `TODAY = "2026-08-23"` を焼き付けており、
+  **2026-08-24 (UTC) の日付ロールオーバーで main 上でも落ちるようになった**。
+  素の origin/main の worktree で同 2 件を実走して同一 failure を再現済み —
+  本ブランチの merge 起因では断じてない。本 PR では直さない (スコープ外 + heart は
+  人間レビュー領域)。次の curriculum / メンテナンス起動で修正されたい
+  (直し方: NOW/TODAY を freezgun 的 fixture 化するか実行日から導出)
+- **demo.json 完全性チェックの「7 bool キー」はトップレベルのみの数え方**:
+  bool を再帰的にフラット化して数えると `pods.*.probe.*` の 4 個が加わり **11 個に
+  なる** (今セッション実際に一瞬パニックした)。正しいチェックは「トップレベル bool が
+  7 個 (`all_passed`, `cleaned_up`, `dns_ok_control`, `dns_ok_labeled`,
+  `labeled_blocked`, `probes_conclusive`, `unlabeled_allowed`) +
+  `pods.labeled.probe.https_ok is False` + `pods.control.probe.https_ok is True`」
+
+### 分かったこと (次セッションへの罠注意)
+
+- 今セッションで新しい罠は上記 2 点 (時限爆弾は罠というより環境側の破壊的変化) のみ。
+  既知の手順 (fetch 先行・merge-base diff・生死は ops-state) が全部そのまま機能した
+- heart tests が 2 件落ちても**本 PR の文脈では退行ではない**。まず
+  「素 main でも落ちるか」を worktree で切り分けるのが正手順 (今回実証済み)。
+  落ちる=自分の merge 壊した、と誤認して heart コードを触らないこと
+
+### 検証 (全部自分で実走済み)
+
+- spec verify V1 green / V3 green / V2 red (既知 fail-fast rc=2、クラスタ副作用ゼロ) —
+  merge 後に再走済み
+- unittest 3 discover: ops/tests OK / runner OK / heart FAILED(2) — 2 件は素 origin/main
+  worktree でも同一に落ちることを実証 (main 側時限爆弾) /
+  python3 ops/validate.py: error 0, warning 11 (既存問題) /
+  inventory.json json.load OK / census 未着確認 / P-0243 state=active 確認 /
+  spawn.py emptyDir mount の実読確認 / demo.json 完全性チェック (トップレベル 7 bool 形式)
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4〜19 から不変**: V2 は本 PR の merge+sync 後の新 runner Pod で
+  自動 green 化する (spawn.py の emptyDir mount 済み)。Pod 内での再走・権限 hack は不要
+  (sudo 不在まで実証済み)。やることは「PR merge を待つ」だけ。main 新着なければ短絡でよい
+- census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+  到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+- main 追い越しの手順はセッション 17 の「罠注意」参照 (merge-base diff で中身確認)
+- 生死が気になったら archive.jsonl ではなく ops-state:projects.json の `state` を見る
