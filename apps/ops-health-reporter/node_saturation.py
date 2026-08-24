@@ -9,7 +9,9 @@ allocatable とホスト load を実測し、閾値超過で exit 1 を返す。
 
 取得源 (spec dod (1)):
   - CPU requests : 全 namespace の pod spec `spec.containers[].resources.requests.cpu` の合計
-    (コア API /api/v1/pods)
+    (コア API /api/v1/pods)。スケジューラと同様に終端 pod (status.phase が
+    Succeeded/Failed) は数えない — k3s は terminated-pod-gc まで残し続けるため、
+    数えると水増しになる (レビュー指摘)。
   - allocatable  : node status `status.allocatable.cpu` (コア API /api/v1/nodes)
   - load         : kubelet stats/summary API (`GET /api/v1/nodes/<name>/proxy/stats/summary`)
     → fallback `/proc/loadavg`。summary には host load が直接無い (P-9029 の審査指摘。
@@ -49,6 +51,10 @@ import urllib.request
 # allocatable の何 % で「飽和前兆」とみなすか (rules.json の逆算を根拠に P-9029 の dod 踏襲)
 REQUESTS_RATIO_WARN = 0.9
 
+# スケジューラは終端 pod (Succeeded/Failed) の requests を容量に数えないため、
+# 集計からも除外する (k3s は terminated-pod-gc まで終端 pod を残す — レビュー指摘)
+TERMINAL_PHASES = frozenset(("Succeeded", "Failed"))
+
 SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
 K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
 K8S_PORT = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
@@ -85,9 +91,15 @@ def sum_cpu_requests(pods_doc):
     08-24 の逆算 (rules.json の `_max_concurrent_comment`) と同じく、通常コンテナの
     requests のみを数える。initContainers は起動時のみ占有で定常の容量計算に
     混ぜない。requests が無いコンテナは 0 扱い (best-effort)。
+
+    status.phase が Succeeded/Failed の終端 pod はスケジューラが容量に数えない
+    ため除外する (クライアント側フィルタ。k3s は terminated-pod-gc まで終端 pod
+    を残し続けるため、数えると水増しになる — レビュー指摘)。
     """
     total = 0
     for pod in pods_doc.get("items", []):
+        if pod.get("status", {}).get("phase") in TERMINAL_PHASES:
+            continue
         for container in pod.get("spec", {}).get("containers", []):
             cpu = (
                 container.get("resources", {})
@@ -336,6 +348,34 @@ def _selfcheck():
         ]
     }
     expect(sum_cpu_requests(pods) == 1750, "sum_cpu_requests の fixture")
+
+    # 終端 pod (Succeeded/Failed) は数えない。実測 (レビュー時点): Running のみ
+    # 3924m/4000m に対し、終端 pod 込みだと 43594m (ratio 10.90) に水増し
+    pods_terminal = {
+        "items": [
+            {
+                "status": {"phase": "Running"},
+                "spec": {"containers": [{"resources": {"requests": {"cpu": "3924m"}}}]},
+            },
+            {
+                "status": {"phase": "Succeeded"},
+                "spec": {"containers": [{"resources": {"requests": {"cpu": "20000m"}}}]},
+            },
+            {
+                "status": {"phase": "Failed"},
+                "spec": {"containers": [{"resources": {"requests": {"cpu": "19670m"}}}]},
+            },
+        ]
+    }
+    expect(
+        sum_cpu_requests(pods_terminal) == 3924,
+        "終端 pod の requests を数えてしまう (3924 のはずが 43594)",
+    )
+    # status.phase を持たない pod は従来どおり数える (手作り fixture との互換)
+    expect(
+        sum_cpu_requests({"items": [{"spec": {"containers": [{"resources": {"requests": {"cpu": "500m"}}}]}}]}) == 500,
+        "phase 無し pod は数える",
+    )
 
     # read_loadavg: 一時ファイルから 1 分平均を読む
     import tempfile

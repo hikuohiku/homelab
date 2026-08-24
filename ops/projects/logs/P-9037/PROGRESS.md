@@ -1,5 +1,62 @@
 # P-9037 — 進捗記録
 
+## 2026-08-24（レビュー指摘の解消: 終端 pod の requests 水増しを直す）
+
+### やったこと
+
+- **`sum_cpu_requests()` に終端 pod 除外を実装** (レビュー指摘の解消)。
+  status.phase が `Succeeded`/`Failed` の pod はスケジューラが容量に数えないため
+  集計から除外する (クライアント側フィルタ。`TERMINAL_PHASES` 定数を新設)。
+  k3s は terminated-pod-gc まで終端 pod を残し続けるため、数えると水増しになる。
+  - `ops/tools/node_saturation.py` (canonical) と
+    `apps/ops-health-reporter/node_saturation.py` (クラスタ内コピー) を**同一 PR で
+    両方修正**し、byte 一致を維持 (sync check OK)。
+  - report.py は `node_saturation.sum_cpu_requests(pods)` を呼ぶだけなので変更不要 —
+    collect_node_saturation の実測値も自動的に終端 pod 除外後の値になる。
+- **`ops/tests/test_node_saturation.py` に終端 pod fixture を追加**:
+  - レビュー時の実測値 (Running 42 / Succeeded 92 / Failed 25) を踏襲した
+    fixture — Running のみ 3924m/4000m に対し終端 pod 込みだと 43594m (ratio 10.90)。
+    「3924 が返り 43594 にならない」ことを固定。
+  - phase を持たない pod (手作り fixture) は従来どおり数える、の互換テストも追加。
+  - `test_review_time_cluster_state_fires_warn` — 終端除外後の現状態
+    (3924m/4000m = 98%) で正しく warn が鳴ることを judge レベルで固定
+    (計器の役割どおり、レビュー文言で確認済み)。
+- `_selfcheck()` (`--check`) にも同じ終端 pod fixture を追加 (selfcheck と
+  単体テストが同じロジックを二重に固定する)。
+
+### verify 実測
+
+- `python3 ops/tools/node_saturation.py --check` → rc=0
+- `python3 -m unittest ops.tests.test_node_saturation` → **21 tests OK** (18 → 21)
+- CI 相当: `python3 -m unittest discover -s ops/tests -t .` → 562 OK、
+  `ops/heart/tests` → 448 OK、consistency checks (`check_node_saturation_script_sync`
+  含む 5 本) 全 ok。
+
+### 分かったこと (実測)
+
+- 既存の `sum_cpu_requests` fixture は status.phase を持たないため、phase 無しを
+  「数える」にしないと既存テスト (selfcheck の 1750 等) が壊れる。除外条件は
+  「phase が Succeeded/Failed のときだけ」に限定した。実 API 応答は必ず phase を
+  持つため、実測値に影響しない。
+
+### 発見（スコープ外、curriculum へ）
+
+- (前セッションの dashboard_smoke no-lie-coexistence 論点は据え置き)
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- verify は green (2 項目)。wrapper が PR を出し、レビューと CI が判断する。
+- 前セッションの「次のセッションへ」は据え置き:
+  - dashboard の変更 (kubernetes.ts) は反映に 2-stage を要する (build → digest pin
+    follow-up PR)。「動いていない」と指摘されたらこの運用を説明する。
+  - **未実測の罠**: kubelet summary proxy 経路。in-cluster で
+    `node_saturation.py --node node01` を動かせる環境ができたら load_source を確認し
+    substrate.md を更新する。
+  - merge 後の最初の reporter run で node_saturation キーが error になっていても
+    ArgoCD が configMapGenerator を sync するまで数回で自愈する。
+
+---
+
 ## 2026-08-24（実装完了・verify 2 項目 green）
 
 ### やったこと

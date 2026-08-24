@@ -58,6 +58,39 @@ class SumCpuRequestsTest(unittest.TestCase):
             ns.sum_cpu_requests({"items": [{"spec": {"containers": [{}]}}]}), 0
         )
 
+    def test_terminal_pods_are_not_counted(self):
+        # レビュー指摘 (P-9037): スケジューラは終端 pod (Succeeded/Failed) の
+        # requests を容量に数えない。k3s は terminated-pod-gc まで終端 pod を
+        # 残し続けるため、数えると水増しになる。実測: Running のみ 3924m/4000m
+        # に対し終端 pod 込みだと 43594m (ratio 10.90)。
+        pods = {
+            "items": [
+                {
+                    "status": {"phase": "Running"},
+                    "spec": {"containers": [{"resources": {"requests": {"cpu": "3924m"}}}]},
+                },
+                {
+                    "status": {"phase": "Succeeded"},
+                    "spec": {"containers": [{"resources": {"requests": {"cpu": "20000m"}}}]},
+                },
+                {
+                    "status": {"phase": "Failed"},
+                    "spec": {"containers": [{"resources": {"requests": {"cpu": "19670m"}}}]},
+                },
+            ]
+        }
+        # 終端 39670m を除いて 3924m だけが残る (43594 に水増ししない)
+        self.assertEqual(ns.sum_cpu_requests(pods), 3924)
+
+    def test_pod_without_phase_is_still_counted(self):
+        # status.phase を持たない pod (手作り fixture 等) は従来どおり数える
+        pods = {
+            "items": [
+                {"spec": {"containers": [{"resources": {"requests": {"cpu": "500m"}}}]}}
+            ]
+        }
+        self.assertEqual(ns.sum_cpu_requests(pods), 500)
+
 
 class AllocatableTest(unittest.TestCase):
     def test_allocatable_and_vcpus(self):
@@ -141,6 +174,14 @@ class JudgeTest(unittest.TestCase):
         report = ns.judge(None, None, None, None)
         self.assertEqual(report["status"], "ok")
         self.assertEqual(ns.exit_code(report), 0)
+
+    def test_review_time_cluster_state_fires_warn(self):
+        # レビュー時の実測 (P-9037): 終端 pod を除いた Running のみで
+        # 3924m/4000m = 98%。終端 pod 除外後の現状態では正しく warn が鳴る
+        # (計器の役割どおり。レビュー文言で確認済み)。
+        report = ns.judge(3924, 4000, 2.0, 4)
+        self.assertEqual(report["status"], "warn")
+        self.assertEqual(report["reasons"], ["requests_ratio"])
 
 
 if __name__ == "__main__":
