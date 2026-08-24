@@ -15,6 +15,11 @@
 //	(2) 健全性の変化 (人間に言われずに動く経路)
 //	    ops-health-report の latest.json → 不調なアプリの顔ぶれが変わったら起こす
 //
+// イベントを渡すほかに、コアが自分で調べるための材料も用意する:
+//
+//	main の作業コピー (repo.go) — PVC 上に clone を持ち、周期的に main へ合わせる。
+//	opencode コンテナには read-only で mount してあり、コアはそこを読める
+//
 // (1) の経路が 2 本あるのは移行の途中だから。publish 側が両方に書いているので
 // consumer も両方から読み、重複は cursor で落とす (bus.go の冒頭を参照)。
 // GitHub 側を落とすのは NATS 経路が確かめられてから。
@@ -465,6 +470,12 @@ func runDriver() {
 
 	c := newClient(cfg)
 	ctx := context.Background()
+
+	// リポジトリの作業コピー。コアが main を自分で読めるようにする (repo.go)。
+	// 初回の clone は数十秒かかるので、メインループとは別の goroutine で回す。
+	// ここが失敗してもコアは書き置きに返事ができるので、待ち合わせない
+	go runRepoSyncLoop(ctx, cfg)
+
 	c.waitForOpencode(ctx)
 
 	// MCP サイドカーの見張り。opencode は remote MCP を自動再接続しないので、

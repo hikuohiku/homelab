@@ -4,17 +4,19 @@
 誰も答えられない環境で `ask` を踏むと、そのセッションは応答待ちのまま固まる
 (CHARTER §5.1 — run #1 が同型の事故で丸ごと消えた)。
 「`ask` を書かない」だけでは足りず、**書き漏らしが `ask` になる**のがこの穴の本体。
-だからエージェントごとにツール種別の網羅を検査する。
+だからグローバルにも、エージェントごとにも、ツール種別の網羅を検査する。
 
 検査するもの:
-  1. permission のどこにも `ask` が無い
-  2. **各エージェント**が、指定可能なツール種別を全部明示している
+  1. permission のどこにも `ask` が無い (グローバル + 各エージェント)
+  2. グローバルが、指定可能なツール種別を全部明示している
+  3. **各エージェント**も、指定可能なツール種別を全部明示している
      (エージェント固有のルールはグローバルに後勝ちで重なるだけなので、
       グローバルに書いていない種別は暗黙の ask のまま残る)
-  3. `edit` は全員 deny (設計 D30: コアは git に書かない)
-  4. 立案の shadow 実行 (Phase C) の役が、副作用を持てない形になっている
-  5. planner / judge のモデルが ops/models.json の curriculum 各役と一致する
-  6. MCP は remote かつ `oauth: false` (未指定だと OAuth 自動検出が走る)
+  4. `edit` は全員 deny (設計 D30: コアは git に書かない)
+  5. `bash` は既定 deny のパターン表で、ブランケット allow が無い
+  6. 立案の shadow 実行 (Phase C) の役が、副作用を持てない形になっている
+  7. planner / judge のモデルが ops/models.json の curriculum 各役と一致する
+  8. MCP は remote かつ `oauth: false` (未指定だと OAuth 自動検出が走る)
 
 リポジトリルートから `python3 -m unittest discover -s ops/tests -t .`。
 """
@@ -82,6 +84,7 @@ def all_permissions(cfg: dict) -> dict[str, dict]:
 class CorePermissions(unittest.TestCase):
     def setUp(self):
         self.cfg = load_opencode_config()
+        self.perm = self.cfg["permission"]
 
     def test_no_ask_anywhere(self):
         for owner, perm in all_permissions(self.cfg).items():
@@ -102,6 +105,15 @@ class CorePermissions(unittest.TestCase):
                         action, ("allow", "deny"), f"{owner} の {tool}: 未知の動作 {action!r}"
                     )
 
+    def test_every_known_tool_is_explicit(self):
+        # グローバル。エージェントを名指ししない既定のセッションがここで縛られる
+        missing = sorted(KNOWN_TOOLS - set(self.perm))
+        self.assertFalse(
+            missing,
+            f"permission に書かれていないツールがある: {missing}。"
+            "マッチするルールが無いと既定は ask なので、allow か deny を明示すること",
+        )
+
     def test_every_agent_enumerates_every_known_tool(self):
         # エージェント固有のルールはグローバルに後勝ちで重なる。グローバルにも
         # エージェントにも無い種別は、そのエージェントでは暗黙の ask になる
@@ -114,11 +126,32 @@ class CorePermissions(unittest.TestCase):
                 "マッチするルールが無いと既定は ask なので、allow か deny を明示すること",
             )
 
+    def test_edit_stays_denied(self):
+        # 設計 D30。コアは git に書かない。実装は heart の担当
+        self.assertEqual(self.perm["edit"], "deny")
+
     def test_edit_stays_denied_everywhere(self):
-        # 設計 D30。コアもサブエージェントも git に書かない。実装は runner Job の担当
+        # サブエージェントも同じ。ここが緩むと shadow 実行に副作用が生える
         for owner, perm in all_permissions(self.cfg).items():
             if "edit" in perm:
                 self.assertEqual(perm["edit"], "deny", f"{owner}: edit は deny のまま")
+
+    def test_bash_is_a_deny_by_default_pattern_table(self):
+        bash = self.perm["bash"]
+        self.assertIsInstance(bash, dict, "bash はコマンド単位のパターン表にすること")
+        self.assertEqual(
+            bash.get("*"), "deny", "bash の既定は deny。列挙した形だけを allow する"
+        )
+        allowed = sorted(k for k, v in bash.items() if v == "allow")
+        self.assertTrue(allowed, "何も allow されていないなら bash ごと deny にすべき")
+        for pattern in allowed:
+            self.assertNotEqual(pattern, "*", "ブランケット allow は置かない")
+            # 履歴を読むための git と date だけ。ファイルの中身は read/grep で読める
+            self.assertTrue(
+                pattern.startswith("git -C /data/repo ") or pattern.startswith("date"),
+                f"想定外の allow パターン: {pattern!r}。"
+                "作業コピーを指した git か date 以外を足すときは、ここも一緒に広げること",
+            )
 
     def test_shadow_agent_cannot_do_anything_but_delegate(self):
         # subtask を撃ち込む受け皿。ここが何か呼べると shadow 実行に副作用が生える
