@@ -17,6 +17,8 @@
   6. 立案の shadow 実行 (Phase C) の役が、副作用を持てない形になっている
   7. planner / judge のモデルが ops/models.json の curriculum 各役と一致する
   8. MCP は remote かつ `oauth: false` (未指定だと OAuth 自動検出が走る)
+  9. 指示書 (AGENTS.md) が dispatch_task を実装依頼の第一手として書き、
+     request_task を heart 不達時の冷スペアとして残している
 
 リポジトリルートから `python3 -m unittest discover -s ops/tests -t .`。
 """
@@ -61,6 +63,10 @@ SHADOW_AGENTS = ("shadow", "planner", "judge")
 def load_opencode_config() -> dict:
     doc = yaml.safe_load(CONFIG.read_text())
     return json.loads(doc["data"]["opencode.json"])
+
+
+def load_agents_md() -> str:
+    return yaml.safe_load(CONFIG.read_text())["data"]["AGENTS.md"]
 
 
 def actions(value) -> list[str]:
@@ -240,6 +246,68 @@ class CuriculumPromptsStayInSync(unittest.TestCase):
             "adopted",
         ):
             self.assertIn(needle, prompt, f"判定役の指示から {needle} が落ちている")
+
+
+class CoreDispatchPolicy(unittest.TestCase):
+    """コアの指示書 (AGENTS.md) が dispatch_task を第一手として書いていること。
+
+    2026-08-24 の実測: 所有者が Telegram で頼んだ 2 件の実装が request_task で
+    起票され、その回の curriculum Job は既に起動済みだったため、次の立案ラウンド
+    待ちになった。dispatch_task は curriculum を経由しないので、使っていれば
+    その待ちは無かった。器 (ツール) はあっても指示書が知らなければ使われないので、
+    ここで固定して静かな先祖返りを防ぐ。
+    """
+
+    def setUp(self):
+        self.doc = load_agents_md()
+
+    def test_dispatch_task_is_the_first_move(self):
+        self.assertIn("dispatch_task", self.doc, "指示書が dispatch_task を知らない")
+        self.assertIn(
+            "第一手", self.doc, "実装依頼の第一手が dispatch_task だと書かれていない"
+        )
+
+    def test_request_task_survives_as_the_fallback(self):
+        # heart が落ちている経路。消すと依頼そのものが落ちる
+        self.assertIn("request_task", self.doc, "冷スペアの request_task が消えている")
+        self.assertIn(
+            "届かなかったときだけ",
+            self.doc,
+            "request_task へ落とす条件 (heart に届かなかったときだけ) が書かれていない",
+        )
+
+    def test_denial_reasons_are_relayed_verbatim(self):
+        # 拒否理由は heart から人語で返る。名前で書いておかないと言い換えて薄まる
+        for reason in (
+            "stop_engaged",
+            "capacity",
+            "rate_limited",
+            "capability_not_declared",
+            "state_stale",
+            "heart_not_ready",
+            "shadow_mode",
+            "invalid",
+            "duplicate",
+        ):
+            self.assertIn(reason, self.doc, f"拒否理由 {reason} の扱いが書かれていない")
+        self.assertIn("そのまま所有者に伝える", self.doc, "理由をそのまま伝える指示が無い")
+
+    def test_verify_and_project_id_are_taught(self):
+        self.assertIn("verify", self.doc, "verify の書き方が書かれていない")
+        self.assertIn("完成したら pass", self.doc, "verify の受入基準の条件が書かれていない")
+        self.assertIn("P-NNNN", self.doc, "受理時にプロジェクト ID を伝える指示が無い")
+
+    def test_curriculum_bypass_is_explicit(self):
+        # ルーブリックを通らない経路なので、使ってよい範囲を明記しておく
+        self.assertIn("curriculum", self.doc, "curriculum を経由しない旨が書かれていない")
+        self.assertIn(
+            "明示的に頼んだものだけ", self.doc, "dispatch_task の適用範囲が書かれていない"
+        )
+
+    def test_no_promise_of_doing_it_yourself(self):
+        # 既存の原則。コアは実装しない
+        self.assertIn("やっておきます", self.doc, "「やっておきます」と言わない原則が消えている")
+        self.assertIn("できたことにしない", self.doc, "「できたことにしない」原則が消えている")
 
 
 class PermissionHelpers(unittest.TestCase):
