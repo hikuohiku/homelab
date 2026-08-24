@@ -1,0 +1,6 @@
+{"type":"step_start","part":{"id":"prt_start","type":"step-start"},"timestamp":1787384162000}
+{"type":"reasoning","part":{"id":"prt_reason","type":"reasoning","text":"inbox の書き置きを確認する。"},"timestamp":1787384163000}
+{"type":"text","part":{"id":"prt_text","type":"text","text":"所有者の書き置きを処理します。"},"timestamp":1787384164000}
+{"type":"tool","part":{"id":"prt_tool1","type":"tool","callID":"call_1","tool":"bash","state":{"status":"running","input":{"command":"git log -1"}}},"timestamp":1787384165000}
+{"type":"tool","part":{"id":"prt_tool1","type":"tool","callID":"call_1","tool":"bash","state":{"status":"completed","input":{"command":"git log -1"},"output":"2a6a57c"}},"timestamp":1787384166000}
+{"type":"step_finish","part":{"id":"prt_finish","type":"step-finish","cost":0.0042,"tokens":{"input":3000,"output":120}},"timestamp":1787384167000}

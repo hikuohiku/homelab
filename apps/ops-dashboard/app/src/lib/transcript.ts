@@ -165,12 +165,26 @@ export function roleFromKind(kind: string): AgentRole {
   return roles[kind] ?? "unknown";
 }
 
+// 常駐エージェント (autopilot-core / autopilot-heart) は Deployment 名を agent id に
+// 持ち (kubernetes.ts の id: metadata.name)、Job 由来の役割名を持たない (P-9004)。
+// 解釈できれば transcript が transcripts/resident/<role>.jsonl にある
+const RESIDENT_IDS: Record<string, AgentRole> = {
+  "autopilot-core": "core",
+  "autopilot-heart": "heart",
+};
+
+function isResidentRole(role: AgentRole): boolean {
+  return role === "core" || role === "heart";
+}
+
 export function transcriptMode(role: AgentRole): string {
+  if (isResidentRole(role)) return "resident";
   return role === "reviewer" ? "review" : role;
 }
 
 export function parseAgentName(agentId: string): { role: AgentRole; projectId: string } | null {
   if (!/^[a-z0-9-]{1,63}$/.test(agentId)) return null;
+  if (RESIDENT_IDS[agentId]) return { role: RESIDENT_IDS[agentId], projectId: agentId };
   const match = agentId.match(/^(runner|reviewer|curriculum|critic|consolidation|chore)-(.+)-a\d+$/);
   if (!match) return null;
   return { role: roleFromKind(match[1]), projectId: match[2] };
@@ -184,9 +198,19 @@ export async function findTranscriptFile(role: AgentRole, projectId: string): Pr
   } catch {
     return null;
   }
+  const resident = isResidentRole(role);
   const prefix = `${projectId.toLowerCase()}-`;
   const candidates = await Promise.all(names
-    .filter((name) => name.endsWith(".jsonl") && name.toLowerCase().includes(`-${prefix}`))
+    .filter((name) => {
+      if (!name.endsWith(".jsonl")) return false;
+      if (resident) {
+        // 常駐は <role>.jsonl の単一追記ファイル。ローテーションは削除のみで
+        // 改名しないが、将来の変種 (分割など) に備えて role 始まりも許容する
+        const base = name.toLowerCase();
+        return base === `${role}.jsonl` || base.startsWith(`${role}-`);
+      }
+      return name.toLowerCase().includes(`-${prefix}`);
+    })
     .map(async (name) => {
       const file = path.join(directory, name);
       const info = await stat(file);

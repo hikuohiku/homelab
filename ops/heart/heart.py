@@ -365,6 +365,17 @@ class Heart:
         dst.parent.mkdir(parents=True, exist_ok=True)
         src.rename(dst)
 
+    def append_resident_transcript(self, agent, line):
+        """常駐エージェントの transcript (transcripts/resident/<agent>.jsonl) に 1 行追記 (P-9004)。
+
+        行は dashboard の normalizeTranscriptEvent (opencode 形式の flat JSON) で読める
+        形にする。ローテーションは metrics.rotate_transcripts が transcripts/ を
+        rglob するので新設不要 (metrics.py:287)。"""
+        d = self.transcripts / "resident"
+        d.mkdir(parents=True, exist_ok=True)
+        with open(d / f"{agent}.jsonl", "a") as f:
+            f.write(json.dumps(line, ensure_ascii=False) + "\n")
+
     # --- critic (日次の自己観測) の入出力 ---
     def critic_dir(self):
         d = self.cfg.data_dir / "critic"
@@ -638,6 +649,24 @@ class Heart:
                 "stop_all": stop_all,
                 "actions": [a["type"] for a in actions],
                 "shadow": self.cfg.shadow,
+            },
+        )
+        # 常駐エージェントのライブ transcript (P-9004)。metrics.jsonl と同じく
+        # shadow でも書く (記録は読み取り専用の観測。spawn しないので副作用は無い)
+        self.append_resident_transcript(
+            "heart",
+            {
+                "type": "text",
+                "part": {
+                    "type": "text",
+                    "text": (
+                        f"beat {i}: "
+                        f"actions=[{', '.join(a['type'] for a in actions)}] "
+                        f"unhealthy={unhealthy_apps or 'なし'}"
+                        f"{' [shadow]' if self.cfg.shadow else ''}"
+                    ),
+                },
+                "timestamp": int(now.timestamp() * 1000),
             },
         )
         sf.save_projects(doc)

@@ -277,6 +277,11 @@ spec:
               value: "0"
             - name: CORE_SHADOW_INTERVAL_HOURS
               value: "6"
+            # 常駐コアの transcript (P-9004) の書き先。autopilot-data を /shared
+            # に rw で mount し、その transcripts/ へ resident/core.jsonl を書く
+            # (dashboard が readOnly で読んでいるのと同じ PVC)。空にすると tee しない
+            - name: CORE_RESIDENT_TRANSCRIPTS_DIR
+              value: /shared/transcripts
             # イベント経路 (設計 D16) からの入力。GitHub の inbox と両読みで、
             # 同じ書き置きは cursor (/data/cursor.json) で 1 回に落とす。
             # この 2 つを消せば GitHub 側だけの構成に切り戻る
@@ -292,6 +297,8 @@ spec:
           volumeMounts:
             - name: state
               mountPath: /data
+            - name: resident-data
+              mountPath: /shared
           resources:
             requests:
               cpu: 10m
@@ -312,6 +319,12 @@ spec:
         - name: state
           persistentVolumeClaim:
             claimName: autopilot-core-state
+        # 常駐コアの transcript (P-9004) の書き先。heart と同じ autopilot-data
+        # (RWO だが node01 は単一ノードなので同時 mount は成立する — pvc.yaml の
+        # 注記どおり)。dashboard が readOnly で読むのと同じ PVC へ書く
+        - name: resident-data
+          persistentVolumeClaim:
+            claimName: autopilot-data
         # k8s API 用の短命トークン。automountServiceAccountToken: false のまま
         # **必要なコンテナにだけ** 配るための形 (kubelet が既定で作るものと同じ中身)。
         # volumeMounts しているのは core-driver-mcp だけ
