@@ -87,14 +87,15 @@ curriculum Job --result.json (spec 全文)--> heart --> ops-state/projects.json 
 - **改竄耐性は落ちない**。`main` は CI を通る PR なら誰でも書けるが、`ops-state` は
   heart しか書けない。runner は ops-state を**読むだけ** (GitHub API で 1 ファイル。
   clone / fetch は増やさない)
-- **runner の読み先は 3 段**: ops-state の `projects.json` → `origin/main` の
-  `archive.jsonl` (この変更より前の走行中プロジェクトの後方互換) → Job の env
-  `HEART_SPEC_JSON` (即時 dispatch の走り出し。Job 作成は ops-state への commit より先)
+- **runner の読み先は Job の env `HEART_SPEC_JSON` だけ** (4b-2a)。以前の 3 段
+  (ops-state の `projects.json` → `origin/main` の `archive.jsonl` → env) は畳んだ。
+  worker Job はトークン automount 無しで走るので CR を直接読む形は採らない
 - **archive.jsonl は台帳として残る**。curriculum の全案 (棄却含む) はその回の PR で、
   台帳を待たずに動き出した spec (即時 dispatch を含む) は次の curriculum の PR に
   **まとめて** (`ARCHIVE_BACKFILL_JSON`)。採択も棄却もいずれ必ず載る
-- **手動採択は変えていない**。人間が `archive.jsonl` に `adopted: true` 行を足せば、
-  従来どおり「main に載れば動き出す」
+- **手動採択の入口は塞がった** (4b-2a)。採択 spec の読み先が Project CR に移り、
+  人間が `archive.jsonl` に `adopted: true` 行を足しても動き出さない。admission
+  gate への移設は設計の Phase 4.5
 - **意味論の変更**: 台帳 PR を close しても採択は取り消されない。取り消しは veto
   (予告窓) で行う
 
@@ -104,8 +105,16 @@ curriculum Job --result.json (spec 全文)--> heart --> ops-state/projects.json 
 (`heart.sync_project_crs` → `projectcr.plan_rejected`、1 ビート 25 件ずつ)。
 `rejected` は終端なので状態機械は触らず、`projects.json` にも載らない。
 
-立案役 / 判定役はこの CR を MCP の `homelab_proposals` で読む。**台帳のファイルは
-もう読ませていない** — 4b-2 で `archive.jsonl` の書き込みを止めても、
+コアのサブエージェント (立案役 / 判定役) はこの CR を MCP の `homelab_proposals` で
+読む。**実際に採否を決める curriculum Job** は、heart が spawn 時に CR から
+書き出した `/data/curriculum/proposals.jsonl` を読む
+(`heart.prepare_curriculum_input()` → env `PROPOSALS_HISTORY` → プロンプトの
+`{{PROPOSALS_HISTORY}}`)。Job にはクラスタ API のトークンが無いので、
+heart が読める形に落として渡す (critic の `CRITIC_INPUT` と同じ流儀)。
+**CR が読めなければ Job を spawn しない** — 死因を知らない立案は同型再提案を
+採択まで通すので、走らせない方が安い。
+
+これで 4b-2b で `archive.jsonl` の書き込みを止めても、
 `reject_reason` / `improve_hint` が生成に戻る経路は切れない。
 
 ## 原則 (実装の理由)
@@ -125,9 +134,10 @@ curriculum Job --result.json (spec 全文)--> heart --> ops-state/projects.json 
   は PVC の `/data/work` に置く (設計 state-out-of-git Phase 3)
 - **プロジェクトは Project CR にも二重書きする** (設計 state-out-of-git Phase 4a)。
   毎ビート `projects.json` と `autopilot` ns の `Project` CR の両方へ書く
-  (`projectcr.py` が変換、`heart.sync_project_crs()` が apply)。**正はまだ
-  `projects.json`** で、CR の書き込み失敗はログに出して続行する。読み手の
-  切り替えと `projects.json` の停止は 4b
+  (`projectcr.py` が変換、`heart.sync_project_crs()` が apply)。**読み手は全員 CR を
+  読む** (4b-2a) が、書き込みは git 側にも残っているので写しは正しいまま。
+  CR の書き込み失敗はログに出して続行する。`projects.json` / `archive.jsonl` の
+  書き込み停止は 4b-2b
 - **書き置きは 2 経路から読む**。issue #56 / ops-feedback ブランチ (GitHub) に加えて、
   同居する Go サイドカー (`apps/autopilot/bus-sidecar`) が NATS から
   `/data/feedback-bus/inbox/<id>.json` に落としたぶんも読む。所有者の「止めて」を

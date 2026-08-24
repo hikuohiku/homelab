@@ -352,7 +352,8 @@ class BeatSurvivesCrFailure(unittest.TestCase):
             mock.patch.object(type(self.h.gh), "ensure_branch", lambda *a, **k: None),
             mock.patch.object(Heart, "k8s_client", lambda self: k8s),
             mock.patch.object(facts, "load_health", lambda *a, **k: ([], True, None)),
-            mock.patch.object(facts, "load_adopted_specs", lambda *a, **k: {}),
+            # load_adopted_specs は **患部なので差し替えない** — 4b-2a で読み先が
+            # CR に移り、ここが読めないビートの挙動そのものがこのテストの対象
             # 実 repo の台帳を読むと棄却案 250 件が取り込み対象になる。
             # ここで見たいのは「apply が壊れてもビートが落ちない」だけ
             mock.patch.object(facts, "load_archive_records", lambda *a, **k: []),

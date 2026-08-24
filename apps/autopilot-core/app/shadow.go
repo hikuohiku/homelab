@@ -45,8 +45,7 @@ type shadowConfig struct {
 	interval      time.Duration
 	timeout       time.Duration // planner / judge 各 1 段あたりの待ち上限
 	maxConcurrent int           // rules.json runner.max_concurrent と揃える
-	stateBranch   string
-	projectsPath  string
+	namespace     string        // Project CR の置き場
 	pollInterval  time.Duration
 }
 
@@ -56,8 +55,7 @@ func loadShadowConfig() shadowConfig {
 		interval:      time.Duration(envOrInt("CORE_SHADOW_INTERVAL_HOURS", 6)) * time.Hour,
 		timeout:       time.Duration(envOrInt("CORE_SHADOW_TIMEOUT_SECONDS", 900)) * time.Second,
 		maxConcurrent: envOrInt("CORE_SHADOW_MAX_CONCURRENT", 6),
-		stateBranch:   envOr("CORE_STATE_BRANCH", "ops-state"),
-		projectsPath:  envOr("CORE_PROJECTS_PATH", "projects.json"),
+		namespace:     envOr("CORE_PROJECTS_NAMESPACE", "autopilot"),
 		pollInterval:  time.Duration(envOrInt("CORE_SHADOW_POLL_SECONDS", 10)) * time.Second,
 	}
 }
@@ -305,21 +303,83 @@ func (c *client) shadowDir() string    { return filepath.Join(c.cfg.stateDir, "s
 func (c *client) shadowLog() string    { return filepath.Join(c.shadowDir(), "curriculum.jsonl") }
 func (c *client) shadowCursor() string { return filepath.Join(c.shadowDir(), "cursor.json") }
 
-// fetchProjects は ops-state の projects.json を読む (GET のみ)。
+// liveProjectsPath は非終端の Project CR だけを返す。selector で切るのが設計の
+// 前提で、終端 250 件超 (棄却案を含む) を毎回引いて手元で捨てる読み手は作らない。
+const liveProjectsPath = "/apis/autopilot.homelab.hikuohiku.dev/v1/namespaces/%s/projects" +
+	"?labelSelector=lifecycle%%3Dlive&limit=500"
+
+// liveProjectList は shadow が見る最小限。CR の spec が projects.json の 1
+// エントリで、その中の spec 子は立案時の spec (ここでは使わない)。
+type liveProjectList struct {
+	Items []struct {
+		Spec struct {
+			State        string `json:"state"`
+			VetoDeadline string `json:"veto_deadline"`
+		} `json:"spec"`
+	} `json:"items"`
+}
+
+// heartSnapshot は heart の admission gate が /healthz で見せる doc 全体の状態。
+// stop_engaged と last_curriculum_at は 1 件 1 プロジェクトの CR には載らない。
+type heartSnapshot struct {
+	Ok               bool   `json:"ok"`
+	StopEngaged      bool   `json:"stop_engaged"`
+	LastCurriculumAt string `json:"last_curriculum_at"`
+}
+
+// fetchHeartSnapshot は heart の /healthz を 1 往復読む (GET のみ)。
+func (c *client) fetchHeartSnapshot(ctx context.Context) (heartSnapshot, error) {
+	var out heartSnapshot
+	ctx, cancel := context.WithTimeout(ctx, heartGateTimeout)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, heartGateBase()+"/healthz", nil)
+	if err != nil {
+		return out, err
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return out, fmt.Errorf("heart の /healthz に届かない: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return out, fmt.Errorf("heart の /healthz が %d を返した", resp.StatusCode)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return out, fmt.Errorf("heart の /healthz を解釈できない: %w", err)
+	}
+	if !out.Ok {
+		return out, fmt.Errorf("heart がまだ状態の写しを持っていない (起動直後?)")
+	}
+	return out, nil
+}
+
+// fetchProjects は起動条件の材料を集める (GET のみ)。
+//
+// 読み先は 2 つ: 非終端のプロジェクトは **Project CR** (設計 state-out-of-git
+// 4b-2a で ops-state の projects.json から移した)、doc 全体にかかる
+// stop_engaged / last_curriculum_at は heart の /healthz。
+// **どちらか一方でも読めなければエラーにする** — 特に stop_engaged が読めない
+// まま走らせると、人間が「止めて」と言った後に立案がトークンを燃やす。
 func (c *client) fetchProjects(ctx context.Context, cfg shadowConfig) (projectsDoc, error) {
 	var doc projectsDoc
-	status, raw, err := c.github(ctx,
-		fmt.Sprintf("/repos/%s/contents/%s?ref=%s", c.cfg.repo, cfg.projectsPath, cfg.stateBranch),
-		"application/vnd.github.raw")
+	kube, err := c.kubeAPI()
 	if err != nil {
 		return doc, err
 	}
-	if status != http.StatusOK {
-		return doc, fmt.Errorf("projects.json を読めない (status=%d)", status)
+	var list liveProjectList
+	if err := kube.get(ctx, fmt.Sprintf(liveProjectsPath, cfg.namespace), &list); err != nil {
+		return doc, fmt.Errorf("Project CR を読めない: %w", err)
 	}
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		return doc, fmt.Errorf("projects.json が JSON として壊れている: %w", err)
+	for _, it := range list.Items {
+		doc.Projects = append(doc.Projects,
+			shadowProject{State: it.Spec.State, VetoDeadline: it.Spec.VetoDeadline})
 	}
+	snap, err := c.fetchHeartSnapshot(ctx)
+	if err != nil {
+		return doc, err
+	}
+	doc.StopEngaged = snap.StopEngaged
+	doc.LastCurriculumAt = snap.LastCurriculumAt
 	return doc, nil
 }
 

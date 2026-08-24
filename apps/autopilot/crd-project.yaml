@@ -3,10 +3,10 @@
 # ここに置くのは **CRD だけ**。CR 本体は heart が毎ビート書くもので、ArgoCD が
 # 管理する定義ではない (git に置くと ArgoCD が「余計な CR」を消しにいく)。
 #
-# 段階: 今は 4b-1 — heart が projects.json と CR の両方に書き、台帳の棄却案も
-# state: rejected の CR として取り込む。正はまだ git 側。読み手
-# (dashboard / runner / core / facts.py) の切り替えと projects.json /
-# archive.jsonl の停止は 4b-2。
+# 段階: 今は 4b-2a — **読み手は全員ここを読む** (dashboard / runner / core /
+# heart の facts / curriculum の入力)。heart は projects.json と archive.jsonl にも
+# 書き続けており、git 側は正しい写しのまま。書き込みを止めるのが 4b-2b で、
+# それまでは読み手が壊れても書き込み側は無傷で戻せる。
 #
 # コントローラは無い。heart が唯一の書き手で、あとは全員読むだけ (RBAC は
 # rbac.yaml)。status サブリソースも置かない — 調停する者が居ないので、

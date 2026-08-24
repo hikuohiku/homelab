@@ -204,8 +204,11 @@ autopilot イメージを流用しているのは opencode-ai が入っている
 - サブエージェントは親と別セッション・文脈は白紙。Job 版の「judge は fresh session」
   という独立性がそのまま残る
 - **起動条件は決定論**（`shadowDue`）: 有効 ∧ 前回から `CORE_SHADOW_INTERVAL_HOURS`
-  経過 ∧ `stop_engaged` でない ∧ パイプラインに空きがある。材料は ops-state の
-  `projects.json` で、heart の `reconcile.py` と同じ数え方
+  経過 ∧ `stop_engaged` でない ∧ パイプラインに空きがある。材料は非終端の
+  Project CR（`lifecycle=live`）と heart の `/healthz`（`stop_engaged` /
+  `last_curriculum_at` は CR に載らない doc 全体の状態）で、数え方は heart の
+  `reconcile.py` と同じ。**どちらかが読めなければ走らない**（`stop_engaged` が
+  読めないまま立案するとトークンを燃やす）
 - **副作用ゼロ**: git に書かない、PR を作らない、`request_task` を撃たない、
   Telegram に送らない。GitHub へは GET しか出さず、書くのは PVC の
   `/data/shadow/` だけ。`shadow_test.go` がこれを機械で固定する
@@ -253,7 +256,7 @@ autopilot イメージを流用しているのは opencode-ai が入っている
 | `CORE_SHADOW_INTERVAL_HOURS` | `6` | shadow 実行の間隔 |
 | `CORE_SHADOW_TIMEOUT_SECONDS` | `900` | planner / judge 各 1 段の待ち上限 |
 | `CORE_SHADOW_MAX_CONCURRENT` | `6` | 空きスロットの計算に使う上限（`rules.json` の `runner.max_concurrent` と揃える） |
-| `CORE_STATE_BRANCH` | `ops-state` | `projects.json` を読むブランチ |
+| `CORE_PROJECTS_NAMESPACE` | `autopilot` | Project CR を読む namespace（shadow の空きスロット計算と `homelab_proposals`） |
 
 MCP サイドカー側は `--listen host:port` で HTTP を待ち受ける。引数なしの
 `core-driver mcp` / `telegram-adapter mcp` は従来どおり stdio。

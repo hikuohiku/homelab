@@ -28,8 +28,7 @@ func testShadowConfig() shadowConfig {
 		interval:      6 * time.Hour,
 		timeout:       2 * time.Second,
 		maxConcurrent: 6,
-		stateBranch:   "ops-state",
-		projectsPath:  "projects.json",
+		namespace:     "autopilot",
 		pollInterval:  10 * time.Millisecond,
 	}
 }
@@ -136,15 +135,20 @@ func TestExtractJSONObjectSurvivesPreamble(t *testing.T) {
 type shadowServers struct {
 	opencode      *httptest.Server
 	github        *httptest.Server
+	kube          *httptest.Server
+	heart         *httptest.Server
 	mu            sync.Mutex
 	opencodeCalls []string
 	githubCalls   []string
+	kubeCalls     []string
 	bodies        []string
 	sessionBodies []string
 }
 
 // newShadowServers は planner → judge が素直に完走する opencode と、
-// ops-state を返す GitHub を模す。すべての要求を記録する。
+// Project CR を返す k8s API、doc 全体の状態を返す heart の /healthz を模す。
+// GitHub も立てるが、shadow はもう状態を読みに行かない (副作用ゼロの確認用)。
+// すべての要求を記録する。
 func newShadowServers(t *testing.T, promptStatus int, projects string) *shadowServers {
 	t.Helper()
 	s := &shadowServers{}
@@ -186,6 +190,45 @@ func newShadowServers(t *testing.T, promptStatus int, projects string) *shadowSe
 		_, _ = w.Write([]byte(projects))
 	}))
 	t.Cleanup(s.github.Close)
+
+	// 状態の読み先は Project CR (非終端だけ) と heart の /healthz に移った
+	// (設計 state-out-of-git 4b-2a)。呼び出し側は従来どおり projects.json の形で
+	// 渡し、ここで 2 つに割る — 同じ入力から同じ判断が出ることを見たいので
+	var doc projectsDoc
+	if err := json.Unmarshal([]byte(projects), &doc); err != nil {
+		t.Fatalf("テストの projects が JSON でない: %v", err)
+	}
+	s.kube = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.mu.Lock()
+		s.kubeCalls = append(s.kubeCalls, r.Method+" "+r.URL.Path+"?"+r.URL.RawQuery)
+		s.mu.Unlock()
+		// API server の selector と同じ切り方をする。終端を返さないので、
+		// 終端を数え落とすコードがあればここで露見する
+		items := []string{}
+		for _, p := range doc.Projects {
+			if terminalStates[p.State] {
+				continue
+			}
+			raw, _ := json.Marshal(map[string]any{
+				"spec": map[string]any{"state": p.State, "veto_deadline": p.VetoDeadline},
+			})
+			items = append(items, string(raw))
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"items":[` + strings.Join(items, ",") + `]}`))
+	}))
+	t.Cleanup(s.kube.Close)
+
+	s.heart = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw, _ := json.Marshal(map[string]any{
+			"ok":                 true,
+			"stop_engaged":       doc.StopEngaged,
+			"last_curriculum_at": doc.LastCurriculumAt,
+		})
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(raw)
+	}))
+	t.Cleanup(s.heart.Close)
 	return s
 }
 
@@ -214,7 +257,8 @@ func shadowMessages(n int) string {
 
 func newShadowClient(t *testing.T, s *shadowServers, dir string) *client {
 	t.Helper()
-	return newClient(&config{
+	t.Setenv("CORE_HEART_GATE_URL", s.heart.URL)
+	c := newClient(&config{
 		opencodeURL: s.opencode.URL,
 		stateDir:    dir,
 		githubAPI:   s.github.URL,
@@ -222,6 +266,10 @@ func newShadowClient(t *testing.T, s *shadowServers, dir string) *client {
 		repo:        "hikuohiku/homelab",
 		model:       "opencode-go/ox-alpha-free",
 	})
+	// 実クラスタを向かせない。トークン読み込みも差し替える
+	// (テスト環境に projected volume は無い)
+	c.kube = newKubeAgainst(s.kube.URL)
+	return c
 }
 
 const idleProjects = `{"projects":[{"state":"active"}],"stop_engaged":false,"last_curriculum_at":"2026-08-24T09:00:00Z"}`
@@ -363,6 +411,49 @@ func TestShadowSkipsWhenStopEngaged(t *testing.T) {
 	c := newShadowClient(t, s, dir)
 	if c.maybeRunShadow(context.Background(), testShadowConfig(), time.Now()) {
 		t.Fatal("「止めて」が効いている間は走らない")
+	}
+	if _, err := os.Stat(filepath.Join(dir, "shadow", "curriculum.jsonl")); err == nil {
+		t.Fatal("走っていないのに記録が増えている")
+	}
+}
+
+func TestShadowReadsProjectsFromProjectCr(t *testing.T) {
+	// 読み先が Project CR に移ったこと (設計 state-out-of-git 4b-2a)。
+	// 終端は selector で落ちるので、空きスロットの数え方は git 版と変わらない
+	dir := t.TempDir()
+	s := newShadowServers(t, http.StatusNoContent,
+		`{"projects":[{"state":"active"},{"state":"delivered"},{"state":"rejected"}],`+
+			`"stop_engaged":false,"last_curriculum_at":"2026-08-24T09:00:00Z"}`)
+	c := newShadowClient(t, s, dir)
+
+	doc, err := c.fetchProjects(context.Background(), testShadowConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Projects) != 1 || doc.Projects[0].State != "active" {
+		t.Fatalf("非終端だけを受け取るべき: %#v", doc.Projects)
+	}
+	if doc.LastCurriculumAt != "2026-08-24T09:00:00Z" || doc.StopEngaged {
+		t.Fatalf("doc 全体の状態は heart の /healthz から来るべき: %#v", doc)
+	}
+	if len(s.kubeCalls) != 1 || !strings.Contains(s.kubeCalls[0], "lifecycle%3Dlive") {
+		t.Fatalf("live selector で引くべき (終端 250 件超を毎回引かない): %v", s.kubeCalls)
+	}
+	if len(s.githubCalls) != 0 {
+		t.Fatalf("状態を GitHub から読んではいけない: %v", s.githubCalls)
+	}
+}
+
+func TestShadowSkipsWhenHeartStateIsUnreadable(t *testing.T) {
+	// stop_engaged が読めないまま走ると、人間が「止めて」と言った後に
+	// 立案がトークンを燃やす。読めないときは走らない (fail-closed)
+	dir := t.TempDir()
+	s := newShadowServers(t, http.StatusNoContent, idleProjects)
+	c := newShadowClient(t, s, dir)
+	s.heart.Close()
+
+	if c.maybeRunShadow(context.Background(), testShadowConfig(), time.Now()) {
+		t.Fatal("heart の状態が読めないなら走らない")
 	}
 	if _, err := os.Stat(filepath.Join(dir, "shadow", "curriculum.jsonl")); err == nil {
 		t.Fatal("走っていないのに記録が増えている")

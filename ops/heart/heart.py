@@ -197,6 +197,11 @@ class Heart:
                     if shadow:
                         log("[shadow] spawn curriculum")
                     else:
+                        # 過去案は CR から読んで PVC のファイルに落とす (4b-2a)。
+                        # 読めなければ例外が上がり、下の spawn.create まで届かない。
+                        # **死因を読めない立案は走らせない方が安い** — 同型再提案を
+                        # 採択まで通してしまうため。失敗は audit.jsonl に残る
+                        history = self.prepare_curriculum_input()
                         # attempt に分単位の時刻を入れて Job 名を一意にする。固定名だと
                         # 前回分が TTL (6h) 内に残っている間 409 を成功扱いして
                         # 黙って空振りする (レビュー指摘 [20])
@@ -217,6 +222,7 @@ class Heart:
                                     a.get("archive_backfill") or [],
                                     ensure_ascii=False,
                                 ),
+                                **history,
                             },
                         )
                 elif kind == "mark_task_requests_done":
@@ -388,6 +394,42 @@ class Heart:
         dst.parent.mkdir(parents=True, exist_ok=True)
         src.rename(dst)
 
+    # --- curriculum (立案) の入力 ---
+    def curriculum_dir(self):
+        d = self.cfg.data_dir / "curriculum"
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+
+    def prepare_curriculum_input(self):
+        """過去案の要点を /data/curriculum/proposals.jsonl に落とし、Job に渡す env を返す。
+
+        curriculum Job は `autopilot-runner` SA でトークンを automount して
+        **いない** (spawn.build_job)。worker がクラスタ API に触れないのは決定 #5
+        の境界そのものなので、立案のためにそこを開けるのは筋が悪い。代わりに
+        heart が読んで PVC のファイルに落とす — critic の input-<日付>.json と
+        同じ形で、Job は /data を既にマウントしている。
+
+        書き出すのは **棄却案を含む全件**。ここは reject_reason / improve_hint を
+        読む唯一の読み手で、これを痩せさせると生成役は死因を知らずに同型再提案を
+        繰り返す (immich postgres 更新系 7 度の再来)。
+
+        CR が読めなければ例外を上げる。**空のファイルを置いて Job を走らせない** —
+        過去案が 0 件に見える立案は「既出と同型を避ける」判断ができず、質の落ちた
+        案を採択まで通してしまう。呼び出し側は spawn を見送る (fail-closed)。
+        """
+        items = self.k8s_client().list_custom(
+            projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL
+        )
+        rows = projectcr.proposal_digest(items)
+        path = self.curriculum_dir() / "proposals.jsonl"
+        tmp = path.with_suffix(".jsonl.tmp")
+        with open(tmp, "w") as f:
+            for row in rows:
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+        tmp.replace(path)  # 書きかけを Job に読ませない
+        log(f"curriculum input: 過去案 {len(rows)} 件を {path} に書いた")
+        return {"PROPOSALS_HISTORY": str(path)}
+
     # --- critic (日次の自己観測) の入出力 ---
     def critic_dir(self):
         d = self.cfg.data_dir / "critic"
@@ -528,11 +570,23 @@ class Heart:
         dispatches = facts.collect_dispatches(self.cfg.data_dir)
         if dispatches:
             log(f"dispatches to fold: {[d.get('project_id') for d in dispatches]}")
+        # 採択済み案の spec は Project CR から読む (設計 state-out-of-git 4b-2a)。
+        # **読めないビートは空で進める** — この facts の使い道は「まだ doc に
+        # 居ない採択を登録する」ことだけなので、空 = このビートは何も登録しない
+        # で済み、次のビートが同じ観測をやり直す。逆に git 側へ落とすと、
+        # 読み手を CR に切り替えた意味が壊れたときだけ消える隠れ経路になる
+        try:
+            adopted_specs_by_id = facts.load_adopted_specs(
+                self.k8s_client(), self.cfg.namespace
+            )
+        except Exception as e:  # noqa: BLE001 — 観測失敗。判断はしない
+            log(f"Project CR を読めない (このビートの採択登録は見送る): {e}")
+            adopted_specs_by_id = {}
         curriculum = facts.collect_curriculum(
-            self.cfg.data_dir, self.repo_dir, self.gh
+            self.cfg.data_dir, adopted_specs_by_id, self.gh
         )
         critic = facts.collect_critic(self.cfg.data_dir)
-        adopted_specs = list(facts.load_adopted_specs(self.repo_dir).values())
+        adopted_specs = list(adopted_specs_by_id.values())
         usage_info = metrics.daily_usage(self.transcripts, now)
 
         running = sum(
@@ -556,6 +610,11 @@ class Heart:
             "curriculum": curriculum,
             "critic": critic,
             "adopted_specs": adopted_specs,
+            # 台帳 (main の archive.jsonl) に既に載っている採択 id。
+            # **台帳の欠落検知はここだけが git を見る** — 4b-2a では台帳への
+            # 書き込みが残っているので、何がまだ載っていないかは git 側にしか
+            # 答えが無い。台帳を止める 4b-2b でこの facts ごと消える
+            "archived_ids": sorted(facts.load_archived_ids(self.repo_dir)),
             "commands": commands,
             "processed_commands": processed_commands,
             # 即時 dispatch (設計 rev3 Phase D) の結末。gate スレッドが

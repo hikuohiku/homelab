@@ -5,6 +5,9 @@ import type { AgentSnapshot, AttentionItem, Project, Snapshot } from "./types";
 
 // budget_exhausted は 2026-08-24 に session_limit へ改名。過去の projects.json も読むので両方残す
 const QUESTION_REASONS = new Set(["session_limit", "budget_exhausted", "quota_wait_exhausted", "merge_timeout", "pr_closed"]);
+// 読み先が Project CR に移っても rejected は入らない (ops-state.ts が selector で
+// 外し、コード側でも落としている)。棄却案 250 件超はボードの流れではなく立案役の
+// 教師信号で、混ぜると終端の山に他が埋まる — 意図的に FLOW_ORDER に無い
 const FLOW_ORDER = ["proposed", "announced", "active", "in_review", "merging", "soaking", "delivered", "stalled", "vetoed"];
 
 export function buildAttention(projects: Project[], now = new Date()): AttentionItem[] {

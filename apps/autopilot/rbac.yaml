@@ -271,8 +271,8 @@ roleRef:
   kind: ClusterRole
   name: autopilot-project-reader
 subjects:
-  # Mission Control。今はまだ ops-state を読んでいるが、読み手の切り替え (4b) で
-  # ここが効く。watch があるので 20 秒ポーリングを畳める
+  # Mission Control。プロジェクト一覧はここから引く (4b-2a)。ops-state を読むのは
+  # heartbeat と stop_engaged だけになった (どちらも Phase 7 で畳む)
   - kind: ServiceAccount
     name: ops-dashboard
     namespace: autopilot

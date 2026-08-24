@@ -1798,8 +1798,8 @@ class TestDispatchSourceOfTruth(unittest.TestCase):
         d, _ = reconcile.decide(doc(), facts(curriculum=self.cur()), RULES, NOW)
         self.assertEqual(d["projects"][0]["spec"], self.SPEC)
 
-    def test_manual_adoption_also_stores_the_spec(self):
-        """人間が archive.jsonl に足す手動採択の経路は生きている。"""
+    def test_specs_from_the_cr_are_registered(self):
+        """CR に居るのに doc に無い採択は登録される (復元後の埋め直し)。"""
         d, _ = reconcile.decide(doc(), facts(adopted_specs=[self.SPEC]), RULES, NOW)
         self.assertEqual(d["projects"][0]["spec"], self.SPEC)
 
@@ -1816,10 +1816,25 @@ class TestDispatchSourceOfTruth(unittest.TestCase):
         p = project(id="P-0009", branch="project/p-0009", state="active",
                     spec=self.SPEC)
         _, actions = reconcile.decide(
-            doc(p), facts(adopted_specs=[self.SPEC]), RULES, NOW
+            doc(p), facts(archived_ids=["P-0009"]), RULES, NOW
         )
         spawn = [a for a in actions if a["type"] == "spawn_curriculum"][0]
         self.assertEqual(spawn["archive_backfill"], [])
+
+    def test_backfill_does_not_look_at_the_cr_specs(self):
+        """CR は doc の写しなので、そこを見ると backfill が永久に空になる。
+
+        4b-2a で adopted_specs の読み先が Project CR に移った。台帳の欠落は
+        git 側 (archived_ids) にしか答えが無い。
+        """
+        p = project(id="P-9001", branch="project/p-9001", state="active",
+                    spec={"id": "P-9001", "verify": ["false"]})
+        _, actions = reconcile.decide(
+            doc(p), facts(adopted_specs=[{"id": "P-9001", "verify": ["false"]}]),
+            RULES, NOW,
+        )
+        spawn = [a for a in actions if a["type"] == "spawn_curriculum"][0]
+        self.assertEqual([s["id"] for s in spawn["archive_backfill"]], ["P-9001"])
 
     def test_backfill_is_capped(self):
         projects = [

@@ -53,10 +53,13 @@ type gateResponse struct {
 	ProjectID  string `json:"project_id"`
 }
 
-func heartGateURL() string {
-	base := strings.TrimSuffix(
+func heartGateBase() string {
+	return strings.TrimSuffix(
 		envOr("CORE_HEART_GATE_URL", "http://autopilot-heart.autopilot.svc:8099"), "/")
-	return base + "/dispatch"
+}
+
+func heartGateURL() string {
+	return heartGateBase() + "/dispatch"
 }
 
 // newGateRequest は引数を検証して要求を組む。検証に落ちたら送らない

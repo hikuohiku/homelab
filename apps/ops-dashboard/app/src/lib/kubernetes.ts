@@ -35,7 +35,7 @@ export interface KubeSnapshot {
 
 type JsonObject = Record<string, any>;
 
-async function kubeGet(pathname: string): Promise<JsonObject> {
+export async function kubeGet(pathname: string): Promise<JsonObject> {
   const explicitUrl = process.env.KUBERNETES_API_URL;
   const host = process.env.KUBERNETES_SERVICE_HOST;
   if (!explicitUrl && !host) throw new Error("クラスタ外のため Kubernetes API は未接続");
