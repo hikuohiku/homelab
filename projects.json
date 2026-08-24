@@ -7087,7 +7087,51 @@
         "adopted": true,
         "proposed_at": "2026-08-24T22:12:35Z"
       },
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-24T22:13:09Z",
+        "verify": [
+          {
+            "cmd": "test -f apps/immich/checksum-cronjob.yaml && grep -q 'checksum-cronjob.yaml' apps/immich/kustomization.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "test -f ops/tools/immich_checksum_check.py && python3 ops/tools/immich_checksum_check.py --selftest",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "test -f docs/immich-checksum.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'checksum' apps/ops-health-reporter/report.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
