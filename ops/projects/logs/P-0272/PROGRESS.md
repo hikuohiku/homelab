@@ -228,3 +228,42 @@ green と出力 JSON を貼るだけ (掃除不要)。まだ root 所有なら�
 記録すること。加えて `git fetch origin main` 後に merge-base..HEAD の差分範囲と seeds.md の節を
 確認すること (main 側で dashboard や seeds に変更が入っていたらその旨を最優先で記録)。
 parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
+
+### 2026-08-24 セッション 7 — 環境は依然未修正 (6 セッション連続)。全 verify を再実測し、wrapper 依頼を 6 度目の提示。main 先行を初確認 (conflict 無し)
+
+> **wrapper への依頼 (未処理。これが唯一のブロッカー)**:
+> `python3 ops/tools/human_tasks.py --out /tmp/opencode/human-tasks.json` は `/tmp/opencode` が
+> `root:root drwxr-xr-x` のため uid 10001(autopilot) には書けず、**OS 的に絶対に green にならない**
+> (sudo 無し)。コードは完成済みで mktemp 書き先の同一検証は green 実測 (下記)。
+> どれか一つで即解消する: **(a)** runner が root で `chown autopilot:autopilot /tmp/opencode`
+> (ディレクトリ内は空なので掃除不要)、**(b)** 受入コマンドのみ root 実行、
+> **(c)** 以降の spec の受入で `/tmp/opencode` 直書きの固定パスを避ける。
+
+**状況**: レビュー指摘なし、failing は verify 1 のみ。最初に `ls -ld /tmp/opencode` を確認 →
+**依然 `root:root drwxr-xr-x`、mtime 08-22 07:41 不変、中身は空、sudo コマンド自体が無い**。
+セッション 2 以来の依頼は 6 度目も未処理。
+
+**本セッションの実測 (証跡。すべて過去セッションと同一結果 = 再現性 7 回目)**:
+
+- verify 1 (spec 通り): 同一トレースの PermissionError、rc=1
+- verify 1 のロジック部 (mktemp 書き先 + 同一 assert 文): **green**。出力 JSON:
+  T-0107/T-0140/T-0141/T-0148 の 4 件、全キー揃い、age_days=18、古い順 (T-0107 先頭)
+- verify 2: rc=0 green / verify 3: unittest 10 tests OK
+- TS ミラー (`npm test`): pass 10 fail 0。node_modules 残存 (消失 2 回・残存 2 回)
+
+**やったこと**: 上記の再実測とこの記録のみ。コード変更ゼロ。
+
+**分かったこと / 罠**: **新規 1 点 — busybox 系 mktemp は X を末尾以外に取れない**。
+`mktemp /tmp/foo.XXXXXX.json` (拡張子付きテンプレート) は `Invalid argument` で即死する
+(`mktemp` 引数無しか X を末尾に置く)。verify ロジック部の再現コマンドを書く人は注意。
+引き継ぎ指示どおり `git fetch origin main` を実施: main に P-0270 (adguard 新設, PR #580) が
+6 commit 先行しているが **HEAD 側とのファイル重複はゼロ** (merge-base 7a7573954)。
+rebase 負債の心配はまだ無い。seeds.md の『人間の鍵作業』節も drift 無し。
+
+**発見 (spec 外)**: 新規なし。固定パス問題による worker 実質停止が 6 セッション連続。
+コード・検証とも完全に凍結状態であり、これ以上のセッションは証跡の更新以外に能がない。
+
+**次のセッションへ一言**: まず `ls -ld /tmp/opencode`。書けるなら verify 1 を spec 通りに実行して
+green と出力 JSON を貼るだけ (掃除不要)。まだ root 所有なら冒頭の「wrapper への依頼」節を参照させて
+記録すること。mktemp で拡張子付きテンプレートを使わないこと (上記の罠)。
+parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
