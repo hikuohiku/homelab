@@ -5573,7 +5573,7 @@
     {
       "id": "P-0270",
       "title": "tailnet 全端末に DNS 広告除去を開通させる — AdGuard Home を syncthing 実績型 (Deployment + PVC + restic backup + inventory 登録込み) で新設し、「入れたのに誰も見てない」を最初から防ぐ",
-      "state": "merging",
+      "state": "soaking",
       "branch": "project/p-0270",
       "irreversible": false,
       "capabilities": [
@@ -5636,7 +5636,16 @@
       ],
       "review_requested_at": "2026-08-23T23:53:07Z",
       "review_retries": 0,
-      "merging_since": "2026-08-24T00:05:29Z"
+      "merging_since": "2026-08-24T00:05:29Z",
+      "soak": {
+        "until": "2026-08-24T00:37:52Z",
+        "baseline_unhealthy": [
+          "coder",
+          "immich",
+          "syncthing",
+          "vaultwarden"
+        ]
+      }
     },
     {
       "id": "P-0272",
