@@ -32,13 +32,14 @@ from . import (
     gate,
     gitutil,
     metrics,
+    projectcr,
     reconcile,
     spawn,
     tasks,
 )
 from .gh import Gh, GhError
 from .notify import Notifier, veto_footer
-from .statefiles import StateFiles, migrate_plan, now_iso
+from .statefiles import TERMINAL_STATES, StateFiles, migrate_plan, now_iso
 
 _stop = False
 
@@ -672,6 +673,12 @@ class Heart:
         # (設計 state-out-of-git Phase 1)
         sf.rewrite_jsonl("metrics.jsonl", [record])
         sf.save_projects(doc)
+        # 二重書き (設計 state-out-of-git Phase 4a)。git 側の写しはそのまま残し、
+        # 同じ内容を Project CR にも置く。CR が壊れてもビートは止めない
+        try:
+            self.sync_project_crs(doc)
+        except Exception as e:  # noqa: BLE001 — CR はまだ写し。正は projects.json
+            log(f"project CR sync failed: {e}")
         # usage は heartbeat に載せる。ダッシュボードの唯一の metrics 利用が
         # 「最終行の usage」だけで、そのために 8.9 MB の metrics.jsonl を
         # 20 秒ごとに fetch していた (設計 state-out-of-git Phase 1)
@@ -690,6 +697,38 @@ class Heart:
         gitutil.commit_and_push_state(
             self.state_dir, self.cfg.state_branch, f"heart: beat {i}"
         )
+
+    def sync_project_crs(self, doc):
+        """projects.json の写しを Project CR にも書く (設計 state-out-of-git Phase 4a)。
+
+        **正はまだ projects.json** なので、ここが失敗してもビートは落とさない。
+        今 CR を読む者は居ないので、例外を上げて器を止める理由が無い。読み手を
+        CR へ移す 4b までは、失敗はログに出して次のビートでやり直す。
+
+        変わった CR だけを送る。消えたプロジェクトは消さない (projectcr.plan)。
+        """
+        k8s = self.k8s_client()
+        existing = k8s.list_custom(
+            projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL
+        )
+        write, orphans = projectcr.plan(
+            doc, existing, self.cfg.namespace, TERMINAL_STATES
+        )
+        failed = 0
+        for cr in write:
+            try:
+                k8s.apply_custom(
+                    projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL,
+                    cr["metadata"]["name"], cr,
+                )
+            except Exception as e:  # noqa: BLE001 — 1 件の失敗で残りを諦めない
+                failed += 1
+                log(f"project CR apply failed: {cr['metadata']['name']}: {e}")
+        if write or orphans:
+            log(
+                f"project CR sync: applied={len(write) - failed} failed={failed} "
+                f"orphans={','.join(orphans) if orphans else '-'}"
+            )
 
     def prune_metrics(self, now):
         """保持窓より古い指標行を落とす。行数が変わったときだけ書き直す。"""

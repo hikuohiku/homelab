@@ -1,0 +1,262 @@
+# プロジェクトの CR (設計 state-out-of-git Phase 4)。
+#
+# ここに置くのは **CRD だけ**。CR 本体は heart が毎ビート書くもので、ArgoCD が
+# 管理する定義ではない (git に置くと ArgoCD が「余計な CR」を消しにいく)。
+#
+# 段階: 今は 4a — heart が projects.json と CR の両方に書き、正はまだ git 側。
+# 読み手 (dashboard / runner / core / facts.py) の切り替えと projects.json の
+# 停止は 4b。CR が正になれる前提は k3s のデータストアがバックアップに乗ること。
+#
+# コントローラは無い。heart が唯一の書き手で、あとは全員読むだけ (RBAC は
+# rbac.yaml)。status サブリソースも置かない — 調停する者が居ないので、
+# spec と status に分ける意味が無い。
+#
+# spec は ops-state の projects.json の 1 エントリを **キー名そのまま**載せる。
+# 名前を付け替えないのは、二重書きの間 2 つの表現が同じものだと目で確認できる
+# ようにするため (spec.spec が入れ子になるのはその代償)。
+# x-kubernetes-preserve-unknown-fields は使わない。構造スキーマは未知フィールドを
+# 黙って落とすので、heart 側でフィールドを増やしたらここも増やすこと
+# (ops/heart/tests/test_project_cr.py が実データの全キーを覆えているか検査する)。
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: projects.autopilot.homelab.hikuohiku.dev
+spec:
+  group: autopilot.homelab.hikuohiku.dev
+  scope: Namespaced
+  names:
+    kind: Project
+    listKind: ProjectList
+    plural: projects
+    singular: project
+    shortNames:
+      - proj
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: State
+          type: string
+          jsonPath: .spec.state
+        - name: Lifecycle
+          type: string
+          jsonPath: .metadata.labels.lifecycle
+        - name: Branch
+          type: string
+          jsonPath: .spec.branch
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+        - name: Title
+          type: string
+          priority: 1
+          jsonPath: .spec.title
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              # ops/heart/statefiles.py の REQUIRED_PROJECT_FIELDS と同じ。
+              # 片方だけ動かないようテストが一致を見る
+              required:
+                - id
+                - title
+                - state
+                - branch
+                - irreversible
+                - capabilities
+                - budget
+                - created
+              properties:
+                id:
+                  type: string
+                title:
+                  type: string
+                # statefiles.PROJECT_STATES と一致。rejected を足すときは両方
+                state:
+                  type: string
+                  enum:
+                    - proposed
+                    - announced
+                    - active
+                    - in_review
+                    - merging
+                    - soaking
+                    - delivered
+                    - stalled
+                    - vetoed
+                branch:
+                  type: string
+                irreversible:
+                  type: boolean
+                capabilities:
+                  type: array
+                  items:
+                    type: string
+                touches_apps:
+                  type: boolean
+                verify:
+                  type: array
+                  items:
+                    type: string
+                confidence:
+                  type: string
+                budget:
+                  type: object
+                  properties:
+                    used_tokens:
+                      type: integer
+                    soft_cap:
+                      type: integer
+                created:
+                  type: string
+                # --- 進行の記録 ---
+                job:
+                  type: string
+                job_created_at:
+                  type: string
+                spawn_count:
+                  type: integer
+                restart_count:
+                  type: integer
+                drift_count:
+                  type: integer
+                acknowledged:
+                  type: boolean
+                veto_deadline:
+                  type: string
+                approved_by_human_at:
+                  type: string
+                stalled_reason:
+                  type: string
+                prs:
+                  type: array
+                  items:
+                    type: integer
+                review_requested_at:
+                  type: string
+                review_retries:
+                  type: integer
+                review_cycles:
+                  type: integer
+                merging_since:
+                  type: string
+                merge_error:
+                  type: object
+                  properties:
+                    at:
+                      type: string
+                    pr:
+                      type: integer
+                    status:
+                      type: integer
+                    reason:
+                      type: string
+                soak:
+                  type: object
+                  properties:
+                    until:
+                      type: string
+                    baseline_unhealthy:
+                      type: array
+                      items:
+                        type: string
+                # 使用量の上限に当たって待っている間だけ現れる (reconcile.py)
+                quota_wait_count:
+                  type: integer
+                quota_wait_since:
+                  type: string
+                quota_wait_until:
+                  type: string
+                # --- 採択ゲートの結果 (ops/heart/adoptgate.py) ---
+                adopt_gate_attempts:
+                  type: integer
+                adopt_gate:
+                  type: object
+                  properties:
+                    at:
+                      type: string
+                    verdict:
+                      type: string
+                    passed:
+                      type: array
+                      items:
+                        type: string
+                    verify:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          cmd:
+                            type: string
+                          ok:
+                            type: boolean
+                          # 走らずに終わったとき (timeout / not_found) は null
+                          rc:
+                            type: integer
+                            nullable: true
+                          timeout:
+                            type: boolean
+                          syntax_error:
+                            type: boolean
+                          not_found:
+                            type: boolean
+                          output:
+                            type: string
+                    broken:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          cmd:
+                            type: string
+                          reason:
+                            type: string
+                # --- 依頼元 (admission gate 経由の即時 dispatch) ---
+                dispatch_id:
+                  type: string
+                requested_by:
+                  type: string
+                # --- 立案時の spec。棄却案を CR にする 4b でここが主役になる ---
+                spec:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    title:
+                      type: string
+                    why:
+                      type: string
+                    cell:
+                      type: array
+                      items:
+                        type: string
+                    dod:
+                      type: string
+                    verify:
+                      type: array
+                      items:
+                        type: string
+                    irreversible:
+                      type: boolean
+                    capabilities:
+                      type: array
+                      items:
+                        type: string
+                    touches_apps:
+                      type: boolean
+                    confidence:
+                      type: string
+                    adopted:
+                      type: boolean
+                    proposed_at:
+                      type: string
+                    proposed_by:
+                      type: string
+                    request_id:
+                      type: string
+                    _note_verify:
+                      type: string

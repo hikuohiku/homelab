@@ -217,3 +217,70 @@ subjects:
   - kind: ServiceAccount
     name: autopilot-core
     namespace: autopilot
+---
+# Project CR (設計 state-out-of-git Phase 4)。**書き手は heart だけ**。
+# 「heart が唯一の書き手」は ops-state の時代は慣習でしかなく、Job が push するのを
+# 止めるものが無かった。CR にした狙いの半分はここで、API が止める。
+#
+# namespace 限定にしているのは CR が autopilot ns にしか存在しないため。
+# delete を含むのは、終端 CR の掃除ではなく **id を間違えて作った CR を直す**ため
+# (通常の運用で消すことはしない — 終端は残し、live set は lifecycle ラベルで切る)。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: project-writer
+  namespace: autopilot
+rules:
+  - apiGroups: ["autopilot.homelab.hikuohiku.dev"]
+    resources: ["projects"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: project-writer
+  namespace: autopilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: project-writer
+subjects:
+  - kind: ServiceAccount
+    name: autopilot-heart
+    namespace: autopilot
+---
+# 読み手。ClusterRole にしてあるのは、tailnet から見る人間とエージェント
+# (apps/agent-rbac の agent-reader) にも同じものを bind するため。
+# **書き込み動詞は 1 つも無い** — 特にコアには渡さない (設計 D29)。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: autopilot-project-reader
+rules:
+  - apiGroups: ["autopilot.homelab.hikuohiku.dev"]
+    resources: ["projects"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: project-reader
+  namespace: autopilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: autopilot-project-reader
+subjects:
+  # Mission Control。今はまだ ops-state を読んでいるが、読み手の切り替え (4b) で
+  # ここが効く。watch があるので 20 秒ポーリングを畳める
+  - kind: ServiceAccount
+    name: ops-dashboard
+    namespace: autopilot
+  # 常駐コア。プロジェクトの状態を人間に話すために読む
+  - kind: ServiceAccount
+    name: autopilot-core
+    namespace: autopilot
+  # runner / reviewer。自分と兄弟の状態を読むだけ
+  - kind: ServiceAccount
+    name: autopilot-runner
+    namespace: autopilot

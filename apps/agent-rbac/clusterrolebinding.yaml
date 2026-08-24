@@ -10,3 +10,21 @@ subjects:
   - kind: ServiceAccount
     name: agent-reader
     namespace: default
+---
+# Project CR の読み取り (設計 state-out-of-git Phase 4)。組み込みの `view` は
+# CustomResource を含まないので別途 bind する。これで read-only MCP から
+# `kubectl get projects` が通り、人間とエージェントがプロジェクトの状態を
+# 直接見られる (今は git を読む口が無く一切見えない)。
+# ClusterRole の実体は apps/autopilot/rbac.yaml。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: agent-reader-projects
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: autopilot-project-reader
+subjects:
+  - kind: ServiceAccount
+    name: agent-reader
+    namespace: default
