@@ -1651,9 +1651,32 @@ P-0258 への言及自体がゼロ (p-0243 の動きも今回無し)。spec・ru
 
 新たな発見は無い。
 
+## セッション 57 (2026-08-24、UTC 02:16 開始 = JST 11:16)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 17 から不変。新 curriculum ブランチも
+無し (`heart/curriculum-20260824-002231` のみ、ls-remote = 00de3c47b で不変)。
+P-0279 も未着地 (`git grep -il recovery origin/main -- apps/ops-health-reporter/` が
+rc=1 ゼロ件)。pull ref 一致を確認 (local HEAD = origin/project/p-0258 = ls-remote = 9ea76fda6 =
+session 56 commit)。reporter ブランチも 420cf7ffa のまま不変 (ls-remote で実測) のため
+verify 3 の正式再実行は見送ったが、参考として latest.json の `recovery_probe` が
+None であることのみ確認 (red 継続、top-level keys 実測も session 52〜56 と同一、
+recovery_probe 無し)。待機中の動きは ops-state beat (91c7e20c4..40eea5fb5, beat 162) の
+`heartbeat.json`/`metrics.jsonl` のみを diff --stat で実測し、projects.json を含まないため
+P-0258 への言及自体がゼロ (p-0243 の動きも今回無し)。spec・runner 非接触。
+デッドロック世界に変化なし。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 55 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 55 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | 正式再実行は見送り — reporter ブランチ不変のため。参考確認で recovery_probe: None (red 固定) |
+
+新たな発見は無い。
+
 ## 次のセッションへの一言
 
-セッション 13〜56 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+セッション 13〜57 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
 `git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
 spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
 (一時ファイルは必ず `mktemp`)。reporter ブランチが動いたら verify 3 も再実測する
