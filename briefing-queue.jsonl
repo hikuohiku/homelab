@@ -122,3 +122,4 @@
 {"at": "2026-08-24T16:38:38Z", "source": "ops/feedback/inbox/20260824-163744-1e88e237.json", "body": "起票して"}
 {"at": "2026-08-24T16:39:46Z", "source": "ops/feedback/inbox/20260824-163900-1e88e238.json", "body": "それと、だとするとtranscriptAvailable を false にしたときのビューの表示に不整合がある\ntranscript 信号を待っています\nと表示されている"}
 {"at": "2026-08-24T16:58:28Z", "source": "issue-comment 5398534382", "body": "(通知予算超過分のまとめ、1 件)\n- [announce] 2026-08-23T16:56:29Z P-0222: 「ずれているのが普通」の座を奪還する — coder・syncthing・vaultwarden の OutOfSync を今日ゼロにし、immich は P-0092 に譲って二度と手を出さない\n検証: git fetch origin ops-health-report -q && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); bad={a['name'] for a in d['applicati"}
+{"at": "2026-08-24T17:20:53Z", "source": "issue-comment 5398789417", "body": "(通知予算超過分のまとめ、1 件)\n- [incident] 2026-08-23T17:19:40Z curriculum Job がエラー終了: curriculum judge: error (failure_kind=auth)"}
