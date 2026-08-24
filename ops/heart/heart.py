@@ -945,7 +945,7 @@ class Heart:
             self.cfg.namespace,
             holder=f"heart/{os.environ.get('HOSTNAME', 'unknown')}",
             beat=beat,
-            now=now_iso(now),
+            now=now,
             stale_seconds=self.cfg.rules["heartbeat"]["stale_seconds"],
         )
         try:
