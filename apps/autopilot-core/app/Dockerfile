@@ -26,7 +26,10 @@ RUN cd adapter && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/tele
 
 # alpine:3.24
 FROM alpine@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
-RUN adduser -D -u 10001 core
+# git / ca-certificates は driver が main の作業コピーを PVC 上に保つために使う
+# (repo.go)。コアはその作業コピーを read-only で読むだけで、git 自体は触らない
+RUN apk add --no-cache git ca-certificates \
+ && adduser -D -u 10001 core
 COPY --from=build /out/core-driver /usr/local/bin/core-driver
 COPY --from=build /out/telegram-adapter /usr/local/bin/telegram-adapter
 USER 10001

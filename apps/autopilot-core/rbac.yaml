@@ -1,0 +1,26 @@
+# コアに k8s の「目」を渡す bind。
+#
+# ClusterRole 本体は新設しない。`autopilot-reader`（`apps/autopilot/rbac.yaml`）が
+# 既に「クラスタを読むための最小集合」として存在し、heart / runner / 旧 loop が
+# 同じものを見ているため。見る対象が同じなのにロールを分けると、片方だけ広がる。
+#
+#   get / list のみ。**書き込み動詞は 1 つも無い**
+#   **Secret は意図的に含まれていない**（ExternalSecret の status で同期状態は見える）
+#
+# トークンの配り方が要点: Pod は `automountServiceAccountToken: false` のままで、
+# projected volume を `core-driver-mcp` コンテナにだけ volumeMounts している
+# （deployment.yaml の kube-api-access）。volumeMounts はコンテナ単位なので、
+# opencode 本体からはトークンが見えない。コアは MCP ツールという固定された窓越しにしか
+# クラスタを読めず、生の API を叩く経路は持たない。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: autopilot-core-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: autopilot-reader
+subjects:
+  - kind: ServiceAccount
+    name: autopilot-core
+    namespace: autopilot
