@@ -5714,7 +5714,7 @@
     {
       "id": "P-0278",
       "title": "application-controller の 512Mi の壁を、30 日分の実測ピークから引き直して今日で終わらせる",
-      "state": "active",
+      "state": "stalled",
       "branch": "project/p-0278",
       "irreversible": false,
       "capabilities": [],
@@ -5779,7 +5779,8 @@
       "veto_deadline": "2026-08-24T07:03:35Z",
       "spawn_count": 1,
       "job": "runner-p-0278-a1",
-      "drift_count": 0
+      "drift_count": 0,
+      "stalled_reason": "error"
     },
     {
       "id": "P-0279",
@@ -5853,7 +5854,7 @@
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T07:00:05Z",
-  "last_activity_at": "2026-08-24T07:03:35Z",
+  "last_activity_at": "2026-08-24T07:07:00Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
