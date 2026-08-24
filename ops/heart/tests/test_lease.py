@@ -7,11 +7,15 @@
 2. 閾値は ops/rules.json が単一情報源。コードに埋めない
 3. 書けなくてもビートは落ちない (書けないことは沈黙として現れる = fail-closed)
 4. 名前が読み手 (apps/autopilot-core の silence.go) と揃っている
+5. 時刻が MicroTime (小数 6 桁) で書かれている。秒精度だと API が 500 を返し、
+   Lease は一度も書かれない (2026-08-24 の障害)
 """
 
 import contextlib
+import datetime as dt
 import json
 import os
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -28,13 +32,14 @@ NS = "autopilot"
 
 class Shape(unittest.TestCase):
     def test_lease_shape(self):
-        doc = lease.to_lease(NS, "heart/pod-1", 42, "2026-08-25T12:00:00Z", 7200)
+        at = dt.datetime(2026, 8, 25, 12, 0, 0, 123456, tzinfo=dt.timezone.utc)
+        doc = lease.to_lease(NS, "heart/pod-1", 42, at, 7200)
         self.assertEqual(doc["apiVersion"], "coordination.k8s.io/v1")
         self.assertEqual(doc["kind"], "Lease")
         self.assertEqual(doc["metadata"]["name"], "autopilot-heart")
         self.assertEqual(doc["metadata"]["namespace"], NS)
         self.assertEqual(doc["metadata"]["annotations"][lease.BEAT_ANNOTATION], "42")
-        self.assertEqual(doc["spec"]["renewTime"], "2026-08-25T12:00:00Z")
+        self.assertEqual(doc["spec"]["renewTime"], "2026-08-25T12:00:00.123456Z")
         self.assertEqual(doc["spec"]["leaseDurationSeconds"], 7200)
         self.assertEqual(doc["spec"]["holderIdentity"], "heart/pod-1")
 
@@ -50,6 +55,36 @@ class Shape(unittest.TestCase):
     def test_rbac_names_the_same_lease(self):
         rbac = (REPO / "apps" / "autopilot" / "rbac.yaml").read_text()
         self.assertIn(f'resourceNames: ["{lease.NAME}"]', rbac)
+
+
+MICRO_TIME = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$")
+
+
+class MicroTime(unittest.TestCase):
+    """**この試験がこの障害の再発を止める。**
+
+    coordination.k8s.io/v1 の renewTime は MicroTime 型で、デコーダは小数 6 桁を
+    要求する。秒精度で書くと k8s API は 500 (`parsing time ...`) を返し、Lease は
+    一度も作られない = 生存が誰にも見えない。
+    """
+
+    def test_renew_time_is_micro_time(self):
+        doc = lease.to_lease(NS, "heart/pod-1", 1, None, 7200)
+        renew = doc["spec"]["renewTime"]
+        self.assertRegex(renew, MICRO_TIME)
+        # 形だけでなく実際に MicroTime として読めること
+        dt.datetime.strptime(renew.replace("Z", "+0000"), "%Y-%m-%dT%H:%M:%S.%f%z")
+
+    def test_micro_time_pads_whole_seconds(self):
+        """マイクロ秒 0 でも 6 桁が落ちないこと (k8s は桁落ちを受け付けない)。"""
+        at = dt.datetime(2026, 8, 25, 12, 0, 0, 0, tzinfo=dt.timezone.utc)
+        self.assertEqual(lease.micro_time(at), "2026-08-25T12:00:00.000000Z")
+
+    def test_heart_does_not_use_the_second_precision_stamp(self):
+        """heart.now_iso (秒精度) を Lease に流し込む道が戻っていないこと。"""
+        source = (REPO / "ops" / "heart" / "heart.py").read_text()
+        body = source.split("def renew_lease", 1)[1].split("\n    def ", 1)[0]
+        self.assertNotIn("now_iso", body)
 
 
 class Threshold(unittest.TestCase):
@@ -144,6 +179,10 @@ class LeaseFollowsTheBeat(unittest.TestCase):
             body["spec"]["leaseDurationSeconds"],
             self.h.cfg.rules["heartbeat"]["stale_seconds"],
         )
+        # 実際にビートが出す body が MicroTime であること (型の罠は経路の端で出る)
+        self.assertRegex(body["spec"]["renewTime"], MICRO_TIME)
+        self.assertIsInstance(body["spec"]["leaseDurationSeconds"], int)
+        self.assertIsInstance(body["spec"]["holderIdentity"], str)
 
     def test_stuck_beat_does_not_renew_the_lease(self):
         """**この試験がこの仕組みの存在理由。**

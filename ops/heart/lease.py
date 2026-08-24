@@ -12,6 +12,8 @@ git は一切経由しない。
 ここは純関数だけ。k8s を叩くのは呼び出し側 (heart.beat)。
 """
 
+from datetime import datetime, timezone
+
 API_VERSION = "coordination.k8s.io/v1"
 KIND = "Lease"
 PLURAL = "leases"
@@ -23,12 +25,26 @@ NAME = "autopilot-heart"
 BEAT_ANNOTATION = "autopilot.homelab.hikuohiku.dev/beat"
 
 
+def micro_time(now=None):
+    """Lease の時刻を MicroTime (小数 6 桁の RFC3339) で返す。
+
+    `Lease.spec` の renewTime / acquireTime は k8s の **MicroTime** 型で、
+    デコーダは小数 6 桁を必ず要求する。statefiles.now_iso の秒精度を渡すと
+    API が 500 (`parsing time ...`) を返し、Lease が一度も書けない
+    (2026-08-24 に実際にそうなった)。他の用途の書式は now_iso のまま。
+    """
+    return (now or datetime.now(timezone.utc)).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
+
+
 def to_lease(namespace, holder, beat, now, stale_seconds, name=NAME):
     """1 ビート分の Lease を返す。
 
     leaseDurationSeconds に閾値をそのまま載せるのは、`kubectl get lease` を見た
     人間が「どれだけ空いたら異常か」を CR の上で読めるようにするため。判定の
     単一情報源は ops/rules.json のままで、ここはその写し。
+
+    now は datetime (None なら現在時刻)。**文字列を受けない**のは、秒精度の
+    now_iso をそのまま渡して 500 を食う道を塞ぐため (micro_time を参照)。
     """
     return {
         "apiVersion": API_VERSION,
@@ -41,6 +57,6 @@ def to_lease(namespace, holder, beat, now, stale_seconds, name=NAME):
         "spec": {
             "holderIdentity": holder,
             "leaseDurationSeconds": int(stale_seconds),
-            "renewTime": now,
+            "renewTime": micro_time(now),
         },
     }
