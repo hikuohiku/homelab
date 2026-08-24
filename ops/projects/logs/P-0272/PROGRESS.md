@@ -436,3 +436,45 @@ git log とは食い違っていた。**埋め込み文脈より実ファイル�
 green と出力 JSON を貼るだけ (掃除不要)。まだ root 所有なら冒頭の「wrapper への依頼」節を参照させて
 記録すること。mktemp で拡張子付きテンプレートを使わないこと (罠: busybox 系は X 末尾のみ)。
 parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
+
+### 2026-08-24 セッション 12 — 環境は依然未修正 (11 セッション連続)。全 verify を再実測し、wrapper 依頼を 11 度目の提示
+
+> **wrapper への依頼 (未処理。これが唯一のブロッカー)**:
+> `python3 ops/tools/human_tasks.py --out /tmp/opencode/human-tasks.json` は `/tmp/opencode` が
+> `root:root drwxr-xr-x` のため uid 10001(autopilot) には書けず、**OS 的に絶対に green にならない**
+> (sudo 無し。本セッションでも `command -v sudo` が空であることを再実測)。コードは完成済みで
+> mktemp 書き先の同一検証は green 実測 (下記)。
+> どれか一つで即解消する: **(a)** runner が root で `chown autopilot:autopilot /tmp/opencode`
+> (ディレクトリ内は空なので掃除不要)、**(b)** 受入コマンドのみ root 実行、
+> **(c)** 以降の spec の受入で `/tmp/opencode` 直書きの固定パスを避ける。
+
+**状況**: レビュー指摘なし、failing は verify 1 のみ。最初に `ls -ld /tmp/opencode` を確認 →
+**依然 `root:root drwxr-xr-x`、mtime 2026-08-22 07:41 不変、中身は空** (`touch .probe` も
+Permission denied を再実測)。セッション 2 以来の依頼は 11 度目も未処理。
+なお wrapper 自身の埋め込み文脈の受入 JSON も同一 PermissionError を記録しており、
+worker 側だけでなく runner 全体がこの固定パスに阻まれている状態が外部からも観測されている。
+
+**本セッションの実測 (証跡。すべて過去セッションと同一結果 = 再現性 12 回目)**:
+
+- verify 1 (spec 通り): 同一トレース (`human_tasks.py:152 write_text → PermissionError`)、rc=1
+- verify 1 のロジック部 (`f=$(mktemp)` 書き先 + 同一 assert 文): **green** rc=0。出力 JSON:
+  T-0107/T-0140/T-0141/T-0148 の 4 件、全キー揃い、age_days=18 (created 2026-08-06 join 済み)、
+  古い順 (T-0107 先頭)
+- verify 2: rc=0 green / verify 3: unittest 10 tests OK rc=0
+- TS ミラー (`npm test`): pass 10 / fail 0。node_modules 残存 (消失 2 回・残存 7 回)
+
+**やったこと**: 上記の再実測とこの記録のみ。コード変更ゼロ。
+
+**分かったこと / 罠**: 新規なし。引き継ぎ指示どおり `git fetch origin main` を再実施:
+merge-base は 7a7573954 のまま、main 先行は P-0270 分の 6 commit から増えておらず、
+**ファイル重複もゼロ継続** (merge-base..HEAD と merge-base..origin/main の changed files の
+comm -12 が空を実測)。seeds.md の『人間の鍵作業』節も drift 無し
+(見出し 57 行目・bullet T 項目 4 件・取り消し線行は複数残存のまま)。
+
+**発見 (spec 外)**: 新規なし。固定パス問題による worker 実質停止が 11 セッション連続。
+main 先行 6 commit・重複ゼロの「解消後の受入が最も容易な」窓は今も開いたまま。
+
+**次のセッションへ一言**: まず `ls -ld /tmp/opencode`。書けるなら verify 1 を spec 通りに実行して
+green と出力 JSON を貼るだけ (掃除不要)。まだ root 所有なら冒頭の「wrapper への依頼」節を参照させて
+記録すること。mktemp で拡張子付きテンプレートを使わないこと (罠: busybox 系は X 末尾のみ)。
+parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
