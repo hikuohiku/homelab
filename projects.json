@@ -7045,7 +7045,7 @@
     {
       "id": "P-0361",
       "title": "写真の実データが『腐っていない』を毎週測る — immich のアセット整合性検証を常設する",
-      "state": "active",
+      "state": "in_review",
       "branch": "project/p-0361",
       "irreversible": false,
       "capabilities": [
@@ -7139,7 +7139,7 @@
       "prs": [
         638
       ],
-      "review_requested_at": "2026-08-24T22:38:02Z",
+      "review_requested_at": "2026-08-24T22:49:21Z",
       "review_retries": 0,
       "review_cycles": 1
     },
@@ -7225,7 +7225,7 @@
     {
       "id": "P-9017",
       "title": "クラスタの脳を B2 から戻せる証明 — k3s 状態ストア (kine/sqlite) の復元ドリルと、未 merge ブランチ phase0-k3s-datastore-backup の検収",
-      "state": "proposed",
+      "state": "stalled",
       "branch": "project/p-9017",
       "irreversible": false,
       "capabilities": [
@@ -7313,12 +7313,13 @@
           "! grep -qE 'restic +(forget|prune|unlock)' ops/drills/k3s_datastore_restore_drill.sh"
         ],
         "broken": []
-      }
+      },
+      "stalled_reason": "adopt_gate_some_pass"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T22:36:54Z",
-  "last_activity_at": "2026-08-24T22:48:09Z",
+  "last_activity_at": "2026-08-24T22:49:21Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false,
