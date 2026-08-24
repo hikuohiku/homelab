@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-08-24T10:27:33Z",
+  "generated_at": "2026-08-24T10:30:07Z",
   "applications": [
     {
       "name": "adguard",
@@ -65,7 +65,7 @@
       "name": "nats",
       "namespace": "argocd",
       "sync": "Synced",
-      "health": "Healthy"
+      "health": "Progressing"
     },
     {
       "name": "ops-dashboard",
@@ -95,7 +95,7 @@
       "name": "telegram-adapter",
       "namespace": "argocd",
       "sync": "Synced",
-      "health": "Healthy"
+      "health": "Progressing"
     },
     {
       "name": "vaultwarden",
@@ -115,22 +115,36 @@
       "name": "adguard-6b6c74fd6b-x45k6",
       "namespace": "adguard",
       "phase": "Running",
-      "restarts": 111,
-      "waiting_reasons": []
+      "restarts": 115,
+      "waiting_reasons": [
+        "CrashLoopBackOff"
+      ],
+      "terminated": [
+        {
+          "container": "adguardhome",
+          "signature": "adguardhome:115",
+          "exit_code": 1,
+          "reason": "Error",
+          "finished_at": "2026-08-24T10:29:12Z",
+          "message": "2026/08/24 10:29:12 [error] Couldn't get logging settings from the configuration: yaml: construct errors: line 13: cannot construct !!seq into string\n2026/08/24 10:29:12.012810 [info] starting adguard home version=\"AdGuard Home, version v0.107.79\"\n2026/08/24 10:29:12.040316 [error] failed to parse configuration file err=\"yaml: construct errors: line 13: cannot construct !!seq into string\"",
+          "message_truncated": false,
+          "message_available": true
+        }
+      ]
     },
     {
       "name": "argocd-application-controller-0",
       "namespace": "argocd",
       "phase": "Running",
-      "restarts": 8,
+      "restarts": 9,
       "waiting_reasons": [],
       "terminated": [
         {
           "container": "application-controller",
-          "signature": "application-controller:8",
-          "exit_code": 255,
-          "reason": "Unknown",
-          "finished_at": "2026-08-24T10:27:04Z",
+          "signature": "application-controller:9",
+          "exit_code": 137,
+          "reason": "OOMKilled",
+          "finished_at": "2026-08-24T10:28:17Z",
           "message": null,
           "message_truncated": false,
           "message_available": false
@@ -233,6 +247,25 @@
       ]
     },
     {
+      "name": "autopilot-core-6974cc6f66-gk6rx",
+      "namespace": "autopilot",
+      "phase": "Running",
+      "restarts": 4,
+      "waiting_reasons": [],
+      "terminated": [
+        {
+          "container": "core-driver-mcp",
+          "signature": "core-driver-mcp:1",
+          "exit_code": 255,
+          "reason": "Unknown",
+          "finished_at": "2026-08-24T10:27:04Z",
+          "message": "[core-driver/mcp] 2026/08/24 09:12:39 MCP を HTTP で待ち受ける: http://127.0.0.1:4098/mcp (boot=dkx2431dkk09)\n[core-driver/mcp] 2026/08/24 09:12:46 <- initialize\n[core-driver/mcp] 2026/08/24 09:12:46 <- notifications/initialized\n[core-driver/mcp] 2026/08/24 09:12:46 <- tools/list\n[core-driver/mcp] 2026/08/24 09:12:46 <- initialize\n[core-driver/mcp] 2026/08/24 09:12:46 <- notifications/initialized\n[core-driver/mcp] 2026/08/24 09:12:46 <- tools/list\n[core-driver/mcp] 2026/08/24 10:02:04 <- initialize\n[core-driver/mcp] 2026/08/24 10:02:05 <- notifications/initialized\n[core-driver/mcp] 2026/08/24 10:02:05 <- tools/list",
+          "message_truncated": false,
+          "message_available": true
+        }
+      ]
+    },
+    {
       "name": "curriculum-system-a792709-7l8rr",
       "namespace": "autopilot",
       "phase": "Failed",
@@ -273,18 +306,7 @@
       "phase": "Running",
       "restarts": 5,
       "waiting_reasons": [],
-      "terminated": [
-        {
-          "container": "postgres",
-          "signature": "postgres:5",
-          "exit_code": 255,
-          "reason": "Unknown",
-          "finished_at": "2026-08-24T10:27:04Z",
-          "message": "AL file(s) added, 0 removed, 0 recycled; write=4.066 s, sync=0.013 s, total=4.121 s; sync files=18, longest=0.011 s, average=0.001 s; distance=167 kB, estimate=283 kB; lsn=0/50734260, redo lsn=0/507308A0\n2026-08-24 09:14:31.031 UTC [14] LOG:  checkpoint starting: time\n2026-08-24 09:14:38.145 UTC [14] LOG:  checkpoint complete: wrote 66 buffers (0.4%); 0 WAL file(s) added, 0 removed, 0 recycled; write=6.550 s, sync=0.006 s, total=7.115 s; sync files=16, longest=0.005 s, average=0.001 s; distance=305 kB, estimate=305 kB; lsn=0/50788308, redo lsn=0/5077CFE8\n2026-08-24 09:19:31.281 UTC [14] LOG:  checkpoint starting: time\n2026-08-24 09:19:38.692 UTC [14] LOG:  checkpoint complete: wrote 47 buffers (0.3%); 0 WAL file(s) added, 0 removed, 0 recycled; write=5.597 s, sync=0.350 s, total=7.320 s; sync files=15, longest=0.185 s, average=0.023 s; distance=229 kB, estimate=298 kB; lsn=0/507B6C10, redo lsn=0/507B65D0\n2026-08-24 09:20:42.251 UTC [163837] LOG:  PID 163833 in cancel request did not match any process\n2026-08-24 09:20:42.373 UTC [163839] LOG:  PID 163830 in cancel request did not match any process\n2026-08-24 09:24:35.412 UTC [14] LOG:  checkpoint starting: time\n2026-08-24 09:25:54.0",
-          "message_truncated": true,
-          "message_available": true
-        }
-      ]
+      "terminated_omitted": 1
     },
     {
       "name": "coder-restic-backup-29773090-k25sh",
@@ -313,18 +335,7 @@
       "phase": "Running",
       "restarts": 7,
       "waiting_reasons": [],
-      "terminated": [
-        {
-          "container": "dex",
-          "signature": "dex:7",
-          "exit_code": 255,
-          "reason": "Unknown",
-          "finished_at": "2026-08-24T10:27:04Z",
-          "message": null,
-          "message_truncated": false,
-          "message_available": false
-        }
-      ]
+      "terminated_omitted": 1
     },
     {
       "name": "immich-restic-backup-29773065-8cg6j",
@@ -611,12 +622,285 @@
   "pod_metrics": [
     {
       "namespace": "argocd",
+      "name": "argocd-application-controller-0",
+      "containers": [
+        {
+          "name": "application-controller",
+          "cpu": "2111670n",
+          "memory": "301692Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "argocd",
+      "name": "argocd-applicationset-controller-85ddf4b49b-nclkw",
+      "containers": [
+        {
+          "name": "applicationset-controller",
+          "cpu": "220489n",
+          "memory": "65340Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "argocd",
+      "name": "argocd-dex-server-5d9c7d5d9f-f6sdz",
+      "containers": [
+        {
+          "name": "dex-server",
+          "cpu": "918524n",
+          "memory": "127372Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "argocd",
       "name": "argocd-notifications-controller-78bcc778c8-l7c6l",
       "containers": [
         {
           "name": "notifications-controller",
-          "cpu": "20218759n",
-          "memory": "59776Ki"
+          "cpu": "35640n",
+          "memory": "62644Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "argocd",
+      "name": "argocd-redis-88d84b6bb-dmm4z",
+      "containers": [
+        {
+          "name": "redis",
+          "cpu": "4471479n",
+          "memory": "29884Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "argocd",
+      "name": "argocd-repo-server-94d4695db-s8bzq",
+      "containers": [
+        {
+          "name": "repo-server",
+          "cpu": "1160013n",
+          "memory": "122976Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "argocd",
+      "name": "argocd-server-77c694888f-x4685",
+      "containers": [
+        {
+          "name": "server",
+          "cpu": "240110n",
+          "memory": "94008Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "autopilot",
+      "name": "autopilot-core-6974cc6f66-gk6rx",
+      "containers": [
+        {
+          "name": "core-driver-mcp",
+          "cpu": "25188n",
+          "memory": "8660Ki"
+        },
+        {
+          "name": "driver",
+          "cpu": "451688n",
+          "memory": "6208Ki"
+        },
+        {
+          "name": "opencode",
+          "cpu": "10793890n",
+          "memory": "356572Ki"
+        },
+        {
+          "name": "telegram-adapter",
+          "cpu": "12197n",
+          "memory": "8572Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "autopilot",
+      "name": "autopilot-heart-f864f9b88-sc49q",
+      "containers": [
+        {
+          "name": "heart",
+          "cpu": "939062n",
+          "memory": "55604Ki"
+        },
+        {
+          "name": "bus-sidecar",
+          "cpu": "459888n",
+          "memory": "8416Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "autopilot",
+      "name": "curriculum-system-a792788-l84m8",
+      "containers": [
+        {
+          "name": "curriculum",
+          "cpu": "989423035n",
+          "memory": "41336Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "autopilot",
+      "name": "nats-56b8888776-69r9b",
+      "containers": [
+        {
+          "name": "nats",
+          "cpu": "2002889n",
+          "memory": "19868Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "autopilot",
+      "name": "ops-dashboard-7c96bc456-66dbx",
+      "containers": [
+        {
+          "name": "web",
+          "cpu": "4926806n",
+          "memory": "287640Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "autopilot",
+      "name": "runner-p-0302-a2-wbwfs",
+      "containers": [
+        {
+          "name": "runner",
+          "cpu": "1026900628n",
+          "memory": "50048Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "autopilot",
+      "name": "runner-p-0304-a2-znwks",
+      "containers": [
+        {
+          "name": "runner",
+          "cpu": "1007880378n",
+          "memory": "22352Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "autopilot",
+      "name": "telegram-adapter-74f7dd99b-8ccxn",
+      "containers": [
+        {
+          "name": "adapter",
+          "cpu": "0",
+          "memory": "5788Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "coder",
+      "name": "coder-0cd09458-ec4b-4b17-9039-f4e4f5927305-7bb4fc758c-w6mjf",
+      "containers": [
+        {
+          "name": "dev",
+          "cpu": "7485382n",
+          "memory": "232996Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "coder",
+      "name": "coder-557bdc87bf-ltmx6",
+      "containers": [
+        {
+          "name": "coder",
+          "cpu": "2707327n",
+          "memory": "636980Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "coder",
+      "name": "coder-postgres-669c6c8956-nv9bh",
+      "containers": [
+        {
+          "name": "postgres",
+          "cpu": "29860285n",
+          "memory": "76644Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "dex",
+      "name": "dex-b9f85dc5f-lthwx",
+      "containers": [
+        {
+          "name": "dex",
+          "cpu": "241432n",
+          "memory": "98936Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "external-secrets",
+      "name": "external-secrets-7d774974f9-62lzk",
+      "containers": [
+        {
+          "name": "external-secrets",
+          "cpu": "1486463n",
+          "memory": "113852Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "external-secrets",
+      "name": "external-secrets-cert-controller-5d8976b685-496kl",
+      "containers": [
+        {
+          "name": "cert-controller",
+          "cpu": "429277n",
+          "memory": "42804Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "external-secrets",
+      "name": "external-secrets-webhook-7444455b79-2dtzj",
+      "containers": [
+        {
+          "name": "webhook",
+          "cpu": "395107n",
+          "memory": "88872Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "immich",
+      "name": "immich-machine-learning-f649c5996-7rn5v",
+      "containers": [
+        {
+          "name": "main",
+          "cpu": "1643332n",
+          "memory": "388964Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "immich",
+      "name": "immich-postgres-68d65f4b9d-jtbvz",
+      "containers": [
+        {
+          "name": "postgres",
+          "cpu": "28006327n",
+          "memory": "78720Ki"
         }
       ]
     },
@@ -626,8 +910,8 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "120887018n",
-          "memory": "160488Ki"
+          "cpu": "54145505n",
+          "memory": "820252Ki"
         }
       ]
     },
@@ -637,13 +921,195 @@
       "containers": [
         {
           "name": "main",
-          "cpu": "7262027n",
-          "memory": "15208Ki"
+          "cpu": "4524940n",
+          "memory": "16356Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "kube-system",
+      "name": "coredns-557cc8c59-fgmdt",
+      "containers": [
+        {
+          "name": "coredns",
+          "cpu": "1355616n",
+          "memory": "75824Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "kube-system",
+      "name": "local-path-provisioner-578895bd58-k6p8x",
+      "containers": [
+        {
+          "name": "local-path-provisioner",
+          "cpu": "29320n",
+          "memory": "49680Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "kube-system",
+      "name": "metrics-server-7b9c9c4b9c-t5n7b",
+      "containers": [
+        {
+          "name": "metrics-server",
+          "cpu": "3230333n",
+          "memory": "79788Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "syncthing",
+      "name": "syncthing-747879bfcf-vl85r",
+      "containers": [
+        {
+          "name": "syncthing",
+          "cpu": "280940n",
+          "memory": "39328Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "nameserver-cc5c8477d-f42w4",
+      "containers": [
+        {
+          "name": "nameserver",
+          "cpu": "292818n",
+          "memory": "19180Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "operator-7c75d4665f-4n2zt",
+      "containers": [
+        {
+          "name": "operator",
+          "cpu": "1670209n",
+          "memory": "104232Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-adguard-gs2ds-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "3012147n",
+          "memory": "57876Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-argocd-xcz9d-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "3098491n",
+          "memory": "33516Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-coder-9cngn-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "2979166n",
+          "memory": "31776Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-dex-9plnb-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "3103987n",
+          "memory": "39308Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-immich-6d7wg-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "2928649n",
+          "memory": "33912Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-ops-dashboard-lcvbm-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "4456595n",
+          "memory": "92136Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-syncthing-dh5js-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "2796512n",
+          "memory": "33112Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-syncthing-sync-62g6j-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "3080573n",
+          "memory": "31512Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "tailscale",
+      "name": "ts-vaultwarden-kgx98-0",
+      "containers": [
+        {
+          "name": "tailscale",
+          "cpu": "3317774n",
+          "memory": "39684Ki"
+        }
+      ]
+    },
+    {
+      "namespace": "vaultwarden",
+      "name": "vaultwarden-5856cf9595-wstjw",
+      "containers": [
+        {
+          "name": "vaultwarden",
+          "cpu": "147099n",
+          "memory": "61712Ki"
         }
       ]
     }
   ],
-  "node_metrics": [],
+  "node_metrics": [
+    {
+      "name": "nixos",
+      "cpu": "3580936318n",
+      "memory": "6587888Ki"
+    }
+  ],
   "pvc_usage": [
     {
       "generated_at": "2026-08-24T09:05:04Z",
@@ -854,187 +1320,163 @@
   },
   "externalsecrets": {
     "total": 25,
-    "secret_synced_errors": 25,
+    "secret_synced_errors": 1,
     "errored": [
-      "adguard: adguard-restic-backup-credentials",
-      "adguard: adguard-restic-credentials",
-      "argocd: argocd-dex-client-secret",
-      "autopilot: autopilot-core-credentials",
-      "autopilot: autopilot-credentials",
-      "autopilot: nats-credentials",
-      "autopilot: ops-dashboard-github-token",
-      "autopilot: telegram-adapter-credentials",
-      "coder: coder-db-url",
-      "coder: coder-postgres-credentials",
-      "coder: coder-restic-backup-credentials",
-      "coder: coder-restic-credentials",
-      "dex: dex-google-oauth",
-      "immich: immich-postgres-credentials",
-      "immich: immich-restic-backup-credentials",
-      "immich: immich-restic-credentials",
-      "ops-health-reporter: github-health-reporter-token",
-      "syncthing: syncthing-photo-intake-credentials",
-      "syncthing: syncthing-restic-backup-credentials",
-      "syncthing: syncthing-restic-credentials",
-      "tailscale: tailscale-oauth",
-      "vaultwarden: vaultwarden-admin-token",
-      "vaultwarden: vaultwarden-restic-backup-credentials",
-      "vaultwarden: vaultwarden-restic-credentials",
-      "version-watcher: github-health-reporter-token"
+      "syncthing: syncthing-photo-intake-credentials"
     ],
     "items": [
       {
         "name": "adguard-restic-backup-credentials",
         "namespace": "adguard",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 4591,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 134,
+        "message": null
       },
       {
         "name": "adguard-restic-credentials",
         "namespace": "adguard",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 4589,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 147,
+        "message": null
       },
       {
         "name": "argocd-dex-client-secret",
         "namespace": "argocd",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 4285,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 124,
+        "message": null
       },
       {
         "name": "autopilot-core-credentials",
         "namespace": "autopilot",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 1800,
-        "last_sync_age_seconds": 4471,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 131,
+        "message": null
       },
       {
         "name": "autopilot-credentials",
         "namespace": "autopilot",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 5016,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 145,
+        "message": null
       },
       {
         "name": "nats-credentials",
         "namespace": "autopilot",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 1800,
-        "last_sync_age_seconds": 5208,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 139,
+        "message": null
       },
       {
         "name": "ops-dashboard-github-token",
         "namespace": "autopilot",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7064,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 136,
+        "message": null
       },
       {
         "name": "telegram-adapter-credentials",
         "namespace": "autopilot",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 1800,
-        "last_sync_age_seconds": 4865,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 150,
+        "message": null
       },
       {
         "name": "coder-db-url",
         "namespace": "coder",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7664,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 141,
+        "message": null
       },
       {
         "name": "coder-postgres-credentials",
         "namespace": "coder",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7647,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 132,
+        "message": null
       },
       {
         "name": "coder-restic-backup-credentials",
         "namespace": "coder",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7661,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 138,
+        "message": null
       },
       {
         "name": "coder-restic-credentials",
         "namespace": "coder",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7642,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 140,
+        "message": null
       },
       {
         "name": "dex-google-oauth",
         "namespace": "dex",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7003,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 123,
+        "message": null
       },
       {
         "name": "immich-postgres-credentials",
         "namespace": "immich",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7619,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 132,
+        "message": null
       },
       {
         "name": "immich-restic-backup-credentials",
         "namespace": "immich",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7613,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 144,
+        "message": null
       },
       {
         "name": "immich-restic-credentials",
         "namespace": "immich",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7618,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 142,
+        "message": null
       },
       {
         "name": "github-health-reporter-token",
         "namespace": "ops-health-reporter",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7638,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 139,
+        "message": null
       },
       {
         "name": "syncthing-photo-intake-credentials",
@@ -1048,79 +1490,79 @@
       {
         "name": "syncthing-restic-backup-credentials",
         "namespace": "syncthing",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 4270,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 127,
+        "message": null
       },
       {
         "name": "syncthing-restic-credentials",
         "namespace": "syncthing",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 4254,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 136,
+        "message": null
       },
       {
         "name": "tailscale-oauth",
         "namespace": "tailscale",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7625,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 152,
+        "message": null
       },
       {
         "name": "vaultwarden-admin-token",
         "namespace": "vaultwarden",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7653,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 141,
+        "message": null
       },
       {
         "name": "vaultwarden-restic-backup-credentials",
         "namespace": "vaultwarden",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7652,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 129,
+        "message": null
       },
       {
         "name": "vaultwarden-restic-credentials",
         "namespace": "vaultwarden",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7645,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 125,
+        "message": null
       },
       {
         "name": "github-health-reporter-token",
         "namespace": "version-watcher",
-        "ready": "False",
-        "sync_reason": "SecretSyncedError",
+        "ready": "True",
+        "sync_reason": "SecretSynced",
         "refresh_interval_seconds": 3600,
-        "last_sync_age_seconds": 7552,
-        "message": "could not get secret data from provider"
+        "last_sync_age_seconds": 134,
+        "message": null
       }
     ]
   },
   "autopilot": {
     "deployment": {
       "replicas": 1,
-      "readyReplicas": 0,
-      "unavailableReplicas": 1
+      "readyReplicas": 1,
+      "unavailableReplicas": 0
     },
     "pods": [
       {
         "name": "autopilot-heart-f864f9b88-sc49q",
         "phase": "Running",
-        "restartCount": 0
+        "restartCount": 1
       }
     ],
     "heartbeat": {
@@ -1129,10 +1571,10 @@
   },
   "dashboard_smoke": {
     "status": "ok",
-    "reason": "全 12 検査合格 (35251 秒前の実測)",
+    "reason": "全 12 検査合格 (35406 秒前の実測)",
     "ok": true,
     "generated_at": "2026-08-24T00:40:03Z",
-    "age_seconds": 35251,
+    "age_seconds": 35406,
     "url": "http://ops-dashboard.autopilot.svc",
     "http_status": 200,
     "elapsed_s": 15.42,
