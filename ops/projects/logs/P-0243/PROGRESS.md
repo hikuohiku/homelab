@@ -722,3 +722,49 @@
   test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
 - main 追い越しの手順はセッション 17 の「罠注意」参照 (merge-base diff で中身確認)
 - 生死が気になったら archive.jsonl ではなく ops-state:projects.json の `state` を見る
+
+## セッション 19 (2026-08-24) — 短絡チェックのみ。main 不動・census 未着・コード変更ゼロ
+
+### やったこと
+
+- **セッション 13〜18 の短絡手順どおりチェック**:
+  V1 green / V2 red (既知 fail-fast rc=2、stderr は wrapper 実測と同一メッセージ。
+  書き込みプローブで中断・クラスタ接触前なので副作用ゼロ。なお wrapper 実測が
+  同一エラーということは runner 環境自体がまだ新しくなっていないことの裏取りでもある) /
+  V3 green / census 未着 (`git ls-tree -r origin/main | grep -c egress` = 0)
+- **fetch を先に打ってから数える**習慣 (セッション 18 の教訓) を実行:
+  ops-state は実際に動いていた (75b480bdc..b3312fee3、他に project/p-0258 も動いた)。
+  教訓どおり fetch 後に `git show origin/ops-state:projects.json` で P-0243 を確認 →
+  **`state: active`** でループ前提は健在
+- demo.json 完全性チェック (7 bool キー + `pods.labeled.probe.https_ok is False` /
+  `pods.control.probe.https_ok is True`) 全パス
+- 本 PR の差分範囲を再確認: `git diff --stat origin/main...HEAD` で **14 ファイル**不変。
+  spawn.py の emptyDir mount (`opencode-tmp` → `/tmp/opencode`) も無傷をファイル実読で確認。
+  コード変更は今セッションもゼロ
+
+### 分かったこと (次セッションへの罠注意)
+
+- 今セッションで新しい罠は無し。既知の手順 (fetch 先行・merge-base diff・
+  pods.*.probe パス・生死は ops-state 見る) が全部そのまま機能した
+- ops-state が動いている回は projects.json の自分の record も目を通すこと
+  (今回は state=active で変化なし。adopt_gate_attempts 等の欄が将来更新されたら
+  何か起きている合図)
+
+### 検証 (全部自分で実走済み)
+
+- spec verify V1 green / V3 green / V2 red (既知 fail-fast rc=2、クラスタ副作用ゼロ)
+- demo.json 完全性確認 (7 bool キー + pods.*.probe 対照を assert) /
+  census 未着確認 / fetch 後 main 新着 = 0 (#579 のまま) 確認 /
+  ops-state:projects.json の P-0243 state=active 確認 /
+  spawn.py emptyDir mount の実読確認
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4〜18 から不変**: V2 は本 PR の merge+sync 後の新 runner Pod で
+  自動 green 化する (spawn.py の emptyDir mount 済み)。Pod 内での再走・権限 hack は不要
+  (sudo 不在まで実証済み)。やることは「PR merge を待つ」だけ。main 新着なければ短絡でよい
+- census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+  到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+- main 追い越しの手順はセッション 17 の「罠注意」参照 (merge-base diff で中身確認)
+- 生死が気になったら archive.jsonl ではなく ops-state:projects.json の `state` を見る
