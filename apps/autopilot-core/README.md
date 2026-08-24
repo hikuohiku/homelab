@@ -143,6 +143,33 @@ autopilot イメージを流用しているのは opencode-ai が入っている
 - **秘密はコアのプロセスに置かない。** `opencode.json` にも `headers` にも、
   `opencode` コンテナの env にも書かない（上の「秘密をコアのプロセスから消す」）
 
+## 立案の shadow 実行（設計 rev3 Phase C）
+
+**コアの中に立案役を置き、Job 版と並走させて答えを突き合わせるための影実行。**
+本番の判断は置き換えない — heart の curriculum Job はそのまま動き続け、
+ここは「同じ問いに自分ならどう答えるか」を記録するだけ。
+
+- `config.yaml` の `agent` に 3 つ: `planner`（発散）/ `judge`（採否）/ `shadow`（受け皿）。
+  指示は `ops/prompts/curriculum-generate.md` / `curriculum-judge.md` を踏襲する
+- driver が `POST /session/{id}/prompt_async` の `parts` に
+  `{"type":"subtask","agent":"planner",...}` を入れて**名指しで起動**する。
+  親 LLM の判断を挟まないので、「いつ考えるか」はコードが決めたまま
+- サブエージェントは親と別セッション・文脈は白紙。Job 版の「judge は fresh session」
+  という独立性がそのまま残る
+- **起動条件は決定論**（`shadowDue`）: 有効 ∧ 前回から `CORE_SHADOW_INTERVAL_HOURS`
+  経過 ∧ `stop_engaged` でない ∧ パイプラインに空きがある。材料は ops-state の
+  `projects.json` で、heart の `reconcile.py` と同じ数え方
+- **副作用ゼロ**: git に書かない、PR を作らない、`request_task` を撃たない、
+  Telegram に送らない。GitHub へは GET しか出さず、書くのは PVC の
+  `/data/shadow/` だけ。`shadow_test.go` がこれを機械で固定する
+- 記録は `/data/shadow/curriculum.jsonl`（1 行 1 回）。突き合わせの鍵は `date`
+  （`archive.jsonl` の `created` と同じ粒度）と `job_last_curriculum_at`。
+  `proposal_ids` / `adopted_ids` を Job 版の採択と並べる
+- 新しいコンテナは増やさない。思考は `opencode` コンテナ（cpu limit 1）で走り、
+  driver は起動と記録だけ。走行中も書き置きの処理は止まらない（別 goroutine）
+
+**既定は無効。** 有効化は Deployment の `CORE_SHADOW_CURRICULUM=1` だけ。
+
 ## モデル
 
 `CORE_MODEL`（`provider/model` 形式）で指定する。単一情報源は `ops/models.json` の
@@ -171,6 +198,11 @@ autopilot イメージを流用しているのは opencode-ai が入っている
 | `NATS_FILTER_SUBJECT` | `events.raw.>` | 拾う subject |
 | `CORE_MCP_TARGETS` | `telegram=http://127.0.0.1:4097,homelab=http://127.0.0.1:4098` | 再接続を見張る MCP サイドカー。空にすると見張らない |
 | `CORE_MCP_CHECK_SECONDS` | `30` | 見張りの間隔 |
+| `CORE_SHADOW_CURRICULUM` | `0`（無効） | 立案の shadow 実行。`1` で有効 |
+| `CORE_SHADOW_INTERVAL_HOURS` | `6` | shadow 実行の間隔 |
+| `CORE_SHADOW_TIMEOUT_SECONDS` | `900` | planner / judge 各 1 段の待ち上限 |
+| `CORE_SHADOW_MAX_CONCURRENT` | `6` | 空きスロットの計算に使う上限（`rules.json` の `runner.max_concurrent` と揃える） |
+| `CORE_STATE_BRANCH` | `ops-state` | `projects.json` を読むブランチ |
 
 MCP サイドカー側は `--listen host:port` で HTTP を待ち受ける。引数なしの
 `core-driver mcp` / `telegram-adapter mcp` は従来どおり stdio。

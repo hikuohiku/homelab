@@ -218,6 +218,19 @@ spec:
               value: telegram=http://127.0.0.1:4097,homelab=http://127.0.0.1:4098
             - name: CORE_MCP_CHECK_SECONDS
               value: "30"
+            # 立案の shadow 実行 (設計 rev3 Phase C)。**既定は無効。**
+            # 有効にすると driver が planner → judge のサブエージェントを
+            # 定期的に回し、結果を /data/shadow/curriculum.jsonl に記録する。
+            # heart の curriculum Job はそのまま動き続け、判断は置き換えない
+            # (突き合わせのための影実行)。副作用はゼロ — git にも PR にも
+            # Telegram にも出さない。
+            # 新しいコンテナは足さない: 思考は opencode コンテナ (cpu limit 1) の
+            # 中で走り、driver は起動と記録だけを担う。node01 は 4 コアしかなく、
+            # 2026-08-24 に autopilot の CPU 枯渇でノードごと落ちている
+            - name: CORE_SHADOW_CURRICULUM
+              value: "0"
+            - name: CORE_SHADOW_INTERVAL_HOURS
+              value: "6"
             # イベント経路 (設計 D16) からの入力。GitHub の inbox と両読みで、
             # 同じ書き置きは cursor (/data/cursor.json) で 1 回に落とす。
             # この 2 つを消せば GitHub 側だけの構成に切り戻る
