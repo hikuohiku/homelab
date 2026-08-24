@@ -7045,7 +7045,7 @@
     {
       "id": "P-0361",
       "title": "写真の実データが『腐っていない』を毎週測る — immich のアセット整合性検証を常設する",
-      "state": "in_review",
+      "state": "stalled",
       "branch": "project/p-0361",
       "irreversible": false,
       "capabilities": [
@@ -7141,7 +7141,8 @@
       ],
       "review_requested_at": "2026-08-24T22:59:35Z",
       "review_retries": 0,
-      "review_cycles": 2
+      "review_cycles": 3,
+      "stalled_reason": "review_rejected"
     },
     {
       "id": "P-9010",
@@ -7319,7 +7320,7 @@
     {
       "id": "P-9025",
       "title": "金庫は一度も開けて戻したことがない — vaultwarden の実データを restic から scratch に戻し、パスワードが生きて返ることを初めて実測する",
-      "state": "proposed",
+      "state": "active",
       "branch": "project/p-9025",
       "irreversible": false,
       "capabilities": [
@@ -7405,12 +7406,13 @@
         "verdict": "all_fail",
         "passed": [],
         "broken": []
-      }
+      },
+      "veto_deadline": "2026-08-24T23:06:20Z"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T22:50:33Z",
-  "last_activity_at": "2026-08-24T23:05:08Z",
+  "last_activity_at": "2026-08-24T23:06:20Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false,
