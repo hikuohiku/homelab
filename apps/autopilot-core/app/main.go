@@ -501,6 +501,14 @@ func runDriver() {
 	}
 	lastBusRetry := time.Now()
 
+	// 立案の shadow 実行 (設計 rev3 Phase C)。既定は無効で、有効でも記録しか残さない。
+	// 新しいコンテナを増やさず driver に相乗りさせる (node01 は 4 コアしかない)
+	shadow := newShadowRunner()
+	if shadow.enabled() {
+		log.Print("shadow: 立案の shadow 実行が有効 (記録のみ。Job 版の判断は置き換えない)")
+	}
+	lastShadowCheck := time.Time{}
+
 	cursorPath := filepath.Join(cfg.stateDir, "cursor.json")
 	healthCursorPath := filepath.Join(cfg.stateDir, "health-cursor.json")
 	seen, hadCursor := loadSeen(cursorPath)
@@ -606,6 +614,14 @@ func runDriver() {
 		if sessionID != "" && time.Since(lastHealthCheck) >= time.Duration(cfg.healthSeconds)*time.Second {
 			c.watchHealth(ctx, sessionID, healthCursorPath)
 			lastHealthCheck = time.Now()
+		}
+
+		// shadow の立案。走るかどうかは決定論の shadowDue が決め、走る場合も
+		// 別 goroutine に逃がす (planner + judge は分オーダー。ここで待つと
+		// その間ずっと所有者の書き置きが届かない)
+		if time.Since(lastShadowCheck) >= shadowCheckInterval() {
+			shadow.tick(ctx, c)
+			lastShadowCheck = time.Now()
 		}
 
 		if !paced {
