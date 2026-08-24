@@ -32,7 +32,7 @@
 - **プロジェクト** — 仕事の単位。curriculum が VISION との差分から立案し、予告 (Discord) を経て
   runner Job が短いフレッシュセッションの連鎖で遂行する。品質は独立レビューゲートと
   受入 verify の実測が守る
-- **記憶** — `ops/memory/` (意味記憶) と `ops/projects/archive.jsonl` (立案の全記録)。
+- **記憶** — `ops/memory/` (意味記憶) と `Project` CR (立案の全記録。棄却案を含む)。
   journal はエピソード。consolidation が昇格を担う
 
 | 段階 | 内容 | 状態 |

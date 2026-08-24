@@ -22,7 +22,7 @@ from pathlib import Path
 from unittest import mock
 
 from ops import check_proposals as cp
-from ops.runner.runner import build_archive_records
+from ops.runner.runner import build_proposal_records
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "proposals"
 
@@ -64,7 +64,7 @@ class TestBuildArchiveRecords(unittest.TestCase):
         }
 
     def test_reject_feedback_is_transcribed(self):
-        recs = build_archive_records(
+        recs = build_proposal_records(
             self.proposals(proposal(id="P-0001")),
             self.adopted(
                 [],
@@ -78,7 +78,7 @@ class TestBuildArchiveRecords(unittest.TestCase):
         self.assertEqual(recs[0]["improve_hint"], "更新系ではなく検証系に変える")
 
     def test_improve_hint_is_optional(self):
-        recs = build_archive_records(
+        recs = build_proposal_records(
             self.proposals(proposal(id="P-0001")),
             self.adopted([], [{"id": "P-0001", "reject_reason": "verify が空"}]),
         )
@@ -88,7 +88,7 @@ class TestBuildArchiveRecords(unittest.TestCase):
     def test_adopted_is_never_touched(self):
         """採択案に scores の鍵が混入すると採択 spec が汚染される。"""
         p = proposal(id="P-0002")
-        recs = build_archive_records(
+        recs = build_proposal_records(
             self.proposals(p),
             self.adopted(
                 ["P-0002"],
@@ -110,14 +110,14 @@ class TestBuildArchiveRecords(unittest.TestCase):
             {"adopted": [], "scores": [None, "broken"]},
         ):
             with self.subTest(adopted=adopted_doc):
-                recs = build_archive_records(
+                recs = build_proposal_records(
                     self.proposals(proposal(id="P-0003")), adopted_doc
                 )
                 self.assertNotIn("reject_reason", recs[0])
                 self.assertFalse(recs[0]["adopted"])
 
     def test_blank_and_nonstring_values_are_skipped(self):
-        recs = build_archive_records(
+        recs = build_proposal_records(
             self.proposals(proposal(id="P-0004")),
             {"adopted": [], "scores": [
                 {"id": "P-0004", "reject_reason": "   ",
@@ -129,7 +129,7 @@ class TestBuildArchiveRecords(unittest.TestCase):
 
     def test_values_are_stripped_and_flag_added(self):
         p = proposal(id="P-0005")
-        recs = build_archive_records(
+        recs = build_proposal_records(
             self.proposals(p, proposal(id="P-0006")),
             {"adopted": [{"id": "P-0006"}],
              "scores": [{"id": "P-0005", "reject_reason": " 死因 "}]},

@@ -34,24 +34,6 @@ class FakeGh:
         return []
 
 
-class FakeCurriculumGh:
-    """台帳 PR の状態だけを返す最小の GitHub クライアント。"""
-
-    def __init__(self, merged=False, error=False):
-        self.merged = merged
-        self.error = error
-
-    def pr(self, number):
-        if self.error:
-            raise RuntimeError("api down")
-        return {"merged_at": "2026-08-24T00:00:00Z" if self.merged else None,
-                "state": "closed" if self.merged else "open",
-                "head": {"sha": "deadbeef"}}
-
-    def pr_combined_status(self, sha):
-        return {"check_runs": []}
-
-
 def note_raw(kind=None, body="vaultwarden を最新化して"):
     doc = {"body": body}
     if kind is not None:
@@ -274,53 +256,47 @@ class TestCollectCommands(unittest.TestCase):
 
 
 class TestCollectCurriculum(unittest.TestCase):
-    """採択 spec の観測 (設計 rev3 D32)。
+    """立案結果の観測 (設計 rev3 D32 / state-out-of-git 4b-2b)。
 
-    spec は curriculum Job の result.json に載っている。台帳 PR の状態を
-    見る前に拾うので、着手は main への PR / CI / merge を待たない。
+    採択も棄却も curriculum Job の result.json に載っている。**GitHub は一切
+    見ない** — 台帳 PR は 4b-2b で無くなった。
     """
 
-    SPEC = {"id": "P-0009", "title": "t", "verify": ["false"]}
+    SPEC = {"id": "P-0009", "title": "t", "verify": ["false"], "adopted": True}
+    REJECTED = {"id": "P-0010", "title": "r", "adopted": False,
+                "reject_reason": "同型の再提案"}
 
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.data = Path(self.tmp.name) / "data"
-        self.repo = Path(self.tmp.name) / "repo"
         (self.data / "projects" / "system").mkdir(parents=True)
-        (self.repo / "ops" / "projects").mkdir(parents=True)
 
     def result(self, **kw):
-        doc = {"state": "curriculum_done", "pr": 7, "adopted": ["P-0009"]}
+        doc = {"state": "curriculum_done", "at": "2026-08-25T00:00:00Z",
+               "adopted": ["P-0009"]}
         doc.update(kw)
         (self.data / "projects" / "system" / "result.json").write_text(
             json.dumps(doc, ensure_ascii=False)
         )
 
-    def collect(self, gh, adopted_specs=None):
-        return facts.collect_curriculum(self.data, adopted_specs or {}, gh)
-
-    def test_specs_come_from_the_result_before_the_pr_is_merged(self):
-        self.result(adopted_specs=[self.SPEC])
-        out = self.collect(FakeCurriculumGh(merged=False))
+    def test_adopted_and_rejected_both_come_from_the_result(self):
+        self.result(adopted_specs=[self.SPEC], records=[self.SPEC, self.REJECTED])
+        out = facts.collect_curriculum(self.data)
         self.assertEqual(out["adopted_specs"], [self.SPEC])
-        self.assertFalse(out["pr_merged"])
+        self.assertEqual([r["id"] for r in out["records"]], ["P-0009", "P-0010"])
+        # 取り込み済みの判定は書き込み時刻。PR 番号はもう無い
+        self.assertEqual(out["at"], "2026-08-25T00:00:00Z")
 
-    def test_specs_survive_an_unreadable_pr(self):
+    def test_records_missing_is_empty_not_an_error(self):
+        """古い result.json (records を持たない) でも採択の登録は進む。"""
         self.result(adopted_specs=[self.SPEC])
-        out = self.collect(FakeCurriculumGh(error=True))
-        self.assertTrue(out["pr_unknown"])
+        out = facts.collect_curriculum(self.data)
+        self.assertEqual(out["records"], [])
         self.assertEqual(out["adopted_specs"], [self.SPEC])
 
-    def test_old_result_without_specs_reads_the_specs_it_is_given(self):
-        """後方互換: D32 より前の curriculum Job が書いた result.json。
-
-        読み先は台帳から Project CR へ移った (4b-2a) が、「merge されてから
-        spec を引く」という意味論は変わっていない。
-        """
-        self.result()
-        out = self.collect(
-            FakeCurriculumGh(merged=True),
-            adopted_specs={"P-0009": {**self.SPEC, "adopted": True}},
-        )
-        self.assertEqual([s["id"] for s in out["adopted_specs"]], ["P-0009"])
+    def test_error_result_carries_no_specs(self):
+        self.result(state="error", error="落ちた")
+        out = facts.collect_curriculum(self.data)
+        self.assertEqual(out["state"], "error")
+        self.assertNotIn("adopted_specs", out)

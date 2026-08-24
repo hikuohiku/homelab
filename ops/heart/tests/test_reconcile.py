@@ -1021,33 +1021,25 @@ class TestCurriculum(unittest.TestCase):
         )
         self.assertNotIn("spawn_curriculum", kinds(actions))
 
-    def test_pending_result_blocks_next_curriculum(self):
-        """未処理の立案結果がある間は次の立案をしない (PR 無限蓄積の防止 [9])。"""
+    def test_result_of_this_beat_blocks_the_next_curriculum(self):
+        """消費と次の立案を同じビートに重ねない。"""
         d, actions = reconcile.decide(
-            doc(), facts(curriculum={"state": "curriculum_done", "pr": 7,
-                                     "pr_open": True, "checks_green": False,
-                                     "pr_merged": False}),
+            doc(), facts(curriculum={"state": "curriculum_done",
+                                     "at": "2026-08-07T11:59:00Z"}),
             RULES, NOW,
         )
+        self.assertIn("consume_curriculum", kinds(actions))
         self.assertNotIn("spawn_curriculum", kinds(actions))
 
-    def test_curriculum_pr_merges_when_green(self):
-        d, actions = reconcile.decide(
-            doc(), facts(curriculum={"state": "curriculum_done", "pr": 7,
-                                     "pr_open": True, "checks_green": True,
-                                     "pr_merged": False}),
-            RULES, NOW,
-        )
-        merges = [a for a in actions if a["type"] == "merge_pr"]
-        self.assertEqual(merges[0]["pr"], 7)
-
-    def test_curriculum_merged_registers_projects_and_consumes(self):
+    def test_curriculum_registers_projects_and_consumes(self):
+        """**git は一切見ない** (4b-2b)。採択は result.json だけで動き出す。"""
         spec = {"id": "P-0009", "title": "t", "verify": ["false"],
                 "irreversible": True, "capabilities": ["kubectl-write"],
                 "touches_apps": True, "confidence": "confident"}
         d, actions = reconcile.decide(
-            doc(), facts(curriculum={"state": "curriculum_done", "pr": 7,
-                                     "pr_merged": True, "adopted_specs": [spec]}),
+            doc(), facts(curriculum={"state": "curriculum_done",
+                                     "at": "2026-08-07T11:59:00Z",
+                                     "adopted_specs": [spec]}),
             RULES, NOW,
         )
         self.assertIn("consume_curriculum", kinds(actions))
@@ -1058,24 +1050,26 @@ class TestCurriculum(unittest.TestCase):
         self.assertTrue(p["irreversible"])
         self.assertEqual(p["budget"], {"used_tokens": 0})
 
-    def test_curriculum_pr_rejected_discards_result(self):
-        d, actions = reconcile.decide(
-            doc(), facts(curriculum={"state": "curriculum_done", "pr": 7,
-                                     "pr_open": False, "pr_merged": False}),
-            RULES, NOW,
-        )
-        self.assertIn("consume_curriculum", kinds(actions))
-        self.assertEqual(d["projects"], [])
-        # 破棄した後は次の立案が可能 (このビートで即 spawn)
-        self.assertIn("spawn_curriculum", kinds(actions))
+    def test_same_result_is_registered_once(self):
+        """同じ result.json を読み直しても二度登録しない (鍵は書き込み時刻)。"""
+        spec = {"id": "P-0009", "title": "t", "verify": ["false"]}
+        cur = {"state": "curriculum_done", "at": "2026-08-07T11:59:00Z",
+               "adopted_specs": [spec]}
+        d, _ = reconcile.decide(doc(), facts(curriculum=cur), RULES, NOW)
+        self.assertEqual(len(d["projects"]), 1)
+        d2, _ = reconcile.decide(d, facts(curriculum=cur), RULES, NOW)
+        self.assertEqual(len(d2["projects"]), 1)
 
-    def test_curriculum_pr_unknown_waits(self):
-        d, actions = reconcile.decide(
-            doc(), facts(curriculum={"state": "curriculum_done", "pr": 7,
-                                     "pr_unknown": True}),
-            RULES, NOW,
-        )
-        self.assertEqual(kinds(actions), [])
+    def test_a_later_result_is_registered_again(self):
+        """**次の立案が落ちない。** PR 番号で畳んでいた頃、番号が消えた後は
+        None 同士が一致して 1 ラウンド丸ごと無視される穴があった。"""
+        first = {"state": "curriculum_done", "at": "2026-08-07T11:00:00Z",
+                 "adopted_specs": [{"id": "P-0009", "title": "t"}]}
+        second = {"state": "curriculum_done", "at": "2026-08-07T11:59:00Z",
+                  "adopted_specs": [{"id": "P-0011", "title": "u"}]}
+        d, _ = reconcile.decide(doc(), facts(curriculum=first), RULES, NOW)
+        d2, _ = reconcile.decide(d, facts(curriculum=second), RULES, NOW)
+        self.assertEqual(sorted(p["id"] for p in d2["projects"]), ["P-0009", "P-0011"])
 
     def test_windowed_announced_does_not_block_curriculum(self):
         """拒否権窓で待機中の案件はスロットを使っていないので、立案を塞がない
@@ -1734,10 +1728,10 @@ class DispatchFolding(unittest.TestCase):
 
 
 class TestDispatchSourceOfTruth(unittest.TestCase):
-    """dispatch の正が ops-state の projects.json に移ったこと (設計 rev3 D32)。
+    """採択から着手までの経路に git が 1 つも無いこと (D32 / 4b-2b)。
 
-    採択から着手までの経路から、main への PR・CI・merge が消えている。
-    archive.jsonl は非同期の台帳として残り、欠落は backfill が埋める。
+    main への PR・CI・merge は消え、台帳 (archive.jsonl) への追記も止まった。
+    棄却案の行き先は Project CR で、写しを取るのは heart.record_rejected。
     """
 
     SPEC = {"id": "P-0009", "title": "t", "why": "なぜ", "dod": "どこまで",
@@ -1746,54 +1740,33 @@ class TestDispatchSourceOfTruth(unittest.TestCase):
             "adopted": True}
 
     def cur(self, **kw):
-        base = {"state": "curriculum_done", "pr": 7, "pr_open": True,
-                "checks_green": False, "pr_merged": False,
-                "adopted_specs": [self.SPEC]}
+        base = {"state": "curriculum_done", "at": "2026-08-07T11:59:00Z",
+                "adopted_specs": [self.SPEC], "records": [self.SPEC]}
         base.update(kw)
         return base
 
-    # --- 登録は PR を待たない ---
-    def test_registers_before_the_archive_pr_is_merged(self):
+    # --- 登録は git の何も待たない ---
+    def test_registers_and_starts_moving_in_the_same_beat(self):
         d, actions = reconcile.decide(doc(), facts(curriculum=self.cur()), RULES, NOW)
         p = d["projects"][0]
         self.assertEqual(p["id"], "P-0009")
         self.assertEqual(p["state"], "proposed")
         # 着手に向けた歩みも同じビートで始まる (採択ゲートの実測)
         self.assertIn("run_adopt_gate", kinds(actions))
-        # 台帳の PR は非同期に流れるだけで、着手を止めていない
-        self.assertNotIn("consume_curriculum", kinds(actions))
 
-    def test_registers_even_when_the_pr_state_is_unreadable(self):
-        d, _ = reconcile.decide(
-            doc(), facts(curriculum=self.cur(pr_unknown=True)), RULES, NOW
-        )
-        self.assertEqual([p["id"] for p in d["projects"]], ["P-0009"])
-
-    def test_registration_happens_once_per_curriculum_pr(self):
+    def test_registration_happens_once_per_result(self):
         """同じ result を毎ビート読み直しても二重登録・二重通知をしない。"""
         d, _ = reconcile.decide(doc(), facts(curriculum=self.cur()), RULES, NOW)
         d, actions = reconcile.decide(d, facts(curriculum=self.cur()), RULES, NOW)
         self.assertEqual(len(d["projects"]), 1)
         self.assertNotIn("mark_task_requests_done", kinds(actions))
 
-    def test_merge_still_consumes_the_result(self):
-        """台帳 PR が merge されたら結果を消費する (立案の枠が空く)。"""
-        d, actions = reconcile.decide(
-            doc(), facts(curriculum=self.cur(pr_merged=True)), RULES, NOW
-        )
+    def test_result_is_consumed_without_waiting_for_anything(self):
+        d, actions = reconcile.decide(doc(), facts(curriculum=self.cur()), RULES, NOW)
         self.assertIn("consume_curriculum", kinds(actions))
         self.assertEqual(len(d["projects"]), 1)
 
-    def test_closed_pr_does_not_take_the_adoption_back(self):
-        """人間が台帳 PR を close しても採択は残る (取り消しは veto で行う)。"""
-        d, _ = reconcile.decide(doc(), facts(curriculum=self.cur()), RULES, NOW)
-        d, actions = reconcile.decide(
-            d, facts(curriculum=self.cur(pr_open=False)), RULES, NOW
-        )
-        self.assertIn("consume_curriculum", kinds(actions))
-        self.assertEqual(d["projects"][0]["id"], "P-0009")
-
-    # --- runner が読む spec は projects.json に載る ---
+    # --- runner が読む spec は doc に載る ---
     def test_spec_is_stored_in_projects_json(self):
         d, _ = reconcile.decide(doc(), facts(curriculum=self.cur()), RULES, NOW)
         self.assertEqual(d["projects"][0]["spec"], self.SPEC)
@@ -1803,47 +1776,11 @@ class TestDispatchSourceOfTruth(unittest.TestCase):
         d, _ = reconcile.decide(doc(), facts(adopted_specs=[self.SPEC]), RULES, NOW)
         self.assertEqual(d["projects"][0]["spec"], self.SPEC)
 
-    # --- 台帳の遅延追記 (backfill) ---
-    def test_backfill_carries_specs_missing_from_the_ledger(self):
-        """台帳に無い採択 spec は次の curriculum の PR にまとめて載る。"""
+    # --- 台帳への遅延追記は無くなった (4b-2b) ---
+    def test_spawn_carries_no_ledger_backfill(self):
+        """立案 Job に git の台帳を埋めさせる仕事はもう無い。"""
         p = project(id="P-9001", branch="project/p-9001", state="active",
                     spec={"id": "P-9001", "verify": ["false"]})
         _, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
         spawn = [a for a in actions if a["type"] == "spawn_curriculum"][0]
-        self.assertEqual([s["id"] for s in spawn["archive_backfill"]], ["P-9001"])
-
-    def test_backfill_skips_specs_already_in_the_ledger(self):
-        p = project(id="P-0009", branch="project/p-0009", state="active",
-                    spec=self.SPEC)
-        _, actions = reconcile.decide(
-            doc(p), facts(archived_ids=["P-0009"]), RULES, NOW
-        )
-        spawn = [a for a in actions if a["type"] == "spawn_curriculum"][0]
-        self.assertEqual(spawn["archive_backfill"], [])
-
-    def test_backfill_does_not_look_at_the_cr_specs(self):
-        """CR は doc の写しなので、そこを見ると backfill が永久に空になる。
-
-        4b-2a で adopted_specs の読み先が Project CR に移った。台帳の欠落は
-        git 側 (archived_ids) にしか答えが無い。
-        """
-        p = project(id="P-9001", branch="project/p-9001", state="active",
-                    spec={"id": "P-9001", "verify": ["false"]})
-        _, actions = reconcile.decide(
-            doc(p), facts(adopted_specs=[{"id": "P-9001", "verify": ["false"]}]),
-            RULES, NOW,
-        )
-        spawn = [a for a in actions if a["type"] == "spawn_curriculum"][0]
-        self.assertEqual([s["id"] for s in spawn["archive_backfill"]], ["P-9001"])
-
-    def test_backfill_is_capped(self):
-        projects = [
-            project(id=f"P-9{n:03d}", branch=f"project/p-9{n:03d}", state="delivered",
-                    spec={"id": f"P-9{n:03d}", "verify": ["false"]})
-            for n in range(reconcile.ARCHIVE_BACKFILL_LIMIT + 5)
-        ]
-        _, actions = reconcile.decide(doc(*projects), facts(), RULES, NOW)
-        spawn = [a for a in actions if a["type"] == "spawn_curriculum"][0]
-        self.assertEqual(
-            len(spawn["archive_backfill"]), reconcile.ARCHIVE_BACKFILL_LIMIT
-        )
+        self.assertNotIn("archive_backfill", spawn)

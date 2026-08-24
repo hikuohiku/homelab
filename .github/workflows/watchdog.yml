@@ -1,14 +1,11 @@
 name: Watchdog
 
-# 器が沈黙したことを、器の外側から気づくための唯一の口 (P-0027)。
+# 器が沈黙したことを、器の外側から気づくための口だったもの (P-0027)。
 #
-# 今の生存確認は全部クラスタの内側にある — heart 自身が heartbeat.json を書き、
-# ops-health-reporter CronJob が同じクラスタで読み、ダッシュボードも同じクラスタが配信する。
-# heart / node01 / k3s のどれが死んでも、死んだと言う口ごと死ぬ。旧・細切れループは
-# 「止まったまま死んだ」のに誰も気づかなかった (ops/VISION.md)。
-# このワークフローは GitHub Actions (クラスタとは別の障害ドメイン) で回り、ops-state の
-# heartbeat.json が ops/rules.json の heartbeat.stale_seconds を超えて古ければ、
-# フィードバック issue #56 に人間宛のコメントを投稿してジョブを失敗させる。
+# **全ジョブが止まっている。** 沈黙の見張りはコアへ移った (#632): heart が Lease を
+# 毎ビート更新し、コアがその鮮度を見て Telegram で人間に言う。読み先だった
+# ops-state ブランチは 4b-2b で更新が止まったので、ここを動かすと誤報しか出ない。
+# ファイルごとの撤去は Phase 7c (#636)。
 #
 # P-0211 で足した「ops-health-reporter 自身の死」の検知 (末尾 2 ステップ) は
 # **止めてある** (if: false)。健全性レポートは GitHub の ops-health-report ブランチ
@@ -51,6 +48,17 @@ concurrency:
 jobs:
   heartbeat:
     name: heartbeat freshness
+    # **止めてある** (設計 state-out-of-git 4b-2b)。heart は ops-state ブランチへの
+    # push をやめたので、ここが読む heartbeat.json はもう更新されない。動かしたままだと
+    # 30 分ごとに「沈黙している」と誤報し、issue #56 を偽の警報で埋める。
+    #
+    # 生存の見張りが消えたわけではない: heart は Lease
+    # (coordination.k8s.io/autopilot-heart) を毎ビート更新し、コアがその鮮度を見て
+    # Telegram で人間に言う (#632)。30 分ポーリングより速い。
+    #
+    # このワークフローと ops/check_heartbeat_fresh.py の撤去は Phase 7c (#636)。
+    # 下の health 側 2 ステップが Phase 5 から同じ形で止まっているのと同じ扱い
+    if: false
     runs-on: ubuntu-latest
     steps:
       # main 側の check_heartbeat_fresh.py と rules.json を使う。ops-state にも

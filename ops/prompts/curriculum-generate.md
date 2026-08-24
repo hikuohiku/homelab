@@ -34,7 +34,7 @@ curriculum 第 1 段: 発散生成。判定 (採択) は別セッション (curr
    末尾の JSON ブロック (`findings`) に構造的原因と提案が入っているので、
    有望な `proposal` はそのまま案の種にしてよい (人間に指摘される前に自分で直す経路)
 7. `ops/journal/` の直近 — 最近何が起きているか
-8. `ops/inventory.json` / ops-health-report ブランチの `ops/health/latest.json` — 環境の現状
+8. `ops/inventory.json` / クラスタの健全性 ConfigMap — 環境の現状
 9. リポジトリ全体 (CLAUDE.md、apps/、docs/) — 現実の姿
 
 ## 人間のタスク依頼 (最優先の原料)

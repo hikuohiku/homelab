@@ -1,13 +1,11 @@
 # heart — heart-and-projects の決定論 reconcile ループ (ops/heart/)。
 #
-# Phase 1 は shadow モード (HEART_MODE=shadow): spawn / merge / Discord 送信をせず、
-# 事実収集・信念照合・指標・ops-state 書き込みだけを実データで回して並走検証する。
-# Phase 2 でこの Deployment を active に切り替え、旧 autopilot Deployment を退役させる。
+# **git には書かない** (設計 state-out-of-git 4b-2b)。プロジェクトの正は Project CR、
+# 作業ファイルと doc の写しは PVC、生存は Lease。main は読むだけ。
 #
 # ラベルを app=autopilot にしないこと: ops-health-reporter (report.py) は
-# app=autopilot の Pod のログから heartbeat を抽出しており、shadow の心拍が
-# 旧ループの心拍として観測されると「旧ループが死んでいるのに healthy に見える」
-# 偽陰性を作る。shadow の観測は ops-state ブランチの heartbeat.json 側で行う。
+# app=autopilot の Pod のログから heartbeat を抽出しており、心拍が旧ループのものと
+# して観測されると「旧ループが死んでいるのに healthy に見える」偽陰性を作る。
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -20,7 +18,7 @@ metadata:
     heart/resident: "true"
 spec:
   replicas: 1
-  # heart は ops-state ブランチの単一書き手。旧 autopilot と同じ理由で常に高々 1 つ
+  # heart は Project CR の単一書き手。旧 autopilot と同じ理由で常に高々 1 つ
   strategy:
     type: Recreate
   selector:

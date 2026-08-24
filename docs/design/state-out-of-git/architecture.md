@@ -208,6 +208,41 @@ id / title / cell / 採否 / reject_reason / improve_hint に絞って返す。
 **手動採択の入口は塞がった**。`archive.jsonl` に `adopted` 行を足しても動き出さない。
 admission gate への移設は下記 Phase 4.5 のまま。
 
+### 進捗 — 4b-2b (2026-08-25): 書き込みを止めた
+
+**ビートは git に 1 度も書かなくなった。** `ops-state` への push を打つ関数
+(`commit_and_push_state` / `sync_state_branch`) と `Gh.ensure_branch` はコードごと
+消えている。プロジェクトの正は Project CR で、外に出るのは restic のバックアップ
+(Phase 0b) だけになった。
+
+| 何 | 前 | 今 |
+|---|---|---|
+| `projects.json` | ops-state (毎ビート push) | PVC の `state/` (ビートの作業用の写し。正は CR) |
+| `heartbeat.json` | ops-state | PVC。読み手は livenessProbe だけ |
+| `metrics.jsonl` (最新 1 行) | ops-state | **廃止** (経過措置の読み手が居なくなった) |
+| `archive.jsonl` への追記 | curriculum Job が PR | **廃止**。棄却案は result.json → PVC の台帳 → Project CR |
+| ダッシュボードの `heartbeat` | ops-state を毎回 clone | Lease (`coordination.k8s.io/autopilot-heart`) |
+| ダッシュボードの `stop_engaged` / 使用量 | ops-state の doc | heart の `/healthz` |
+| 外部 watchdog (GitHub Actions) | 30 分ごとに ops-state を読む | 止めた (誤報しか出ない)。撤去は Phase 7c |
+
+**止める前の守り**: `projects.json` を PVC へ移す前に、heart が
+「移行前の doc のプロジェクト id + 台帳の全 id」が**すべて CR に在ること**を
+突き合わせる (`Heart.cr_gap`)。1 件でも欠けていれば移行しない — 移した瞬間、CR に
+ならなかったものは restic のバックアップにも乗らず静かに消えるため。欠けている間は
+従来どおり移行前の doc で回り (push はしない)、毎ビートの `sync_project_crs` /
+`plan_rejected` が穴を埋めるので自力で収束する。人間には incident で言う。
+CR を読めなかったビートも「揃っている」に倒さない (fail-closed)。
+
+**PVC ごと失った場合**: `load_doc()` が Project CR から doc を組み直す。
+空の doc で走り出さない (CR が読めなければ例外を上げて次のビートに任せる) —
+空の doc は「全プロジェクトを忘れた」と同義だから。
+
+**`ops-state` ブランチと `archive.jsonl` は消していない。** 中身はそのまま残り、
+戻せる状態を保っている。削除は所有者の判断を待つ (別 PR)。
+
+**人間が手で採択する手段は Telegram → コア → admission gate だけ**になった。
+`archive.jsonl` に `adopted` 行を足しても何も起きない (4b-2a で入口は塞がっている)。
+
 ### 手動採択の入口を admission gate へ
 
 `reconcile.py` は「人間が `archive.jsonl` に `adopted` 行を足したら動き出す」という

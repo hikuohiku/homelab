@@ -95,14 +95,14 @@ class LeaseFollowsTheBeat(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         self.h = Heart(REPO)
-        self.sf = StateFiles(self.h.state_dir)
+        # doc の置き場は PVC (設計 state-out-of-git 4b-2b)。空の doc を先に
+        # 置く — 無いと load_doc が Project CR からの復元に落ちる
+        self.h.docs.save_projects({"version": 1, "projects": [], "chores": []})
+        self.sf = self.h.docs
 
     def beat(self, k8s, fail_before_end=False):
         patches = [
             mock.patch.object(gitutil, "sync_main", lambda *a, **k: None),
-            mock.patch.object(gitutil, "sync_state_branch", lambda *a, **k: None),
-            mock.patch.object(gitutil, "commit_and_push_state", lambda *a, **k: None),
-            mock.patch.object(type(self.h.gh), "ensure_branch", lambda *a, **k: None),
             mock.patch.object(Heart, "k8s_client", lambda self: k8s),
             mock.patch.object(facts, "load_health", lambda *a, **k: ([], True, None)),
             mock.patch.object(facts, "load_adopted_specs", lambda *a, **k: {}),
@@ -159,7 +159,7 @@ class LeaseFollowsTheBeat(unittest.TestCase):
     def test_lease_failure_does_not_stop_the_beat(self):
         self.beat(BrokenLeaseK8s())
         # ビートは最後まで通っている
-        self.assertTrue((self.h.state_dir / "heartbeat.json").exists())
+        self.assertTrue((self.h.doc_dir / "heartbeat.json").exists())
 
 
 if __name__ == "__main__":

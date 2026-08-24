@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { parseKubeSnapshot } from "../src/lib/kubernetes";
-import { projectsFromCrs } from "../src/lib/ops-state";
+import { heartbeatFromLease, projectsFromCrs } from "../src/lib/ops-state";
 import { buildAttention } from "../src/lib/snapshot";
 
 test("Kubernetes の active Job と heart ready を抽出する", () => {
@@ -51,3 +51,25 @@ test("Project CR から projects.json と同じプロジェクト一覧を組み
   assert.equal("spec" in projects[1], false);
 });
 
+
+// 心拍の読み先が ops-state の heartbeat.json から Lease に移った (4b-2b)。
+// renewTime は **ビートが最後まで通ったときだけ**進むので、これは
+// 「プロセスが生きているか」ではなく「ビートが回っているか」を表す
+test("Lease から心拍を読む", () => {
+  const beat = heartbeatFromLease({
+    metadata: { annotations: { "autopilot.homelab.hikuohiku.dev/beat": "4211" } },
+    spec: { renewTime: "2026-08-25T10:00:00Z" },
+  });
+  assert.equal(beat.beat, 4211);
+  assert.equal(beat.at, "2026-08-25T10:00:00Z");
+});
+
+test("注記の無い Lease でも時刻は読める (beat は判定に使わない)", () => {
+  const beat = heartbeatFromLease({ spec: { renewTime: "2026-08-25T10:00:00Z" } });
+  assert.equal(beat.beat, undefined);
+  assert.equal(beat.at, "2026-08-25T10:00:00Z");
+});
+
+test("Lease が空なら時刻も空 (呼び出し側が stale として扱う)", () => {
+  assert.deepEqual(heartbeatFromLease({}), { beat: undefined, at: undefined });
+});

@@ -76,6 +76,9 @@ class BudgetAlertBeatTest(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         self.h = Heart(REPO)
+        # doc の置き場は PVC (設計 state-out-of-git 4b-2b)。空の doc を先に
+        # 置く — 無いと load_doc が Project CR からの復元に落ちる
+        self.h.docs.save_projects({"version": 1, "projects": [], "chores": []})
 
     def _patch_externals(self, health_returns):
         """git / GitHub / k8s / フィードバック経路をパッチする。
@@ -89,9 +92,6 @@ class BudgetAlertBeatTest(unittest.TestCase):
             # beat() 内の datetime.now(timezone.utc) を NOW に固定 (実行日に依存させない)
             mock.patch.object(heart_module, "datetime", _FixedDatetime),
             mock.patch.object(gitutil, "sync_main", lambda *a, **k: None),
-            mock.patch.object(gitutil, "sync_state_branch", lambda *a, **k: None),
-            mock.patch.object(gitutil, "commit_and_push_state", lambda *a, **k: None),
-            mock.patch.object(type(self.h.gh), "ensure_branch", lambda *a, **k: None),
             # 引数評価で K8s クライアント (SA token 読み) が走るのでクライアントごと止める
             mock.patch.object(Heart, "k8s_client", lambda self: None),
             mock.patch.object(facts, "load_health", lambda *a, **k: health_returns),

@@ -171,6 +171,9 @@ class CurriculumInput(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         self.h = Heart(REPO)
+        # doc の置き場は PVC (設計 state-out-of-git 4b-2b)。空の doc を先に
+        # 置く — 無いと load_doc が Project CR からの復元に落ちる
+        self.h.docs.save_projects({"version": 1, "projects": [], "chores": []})
 
     def test_it_writes_every_proposal_including_rejected(self):
         rejected = projectcr.to_cr(

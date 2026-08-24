@@ -1,12 +1,12 @@
 """git 操作のヘルパ。
 
-heart は 2 つの checkout を持つ:
-  - repo_dir:  main の読み取り専用ミラー (毎ビート hard reset。loop.sh と同じ規律)
-  - state_dir: ops-state ブランチの checkout (heart が唯一の書き手。直 push)
+heart が持つ checkout は 1 つだけになった (設計 state-out-of-git 4b-2b):
+  - repo_dir: main の**読み取り専用**ミラー (毎ビート hard reset。loop.sh と同じ規律)
 
-ops-state を main と別ブランチにするのは ops-health-report と同じ理由
-(main は ruleset で直 push 不可、かつ 120s ごとの状態更新を PR にすると
-main の履歴とレビュー窓が運用ノイズで埋まるため)。
+**ここに書き込みの口は無い。** ops-state ブランチへ commit / push する
+sync_state_branch / commit_and_push_state は 4b-2b で消した。プロジェクトの正は
+Project CR に移り、heart の作業ファイルは PVC に居る。「機械は git に定期
+コミットを打たない」(設計の原則 3) を、規律ではなく**関数が無いこと**で守る。
 """
 
 import subprocess
@@ -15,9 +15,7 @@ from pathlib import Path
 # clone は blobless (partial clone) で打つ。状態ブランチ 4 本の履歴で .git が 124MB あり、
 # 素の clone はこの回線で 65s、ops-state 1 本でも 54s かかる (2026-08-24 実測)。採択ゲートの
 # clone はこれで 120s 上限を越えて落ちていた。--filter=blob:none なら 2s / 9.2MB。
-# **shallow (--depth=1) にはしない。** ここの checkout は push もするし merge-base も要る。
-# --single-branch は remote.origin.fetch を 1 本に固定し、以後 fetch しても
-# origin/ops-state が生えない (P-0014, ops/memory/substrate.md)。
+# **shallow (--depth=1) にはしない。** merge-base を要る経路 (採択ゲートの verify) がある。
 # blob は使うときに 1 つずつ取りに行く = clone 後の操作にネットワークが要ることに注意。
 BLOBLESS = "--filter=blob:none"
 
@@ -26,18 +24,13 @@ class GitError(Exception):
     pass
 
 
-def clone_args(repo_url, dest, branch=None, single_branch=False):
+def clone_args(repo_url, dest):
     """clone のコマンド列を組み立てる (純関数。テストがネットワークに出ずに検査する)。
 
-    branch を渡すとその ref を checkout する。single_branch は「そのブランチしか
-    見ない」と言い切れる用途 (state_dir) だけ。
+    --single-branch は付けない。remote.origin.fetch を 1 本に固定してしまい、
+    以後 fetch しても他の ref が生えない (P-0014)。
     """
-    args = ["clone", "--quiet", BLOBLESS]
-    if branch:
-        args += ["--branch", branch]
-    if single_branch:
-        args.append("--single-branch")
-    return [*args, repo_url, str(dest)]
+    return ["clone", "--quiet", BLOBLESS, repo_url, str(dest)]
 
 
 def run(args, cwd=None, check=True):
@@ -73,36 +66,3 @@ def show(repo_dir, ref, path):
 def ls_remote_branch(repo_dir, branch):
     out = run(["ls-remote", "--heads", "origin", branch], cwd=repo_dir, check=False)
     return bool(out.strip())
-
-
-def sync_state_branch(state_dir, repo_url, branch):
-    """ops-state ブランチの checkout を最新化する。ブランチは呼び出し側で
-    ensure_branch (API) 済みであること。
-
-    reset --hard の前に、前回の push が失敗して local が origin より進んでいれば
-    まず push を試みる。commit 済み・push 前に落ちた状態を黙って巻き戻さない
-    (レビュー指摘 [8] の salvage。単一書き手なので push が競合することはない)。"""
-    state_dir = Path(state_dir)
-    if not (state_dir / ".git").is_dir():
-        state_dir.parent.mkdir(parents=True, exist_ok=True)
-        run(clone_args(repo_url, state_dir, branch=branch, single_branch=True))
-    run(["fetch", "--quiet", "origin", branch], cwd=state_dir)
-    ahead = run(
-        ["rev-list", "--count", f"origin/{branch}..HEAD"], cwd=state_dir, check=False
-    )
-    if ahead and ahead != "0":
-        run(["push", "--quiet", "origin", f"HEAD:{branch}"], cwd=state_dir, check=False)
-        run(["fetch", "--quiet", "origin", branch], cwd=state_dir)
-    run(["checkout", "--quiet", "-B", branch, f"origin/{branch}"], cwd=state_dir)
-    run(["reset", "--hard", "--quiet", f"origin/{branch}"], cwd=state_dir)
-
-
-def commit_and_push_state(state_dir, branch, message):
-    """変更があれば commit して push。単一書き手なので non-fast-forward は
-    起きない前提だが、起きたら例外を投げて次のビートに任せる (上書きしない)。"""
-    run(["add", "-A"], cwd=state_dir)
-    if not run(["status", "--porcelain"], cwd=state_dir):
-        return False
-    run(["commit", "--quiet", "-m", message], cwd=state_dir)
-    run(["push", "--quiet", "origin", f"HEAD:{branch}"], cwd=state_dir)
-    return True
