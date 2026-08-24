@@ -6635,11 +6635,49 @@
       },
       "adopt_gate_attempts": 3,
       "stalled_reason": "adopt_gate_unmeasurable"
+    },
+    {
+      "id": "P-9002",
+      "title": "ダッシュボードのエージェントライブに core / heart の transcript 表示を追加",
+      "state": "active",
+      "branch": "project/p-9002",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "dispatch_id": "d-4532c8ad284ce4a8",
+      "requested_by": "core",
+      "spec": {
+        "id": "P-9002",
+        "title": "ダッシュボードのエージェントライブに core / heart の transcript 表示を追加",
+        "why": "所有者が Telegram で明示依頼 (2026-08-24T19:35:11Z「採択ゲートの仕組みを取り払ったのでさっきのタスク2件をもう一度dispatchしてください」)。前回 dispatch (P-9000, dispatch_id=d-13512d95c099b422) の再送。verify は所有者の指示により省略。\n\n何をしたいか: ops-dashboard のエージェントライブで、常駐エージェント (autopilot-core / autopilot-heart) の transcript を見えるようにする。\n\nなぜ要るか: 現行実装は apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 のコメント「常駐組 (heart/resident Deployment) は projectId / transcript を持たない」どおり、resident の transcriptAvailable を false に固定している。transcript 表示機構自体は Job 由来の役割名 (runner|reviewer|curriculum|critic|consolidation|chore)-<projectId>-aN しか parseAgentName で解釈しない (apps/ops-dashboard/app/src/lib/transcript.ts:172-177)。/data/transcripts/ 配下は worker/review/curriculum/critic のディレクトリのみで core/heart の出力はどこにも落ちていない。\n\nどこを見れば分かるか:\n- apps/ops-dashboard/app/src/lib/snapshot.ts (residentAgents を固定値で組んでいる箇所)\n- apps/ops-dashboard/app/src/lib/transcript.ts (findTranscriptFile / latestAction / transcriptMode)\n- apps/ops-dashboard/app/src/app/page.tsx (LIVE TRANSCRIPT パネル、SSE /api/agents/[agentId]/events)\n- transcript 実体は PVC autopilot-data の /data/transcripts/<role>/ 配下 (apps/ops-dashboard/deployment.yaml の DATA_DIR=/data/transcripts)\n\n実装の方向は実装役の判断に任せるが、core/heart セッション側で transcript ファイルを新設する場合はその書き出し元も範囲に入る。参考: 同趣向の P-0317 が 2026-08-24T18:43Z の立案ラウンドで採択済み — 重複するならこちらを統合・破棄する判断は heart に委ねる。",
+        "dod": "所有者が Telegram で明示依頼 (2026-08-24T19:35:11Z「採択ゲートの仕組みを取り払ったのでさっきのタスク2件をもう一度dispatchしてください」)。前回 dispatch (P-9000, dispatch_id=d-13512d95c099b422) の再送。verify は所有者の指示により省略。\n\n何をしたいか: ops-dashboard のエージェントライブで、常駐エージェント (autopilot-core / autopilot-heart) の transcript を見えるようにする。\n\nなぜ要るか: 現行実装は apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 のコメント「常駐組 (heart/resident Deployment) は projectId / transcript を持たない」どおり、resident の transcriptAvailable を false に固定している。transcript 表示機構自体は Job 由来の役割名 (runner|reviewer|curriculum|critic|consolidation|chore)-<projectId>-aN しか parseAgentName で解釈しない (apps/ops-dashboard/app/src/lib/transcript.ts:172-177)。/data/transcripts/ 配下は worker/review/curriculum/critic のディレクトリのみで core/heart の出力はどこにも落ちていない。\n\nどこを見れば分かるか:\n- apps/ops-dashboard/app/src/lib/snapshot.ts (residentAgents を固定値で組んでいる箇所)\n- apps/ops-dashboard/app/src/lib/transcript.ts (findTranscriptFile / latestAction / transcriptMode)\n- apps/ops-dashboard/app/src/app/page.tsx (LIVE TRANSCRIPT パネル、SSE /api/agents/[agentId]/events)\n- transcript 実体は PVC autopilot-data の /data/transcripts/<role>/ 配下 (apps/ops-dashboard/deployment.yaml の DATA_DIR=/data/transcripts)\n\n実装の方向は実装役の判断に任せるが、core/heart セッション側で transcript ファイルを新設する場合はその書き出し元も範囲に入る。参考: 同趣向の P-0317 が 2026-08-24T18:43Z の立案ラウンドで採択済み — 重複するならこちらを統合・破棄する判断は heart に委ねる。",
+        "verify": [],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": false,
+        "confidence": "unsure",
+        "adopted": true,
+        "proposed_by": "core-dispatch",
+        "cell": [
+          "self",
+          "feature"
+        ]
+      },
+      "job": "runner-p-9002-a1",
+      "spawn_count": 1,
+      "job_created_at": "2026-08-24T19:36:43Z",
+      "drift_count": 0
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T18:57:11Z",
-  "last_activity_at": "2026-08-24T19:06:00Z",
+  "last_activity_at": "2026-08-24T19:36:43Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": true,
   "stop_engaged": false,
