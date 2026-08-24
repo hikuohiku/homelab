@@ -147,6 +147,27 @@ def prune_beats(records, now, keep_hours=METRICS_KEEP_HOURS):
     return kept
 
 
+# audit.jsonl を PVC に置いてから残す日数 (設計 state-out-of-git Phase 3)。
+# 監査行は誰も読み戻さない (人間はダッシュボードで見る) ので、窓は「後から人が
+# 遡りたくなる範囲」で決める。transcripts の retention_days と揃えてある
+AUDIT_KEEP_DAYS = 30
+
+
+def prune_audit(records, now, keep_days=AUDIT_KEEP_DAYS):
+    """保持窓より古い監査行を落とす (純関数)。
+
+    at が読めない行は残す: 書式を知らない行を黙って消すと、壊れた書き手に
+    気づく手段が無くなる (古い行が積もり続けるより、そちらの方が困る)。
+    """
+    start = now - timedelta(days=keep_days)
+    kept = []
+    for rec in records:
+        at = _beat_at(rec)
+        if at is None or at >= start:
+            kept.append(rec)
+    return kept
+
+
 def _beat_at(rec):
     try:
         return parse_iso(rec["at"])

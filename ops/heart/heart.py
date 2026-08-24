@@ -17,6 +17,7 @@ HEARTBEAT_RE (report.py) がこれを拾って自己ハング検知に使うた�
 
 import json
 import os
+import shutil
 import signal
 import sys
 import time
@@ -37,7 +38,7 @@ from . import (
 )
 from .gh import Gh, GhError
 from .notify import Notifier, veto_footer
-from .statefiles import StateFiles, now_iso
+from .statefiles import StateFiles, migrate_plan, now_iso
 
 _stop = False
 
@@ -45,6 +46,13 @@ _stop = False
 def _sigterm(_sig, _frame):
     global _stop
     _stop = True
+
+
+def _names(directory):
+    """ディレクトリ直下のファイル名。無ければ空。"""
+    if not directory.is_dir():
+        return []
+    return [p.name for p in directory.iterdir() if p.is_file()]
 
 
 def log(msg):
@@ -92,6 +100,11 @@ class Heart:
         # 指標は git に出さない (設計 state-out-of-git Phase 1)。PVC 上に
         # 保持窓ぶんだけ置く。誰も読み戻さないので、消えても判断は狂わない
         self.metrics_store = StateFiles(self.cfg.data_dir / "metrics")
+        # heart しか読まない作業ファイル (キュー・監査・カーソル) は git に出さない
+        # (設計 state-out-of-git Phase 3)。ops-state に残るのは外から見える
+        # projects.json / heartbeat.json だけ
+        self.work_dir = self.cfg.data_dir / "work"
+        self.work = StateFiles(self.work_dir)
         self.transcripts = self.cfg.data_dir / "transcripts"
         self.gh = Gh(self.cfg.github_token, self.cfg.repo)
         self.k8s = None  # 遅延初期化 (単体テスト・クラスタ外実行のため)
@@ -188,7 +201,7 @@ class Heart:
                             extra_env={
                                 "ADOPT_LIMIT": a.get("adopt_limit", 2),
                                 "TASK_REQUESTS": tasks.for_env(
-                                    sf.read_jsonl(tasks.QUEUE_FILE)
+                                    self.work.read_jsonl(tasks.QUEUE_FILE)
                                 ),
                                 # 台帳 (archive.jsonl) にまだ載っていない採択 spec。
                                 # 着手はもう台帳を待たないので、動き出した spec を
@@ -206,8 +219,8 @@ class Heart:
                     if shadow:
                         log(f"[shadow] mark task requests done: {a.get('ids')}")
                     else:
-                        records = sf.read_jsonl(tasks.QUEUE_FILE)
-                        sf.rewrite_jsonl(
+                        records = self.work.read_jsonl(tasks.QUEUE_FILE)
+                        self.work.rewrite_jsonl(
                             tasks.QUEUE_FILE,
                             tasks.mark_processed(records, a.get("ids", []), now),
                         )
@@ -227,7 +240,7 @@ class Heart:
                             body = a.get("body", "")
                             if a.get("title"):
                                 body = f"{a['title']}\n\n{body}"
-                            records = sf.read_jsonl(tasks.QUEUE_FILE)
+                            records = self.work.read_jsonl(tasks.QUEUE_FILE)
                             merged = tasks.merge_new(
                                 records,
                                 [{"source": tasks.command_source(a["command_id"]),
@@ -235,8 +248,8 @@ class Heart:
                                 now,
                             )
                             if len(merged) != len(records):
-                                sf.rewrite_jsonl(tasks.QUEUE_FILE, merged)
-                        sf.append_jsonl(
+                                self.work.rewrite_jsonl(tasks.QUEUE_FILE, merged)
+                        self.work.append_jsonl(
                             tasks.COMMAND_LEDGER_FILE,
                             tasks.ledger_entry(
                                 a["command_id"], a.get("command_type", ""),
@@ -335,9 +348,9 @@ class Heart:
                 elif kind == "consume_dispatch":
                     # 即時 dispatch (設計 rev3 Phase D) の結末を消費する。
                     # gate が書いた audit 行をここで audit.jsonl に移す —
-                    # ops-state への書き込みはビート側の単一書き手のまま
+                    # 作業ファイルへの書き込みはビート側の単一書き手のまま
                     for line in a.get("audit") or []:
-                        sf.append_jsonl("audit.jsonl", line)
+                        self.work.append_jsonl("audit.jsonl", line)
                     self.consume_dispatch(a.get("dispatch_id"), now)
                     log(f"dispatch consumed: {a.get('dispatch_id')} -> {pid}")
                 elif kind == "record_drift":
@@ -345,7 +358,7 @@ class Heart:
             except Exception as e:
                 audit["error"] = str(e)[:300]
                 log(f"action {kind} for {pid} failed: {e}")
-            sf.append_jsonl("audit.jsonl", audit)
+            self.work.append_jsonl("audit.jsonl", audit)
 
     def consume_dispatch(self, dispatch_id, now):
         """消費済みの dispatch レコードを done/ へ移す (削除でなく退避 — 監査用)。"""
@@ -439,12 +452,15 @@ class Heart:
         self.gh.ensure_branch(self.cfg.state_branch)
         gitutil.sync_state_branch(self.state_dir, self.repo_url, self.cfg.state_branch)
         sf = StateFiles(self.state_dir)
+        self.migrate_work_files()
+        # Notifier の outbox / sent は PVC 側 (設計 state-out-of-git Phase 3)
         notifier = Notifier(
-            self.cfg.discord_webhook, sf, self.cfg.rules, self.gh, self.cfg.feedback_issue
+            self.cfg.discord_webhook, self.work, self.cfg.rules, self.gh,
+            self.cfg.feedback_issue,
         )
 
         doc = sf.load_projects()
-        cursors = sf.load_cursors()
+        cursors = self.work.load_cursors()
 
         # --- 観測。失敗した項目は None (「無い」と区別する。decide が保守的に扱う) ---
         unhealthy_apps, health_fresh, health_doc = facts.load_health(
@@ -491,7 +507,7 @@ class Heart:
         # 二重実行の判断は decide (純関数) に置く
         commands = facts.collect_commands(self.cfg.command_bus_dir)
         processed_commands = sorted(
-            tasks.ledger_ids(sf.read_jsonl(tasks.COMMAND_LEDGER_FILE))
+            tasks.ledger_ids(self.work.read_jsonl(tasks.COMMAND_LEDGER_FILE))
         )
         if commands:
             log(f"commands on bus: {len(commands)} "
@@ -578,12 +594,12 @@ class Heart:
         # 逆順 (実行→保存) だと、保存失敗の翌ビートが「実行済みの副作用」を知らずに
         # 二重実行する
         sf.save_projects(doc)
-        sf.save_cursors(cursors)
+        self.work.save_cursors(cursors)
 
         for item in review_needed:
-            sf.append_jsonl("briefing-queue.jsonl", {"at": now_iso(now), **item})
+            self.work.append_jsonl("briefing-queue.jsonl", {"at": now_iso(now), **item})
         if budget_queued:
-            sf.append_jsonl(
+            self.work.append_jsonl(
                 "briefing-queue.jsonl",
                 {
                     "at": now_iso(now),
@@ -593,7 +609,7 @@ class Heart:
             )
             log(f"download_budget alert: {budget['status']} — queued to briefing")
         if smoke_queued:
-            sf.append_jsonl(
+            self.work.append_jsonl(
                 "briefing-queue.jsonl",
                 {
                     "at": now_iso(now),
@@ -604,10 +620,10 @@ class Heart:
             log(f"dashboard_smoke alert: {smoke['status']} — queued to briefing")
         # タスク依頼の受領 (P-0091)。id 重複は merge_new が落とすので、
         # カーソル巻き戻り等で同じ note を再取り込みしても積み直さない
-        queue = sf.read_jsonl(tasks.QUEUE_FILE)
+        queue = self.work.read_jsonl(tasks.QUEUE_FILE)
         merged = tasks.merge_new(queue, task_requests, now)
         if len(merged) != len(queue):
-            sf.rewrite_jsonl(tasks.QUEUE_FILE, merged)
+            self.work.rewrite_jsonl(tasks.QUEUE_FILE, merged)
             log(f"task requests queued: total={len(merged)}")
         gitutil.commit_and_push_state(
             self.state_dir, self.cfg.state_branch, f"heart: beat {i} decide"
@@ -661,6 +677,7 @@ class Heart:
             self.gate.update(doc, self.cfg.rules, now, self.cfg.shadow)
         if not self.cfg.shadow:
             notifier.flush_outbox(now)
+        self.prune_audit(now)
         removed = metrics.rotate_transcripts(self.transcripts, self.cfg.rules, now)
         if removed:
             log(f"rotated {removed} old transcript files")
@@ -675,6 +692,33 @@ class Heart:
         if len(kept) != len(records):
             self.metrics_store.rewrite_jsonl("metrics.jsonl", kept)
             log(f"pruned {len(records) - len(kept)} old metric beats")
+
+    def migrate_work_files(self):
+        """ops-state に残っている作業ファイルを PVC へ移す (設計 Phase 3)。
+
+        **コピーしてから消す**。逆順だと途中で落ちたときに未送信の通知や
+        受理済みの依頼をまとめて失う。PVC 側に既にあるものは移行済みなので
+        触らない = 何度呼んでも同じ (移行が済めばこのメソッドは何もしない)。
+
+        ops-state からの削除は次の commit_and_push_state が git に反映する。
+        """
+        copy, remove = migrate_plan(_names(self.state_dir), _names(self.work_dir))
+        if not remove:
+            return
+        self.work_dir.mkdir(parents=True, exist_ok=True)
+        for name in copy:
+            shutil.copyfile(self.state_dir / name, self.work_dir / name)
+        for name in remove:
+            (self.state_dir / name).unlink()
+        log(f"作業ファイルを PVC へ移した: copied={copy} removed={remove}")
+
+    def prune_audit(self, now):
+        """保持窓より古い監査行を落とす。行数が変わったときだけ書き直す。"""
+        records = self.work.read_jsonl("audit.jsonl")
+        kept = metrics.prune_audit(records, now)
+        if len(kept) != len(records):
+            self.work.rewrite_jsonl("audit.jsonl", kept)
+            log(f"pruned {len(records) - len(kept)} old audit lines")
 
     def self_update_check(self):
         # ops/heart だけでなく rules.json / models.json も監視する。config は起動時に

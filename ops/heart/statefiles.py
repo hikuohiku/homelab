@@ -1,13 +1,47 @@
-"""ops-state ブランチ上の状態ファイルの読み書きと検証。
+"""状態ファイルの読み書きと検証。
 
-書き手は heart だけ (単一書き手)。push 前に必ず validate_projects() を通す。
-main の CI からは見えないので、ここでの検証が唯一のゲート。壊れた状態を
-push すると次のビートの自分が読めなくなる — 検証は自分を守るためにある。
+書き手は heart だけ (単一書き手)。置き場は 2 つあり、同じクラスで扱う:
+
+  - ops-state ブランチの checkout — projects.json / heartbeat.json。
+    外から見える状態。push 前に必ず validate_projects() を通す。main の CI からは
+    見えないので、ここでの検証が唯一のゲート。壊れた状態を push すると次のビートの
+    自分が読めなくなる — 検証は自分を守るためにある
+  - PVC の作業ディレクトリ — WORK_FILES。heart しか読まないので git に出さない
+    (設計 state-out-of-git Phase 3)
 """
 
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+
+# git を経由しない作業ファイル。heart だけが読み書きし、誰も外から読み戻さない
+# (設計 state-out-of-git Phase 3)。消えて困るのは「未送信の Discord」「受理済みの
+# 依頼」「フィードバックの取り込み位置」程度で、記録ではない
+WORK_FILES = (
+    "outbox.jsonl",
+    "sent.jsonl",
+    "task-requests.jsonl",
+    "briefing-queue.jsonl",
+    "commands.jsonl",
+    "audit.jsonl",
+    "cursors.json",
+    "trust.json",
+)
+
+
+def migrate_plan(src_names, dst_names):
+    """ops-state から PVC へ移す作業ファイルを決める (純関数)。
+
+    返り値は (コピーするもの, ops-state から消すもの)。PVC に既にあるものは
+    **上書きしない** — 移行後に heart が書いた方が正。それでも ops-state 側は
+    消す: push に失敗して残った古い写しを置いておくと、次の誰かが正と取り違える。
+
+    どちらも空になったら移行は済んでいる (以後このビートは何もしない)。
+    """
+    src, dst = set(src_names), set(dst_names)
+    remove = [n for n in WORK_FILES if n in src]
+    return [n for n in remove if n not in dst], remove
+
 
 PROJECT_STATES = (
     "proposed",

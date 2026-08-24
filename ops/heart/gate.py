@@ -43,7 +43,7 @@ LLM なので迂回でき、機械の判定として意味を成さないため�
 
 heart は ops-state の単一書き手であり続ける。gate スレッドは **git を触らない** —
 書くのは /data (PVC) の inbox と台帳だけで、projects.json / audit.jsonl への
-反映は必ずビート側が行う。gate が直に作るのは k8s Job だけで、それは
+反映は必ずビート側が行う (audit.jsonl も PVC に居るが、書き手はビートだけ)。gate が直に作るのは k8s Job だけで、それは
 決定論的な名前 + 409 冪等 (spawn.create) なので二重に作れない。
 """
 
