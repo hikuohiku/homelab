@@ -26,14 +26,14 @@ class K8s:
         self._ctx = ssl.create_default_context(cafile=f"{sa_dir}/ca.crt")
         self._api = api
 
-    def request(self, method, path, body=None):
+    def request(self, method, path, body=None, content_type="application/json"):
         req = urllib.request.Request(
             self._api + path,
             data=json.dumps(body).encode() if body is not None else None,
             method=method,
             headers={
                 "Authorization": f"Bearer {self._token}",
-                "Content-Type": "application/json",
+                "Content-Type": content_type,
                 "Accept": "application/json",
             },
         )
@@ -68,3 +68,24 @@ class K8s:
         if label_selector:
             path += f"?labelSelector={label_selector}"
         return self.request("GET", path).get("items", [])
+
+    # --- カスタムリソース (Project CR。設計 state-out-of-git Phase 4) ---
+    def list_custom(self, api_version, namespace, plural):
+        return self.request(
+            "GET", f"/apis/{api_version}/namespaces/{namespace}/{plural}"
+        ).get("items", [])
+
+    def apply_custom(self, api_version, namespace, plural, name, body):
+        """server-side apply。存在しなければ作り、あれば heart の持ち分を上書きする。
+
+        create/replace の 2 段構えにしないのは、resourceVersion の読み合わせが
+        要らず 1 往復で済むため。force=true は他の書き手と競合したときに heart を
+        勝たせる — heart が唯一の書き手であることは RBAC で担保している
+        """
+        return self.request(
+            "PATCH",
+            f"/apis/{api_version}/namespaces/{namespace}/{plural}/{name}"
+            "?fieldManager=heart&force=true",
+            body,
+            content_type="application/apply-patch+yaml",
+        )

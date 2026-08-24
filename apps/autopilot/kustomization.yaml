@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
+  - crd-project.yaml
   - rbac.yaml
   - external-secret.yaml
   - pvc.yaml

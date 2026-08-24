@@ -113,6 +113,11 @@ curriculum Job --result.json (spec 全文)--> heart --> ops-state/projects.json 
   projects.json / heartbeat.json (と経過措置の metrics.jsonl 1 行) だけで、
   heart しか読まない作業ファイル (キュー・監査・カーソル = statefiles.WORK_FILES)
   は PVC の `/data/work` に置く (設計 state-out-of-git Phase 3)
+- **プロジェクトは Project CR にも二重書きする** (設計 state-out-of-git Phase 4a)。
+  毎ビート `projects.json` と `autopilot` ns の `Project` CR の両方へ書く
+  (`projectcr.py` が変換、`heart.sync_project_crs()` が apply)。**正はまだ
+  `projects.json`** で、CR の書き込み失敗はログに出して続行する。読み手の
+  切り替えと `projects.json` の停止は 4b
 - **書き置きは 2 経路から読む**。issue #56 / ops-feedback ブランチ (GitHub) に加えて、
   同居する Go サイドカー (`apps/autopilot/bus-sidecar`) が NATS から
   `/data/feedback-bus/inbox/<id>.json` に落としたぶんも読む。所有者の「止めて」を

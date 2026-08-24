@@ -1,0 +1,506 @@
+{
+  "version": 1,
+  "projects": [
+    {
+      "id": "P-0216",
+      "title": "B2 の download cap で backup が全滅した夜を二度と作らない — 全消費者の転送量を事前見積りで一枚にし、CI が「cap を食い潰すスケジュール」を落とすようにする",
+      "state": "stalled",
+      "branch": "project/p-0216",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "python3 ops/b2/budget.py --check",
+        "grep -q 'b2/budget.py' .github/workflows/ci.yml",
+        "python3 -c \"import sys; sys.exit(0 if __import__('pathlib').Path('docs/backup.md').read_text().count('download cap') >= 2 else 1)\""
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2500000
+      },
+      "created": "2026-08-23",
+      "adopt_gate_attempts": 3,
+      "adopt_gate": {
+        "at": "2026-08-23T16:18:31Z",
+        "verify": [
+          {
+            "cmd": "python3 ops/b2/budget.py --check",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-4l00tayu/repo/ops/b2/budget.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "grep -q 'b2/budget.py' .github/workflows/ci.yml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -c \"import sys; sys.exit(0 if __import__('pathlib').Path('docs/backup.md').read_text().count('download cap') >= 2 else 1)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      },
+      "veto_deadline": "2026-08-23T16:19:45Z",
+      "spawn_count": 1,
+      "job": "runner-p-0216-a1",
+      "drift_count": 0,
+      "prs": [
+        556
+      ],
+      "review_requested_at": "2026-08-23T16:50:30Z",
+      "review_retries": 0,
+      "merging_since": "2026-08-23T17:01:35Z",
+      "merge_error": {
+        "at": "2026-08-23T23:03:11Z",
+        "pr": 556,
+        "status": 405,
+        "reason": "Pull Request has merge conflicts"
+      },
+      "stalled_reason": "merge_conflict"
+    },
+    {
+      "id": "P-9003",
+      "title": "常駐エージェント選択時に「transcript 信号を待っています」と出る不整合を直す",
+      "state": "delivered",
+      "branch": "project/p-9003",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "dispatch_id": "d-6c9f83c7bf3e4e81",
+      "requested_by": "core",
+      "spec": {
+        "id": "P-9003",
+        "title": "常駐エージェント選択時に「transcript 信号を待っています」と出る不整合を直す",
+        "why": "所有者が Telegram で明示依頼 (2026-08-24T19:35:11Z「採択ゲートの仕組みを取り払ったのでさっきのタスク2件をもう一度dispatchしてください」)。前回 dispatch (P-9001, dispatch_id=d-5b629eb5dc3ffee8) の再送。verify は所有者の指示により省略。\n\n何をしたいか: ops-dashboard で常駐エージェント (autopilot-core / autopilot-heart) を選んだときに出る「transcript 信号を待っています / ファイルが作られると自動で表示します」を、resident の場合は対象外であることが伝わる表示に変える。\n\nなぜ要るか (不整合の実体): apps/ops-dashboard/app/src/app/page.tsx:222-227 の空状態は agent がいれば役割に関係なく待機メッセージを出す。一方 apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 では resident の transcriptAvailable を false に固定しており、「ファイルが作られる」ことは設計上ない。つまり core/heart 選択時は、来る見込みのないものを「待っている」ように見える。所有者の指摘そのまま: 「transcriptAvailable を false にしたときのビューの表示に不整合がある transcript 信号を待っています と表示されている」。\n\nどこを見れば分かるか:\n- page.tsx の Scope コンポーネント内 scope__empty ブロック (222-227 行付近)。agent.resident フラグは同ファイルの AgentCard (75, 83 行) で既に使われているので同じ分岐様式で差し替えるのが自然\n- 文言案は実装役に任せるが「常駐エージェントのため transcript 表示なし」等、待機でないことが伝わること\n\n注記: 同趣向の P-0318 が 2026-08-24T18:43Z の立案ラウンドで不採択 (improve_hint: P-0317 merge 後の整理として再提出)。また P-9002 (resident transcript 表示の追加) と並走するため、そちらの merge 状況を見て文言を合わせる判断は実装役に委ねる。",
+        "dod": "所有者が Telegram で明示依頼 (2026-08-24T19:35:11Z「採択ゲートの仕組みを取り払ったのでさっきのタスク2件をもう一度dispatchしてください」)。前回 dispatch (P-9001, dispatch_id=d-5b629eb5dc3ffee8) の再送。verify は所有者の指示により省略。\n\n何をしたいか: ops-dashboard で常駐エージェント (autopilot-core / autopilot-heart) を選んだときに出る「transcript 信号を待っています / ファイルが作られると自動で表示します」を、resident の場合は対象外であることが伝わる表示に変える。\n\nなぜ要るか (不整合の実体): apps/ops-dashboard/app/src/app/page.tsx:222-227 の空状態は agent がいれば役割に関係なく待機メッセージを出す。一方 apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 では resident の transcriptAvailable を false に固定しており、「ファイルが作られる」ことは設計上ない。つまり core/heart 選択時は、来る見込みのないものを「待っている」ように見える。所有者の指摘そのまま: 「transcriptAvailable を false にしたときのビューの表示に不整合がある transcript 信号を待っています と表示されている」。\n\nどこを見れば分かるか:\n- page.tsx の Scope コンポーネント内 scope__empty ブロック (222-227 行付近)。agent.resident フラグは同ファイルの AgentCard (75, 83 行) で既に使われているので同じ分岐様式で差し替えるのが自然\n- 文言案は実装役に任せるが「常駐エージェントのため transcript 表示なし」等、待機でないことが伝わること\n\n注記: 同趣向の P-0318 が 2026-08-24T18:43Z の立案ラウンドで不採択 (improve_hint: P-0317 merge 後の整理として再提出)。また P-9002 (resident transcript 表示の追加) と並走するため、そちらの merge 状況を見て文言を合わせる判断は実装役に委ねる。",
+        "verify": [],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": false,
+        "confidence": "unsure",
+        "adopted": true,
+        "proposed_by": "core-dispatch",
+        "cell": [
+          "self",
+          "feature"
+        ]
+      },
+      "job": "runner-p-9003-a2",
+      "spawn_count": 2,
+      "job_created_at": "2026-08-24T19:37:50Z",
+      "drift_count": 0,
+      "prs": [
+        607
+      ],
+      "review_requested_at": "2026-08-24T20:13:55Z",
+      "review_retries": 0,
+      "review_cycles": 1,
+      "merging_since": "2026-08-24T20:18:26Z"
+    },
+    {
+      "id": "P-0090",
+      "title": "OpenClaw を Telegram の口として導入する (デプロイ + 決定論パススルー・ブリッジ)",
+      "state": "stalled",
+      "branch": "project/p-0090",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "test -f apps/openclaw/kustomization.yaml",
+        "grep -q 'openclaw' apps/kustomization.yaml",
+        "grep -q 'TELEGRAM_BOT_TOKEN' ops/rules.json"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2500000
+      },
+      "created": "2026-08-22",
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-22T14:53:40Z",
+        "verify": [
+          {
+            "cmd": "test -f apps/openclaw/kustomization.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'openclaw' apps/kustomization.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'TELEGRAM_BOT_TOKEN' ops/rules.json",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      },
+      "veto_deadline": "2026-08-22T14:54:51Z",
+      "spawn_count": 1,
+      "job": "runner-p-0090-a1",
+      "drift_count": 0,
+      "prs": [
+        471
+      ],
+      "review_requested_at": "2026-08-22T15:51:45Z",
+      "review_retries": 0,
+      "merging_since": "2026-08-22T16:04:37Z",
+      "soak": {
+        "until": "2026-08-22T16:36:59Z",
+        "baseline_unhealthy": []
+      },
+      "stalled_reason": "soak_failed",
+      "acknowledged": true
+    },
+    {
+      "id": "P-0285",
+      "title": "tailnet の DNS が今も落ちている — AdGuard Home の 84 回 CrashLoop を今日止め、壊れ方ごと直す",
+      "state": "stalled",
+      "branch": "project/p-0285",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "kubectl wait --for=condition=Available deployment/adguard -n adguard --timeout=120s",
+        "kubectl run ag-dns-probe-$(date +%s) --rm -i --restart=Never --image=busybox:1.36 -n adguard --command -- nslookup doubleclick.net adguard.adguard.svc.cluster.local",
+        "kubectl get pod -n adguard -l app=adguard -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}' | grep -qx '0'",
+        "test -s docs/adguard-runbook.md"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2500000
+      },
+      "created": "2026-08-24",
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-24T07:49:21Z",
+        "verify": [
+          {
+            "cmd": "kubectl wait --for=condition=Available deployment/adguard -n adguard --timeout=120s",
+            "ok": false,
+            "rc": null,
+            "timeout": true,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "timeout after 120s"
+          },
+          {
+            "cmd": "kubectl run ag-dns-probe-$(date +%s) --rm -i --restart=Never --image=busybox:1.36 -n adguard --command -- nslookup doubleclick.net adguard.adguard.svc.cluster.local",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Error from server (Forbidden): pods is forbidden: User \"system:serviceaccount:autopilot:autopilot-heart\" cannot create resource \"pods\" in API group \"\" in the namespace \"adguard\"\n"
+          },
+          {
+            "cmd": "kubectl get pod -n adguard -l app=adguard -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}' | grep -qx '0'",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "test -s docs/adguard-runbook.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "broken_command",
+        "passed": [],
+        "broken": [
+          {
+            "cmd": "kubectl wait --for=condition=Available deployment/adguard -n adguard --timeout=120s",
+            "reason": "timeout"
+          }
+        ]
+      },
+      "stalled_reason": "adopt_gate_broken_command"
+    },
+    {
+      "id": "P-0311",
+      "title": "cap の夜は 4 度目で必ず迎える — B2 download 予報を latest.json の型付き節に住ませ、「超過予測の夜」を警告配列の値として assert できるようにする",
+      "state": "stalled",
+      "branch": "project/p-0311",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "test -f ops/tools/download_forecast.py && python3 ops/tools/download_forecast.py --selftest",
+        "git fetch origin '+refs/heads/ops-health-report:refs/remotes/origin/ops-health-report' && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import sys,json;d=json.load(sys.stdin);f=d['forecast'];assert f['status'] in ('ok','warn','exceed') and f['projected_bytes']>=0 and f['remaining_bytes']>=0, f\"",
+        "python3 ops/tools/download_forecast.py --fixture exceed | python3 -c \"import sys,json;w=json.load(sys.stdin);assert w['warnings'] and w['warnings'][0]['kind']=='download_forecast' and w['warnings'][0]['severity']=='high', w\"",
+        "! git log --oneline -5 -- apps/*/backup* apps/*/*retention* | grep -q . || git diff --stat HEAD~5 -- 'apps/**' | grep -qi retention && exit 1 || exit 0"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-0311",
+        "title": "cap の夜は 4 度目で必ず迎える — B2 download 予報を latest.json の型付き節に住ませ、「超過予測の夜」を警告配列の値として assert できるようにする",
+        "why": "P-0286→P-0296→P-0300 と 3 度連続で枠外になった案の最終形。前判決の約束 (空きスロット回の最優先採択圏) と改善指示 (文字列 grep をやめて latest.json の forecast 節の値そのものを JSON パースで assert する) を両方実行する。2026-08-22 の backup 全滅 (B2 download cap 超過、substrate 実測どおり 08-23T00:04Z に回復) の再発防止であり、retention (forget/--prune・credential・スケジュール) には一切触れない — 失格条件の遵守も明記する。reporter の既存 30 分周期に乗るため新装置を増やさない。",
+        "cell": [
+          "storage",
+          "prevent"
+        ],
+        "dod": "(1) download_budget 台帳に「今日あと何バイト」の前倒し予報 (projected_bytes / remaining_bytes / status) を持つ forecast 節ができる。(2) 予報は health ブランチの latest.json に型付きで現れる。(3) 超過予測の合成入力で warnings 配列の先頭に download_forecast 警告 (severity high) が入る。(4) retention は 1 行も変更しない。",
+        "verify": [
+          "test -f ops/tools/download_forecast.py && python3 ops/tools/download_forecast.py --selftest",
+          "git fetch origin '+refs/heads/ops-health-report:refs/remotes/origin/ops-health-report' && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import sys,json;d=json.load(sys.stdin);f=d['forecast'];assert f['status'] in ('ok','warn','exceed') and f['projected_bytes']>=0 and f['remaining_bytes']>=0, f\"",
+          "python3 ops/tools/download_forecast.py --fixture exceed | python3 -c \"import sys,json;w=json.load(sys.stdin);assert w['warnings'] and w['warnings'][0]['kind']=='download_forecast' and w['warnings'][0]['severity']=='high', w\"",
+          "! git log --oneline -5 -- apps/*/backup* apps/*/*retention* | grep -q . || git diff --stat HEAD~5 -- 'apps/**' | grep -qi retention && exit 1 || exit 0"
+        ],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": false,
+        "confidence": "confident",
+        "_note_verify": "verify(2) は現状 latest.json に forecast 節が無いため fail-now。verify(4) は「retention 非接触」の自己宣言検査 (簡易)。spec では --fixture exceed を「cap 残り < 予測消費」という合成台帳を食わせるモードとして定義する",
+        "adopted": true,
+        "proposed_at": "2026-08-24T17:04:17Z"
+      },
+      "adopt_gate_attempts": 3,
+      "stalled_reason": "adopt_gate_unmeasurable"
+    },
+    {
+      "id": "P-0302",
+      "title": "提供者の揺れをプロジェクトの死に換算しない — network_error 死に実署名フィクスチャ・checkpoint・上限付き自動 respawn を与える",
+      "state": "stalled",
+      "branch": "project/p-0302",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "test $(ls ops/tests/fixtures/provider_stderr/*.jsonl 2>/dev/null | wc -l) -ge 3",
+        "python3 -m pytest ops/tests/test_provider_classification.py -q",
+        "python3 ops/runner/runner.py --classify ops/tests/fixtures/provider_stderr --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get(\"provider_unavailable\",0)>=3 and d.get(\"error\",0)==0, d'",
+        "python3 -m pytest ops/tests/test_provider_respawn.py -q",
+        "grep -q 'checkpoint' ops/prompts/worker.md && grep -q 'checkpoint' ops/prompts/curriculum-generate.md"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-24T09:07:03Z",
+        "verify": [
+          {
+            "cmd": "test $(ls ops/tests/fixtures/provider_stderr/*.jsonl 2>/dev/null | wc -l) -ge 3",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m pytest ops/tests/test_provider_classification.py -q",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "/usr/bin/python3: No module named pytest\n"
+          },
+          {
+            "cmd": "python3 ops/runner/runner.py --classify ops/tests/fixtures/provider_stderr --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get(\"provider_unavailable\",0)>=3 and d.get(\"error\",0)==0, d'",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,sys; d=json.load(sys.stdin); assert d.get(\"provider_unavailable\",0)>=3 and d.get(\"error\",0)==0, d\n                       ~~~~~~~~~^^^^^^^^^^^\n  File \"/usr/lib/python3.14/json/__init__.py\", line 298, in load\n    return loads(fp.read(),\n        cls=cls, object_hook=object_hook,\n        parse_float=parse_float, parse_int=parse_int,\n        parse_constant=parse_constant, object_pairs_hook=object_pairs_hook, **kw)\n  File \"/usr/lib/python3.14/json/__init__.py\", line 352, in loads\n    return _default_decoder.decode(s)\n           ~~~~~~~~~~~~~~~~~~~~~~~^^^\n  File \"/usr/lib/python3.14/json/decoder.py\", line 345, in decode\n    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/json/decoder.py\", line 363, in raw_decode\n    raise JSONDecodeError(\"Expecting value\", s, err.value) from None\njson.decoder.JSONDecodeError: Expecting value: line 1 column 2 (char 1)\n"
+          },
+          {
+            "cmd": "python3 -m pytest ops/tests/test_provider_respawn.py -q",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "/usr/bin/python3: No module named pytest\n"
+          },
+          {
+            "cmd": "grep -q 'checkpoint' ops/prompts/worker.md && grep -q 'checkpoint' ops/prompts/curriculum-generate.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      },
+      "veto_deadline": "2026-08-24T09:10:03Z",
+      "spawn_count": 4,
+      "job": "runner-p-0302-a4",
+      "drift_count": 0,
+      "restart_count": 2,
+      "stalled_reason": "human_stop"
+    },
+    {
+      "id": "P-0317",
+      "title": "常駐組の声を画面に流す — core/heart のセッション出力を transcript パイプラインに乗せ、Mission Control でライブ表示する",
+      "state": "stalled",
+      "branch": "project/p-0317",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "cd apps/ops-dashboard/app && npx tsx --test tests/resident-transcript.test.ts",
+        "grep -q 'transcripts/resident' apps/ops-dashboard/app/src/lib/transcript.ts",
+        "grep -rqE 'transcripts/resident' apps/autopilot-core/app apps/autopilot/"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-0317",
+        "title": "常駐組の声を画面に流す — core/heart のセッション出力を transcript パイプラインに乗せ、Mission Control でライブ表示する",
+        "why": "人間のタスク依頼 (Telegram 経由, request_id 2c3645e5045b4b27, 2026-08-24T16:37Z「起票して」): 「ダッシュボードでcoreとheartのtranscriptが見えないのは仕様ですか？」。P-0284 が常駐組を「住人」として Ready 数だけ映したのが v1 で、transcript 連携は範囲外と明示して切り捨てられた残り半分。現状の実測: apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 が resident を transcriptAvailable:false に固定、transcript.ts の parseAgentName は Job 由来の役割名 (runner|reviewer|…)-<projectId>-aN のみ解釈、/data/transcripts/ 配下は worker/review/curriculum/critic の 4 ディレクトリのみで core/heart の出力は PVC のどこにも落ちていない。人間が毎日開く画面から器の中身が見えないのは、VISION の「人間の介入はフィードバックと拒否権だけ」を支える pull 面として本体。",
+        "cell": [
+          "observability",
+          "feature"
+        ],
+        "dod": "(1) 生産側: core (opencode セッション) と heart (beat ログ) の出力を PVC autopilot-data の /data/transcripts/resident/<agent>.jsonl (core / heart) へ JSONL 追記で tee する経路を作る (Job ランナの tee と同型。サイズ上限のローテーションも一緒に)。(2) 表示側: transcript.ts に resident モードを追加する (parseAgentName が \"core\"/\"heart\" を解釈、findTranscriptFile が transcripts/resident/ を見る)。snapshot.ts の常駐組は transcriptAvailable を実ファイルの存在から出す。既存ビューア (normalizeTranscriptEvent 経由) で表示できるイベント形式で吐く。(3) tests/resident-transcript.test.ts を新設し、fixture ファイルからの resident 解釈・最新ファイル選択・イベント正規化をクラスタ外 unit test で検証する。",
+        "verify": [
+          "cd apps/ops-dashboard/app && npx tsx --test tests/resident-transcript.test.ts",
+          "grep -q 'transcripts/resident' apps/ops-dashboard/app/src/lib/transcript.ts",
+          "grep -rqE 'transcripts/resident' apps/autopilot-core/app apps/autopilot/"
+        ],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": true,
+        "confidence": "confident",
+        "proposed_by": "human-request",
+        "request_id": "2c3645e5045b4b27",
+        "adopted": true,
+        "proposed_at": "2026-08-24T18:43:28Z"
+      },
+      "adopt_gate_attempts": 3,
+      "stalled_reason": "adopt_gate_unmeasurable",
+      "acknowledged": true
+    },
+    {
+      "id": "P-9004",
+      "title": "ダッシュボードのエージェントライブに core / heart の transcript 表示を追加",
+      "state": "in_review",
+      "branch": "project/p-9004",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "dispatch_id": "d-1627ee89ba3a5b42",
+      "requested_by": "core",
+      "spec": {
+        "id": "P-9004",
+        "title": "ダッシュボードのエージェントライブに core / heart の transcript 表示を追加",
+        "why": "所有者が Telegram で明示依頼 (2026-08-24T20:22:40Z)。前回 dispatch (P-9002, dispatch_id=d-4532c8ad284ce4a8) は ox-alpha-free の混雑で失敗したため、モデル切替 (opencode-go/deepseek-v4-flash) 後の再送。verify は所有者の指示により省略。\n\n何をしたいか: ops-dashboard のエージェントライブで、常駐エージェント (autopilot-core / autopilot-heart) の transcript を見えるようにする。\n\nなぜ要るか: 現行実装は apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 のコメント「常駐組 (heart/resident Deployment) は projectId / transcript を持たない」どおり、resident の transcriptAvailable を false に固定している。transcript 表示機構自体は Job 由来の役割名 (runner|reviewer|curriculum|critic|consolidation|chore)-<projectId>-aN しか parseAgentName で解釈しない (apps/ops-dashboard/app/src/lib/transcript.ts:172-177)。/data/transcripts/ 配下は worker/review/curriculum/critic のディレクトリのみで core/heart の出力はどこにも落ちていない。\n\nどこを見れば分かるか:\n- apps/ops-dashboard/app/src/lib/snapshot.ts (residentAgents を固定値で組んでいる箇所)\n- apps/ops-dashboard/app/src/lib/transcript.ts (findTranscriptFile / latestAction / transcriptMode)\n- apps/ops-dashboard/app/src/app/page.tsx (LIVE TRANSCRIPT パネル、SSE /api/agents/[agentId]/events)\n- transcript 実体は PVC autopilot-data の /data/transcripts/<role>/ 配下 (apps/ops-dashboard/deployment.yaml の DATA_DIR=/data/transcripts)\n\n実装の方向は実装役の判断に任せる。参考: 同趣向の P-0317 が 2026-08-24T18:43Z の立案ラウンドで採択済み — 重複するなら統合・破棄の判断は heart に委ねる。",
+        "dod": "所有者が Telegram で明示依頼 (2026-08-24T20:22:40Z)。前回 dispatch (P-9002, dispatch_id=d-4532c8ad284ce4a8) は ox-alpha-free の混雑で失敗したため、モデル切替 (opencode-go/deepseek-v4-flash) 後の再送。verify は所有者の指示により省略。\n\n何をしたいか: ops-dashboard のエージェントライブで、常駐エージェント (autopilot-core / autopilot-heart) の transcript を見えるようにする。\n\nなぜ要るか: 現行実装は apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 のコメント「常駐組 (heart/resident Deployment) は projectId / transcript を持たない」どおり、resident の transcriptAvailable を false に固定している。transcript 表示機構自体は Job 由来の役割名 (runner|reviewer|curriculum|critic|consolidation|chore)-<projectId>-aN しか parseAgentName で解釈しない (apps/ops-dashboard/app/src/lib/transcript.ts:172-177)。/data/transcripts/ 配下は worker/review/curriculum/critic のディレクトリのみで core/heart の出力はどこにも落ちていない。\n\nどこを見れば分かるか:\n- apps/ops-dashboard/app/src/lib/snapshot.ts (residentAgents を固定値で組んでいる箇所)\n- apps/ops-dashboard/app/src/lib/transcript.ts (findTranscriptFile / latestAction / transcriptMode)\n- apps/ops-dashboard/app/src/app/page.tsx (LIVE TRANSCRIPT パネル、SSE /api/agents/[agentId]/events)\n- transcript 実体は PVC autopilot-data の /data/transcripts/<role>/ 配下 (apps/ops-dashboard/deployment.yaml の DATA_DIR=/data/transcripts)\n\n実装の方向は実装役の判断に任せる。参考: 同趣向の P-0317 が 2026-08-24T18:43Z の立案ラウンドで採択済み — 重複するなら統合・破棄の判断は heart に委ねる。",
+        "verify": [],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": false,
+        "confidence": "unsure",
+        "adopted": true,
+        "proposed_by": "core-dispatch",
+        "cell": [
+          "self",
+          "feature"
+        ]
+      },
+      "job": "runner-p-9004-a2",
+      "spawn_count": 2,
+      "job_created_at": "2026-08-24T20:23:00Z",
+      "drift_count": 0,
+      "prs": [
+        612
+      ],
+      "review_requested_at": "2026-08-24T21:07:51Z",
+      "review_retries": 0,
+      "review_cycles": 1
+    },
+    {
+      "id": "P-0002",
+      "title": "ops-health-reporter を heart 対応にし、心臓の生存を再び観測可能にする",
+      "state": "vetoed",
+      "branch": "project/p-0002",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "python3 ops/check_health_reporter_target.py",
+        "grep -q 'autopilot-heart' apps/ops-health-reporter/report.py",
+        "grep -q 'check_health_reporter_target.py' .github/workflows/ci.yml"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2000000
+      },
+      "created": "2026-08-08",
+      "veto_deadline": "2026-08-08T06:13:24Z"
+    }
+  ],
+  "chores": []
+}
