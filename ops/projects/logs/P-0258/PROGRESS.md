@@ -474,3 +474,27 @@ verify 1/2 の再実測と上表の更新だけでよい (reporter run のタイ
 merge された世界になったらセッション 3 記載の手順 (ArgoCD sync 確認 → 手動 Job or
 03:43 JST 待ち → reporter run 待ち) で初回計測を起こし、verify 3 を green にするのが
 最初で最後の残作業。
+
+## セッション 10 (2026-08-24 09:xx JST)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main の先頭 (#579)、reporter の最新 run (2026-08-24T00:00:07Z)、main との差分
+(`ops/heart/{gh,heart,reconcile}.py` / `ops/heart/tests/test_reconcile.py` /
+`archive.jsonl`、重複ゼロ) のすべてが session 9 時点から不変。3 項目を再実測:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 9 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse -v` | **green (27 tests OK)** 9 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | red (`recovery_probe: None`) — merge 前なので想定どおり |
+
+新たな発見は無し。
+
+## 次のセッションへの一言
+
+セッション 4〜9 と同じ。**やることは「merge 待ち」以外にない。** 起動したら最初に
+`git branch -r --merged origin/main | grep p-0258` で merge 済みか確認。未 merge なら
+verify 1/2 の再実測と上表の更新だけでよい。
+merge された世界になったらセッション 3 記載の手順 (ArgoCD sync 確認 → 手動 Job or
+03:43 JST 待ち → reporter run 待ち) で初回計測を起こし、verify 3 を green にするのが
+最初で最後の残作業。
