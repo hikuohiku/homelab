@@ -178,6 +178,71 @@
    確認する。summary レスポンスが docs の形と食い違ったら
    ops/tools/immich_checksum_check.py の fixture を実測値で更新する
 
+### 2026-08-24 (worker #5) — DoD 3 を実装した (閾値 + incident 経路。レビュー差し戻し 1 件目)
+
+**やったこと** (レビュー指摘の (a)(b)(c) 全部):
+- **(a) rules.json に `checksum.mismatch_threshold: 1` を宣言** (ops/rules.json の
+  checksum 節)。唯一の宣言元。既定 1 (検出したら即 incident) にした理由を
+  `_comment` に書いた。`ops/validate.py` の数値検査に `("checksum",
+  "mismatch_threshold")` を追加
+- **(b) CronJob env + rules.json → env の配線**。`apps/immich/checksum-cronjob.yaml`
+  の env に `MISMATCH_THRESHOLD: "1"` を追加 (checksum_runner.py は元々
+  `os.environ.get("MISMATCH_THRESHOLD")` を読んでいた)。配線は
+  `ops/check_version_sync.py` の GROUPS に「rules.json の値と manifest の env 値が
+  一致すること」のエントリを追加して機械的に担保した (CORE_MODEL と同じ流儀。
+  `extract_json_nested_value()` を新設し、`extract_env_value()` はダブルクォートを
+  剥がすよう拡張 — 実測で `"1"` vs `1` の不一致を踏んで直した)
+- **(c) incident consumer**。`ops/heart/facts.py` に `checksum_alert()` を追加
+  (latest.json の checksum.status が fail / error のときだけ抽出。unconfigured /
+  no_data は沈黙 — budget/dashboard_smoke と同じ判断。error = 代役レコード = 装置
+  自体の失敗も鳴らす: 週次装置が「測れなかった」まま沈黙すると検出が失われる)。
+  `ops/heart/heart.py` に budget/smoke と同じ 3 本の流路を配線: cursors の
+  `checksum_alert` (status/date) で同一日内の再通知を落とす → briefing-queue.jsonl
+  (source "checksum (<status>)") → incident 通知 → metrics.jsonl の `checksum_status`
+- **テスト**: `ops/heart/tests/test_checksum_alert.py` (5 テスト) +
+  `test_checksum_alert_beat.py` (5 テスト、実物の Heart.beat() を shadow で回す)。
+  `ops/tests/test_checksum_threshold_sync.py` (4 テスト) で rules.json と manifest
+  env の同期・GROUPS 登録・閾値の形を固定。既存テストの「閾値未導入」コメントを
+  「env 未設定の経路」に修正 (test_immich_checksum_script_sync.py /
+  test_report_checksum.py)。docs の「閾値 (DoD 3 — 未設定)」節を「閾値と incident
+  経路」に書き換え
+- `docs/immich-checksum.md` の閾値節を更新 (実値 1、check_version_sync の配線、
+  checksum_alert の流路、unconfigured 時に沈黙する旨)
+
+**分かったこと**:
+- 受入検証 4 項目は変更後も全部 green。`ops/check_version_sync.py` /
+  `check_immich_checksum_script_sync.py` / `check_health_reporter_target.py` /
+  `check_credential_map.py` すべて rc=0。unittest は ops/tests 583 件 + heart 411 件
+  + runner 63 件、全部 green。
+- DoD 3 の「配線」は apps/ に rules.json を読ませるのではなく、**rules.json を単一
+  情報源にしたまま CI が manifest との同期を検査する**形にした (常駐コアの
+  CORE_MODEL = models.json → Deployment env と同じ既存パターン)。レビュー指摘の
+  「(b) rules.json から CronJob へ値を流す配線」はこれで満たしたと考える
+- `extract_env_value` は元々 value のダブルクォートを剥がさず、`"1"` と `1` が
+  不一致になるのを最初に踏んだ。クォートを剥がす拡張は既存の CORE_MODEL (未クォー
+  ト値) に影響しないことを実測で確認
+- metrics の `checksum_status` は budget/dashboard_smoke と同じ形で、他に読む側は
+  無い (dashboard は別経路)。追加しても破綻しないことを grep で確認済み
+
+**受入検証**: 4 項目とも自分で実測 → green
+(v1 CronJob+kustomization / v2 selftest 8 fixture / v3 docs / v4 report.py checksum)。
+
+**次への一言**:
+1. **DoD 5 / 実機 (レビュー差し戻し 2 件目)**: このサンドボックスには tailscale /
+   kubectl が無く、実機実行は wrapper 側 (実機到達手段を持つ環境) の仕事。
+   Doppler の `IMMICH_API_KEY` 登録 (人間) → `kubectl create job immich-checksum-manual
+   --from=cronjob/immich-checksum -n immich` → report.json の対象アセット数・
+   `job.run_elapsed_s`・結果を PROGRESS に残す。system config の
+   `integrityChecks.checksumFiles.timeLimit` 実値と内蔵 checksum cron の有効/無効も
+   確認し、`RUN_TIMEOUT_S` / `activeDeadlineSeconds` を実値に合わせること
+2. **DoD 1 の実機確定 (レビュー差し戻し 3 件目)**: 実機の summary レスポンスが
+   docs/immich_checksum_check.py の fixture と食い違ったら実測値で fixture を更新。
+   checkpoint 再開 (issue #29487 / PR #29516 の v3.1.0 修正) の実機挙動も確認
+3. 実機実行で最新.json の checksum 節が fail になったら、heart の checksum_alert →
+   briefing / incident 経路 (worker #5 が実装) が実際に鳴ることを確認できる
+   (status=fail の実データで 1 回通すと配線の実証になる。誤検出のぶんは
+   rules.json の閾値を PR で上げる)
+
 ## 発見
 
 - (2026-08-24, worker #3) `test_health_report_path.py` は reader ClusterRole
