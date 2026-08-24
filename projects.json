@@ -6992,13 +6992,61 @@
       },
       "adopt_gate_attempts": 3,
       "stalled_reason": "adopt_gate_unmeasurable"
+    },
+    {
+      "id": "P-0353",
+      "title": "veto 済みプロジェクトの幽霊が健康を濁す — prune:true が何故この ExternalSecret を消さないのかを解剖し、secret_synced_errors=0 を実測する",
+      "state": "proposed",
+      "branch": "project/p-0353",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": true,
+      "verify": [
+        "test -f ops/tools/check_externalsecret_orphans.py",
+        "python3 -m unittest ops.tests.test_externalsecret_orphan -v",
+        "git fetch origin ops-health-report -q && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); assert d.get('externalsecrets',{}).get('secret_synced_errors',1)==0, d.get('externalsecrets',{}).get('errored')\""
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-0353",
+        "title": "veto 済みプロジェクトの幽霊が健康を濁す — prune:true が何故この ExternalSecret を消さないのかを解剖し、secret_synced_errors=0 を実測する",
+        "why": "latest.json (2026-08-24T21:00Z 実測) の externalsecrets は total 25 のうち secret_synced_errors=1: syncthing namespace の syncthing-photo-intake-credentials。「could not get secret data from provider」。これは人間が veto した P-0085 (写真 intake) の残骸で、apps/syncthing の manifest は既に存在しないのにクラスタに残り続けている。採択済み P-0237 (この掃除を含む) は adopt_gate_some_pass で stalled のまま未納品で、問題は今も生きている。本件の学びは掃除そのものではなく「GitOps の不変条件の穴」の確定である: apps root は prune:true (substrate 実測) なのに、repo から消えたオブジェクトがクラスタに居座るのは、out-of-band 適用・Application path 外・ArgoCD が管理しない orphan のどれかで、その正体は誰も特定していない。これを確定すれば「消えた manifest の残骸」を CI が拾える歯止めの設計根拠になる。",
+        "cell": [
+          "k8s",
+          "repair"
+        ],
+        "dod": "(1) 幽霊の解剖: syncthing-photo-intake-credentials の ownerReferences / 生成元 (ArgoCD Application の管理下か・いつ適用されたか) を実機で調べ、prune:true がこれを消さなかった機序を確定して ops/projects/logs/P-0353/root_cause.md に証拠引用付きで書く。(2) 残骸をクラスタから削除する (writer capability、対象は photo-intake 由来と特定できるもののみ。syncthing 本体の credential には触れない)。(3) 再発を CI が落とす: ops/tools/check_externalsecret_orphans.py が ops-health-report ブランチの latest.json (externalsecrets.items) と repo の ExternalSecret manifest 群を突き合わせ、「クラスタにあるのに repo に manifest が無い ExternalSecret」を検出して rc=1 にする (幽霊の再入居を防ぐ)。(4) 完了判定は ops-health-report の latest.json で secret_synced_errors=0 になること (外部真実での機械確認)。",
+        "verify": [
+          "test -f ops/tools/check_externalsecret_orphans.py",
+          "python3 -m unittest ops.tests.test_externalsecret_orphan -v",
+          "git fetch origin ops-health-report -q && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); assert d.get('externalsecrets',{}).get('secret_synced_errors',1)==0, d.get('externalsecrets',{}).get('errored')\""
+        ],
+        "irreversible": false,
+        "capabilities": [
+          "kubectl-write"
+        ],
+        "touches_apps": true,
+        "budget": {
+          "soft_cap_tokens": 1500000
+        },
+        "confidence": "confident",
+        "adopted": true,
+        "proposed_at": "2026-08-24T21:47:22Z"
+      },
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T21:38:31Z",
-  "last_activity_at": "2026-08-24T21:39:39Z",
+  "last_activity_at": "2026-08-24T21:48:23Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false,
-  "curriculum_registered_pr": 623
+  "curriculum_registered_pr": 625
 }
