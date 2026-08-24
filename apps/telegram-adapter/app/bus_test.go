@@ -10,18 +10,18 @@ import (
 	"testing"
 )
 
-func TestConnectBusIsOptional(t *testing.T) {
-	// 設定が無ければ nil を返して、GitHub 側だけで動く。
-	// ここが error になると、バス未設定の切り戻し構成で adapter が起動しなくなる
+func TestConnectBusIsRequired(t *testing.T) {
+	// 出口はここ 1 本 (設計 state-out-of-git Phase 7)。未設定で起動すると、
+	// 受信した書き置きを黙って捨てながら ack だけ返し続けることになる
 	t.Setenv("NATS_URL", "")
 	t.Setenv("NATS_NKEY_SEED", "")
 
 	bus, err := connectBus()
-	if err != nil {
-		t.Fatalf("未設定はエラーにしない: %v", err)
+	if err == nil {
+		t.Fatal("未設定は起動時に落とすべき")
 	}
 	if bus != nil {
-		t.Fatal("未設定なら nil を返すべき")
+		t.Fatal("失敗したら nil を返すべき")
 	}
 	// nil に対して close を呼んでも落ちないこと (defer で無条件に呼ぶため)
 	bus.close()

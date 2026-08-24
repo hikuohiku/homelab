@@ -5,7 +5,7 @@ Go 標準ライブラリのみの単一バイナリで、2 つのモードを持
 
 | モード | 起動 | 役割 |
 |---|---|---|
-| adapter | 引数なし | **受信**。`getUpdates` を long poll し、allowlist の private DM を `ops-feedback` の inbox へ保存する |
+| adapter | 引数なし | **受信**。`getUpdates` を long poll し、allowlist の private DM を NATS へ publish する |
 | mcp | `mcp [--listen host:port]` | **送信**。MCP サーバとして `telegram_reply` ツールを提供する（既定は stdio、`--listen` で HTTP streamable） |
 
 同じバイナリに同居させているのは、allowlist の解釈と Telegram の呼び出し方を
@@ -18,12 +18,17 @@ Deployment として常駐する。経路は次のとおり。
 ```
 人間の DM → Telegram → getUpdates (long poll 50s)
   → allowlist + private 判定 (決定論のみ。LLM は通らない)
-  → ops-feedback:ops/feedback/inbox/<id>.json へ PUT
-  → heart が毎ビート走査 → triage
+  → NATS (events.raw.homelab.telegram) へ publish
+  → bus-sidecar → heart の triage / 常駐コア
 ```
 
-- note ID に `update_id` を埋めてあるので、再処理しても同じパスへの PUT になる。
-  422 (既存) は「保存済み」として成功扱いにするため、cursor の永続化 (PVC) が要らない
+- **git は触らない。** 以前は `ops-feedback` ブランチの inbox にも PUT していたが、
+  状態を git から出すのに合わせて閉じた (設計 state-out-of-git Phase 7)
+- note ID に `update_id` を埋めてあるので、再処理しても同じ `Nats-Msg-Id` になり
+  JetStream が重複を落とす。cursor の永続化 (PVC) が要らない
+- **publish が通るまで Telegram の offset を進めない。** 出口が 1 本なので、
+  送れなかったものを受信済みにすると書き置きが消える
+- NATS が未設定なら起動しない (fail-closed)
 - 未処理の update は起動時にすべて処理する。Telegram は offset で ack された分だけ
   キューから消すので、ダウン中に届いた分も復帰後に受け取れる
 - private チャット限定。allowlist の送信者でも、グループでの発言は拾わない
@@ -64,7 +69,6 @@ telegram_reply(text) → allowlist の所有者へ DM を送る
 `{env:...}` 展開後の値をそのまま返す。同一 Pod の loopback はネットワーク名前空間が
 境界なので、そもそも認証が要らない。
 
-MCP モードは inbox に触らないので `AUTOPILOT_GITHUB_TOKEN` を要求しない。
 stdout は JSON-RPC 専用で、ログはすべて stderr に出す。
 
 ## 環境変数
@@ -72,12 +76,12 @@ stdout は JSON-RPC 専用で、ログはすべて stderr に出す。
 | 変数 | adapter | mcp | 既定 |
 |---|---|---|---|
 | `TELEGRAM_BOT_TOKEN` | 必須 | 必須 | — |
-| `TELEGRAM_ALLOWED_USER_ID` | 未設定なら保存 0 件で待機 | 未設定なら起動失敗 | — |
-| `AUTOPILOT_GITHUB_TOKEN` | 必須 | 不要 | — |
+| `TELEGRAM_ALLOWED_USER_ID` | 未設定なら取り込み 0 件で待機 | 未設定なら起動失敗 | — |
 | `TELEGRAM_ACK_TEXT` | 空なら ack を送らない | — | — |
 | `ADAPTER_POLL_SECONDS` | long poll の秒数 | — | `50` |
-| `ADAPTER_BRANCH` | 保存先ブランチ | — | `ops-feedback` |
-| `ADAPTER_INBOX_DIR` | 保存先ディレクトリ | — | `ops/feedback/inbox` |
+| `NATS_URL` | 必須 (未設定なら起動失敗) | 不要 | — |
+| `NATS_NKEY_SEED` | 必須 (未設定なら起動失敗) | 不要 | — |
+| `NATS_SUBJECT` | publish 先 | — | `events.raw.homelab.telegram` |
 
 ## 開発
 

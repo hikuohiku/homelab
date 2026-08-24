@@ -40,19 +40,14 @@ spec:
                 secretKeyRef:
                   name: telegram-adapter-credentials
                   key: TELEGRAM_ALLOWED_USER_ID
-            - name: AUTOPILOT_GITHUB_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: telegram-adapter-credentials
-                  key: AUTOPILOT_GITHUB_TOKEN
             # 受信を握り潰さないための最小限の定型応答。OpenClaw の LLM 応答を
             # 撤去した穴を埋めるだけのもので、内容の判断はしない。
             # 常駐コア (docs/design/event-driven-core) が入ったらコアの発話に置き換える。
             # 空文字にすると ack を送らない。
             - name: TELEGRAM_ACK_TEXT
               value: "受け取りました。内容は次の点検サイクルで読まれます。"
-            # イベント経路 (設計 D16)。ここが未設定なら GitHub 側にだけ書く
-            # (移行中の切り戻し構成でも adapter が動くようにしてある)
+            # 書き置きの唯一の出口 (設計 state-out-of-git Phase 7 で GitHub 側を閉じた)。
+            # 未設定だと起動しない — 出口が無いまま ack だけ返す状態を作らない
             - name: NATS_URL
               value: nats://nats.autopilot.svc:4222
             - name: NATS_NKEY_SEED

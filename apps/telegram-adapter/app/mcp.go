@@ -253,7 +253,7 @@ func runMCP(listen string) {
 	// stdout は JSON-RPC 専用。ログは必ず stderr へ出す
 	log.SetOutput(os.Stderr)
 
-	cfg, err := loadConfig(false)
+	cfg, err := loadConfig()
 	if err != nil {
 		log.Fatalf("起動できません: %v", err)
 	}

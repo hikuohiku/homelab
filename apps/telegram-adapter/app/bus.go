@@ -1,13 +1,11 @@
-// NATS への publish。イベント経路をクラスタ内に閉じるための出口。
+// NATS への publish。書き置きの唯一の出口。
 //
-// なぜ両書きか: いまは heart がまだ ops-feedback ブランチ (GitHub) を読んでいる。
-// publish 側だけ切り替えると、所有者の「止めて」が heart に届かなくなる。
-// heart がバスを読めるようになるまでは GitHub と NATS の両方に書き、
-// 移行が終わってから GitHub 側を落とす。
+// 以前は GitHub (ops-feedback ブランチ) との両書きだった。状態が git から出るのに
+// 合わせて閉じた (設計 state-out-of-git Phase 7)。
 //
-// 失敗の扱い: GitHub への保存が成功していれば、NATS への publish が失敗しても
-// update は処理済みとして進める。ここで止めると、バスの不調が受信そのものを
-// 止めてしまう (heart への経路は生きているのに)。publish 失敗はログに残す。
+// 失敗の扱い: 冗長側が無くなったので、publish が通るまで Telegram の offset を
+// 進めない (呼び出し側 runAdapter)。「送れなかったが受信済み」にすると書き置きが
+// そのまま消える。設定が無いときも起動しない (下記 connectBus)。
 package main
 
 import (
@@ -40,13 +38,13 @@ type busPublisher struct {
 	subject string
 }
 
-// connectBus は NKey で NATS に繋ぐ。設定が無ければ (nil, nil) を返す —
-// バスを使わない構成でも adapter が動くようにしておく (移行中の切り戻し用)。
+// connectBus は NKey で NATS に繋ぐ。**設定が無ければエラー**。
+// 出口が 1 本になったので、バス無しで動く構成はもう存在しない。
 func connectBus() (*busPublisher, error) {
 	url := strings.TrimSpace(os.Getenv("NATS_URL"))
 	seed := strings.TrimSpace(os.Getenv("NATS_NKEY_SEED"))
 	if url == "" || seed == "" {
-		return nil, nil
+		return nil, fmt.Errorf("NATS_URL / NATS_NKEY_SEED が無い (書き置きの出口が無い)")
 	}
 
 	// seed をファイルに書かずメモリ上で署名する。nats.NkeyOptionFromSeed は
