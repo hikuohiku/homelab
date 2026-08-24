@@ -6376,12 +6376,101 @@
       "drift_count": 0,
       "restart_count": 2,
       "stalled_reason": "human_stop"
+    },
+    {
+      "id": "P-0311",
+      "title": "cap の夜は 4 度目で必ず迎える — B2 download 予報を latest.json の型付き節に住ませ、「超過予測の夜」を警告配列の値として assert できるようにする",
+      "state": "proposed",
+      "branch": "project/p-0311",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "test -f ops/tools/download_forecast.py && python3 ops/tools/download_forecast.py --selftest",
+        "git fetch origin '+refs/heads/ops-health-report:refs/remotes/origin/ops-health-report' && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import sys,json;d=json.load(sys.stdin);f=d['forecast'];assert f['status'] in ('ok','warn','exceed') and f['projected_bytes']>=0 and f['remaining_bytes']>=0, f\"",
+        "python3 ops/tools/download_forecast.py --fixture exceed | python3 -c \"import sys,json;w=json.load(sys.stdin);assert w['warnings'] and w['warnings'][0]['kind']=='download_forecast' and w['warnings'][0]['severity']=='high', w\"",
+        "! git log --oneline -5 -- apps/*/backup* apps/*/*retention* | grep -q . || git diff --stat HEAD~5 -- 'apps/**' | grep -qi retention && exit 1 || exit 0"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-0311",
+        "title": "cap の夜は 4 度目で必ず迎える — B2 download 予報を latest.json の型付き節に住ませ、「超過予測の夜」を警告配列の値として assert できるようにする",
+        "why": "P-0286→P-0296→P-0300 と 3 度連続で枠外になった案の最終形。前判決の約束 (空きスロット回の最優先採択圏) と改善指示 (文字列 grep をやめて latest.json の forecast 節の値そのものを JSON パースで assert する) を両方実行する。2026-08-22 の backup 全滅 (B2 download cap 超過、substrate 実測どおり 08-23T00:04Z に回復) の再発防止であり、retention (forget/--prune・credential・スケジュール) には一切触れない — 失格条件の遵守も明記する。reporter の既存 30 分周期に乗るため新装置を増やさない。",
+        "cell": [
+          "storage",
+          "prevent"
+        ],
+        "dod": "(1) download_budget 台帳に「今日あと何バイト」の前倒し予報 (projected_bytes / remaining_bytes / status) を持つ forecast 節ができる。(2) 予報は health ブランチの latest.json に型付きで現れる。(3) 超過予測の合成入力で warnings 配列の先頭に download_forecast 警告 (severity high) が入る。(4) retention は 1 行も変更しない。",
+        "verify": [
+          "test -f ops/tools/download_forecast.py && python3 ops/tools/download_forecast.py --selftest",
+          "git fetch origin '+refs/heads/ops-health-report:refs/remotes/origin/ops-health-report' && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import sys,json;d=json.load(sys.stdin);f=d['forecast'];assert f['status'] in ('ok','warn','exceed') and f['projected_bytes']>=0 and f['remaining_bytes']>=0, f\"",
+          "python3 ops/tools/download_forecast.py --fixture exceed | python3 -c \"import sys,json;w=json.load(sys.stdin);assert w['warnings'] and w['warnings'][0]['kind']=='download_forecast' and w['warnings'][0]['severity']=='high', w\"",
+          "! git log --oneline -5 -- apps/*/backup* apps/*/*retention* | grep -q . || git diff --stat HEAD~5 -- 'apps/**' | grep -qi retention && exit 1 || exit 0"
+        ],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": false,
+        "confidence": "confident",
+        "_note_verify": "verify(2) は現状 latest.json に forecast 節が無いため fail-now。verify(4) は「retention 非接触」の自己宣言検査 (簡易)。spec では --fixture exceed を「cap 残り < 予測消費」という合成台帳を食わせるモードとして定義する",
+        "adopted": true,
+        "proposed_at": "2026-08-24T17:04:17Z"
+      },
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0316",
+      "title": "画面は嘘をついたまま 3 日目 — 既知の障害スナップショットを注入する描画契約試験を作り、「DNS 全停でも無風」「$0 の死に欄」を CI が落とすようにする",
+      "state": "proposed",
+      "branch": "project/p-0316",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "test -f apps/ops-dashboard/app/tests/run-contracts.mjs && ls apps/ops-dashboard/app/tests/fixtures/*.json | wc -l | awk '{exit ($1>=4)?0:1}'",
+        "cd apps/ops-dashboard/app && node tests/run-contracts.mjs",
+        "grep -qiE 'crashloop|dns|adguard' apps/ops-dashboard/app/.render-out/dns-outage.html",
+        "! grep -qE '\\$0\\.00' apps/ops-dashboard/app/.render-out/zero-cost-busy.html || grep -qiE '観測不能|unmeasured|no-data' apps/ops-dashboard/app/.render-out/zero-cost-busy.html"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-0316",
+        "title": "画面は嘘をついたまま 3 日目 — 既知の障害スナップショットを注入する描画契約試験を作り、「DNS 全停でも無風」「$0 の死に欄」を CI が落とすようにする",
+        "why": "critic 2026-08-24 所見 4 への応答で、P-0299/P-0306 の improve_hint (面の追加は同型・能力+1 が必要) の学びを踏まえた設計転換。「面を足す」のではなく「壊れたときに画面が正直であることを試験する器官」を作る。実材料は今ある: adguard CrashLoopBackOff restarts=183 なのに /api/snapshot warnings=[]、TODAY 欄は $0/0 sessions の死に欄、赤タイル居座りの前科 (P-0154/P-0266 系)。fixture 化した障害スナップショット (DNS 全停・cost $0 なのにセッション多数・heart 回復後赤居座り) を snapshot 結合層に注入して描画し、「人間が一目で知るべき事実が最上部に出る」「嘘の値を表示しない」を node の契約試験で assert する。副産物として所見 4 の提案 (pod_issues/非 Healthy アプリを attention/warnings へ流し込む結合) が契約の成立条件として自然に実装される。",
+        "cell": [
+          "observability",
+          "experiment"
+        ],
+        "dod": "(1) apps/ops-dashboard/app/tests/ に fixture スナップショット群 (>=4 種の既知障害) とオフライン描画ハーネスがある。(2) 各 fixture について契約 assert を書き、現行コードで少なくとも 2 件 red であることを記録してから、snapshot 結合に health latest.json 由来の pod_issues/非 Healthy を流し込み green に反転させる。(3) 試験が CI で回る。(4) ダッシュボード実 URL に依存しないオフライン試験である。",
+        "verify": [
+          "test -f apps/ops-dashboard/app/tests/run-contracts.mjs && ls apps/ops-dashboard/app/tests/fixtures/*.json | wc -l | awk '{exit ($1>=4)?0:1}'",
+          "cd apps/ops-dashboard/app && node tests/run-contracts.mjs",
+          "grep -qiE 'crashloop|dns|adguard' apps/ops-dashboard/app/.render-out/dns-outage.html",
+          "! grep -qE '\\$0\\.00' apps/ops-dashboard/app/.render-out/zero-cost-busy.html || grep -qiE '観測不能|unmeasured|no-data' apps/ops-dashboard/app/.render-out/zero-cost-busy.html"
+        ],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": true,
+        "confidence": "confident",
+        "_note_verify": "harness/fixtures/.render-out は本案で新設する (現不在 = fail-now)。run-contracts.mjs は fixture を結合層に注入して prerender HTML を .render-out/ に書き出し、各契約を assert してから exit code を返す",
+        "adopted": true,
+        "proposed_at": "2026-08-24T17:04:17Z"
+      },
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T16:18:39Z",
-  "last_activity_at": "2026-08-24T16:40:53Z",
+  "last_activity_at": "2026-08-24T17:05:05Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
-  "stop_engaged": false
+  "stop_engaged": false,
+  "curriculum_registered_pr": 601
 }
