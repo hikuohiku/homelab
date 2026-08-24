@@ -7315,13 +7315,60 @@
         "broken": []
       },
       "stalled_reason": "adopt_gate_some_pass"
+    },
+    {
+      "id": "P-9025",
+      "title": "金庫は一度も開けて戻したことがない — vaultwarden の実データを restic から scratch に戻し、パスワードが生きて返ることを初めて実測する",
+      "state": "proposed",
+      "branch": "project/p-9025",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "test -f ops/vaultwarden_restore.py",
+        "test -f ops/projects/logs/P-9025/restore-summary.json",
+        "python3 -c \"import json;d=json.load(open('ops/projects/logs/P-9025/restore-summary.json'));assert d['integrity']=='ok' and d['rows']>0 and d['duration_seconds']>0\"",
+        "grep -q 'scratch' ops/projects/logs/P-9025/restore-summary.json"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-9025",
+        "title": "金庫は一度も開けて戻したことがない — vaultwarden の実データを restic から scratch に戻し、パスワードが生きて返ることを初めて実測する",
+        "why": "T-0117 (coder home) と P-0208 (syncthing) は復元を実証したが、人間のパスワード金庫 vaultwarden (sqlite) は一度も『開けて戻した』ことがない (archive に復元系 0 件)。しかも vaultwarden の backup CronJob は B2 の download cap 超過で実に失敗した実績がある (P-0111、substrate 実測)。『戻せるはず』はまだ証明されていない。VISION 段階 2 の『バックアップや復旧の実証』は、最重要データから始めるのが正しい順序。P-0341 が coder 向けに開けた restore 実測の道を、パスワード金庫に適用する。",
+        "cell": [
+          "security",
+          "experiment"
+        ],
+        "dod": "(1) 直近 24h 以内に vaultwarden の restic snapshot が無ければ backup CronJob を 1 回起動し、snapshot の実在を先に確定する。(2) ops/vaultwarden_restore.py が vaultwarden ns の backup と同一の restic credential (restic-external-secret.yaml) を使い、最新 snapshot を scratch PVC へ復元する (本番 PVC には触れない)。(3) 復元した sqlite で PRAGMA integrity_check と行数照合・checksum 照合を実行する。(4) 復元データで vaultwarden サーバを scratch 起動し、ログイン画面が立ち上がる (readonly) までを確認する。(5) 所要時間・転送量・integrity・行数を restore-summary.json に書き出し、docs/backup.md の復元手順に反映する。",
+        "verify": [
+          "test -f ops/vaultwarden_restore.py",
+          "test -f ops/projects/logs/P-9025/restore-summary.json",
+          "python3 -c \"import json;d=json.load(open('ops/projects/logs/P-9025/restore-summary.json'));assert d['integrity']=='ok' and d['rows']>0 and d['duration_seconds']>0\"",
+          "grep -q 'scratch' ops/projects/logs/P-9025/restore-summary.json"
+        ],
+        "irreversible": false,
+        "capabilities": [
+          "kubectl-write"
+        ],
+        "touches_apps": false,
+        "confidence": "confident",
+        "adopted": true,
+        "proposed_at": "2026-08-24T23:04:24Z"
+      },
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T22:50:33Z",
-  "last_activity_at": "2026-08-24T22:59:35Z",
+  "last_activity_at": "2026-08-24T23:05:08Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false,
-  "curriculum_registered_pr": 640
+  "curriculum_registered_pr": 643
 }
