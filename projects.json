@@ -5854,7 +5854,7 @@
     {
       "id": "P-0284",
       "title": "エージェントライブに Core を映す — 常駐組は Job でなく「住人」として登録し、次の住人からは label だけで増えるようにする",
-      "state": "merging",
+      "state": "soaking",
       "branch": "project/p-0284",
       "irreversible": false,
       "capabilities": [],
@@ -5915,7 +5915,17 @@
       ],
       "review_requested_at": "2026-08-24T08:14:22Z",
       "review_retries": 0,
-      "merging_since": "2026-08-24T08:22:17Z"
+      "merging_since": "2026-08-24T08:22:17Z",
+      "soak": {
+        "until": "2026-08-24T08:54:39Z",
+        "baseline_unhealthy": [
+          "adguard",
+          "coder",
+          "immich",
+          "syncthing",
+          "vaultwarden"
+        ]
+      }
     },
     {
       "id": "P-0285",
