@@ -2580,3 +2580,89 @@ decide commit が来たら projects.json diff を見る価値はある (beat 215
 curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
 か runner escape hatch が着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or
 03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
+
+## checkpoint (予算上限)
+
+予算のソフト上限到達により最終セッション (2026-08-24)。実装は行わず状態の書き残りのみ。
+起動直後の実測: ワーキングツリーはクリーン (**未コミット変更ゼロ — commit も破棄も不要
+だった**)、local HEAD = origin/project/p-0258 = 7b6c89406 (session 89 commit)、ブランチは
+未 merge、PR #581 head = 00de3c47b で session 74 以降不変、reporter ブランチも fe6ad481e
+のまま不変。
+
+### 受入チェックリストの達成状況
+
+| 項目 | 状態 |
+|------|------|
+| verify 1 (`kubectl kustomize apps \| grep -q 'name: recovery-canary'`) | **green** (最終実測 rc=0。通算 88 回目) |
+| verify 2 (`python3 -m unittest ops.tests.test_recovery_probe_parse`) | **green** (27 tests OK。通算 88 回目) |
+| verify 3 (`git show origin/ops-health-report:...`) | **red** (`recovery_probe: None`) — merge 前提のため構造的に red 固定 |
+
+DoD 3 点セットは**コードとして全部完成している**:
+
+- **(1)+(3)** `apps/recovery-canary/` 一式 (namespace / deployment pause 1 replica /
+  rbac resourceNames 固定 / cronjob schedule `43 3 * * *` / kustomization / application、
+  root 登録済み)。render 7 docs 全て YAML parse 通過
+- **(2)** reporter 側 3 点セット:
+  `apps/ops-health-reporter/recovery_probe.py` (純関数モジュール) +
+  `report.py` の `collect_recovery_probe()` (:441) と notes 文言 (:888、夜間一時的
+  Degraded を誤報しないための注記込み) + `rbac.yaml` configmaps get resourceNames への
+  `recovery-probe` 追加 (:33)。テスト `ops/tests/test_recovery_probe_parse.py`
+  27 本 (契約: ok のときのみ last_recovery_seconds int / fail は phase+error /
+  stale は age > 26h / 壊れた記録は no_data)
+
+CI 相当も session 3 時点で全 green 実測済み (ops/tests 467 本 + heart + runner tests、
+各 check スクリプト)。check_app_list_sync の drift 6 件は main 由来の既存問題で本ブランチ無関係。
+
+### 止まっている場所と次の一手
+
+**止まっている場所**: 「merge 待ち」。ただし単なる待ちではなく構造的デッドロック
+(session 12 で確定):
+
+1. runner は verify **全項目 green** でしか PR を開かない
+   (`ops/runner/runner.py:927` の `if verify and all(v["ok"] ...)`)
+2. verify 3 は main 由来の reporter が cluster 内で recovery_probe キーを書くまで
+   絶対に green にならない = **merge 前提**
+
+よって worker ループ自力では merge に到達できない。現存する唯一の PR である
+**#581 は curriculum が代理作成したもの** (session 74 前後、head 00de3c47b 不変)。
+
+**次に取るべき一手 (人間または再開された次の worker 向け。順序どおり):**
+
+1. **PR #581 をレビューして merge する** — 実装完成済み・テスト全 green なので
+   review のみ。状態確認:
+   `curl -s https://api.github.com/repos/hikuohiku/homelab/pulls/581`
+   差分ファイル: `apps/recovery-canary/*`,
+   `apps/ops-health-reporter/{recovery_probe.py,report.py,rbac.yaml,kustomization.yaml}`,
+   `apps/kustomization.yaml`, `ops/tests/test_recovery_probe_parse.py`, 本ログ
+2. **merge 後、ArgoCD が canary を deploy したことを確認**
+   `kubectl -n recovery-canary get deploy recovery-canary`
+   (これを飛ばすと Deployment 404 → wait-recreate の fail 記録を 20 分かけて書くだけになる)
+3. **夜を待たず初回計測を起こす**
+   `kubectl -n recovery-canary create job --from=cronjob/recovery-canary-probe p0258-first-run`
+   → `kubectl -n recovery-canary logs job/p0258-first-run` →
+   `kubectl -n recovery-canary get cm recovery-probe -o jsonpath='{.data.report\.json}'`
+4. **次の reporter run (:00/:30 JST) を待って verify 3 を実行** → green 化で完了
+
+初回 run が ok=false になったら report.json の phase/error で切り分けること
+(phase=delete + HTTP 403 → canary 自身の Role 問題 / wait-recreate → ArgoCD が
+recovery-canary Application を sync できていない疑い、Application の syncStatus を先に見る)。
+
+代替経路 (merge を待たない場合): P-0193 前例
+(`ops/projects/logs/P-0193/PROGRESS.md:267-282`) のとおり verify 3 を「merge 後確認」へ
+移す spec 修正をするか、runner に post-merge 依存 verify の escape hatch
+(ready_for_review 判定から除外し soak 中に実測) を入れる。後者は同型デッドロックの
+汎用対策になる (worker 権限外のためここに記すにとどめる)。
+
+### 残った不確実性
+
+- **初回計測値がまだ無い**。ArgoCD reconciliation は values.yaml 未設定 = 上流既定 3 分
+  のため復旧秒数は ~3 分 + Pod 起動数十秒と想定されるが、実測は初回 run まで取れない
+  (これが本プロジェクトの主産物そのものなので、merge + 初回計測まで納品価値が確定しない)
+- PUT resourceVersion 競合時は記録を書けずクラッシュ → stale 経路で拾う設計
+  (dashboard-smoke 流儀の許容) の発生頻度は実運用で未知
+- **P-0279** (健康レポート読み失敗修正、main 未着地) が将来 merge されると
+  `apps/ops-health-reporter/` で conflict する可能性。再開時はまず
+  `git grep -il recovery origin/main -- apps/ops-health-reporter/` で接触有無を確認
+  (session 16 発見)。merge-tree の再確認も (session 74 に rc=0 の前例あり)
+- runner の escape hatch が入らない限り、「post-merge 依存 verify を含む spec」は
+  未来でも同型の budget 消化 → stalled になりうる (session 12 発見の一般化)
