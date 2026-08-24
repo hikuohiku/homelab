@@ -54,18 +54,23 @@ export async function getSnapshot(): Promise<Snapshot> {
       transcriptAvailable: action.available,
     };
   }));
-  // 常駐組 (heart/resident Deployment) は projectId / transcript を持たない。
-  // 「応答可能か」= Ready 数を recentAction の位置に出す
-  const residentAgents: AgentSnapshot[] = kube.residents.map((r) => ({
-    id: r.id,
-    role: r.role,
-    projectId: r.id.toUpperCase(),
-    projectTitle: "常駐エージェント",
-    startedAt: r.startedAt,
-    podPhase: r.podPhase,
-    recentAction: `Ready ${r.readyReplicas}/${r.replicas}`,
-    transcriptAvailable: false,
-    resident: true,
+  // 常駐組 (heart/resident Deployment) は projectId を持たないが、P-9004 で
+  // transcripts/resident/<role>.jsonl に transcript を持つようになった。
+  // transcript があれば実測の最新アクションを、無ければ Ready 数を出す
+  // (transcriptAvailable は実ファイルの存在から決まる)
+  const residentAgents: AgentSnapshot[] = await Promise.all(kube.residents.map(async (r) => {
+    const action = await latestAction(r.role, r.id);
+    return {
+      id: r.id,
+      role: r.role,
+      projectId: r.id.toUpperCase(),
+      projectTitle: "常駐エージェント",
+      startedAt: r.startedAt,
+      podPhase: r.podPhase,
+      recentAction: action.available ? action.text : `Ready ${r.readyReplicas}/${r.replicas}`,
+      transcriptAvailable: action.available,
+      resident: true,
+    };
   }));
   const agents = [...jobAgents, ...residentAgents];
   const heartbeatAt = state.heartbeat.at ? Date.parse(state.heartbeat.at) : 0;

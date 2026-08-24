@@ -52,16 +52,17 @@ import (
 )
 
 type config struct {
-	opencodeURL   string
-	model         string
-	stateDir      string
-	githubToken   string
-	githubAPI     string
-	repo          string
-	branch        string
-	inboxDir      string
-	pollSeconds   int
-	healthSeconds int
+	opencodeURL       string
+	model             string
+	stateDir          string
+	githubToken       string
+	githubAPI         string
+	repo              string
+	branch            string
+	inboxDir          string
+	pollSeconds       int
+	healthSeconds     int
+	residentTranscript string
 }
 
 // 覚えておく既読ファイル名の上限。inbox は消えないので、無制限に持つと
@@ -101,6 +102,9 @@ func loadConfig() (*config, error) {
 		// 健全性レポートは 30 分周期の CronJob が書くので、速く見ても意味が無い。
 		// inbox と同じ速さで叩くと API を無駄に食うだけなので分ける
 		healthSeconds: 120,
+		// 常駐コアの transcript (P-9004) の書き先。autopilot-data を /shared に
+		// mount し、ここに transcripts/ を向ける。空なら tee しない (既定)
+		residentTranscript: strings.TrimSpace(os.Getenv("CORE_RESIDENT_TRANSCRIPTS_DIR")),
 	}
 	for _, spec := range []struct {
 		env string
@@ -515,6 +519,9 @@ func runDriver() {
 
 	sessionID := ""
 	var lastHealthCheck time.Time
+	// 常駐コアの transcript tee (P-9004)。セッションを張り直したら作り直す
+	var resident *residentTranscript
+	lastResidentCheck := time.Time{}
 	for {
 		// コアのツールが黙って壊れていないかを先に見る。ここが死んでいると
 		// 書き置きに返事はできても homelab を見られない
@@ -622,6 +629,23 @@ func runDriver() {
 		if time.Since(lastShadowCheck) >= shadowCheckInterval() {
 			shadow.tick(ctx, c)
 			lastShadowCheck = time.Now()
+		}
+
+		// 常駐コアの transcript を tee する (P-9004)。セッションの応答を
+		// prompt_async では受け取れないため、/session/{id}/message をポーリングして
+		// transcripts/resident/core.jsonl へ flat イベント行を追記する。
+		// 失敗しても会話の経路 (GitHub / bus) を止めてはならないので継続する
+		if sessionID != "" && cfg.residentTranscript != "" {
+			if resident == nil || resident.sessionID != sessionID {
+				resident = newResidentTranscript(c, sessionID,
+					filepath.Join(cfg.residentTranscript, "resident", "core.jsonl"))
+			}
+			if time.Since(lastResidentCheck) >= residentTranscriptInterval() {
+				if err := resident.sync(ctx); err != nil {
+					log.Printf("resident transcript: 追記失敗 (継続): %v", err)
+				}
+				lastResidentCheck = time.Now()
+			}
 		}
 
 		if !paced {
