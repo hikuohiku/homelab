@@ -152,6 +152,39 @@ def dashboard_smoke_alert(doc):
     }
 
 
+def checksum_alert(doc):
+    """latest.json から immich アセット整合性検証の警報すべき状態を抽出する (P-0361)。
+
+    report が作る checksum.status のうち fail / error のときだけ {status, reason} を
+    返す。それ以外 (ok / unconfigured / no_data、latest.json 無し・壊れ・checksum キー
+    無し) は None。unconfigured (閾値未設定) と no_data (産出側未稼働・記録破損) を
+    鳴らさないのは budget_alert() が unconfigured/no_data を沈黙させるのと同じ判断 —
+    鳴らせる状態になったときにだけ既存経路に乗る。
+
+    error (産出側の代役レコード = 装置自体の失敗) は fail と同様に鳴らす — 週次でしか
+    回らない予防装置が「測れなかった」まま沈黙すると、腐りの検出自体が黙って失われる
+    (dashboard_smoke_alert が tool_error を区別せず乗せる判断と同じ)。区別は reason が担う。
+
+    観測のみを行い判断しない (モジュール冒頭の原則)。鳴らすかどうかの繰り返し
+    抑制は budget_alert_due() が担う (status/date の一般判定なので流用する)。
+    """
+    if not isinstance(doc, dict):
+        return None
+    cs = doc.get("checksum")
+    if not isinstance(cs, dict):
+        return None
+    status = cs.get("status")
+    if status not in ("fail", "error"):
+        return None
+    reason = cs.get("reason")
+    return {
+        "status": status,
+        # reporter が reason を必ず文字列で書く契約だが、壊れていたら
+        # str() で捏造せず None (文面だけの欠落で警報は倒さない)
+        "reason": reason if isinstance(reason, str) and reason else None,
+    }
+
+
 def collect_jobs(k8s, namespace):
     """heart が生んだ Job の実状態。{job_name: {"active":bool,"failed":bool,"succeeded":bool}}"""
     out = {}

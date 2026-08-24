@@ -125,14 +125,25 @@ v3.0.1 には checkpoint 再開が 0 件処理のまま「全カバー」と嘘�
 - `apps/ops-health-reporter/rbac.yaml` の reader ClusterRole configmaps `resourceNames` に
   `immich-checksum-report` を追加済み。
 
-### 閾値 (DoD 3 — 未設定)
+### 閾値と incident 経路 (DoD 3)
 
 不一致検出時の incident 閾値は `ops/rules.json` の `checksum.mismatch_threshold` が
-唯一の宣言元。**現時点 (2026-08-24) は未設定**で、CronJob の `MISMATCH_THRESHOLD` env も
-未設定。この状態では report の status が `unconfigured` を正直に返す
-(`immich_checksum_check.DEFAULT_MISMATCH_THRESHOLD = None` の設計どおり)。
-設定するときは rules.json に 1 か所宣言し、CronJob の env を追記する
-(worker #2 が unconfigured 前提で実装済み)。
+**唯一の宣言元**。CronJob の `MISMATCH_THRESHOLD` env にこの値を渡し、
+`ops/check_version_sync.py` の GROUPS が両者の同期を機械的に検査する
+(rules.json と env の食い違いは CI で落ちる)。
+
+- 2026-08-24 時点の実値は `1` (検出したら即 incident)。原本 (人間の唯一の写真データ)
+  の腐り検出が目的のため、黙って 0 や 2 を決め打ちせず 1 にした。誤通知が気になる
+  場合は PR で上げる (rules.json は人間レビュー必須パス)。
+- report の status は `checksum_mismatch >= mismatch_threshold` で fail になる
+  (`ops/tools/immich_checksum_check.py` の `judge_mismatch`。この判定の正は実機で
+  確定すること)。
+- fail / error は latest.json の `checksum` 節から heart の `checksum_alert()`
+  (ops/heart/facts.py) が拾い、briefing-queue.jsonl への追記と incident 通知に乗せる。
+  同じ status の同一日内の再通知は cursors の `checksum_alert` 記録で落とす
+  (download-budget / dashboard-smoke と同じ流儀)。
+- env を外す (または rules.json から消す) と report の status が `unconfigured` を
+  正直に返し、heart は鳴らさない (budget の unconfigured と同じ判断)。
 
 ### 判定と報告の契約 (report.json)
 

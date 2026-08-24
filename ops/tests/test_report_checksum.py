@@ -110,7 +110,8 @@ class ContractTest(unittest.TestCase):
         self.assertEqual(out, payload)
 
     def test_unconfigured_passes_through_untouched(self):
-        # 閾値未設定 (rules.json の checksum.mismatch_threshold 未導入) の現状実装状態
+        # 閾値未設定 (CronJob の env が未設定の経路。rules.json の checksum.mismatch_threshold
+        # が宣言元で、反映は ops/check_version_sync.py が検査) でも集約側は素通しする契約
         payload = report_payload(status="unconfigured", ok=False, reason="閾値未設定")
         out, _ = collect(payload)
         self.assertEqual(out, payload)

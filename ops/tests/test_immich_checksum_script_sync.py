@@ -187,8 +187,9 @@ class TestRunnerFlow(unittest.TestCase):
         self.assertIn("run_elapsed_s", report["job"])
 
     def test_unconfigured_without_threshold(self):
-        # 閾値未設定 (rules.json の checksum.mismatch_threshold 未導入 = 現状の実装状態) では
-        # status=unconfigured を正直に出す。黙って 0 を決め打ちしない
+        # env MISMATCH_THRESHOLD が未設定の経路では status=unconfigured を正直に出す。
+        # 黙って 0 を決め打ちしない。閾値の宣言元は rules.json の checksum.mismatch_threshold
+        # で、CronJob env への反映は ops/check_version_sync.py が同期を検査する
         ns = _exec_runner({"IMMICH_API_KEY": "test-key"})
         ns["POLL_INTERVAL_S"] = 0
 

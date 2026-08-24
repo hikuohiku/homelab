@@ -631,8 +631,11 @@ spec:
                 - name: IMMICH_BASE
                   value: "http://immich-server:2283"
                 # 不一致とみなす閾値は rules.json の checksum.mismatch_threshold が
-                # 唯一の宣言元 (DoD 3)。未設定の間は report の status が unconfigured を
-                # 正直に返す (immich_checksum_check.DEFAULT_MISMATCH_THRESHOLD = None)
+                # 唯一の宣言元 (DoD 3)。ops/check_version_sync.py の GROUPS がこの値と
+                # rules.json の同期を機械的に検査する。env を外すと report の status が
+                # unconfigured を正直に返す (immich_checksum_check.DEFAULT_MISMATCH_THRESHOLD = None)
+                - name: MISMATCH_THRESHOLD
+                  value: "1"
                 - name: PYTHONDONTWRITEBYTECODE
                   value: "1"
               # PVC にも他 namespace にも触れない。immich API と自 namespace の ConfigMap

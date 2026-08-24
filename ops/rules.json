@@ -35,6 +35,10 @@
     "max_cycles": 3,
     "_comment": "reviewer の差し戻し回数上限。超えたら stalled にして review 型通知で人間に見せる"
   },
+  "checksum": {
+    "mismatch_threshold": 1,
+    "_comment": "immich のアセット整合性検証 (P-0361) の不一致閾値。唯一の宣言元 — CronJob (apps/immich/checksum-cronjob.yaml) の MISMATCH_THRESHOLD env は ops/check_version_sync.py がこの値と機械的に同期を検査する。semantics: 検出された checksum_mismatch がこの値以上なら report の status が fail になり、heart の checksum_alert が incident 通知 + briefing に乗せる。0 は「1 件でも不一致なら fail」。原本 (人間の唯一の写真データ) の腐り検出が目的なので既定は 1 (検出したら即通知)。誤通知が気になるなら PR で上げる"
+  },
   "heartbeat": {
     "stale_seconds": 7200,
     "_comment": "watchdog (外部) が ops-state の heartbeat をこの時間以上 stale と見たら通知。report.py の sinceSeconds=7200 と同じ値に揃えている"
