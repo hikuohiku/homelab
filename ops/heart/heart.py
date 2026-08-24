@@ -53,11 +53,26 @@ PARITY_ALERT_BEATS = 60
 # 通知に載せる取りこぼし id の上限 (全部載せると Discord の 1900 字を越える)
 PARITY_ALERT_IDS = 10
 
+# CR の件数が落ちてビートを止めている間、鳴らし直す間隔 (check_cr_census)。
+# 1 ビート目で必ず鳴らし、以後はこの間隔。仕事は止まっているので、鳴らさなければ
+# 誰も気づかないまま器が黙る — 取りこぼし (PARITY_ALERT_BEATS) より短く置く
+CENSUS_ALERT_BEATS = 15
+
 # 棄却案の台帳 (PVC)。git の ops/projects/archive.jsonl への追記を止めた 4b-2b
 # 以後、新しい死因はここに積み、次のビートが Project CR に移す
 REJECTED_LEDGER_FILE = "curriculum-rejected.jsonl"
 
 _stop = False
+
+
+class CrCensusStop(Exception):
+    """Project CR の件数が壊れて見えるのでビートを落とす (fail-closed)。
+
+    run() の try/except が受けてこのビートは丸ごと諦める。heartbeat.json も
+    書かれないので、続けば livenessProbe が Pod を再起動する — **それが正しい**。
+    記憶が飛んだまま「生きているが仕事をしていない」を続けるより、落ちて見える方が
+    直しやすい (P-0065 で liveness を入れたときと同じ判断)。
+    """
 
 
 def _sigterm(_sig, _frame):
@@ -139,6 +154,8 @@ class Heart:
         self.cr_fail_streak = 0
         # doc を PVC へ移せずにいるビート数 (migrate_projects_doc の守り)
         self.parity_gap_streak = 0
+        # CR の件数が床を割ったままのビート数 (check_cr_census)
+        self.census_streak = 0
 
     def k8s_client(self):
         if self.k8s is None:
@@ -517,6 +534,9 @@ class Heart:
             self.cfg.discord_webhook, self.work, self.cfg.rules, self.gh,
             self.cfg.feedback_issue,
         )
+        # 記憶が飛んだまま静かに回らない。**何かを決める前**に数える
+        # (設計 state-out-of-git の「CR が 0 件」)
+        cr_items = self.check_cr_census(notifier, now)
         self.migrate_projects_doc(notifier, now)
         sf = self.doc_store()
 
@@ -742,7 +762,7 @@ class Heart:
         # 外から見えるのはここだけになった。**書けなければ記録が止まる**ので、
         # 失敗が続けば note_cr_failures が人間を叩く
         try:
-            self.sync_project_crs(doc, notifier, now)
+            self.sync_project_crs(doc, notifier, now, existing=cr_items)
         except Exception as e:  # noqa: BLE001 — 1 ビートの失敗ではビートを止めない
             log(f"project CR sync failed: {e}")
             self.note_cr_failures(1, notifier, now)
@@ -800,6 +820,76 @@ class Heart:
         projects = projectcr.projects_from_items(items)
         log(f"projects.json が無い。Project CR から {len(projects)} 件を復元する")
         return {"version": 1, "projects": projects, "chores": []}
+
+    # --- 件数の床 (設計 state-out-of-git「CR が 0 件」の穴) ---
+
+    def check_cr_census(self, notifier=None, now=None):
+        """Project CR を数え、直前のビートから不自然に落ちていればビートを落とす。
+
+        「読めない」は例外になるので検知できる。塞ぐのは **「読めたが 0 件」** —
+        CRD が消えた・RBAC を外された・namespace や selector を取り違えた、の
+        どれでも API は 200 と空リストを返し、heart は「やることが無い」として
+        静かに回り続ける。112 件が 0 件になったのは「終わった」ではなく
+        「壊れた」で、そのまま回すと空の doc が正として書き戻される。
+
+        床 (直前に正常に読めた件数) の置き場は **PVC**。git は読み戻さない
+        (設計の原則) ので、metrics_store / work と同じ流儀で state/ に置く。
+        doc_store() ではなく self.docs に固定する — 床は移行前の checkout 側に
+        置く意味が無く、置き場が 2 つあると「どちらの床か」で迷う。
+
+        返り値はこのビートの CR 一覧で、sync_project_crs が使い回す
+        (全件 list をビートに 2 度打たない。ビートの間の書き手は heart だけ)。
+        **読めなければ None を返してビートは続ける** — 読み取り失敗は既存の経路
+        (採択登録は空で進む / note_cr_failures) が扱う分担で、ここが止めるのは
+        「読めたのに減っている」ときだけ。
+        """
+        try:
+            items = self.k8s_client().list_custom(
+                projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL
+            )
+        except Exception as e:  # noqa: BLE001 — 読めないことでは止めない
+            log(f"Project CR を数えられない (床は据え置く): {e}")
+            return None
+        floor = self.docs.load_census().get("cr_count")
+        problem = projectcr.census_problem(len(items), floor)
+        if problem is not None:
+            self.note_cr_census(problem, notifier, now)
+            raise CrCensusStop(problem)
+        self.census_streak = 0
+        # 床を動かすのは **正常に読めたビートだけ**。落としたビートで下げると
+        # 次のビートは下がった床を通り、装置が 1 回で無効になる
+        self.docs.save_census(
+            {"version": 1, "cr_count": len(items), "at": now_iso(now)}
+        )
+        return items
+
+    def note_cr_census(self, problem, notifier=None, now=None):
+        """件数の急減を人間に届ける。**note_cr_failures とは別に立てる**。
+
+        あちらは「書けない」でビートは続く。こちらは「記憶が消えた」でビートを
+        落とす — 直し方 (restic からの復元。docs/backup.md) も緊急度も違うので
+        1 本にまとめない。同時には鳴らない: 件数が床を割ったビートは書き込みまで
+        進まないので、note_cr_failures はそもそも呼ばれない。
+
+        指標に載せずに通知にするのは note_cr_failures と同じ理由 —
+        metrics.jsonl は PVC 内で読み手が居らず、「載せた」が「届く」にならない。
+        ビートが止まっている以上、届かなければ器は黙って死んだまま。
+        """
+        self.census_streak += 1
+        log(f"[cr-census] ビートを落とす: {problem}")
+        if self.census_streak % CENSUS_ALERT_BEATS != 1:
+            return
+        text = (
+            f"Project CR の件数が壊れているのでビートを止めています ("
+            f"{self.census_streak} ビート目)。{problem}。"
+            "CRD (apps/autopilot/crd-project.yaml) と RBAC を確認し、"
+            "消えていれば restic から戻してください (docs/backup.md の"
+            "「Project CR の restic バックアップ」)"
+        )
+        if notifier is None or self.cfg.shadow:
+            log(f"[cr-census] {text}")
+            return
+        notifier.send("incident", text, now)
 
     def cr_gap(self, doc):
         """git 側が知っている id のうち、まだ CR になっていないものを返す。
@@ -953,7 +1043,7 @@ class Heart:
         except Exception as e:  # noqa: BLE001 — 書けないことは沈黙として現れる
             log(f"lease renew failed: {e}")
 
-    def sync_project_crs(self, doc, notifier=None, now=None):
+    def sync_project_crs(self, doc, notifier=None, now=None, existing=None):
         """doc のプロジェクトと棄却案を Project CR に書く。
 
         4b-2b で **CR が正になった**。git 側の写しは凍結されたので、ここに書け
@@ -969,9 +1059,12 @@ class Heart:
         取り込みは自力で収束し、restic からの復元後もひとりでに埋め直る。
         """
         k8s = self.k8s_client()
-        existing = k8s.list_custom(
-            projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL
-        )
+        if existing is None:
+            # ビート冒頭の check_cr_census が引いた一覧を渡してもらう。
+            # 無いのは census が読めなかったときと、単体で呼ばれたとき
+            existing = k8s.list_custom(
+                projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL
+            )
         write, orphans = projectcr.plan(
             doc, existing, self.cfg.namespace, TERMINAL_STATES
         )

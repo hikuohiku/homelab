@@ -134,6 +134,10 @@ heart が読める形に落として渡す (critic の `CRITIC_INPUT` と同じ�
   書き込み前に statefiles.validate_projects() が守るのは従来どおり
 - **CR の書き込み失敗は続けば人間に鳴らす** (`heart.note_cr_failures`)。git 側の写しが
   無くなった今、書けなかったものは restic のバックアップにも乗らない
+- **CR の件数が落ちたらビートを落とす** (`heart.check_cr_census`)。「読めない」は例外に
+  なるが「読めたが 0 件」は 200 で返り、静かに通る。直前に正常に読めた件数を PVC の
+  床にして、0 件・1 割超の急減で止める (判定は `projectcr.census_problem`)。
+  床がまだ無いビートは通す — 新規デプロイで落とすと器が起動しない
 - **書き置きは 2 経路から読む**。issue #56 / ops-feedback ブランチ (GitHub) に加えて、
   同居する Go サイドカー (`apps/autopilot/bus-sidecar`) が NATS から
   `/data/feedback-bus/inbox/<id>.json` に落としたぶんも読む。所有者の「止めて」を
