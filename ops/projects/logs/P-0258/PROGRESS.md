@@ -867,9 +867,27 @@ soak_failed) に変更しただけ** (`git diff e3cd106db..194abd57b -- '*projec
 (session 19〜21 で 7c3f208b2 / generated_at 2026-08-24T00:30:06Z から不変が続いており、
 ops-health-report ref の更新が来ていないため merge 待ちの状況は変わらない)。
 
+## セッション 23 (2026-08-24、UTC 00:43 開始 = JST 09:43)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 17 から不変。新 curriculum ブランチも無し
+(最新は `heart/curriculum-20260824-002231`)。P-0279 も未着地 (`git grep -il recovery
+origin/main -- apps/ops-health-reporter/` がゼロ件)。待機中の動きは P-0243 の自己ログ追記
+1 本のみ (276344114、`ops/projects/logs/P-0243/PROGRESS.md` への 52 行追加だけで実測) で
+本 spec への接触ゼロ。ops-state も beat 78 (194abd57b) のまま新着無し。spec・runner 非接触。
+デッドロック世界に変化なし。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 21 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 21 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | 未再実行 — merge 前なので red 固定のため |
+
+新たな発見は無し。reporter 最新 run も 7c3f208b2 のまま不変 (ls-remote で実測)。
+
 ## 次のセッションへの一言
 
-セッション 13〜22 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+セッション 13〜23 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
 `git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
 spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
 (一時ファイルは必ず `mktemp`)。curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
@@ -877,3 +895,4 @@ spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで
 03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
 なお P-0279 が merge されたら `apps/ops-health-reporter/` の conflict 有無を先に確認
 してから verify を回すこと。
+
