@@ -158,8 +158,38 @@ def build_job(cfg, kind, *, project=None, project_id=None, attempt=0, extra_env=
                                 {"name": "work", "mountPath": "/work"},
                             ],
                             "resources": {
-                                "requests": {"cpu": "200m", "memory": "512Mi"}
-                                # memory limits は実測の裏付けなしに付けない (CHARTER §4)
+                                # CPU は requests と limits を実測に合わせて揃える。
+                                # 2026-08-24 18:18 JST、node01 (4 コア) が応答不能になった
+                                # ときの実測値:
+                                #
+                                #   runner-p-0302-a4           1012m
+                                #   runner-p-0304-a4            959m
+                                #   curriculum-system-a792813   956m
+                                #   autopilot-heart             834m
+                                #   ------------------------------------
+                                #   計                         3761m / 4000m
+                                #   → ホスト load 25、kube-apiserver / sshd / guest agent
+                                #     がいずれも無反応。メモリは枯渇していない (5.5/12 GiB)
+                                #
+                                # 壊れていた点は 2 つある:
+                                # (1) limits が無く、Job 1 本が 1 コアを丸ごと食えた。
+                                #     limit を実測ピーク (1012m) の位置 = 1 コアに置き、
+                                #     1 本の暴走を throttle で抑える
+                                # (2) requests 200m が実態 (~1000m) の 1/5 しかなく、
+                                #     スケジューラが 4 コアに 6 本を詰め込んだ。requests を
+                                #     実測に合わせると、ノードの容量そのものが同時実行数の
+                                #     ハードな上限になる。溢れた Job は Pending で待つ
+                                #     (ノードが落ちる代わりに順番待ちになる)
+                                #
+                                # curriculum / critic / chore は runner より軽いはずだが、
+                                # 実測が無い。「軽いはず」の見積もりで詰め込んだ結果が今回の
+                                # 全停止なので、種類ごとに緩めるのは実測を取ってから
+                                # (実測 956m の curriculum は runner とほぼ同じだった)。
+                                #
+                                # memory limits は付けない (CHARTER §4: 超過が回復不能な
+                                # OOMKill になる。CPU limits は throttle なので同列でない)
+                                "requests": {"cpu": "1", "memory": "512Mi"},
+                                "limits": {"cpu": "1"},
                             },
                         }
                     ],
