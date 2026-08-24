@@ -37,7 +37,11 @@
   },
   "heartbeat": {
     "stale_seconds": 7200,
-    "_comment": "watchdog (外部) が ops-state の heartbeat をこの時間以上 stale と見たら通知。report.py の sinceSeconds=7200 と同じ値に揃えている"
+    "_comment": "heart の Lease (coordination.k8s.io/autopilot-heart) の renewTime がこの時間以上古ければ沈黙とみなす。見るのはコア (apps/autopilot-core の driver) で、気づいたら Telegram で人間に言う (設計 state-out-of-git Phase 7)。report.py の sinceSeconds=7200 と同じ値に揃えている"
+  },
+  "health": {
+    "stale_seconds": 21600,
+    "_comment": "健全性レポート ConfigMap (autopilot/ops-health-report) の generated_at がこの時間以上古ければ ops-health-reporter 自身が死んだとみなす。書き手は 30 分毎なので 6h は 12 サイクル分の余裕。ops/heart/facts.py の HEALTH_FRESH_SECONDS (1h) より緩いのは、あちらが soak を fail-closed に倒すだけなのに対しこちらは人間を叩くため — 誤検知の代償が違う"
   },
   "transcripts": {
     "retention_days": 30,

@@ -69,6 +69,20 @@ class K8s:
             path += f"?labelSelector={label_selector}"
         return self.request("GET", path).get("items", [])
 
+    def apply_lease(self, namespace, name, body):
+        """生存の Lease を server-side apply する (設計 state-out-of-git Phase 7)。
+
+        apply_custom と同じ理由で PATCH 1 往復。書き手は heart だけで、
+        権限は RBAC (heart-lease-writer) が縛る
+        """
+        return self.request(
+            "PATCH",
+            f"/apis/coordination.k8s.io/v1/namespaces/{namespace}/leases/{name}"
+            "?fieldManager=heart&force=true",
+            body,
+            content_type="application/apply-patch+yaml",
+        )
+
     # --- カスタムリソース (Project CR。設計 state-out-of-git Phase 4) ---
     def list_custom(self, api_version, namespace, plural):
         return self.request(

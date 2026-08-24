@@ -42,9 +42,15 @@ type repoSyncer struct {
 	run  gitRunner
 }
 
+// repoWorkDir は main の作業コピーの置き場。silence.go も同じ場所から
+// ops/rules.json を読むので、既定値の解釈をここ 1 箇所に持つ。
+func repoWorkDir(cfg *config) string {
+	return envOr("CORE_REPO_DIR", filepath.Join(cfg.stateDir, "repo"))
+}
+
 func newRepoSyncer(cfg *config) *repoSyncer {
 	r := &repoSyncer{
-		dir:  envOr("CORE_REPO_DIR", filepath.Join(cfg.stateDir, "repo")),
+		dir:  repoWorkDir(cfg),
 		url:  envOr("CORE_REPO_URL", "https://github.com/"+cfg.repo+".git"),
 		ref:  envOr("CORE_REPO_REF", "main"),
 		home: cfg.stateDir,

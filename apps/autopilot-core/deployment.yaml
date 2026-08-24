@@ -248,6 +248,12 @@ spec:
             # 健全性レポートは 30 分周期の CronJob が書くので速く見ても意味が無い
             - name: CORE_HEALTH_SECONDS
               value: "120"
+            # 器の沈黙の見張り (設計 state-out-of-git Phase 7)。heart の Lease と
+            # 健全性レポートの**鮮度**を見て、古ければコアに知らせ、コアが Telegram で
+            # 所有者に言う。閾値は ops/rules.json (作業コピー /data/repo から読む) が
+            # 単一情報源で、ここには置かない。GitHub Actions の watchdog を畳んだ先
+            - name: CORE_SILENCE_SECONDS
+              value: "60"
             # MCP サイドカーの見張り。opencode は remote MCP を自動再接続せず、
             # サイドカーが再起動しても connected のままツールだけ黙って壊れる。
             # driver が boot 識別子の変化を見て POST /mcp/<name>/connect を叩く。

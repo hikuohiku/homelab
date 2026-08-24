@@ -218,6 +218,72 @@ subjects:
     name: autopilot-core
     namespace: autopilot
 ---
+# heart の生存を示す Lease (設計 state-out-of-git Phase 7)。ビートが最後まで通った
+# ときだけ renewTime が進むので、これは liveness probe ではなく **ビートの鮮度**を
+# 表す面になる。「プロセスは生きているのにループが回っていない」(P-0027) がここに出る。
+#
+# 書き手は heart だけ、読み手はコア。コアが古さを見て Telegram で人間に言う経路に
+# 置き換わったので、GitHub Actions の外部 watchdog は要らなくなった。
+#
+# create に resourceNames が効かない (作る前に名前で縛れない) ので 2 本に分けてある。
+# server-side apply は対象が無ければ作るため、create も要る。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: heart-lease-writer
+  namespace: autopilot
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    verbs: ["create"]
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    resourceNames: ["autopilot-heart"]
+    verbs: ["get", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: heart-lease-writer
+  namespace: autopilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: heart-lease-writer
+subjects:
+  - kind: ServiceAccount
+    name: autopilot-heart
+    namespace: autopilot
+---
+# 沈黙の見張り (コア) が読む Lease 1 個の get だけ。**書き込み動詞は渡さない**
+# (設計 D29)。ClusterRole `autopilot-reader` に leases を足さないのは、
+# 全 namespace の Lease は kube-system の leader election まで含み、必要な範囲より広いため
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: heart-lease-reader
+  namespace: autopilot
+rules:
+  - apiGroups: ["coordination.k8s.io"]
+    resources: ["leases"]
+    resourceNames: ["autopilot-heart"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: heart-lease-reader
+  namespace: autopilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: heart-lease-reader
+subjects:
+  # 常駐コア (apps/autopilot-core)。沈黙に気づいて Telegram で人間に言う
+  - kind: ServiceAccount
+    name: autopilot-core
+    namespace: autopilot
+---
 # Project CR (設計 state-out-of-git Phase 4)。**書き手は heart だけ**。
 # 「heart が唯一の書き手」は ops-state の時代は慣習でしかなく、Job が push するのを
 # 止めるものが無かった。CR にした狙いの半分はここで、API が止める。

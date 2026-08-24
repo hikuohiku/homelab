@@ -15,6 +15,10 @@
 //	(2) 健全性の変化 (人間に言われずに動く経路)
 //	    健全性レポート (ConfigMap) → 不調なアプリの顔ぶれが変わったら起こす
 //
+//	(3) 器の沈黙 (silence.go。設計 state-out-of-git Phase 7)
+//	    heart の Lease と健全性レポートの**鮮度** → 古ければ起こす。
+//	    以前は GitHub Actions の watchdog が ops-state を読んでいた役
+//
 // イベントを渡すほかに、コアが自分で調べるための材料も用意する:
 //
 //	main の作業コピー (repo.go) — PVC 上に clone を持ち、周期的に main へ合わせる。
@@ -525,6 +529,12 @@ func runDriver() {
 	}
 	lastShadowCheck := time.Time{}
 
+	// 沈黙の見張り (設計 state-out-of-git Phase 7)。heart のビートと健全性レポートの
+	// **鮮度**を見て、古ければコアに知らせ、コアが Telegram で所有者に言う。
+	// 旧構成では GitHub Actions が 30 分ごとに ops-state を読んでいた役
+	silence := newSilenceWatcher(cfg)
+	lastSilenceCheck := time.Time{}
+
 	cursorPath := filepath.Join(cfg.stateDir, "cursor.json")
 	healthCursorPath := filepath.Join(cfg.stateDir, "health-cursor.json")
 	seen, hadCursor := loadSeen(cursorPath)
@@ -630,6 +640,14 @@ func runDriver() {
 		if sessionID != "" && time.Since(lastHealthCheck) >= time.Duration(cfg.healthSeconds)*time.Second {
 			c.watchHealth(ctx, sessionID, healthCursorPath)
 			lastHealthCheck = time.Now()
+		}
+
+		// 器が黙っていないか。人間の書き置きより後、健全性より後に見る
+		// (どれも「人を待たせない」を優先した順序)。sessionID が空の間は
+		// 話しかけても失敗するだけなので飛ばす
+		if sessionID != "" && time.Since(lastSilenceCheck) >= silenceCheckInterval() {
+			silence.tick(ctx, c, sessionID, time.Now().UTC())
+			lastSilenceCheck = time.Now()
 		}
 
 		// shadow の立案。走るかどうかは決定論の shadowDue が決め、走る場合も

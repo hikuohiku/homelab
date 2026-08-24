@@ -160,6 +160,44 @@ func (k *kubeClient) healthReport(ctx context.Context) (string, error) {
 	return raw, nil
 }
 
+// healthReportGeneratedAt はレポートの generated_at だけを返す。
+// 沈黙の見張り (silence.go) が「reporter 自身が死んでいないか」を見るための口。
+func (k *kubeClient) healthReportGeneratedAt(ctx context.Context) (string, error) {
+	raw, err := k.healthReport(ctx)
+	if err != nil {
+		return "", err
+	}
+	var doc struct {
+		GeneratedAt string `json:"generated_at"`
+	}
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		return "", fmt.Errorf("健全性レポートが JSON として壊れている: %w", err)
+	}
+	return doc.GeneratedAt, nil
+}
+
+// --- heart の生存 (Lease) ---
+
+// heartLeaseRenewTime は heart が最後にビートを完走した時刻を返す。
+//
+// **liveness probe ではない。** heart は beat() の最後で renewTime を進めるので、
+// プロセスが起きたままループが止まっていればこの値は古くなる。P-0027 の
+// 「止まったまま死んだ」がここに出る。書き手は ops/heart/lease.py。
+func (k *kubeClient) heartLeaseRenewTime(ctx context.Context) (string, error) {
+	namespace, name := heartLeaseTarget()
+	var lease struct {
+		Spec struct {
+			RenewTime string `json:"renewTime"`
+		} `json:"spec"`
+	}
+	err := k.get(ctx,
+		"/apis/coordination.k8s.io/v1/namespaces/"+namespace+"/leases/"+name, &lease)
+	if err != nil {
+		return "", err
+	}
+	return lease.Spec.RenewTime, nil
+}
+
 // --- ArgoCD Application ---
 
 type appList struct {

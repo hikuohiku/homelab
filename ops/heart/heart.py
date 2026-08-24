@@ -31,6 +31,7 @@ from . import (
     facts,
     gate,
     gitutil,
+    lease,
     metrics,
     projectcr,
     reconcile,
@@ -690,6 +691,10 @@ class Heart:
         # 「最終行の usage」だけで、そのために 8.9 MB の metrics.jsonl を
         # 20 秒ごとに fetch していた (設計 state-out-of-git Phase 1)
         sf.write_heartbeat(i, now, usage=usage_info)
+        # 生存はクラスタの中の Lease でも示す (設計 state-out-of-git Phase 7)。
+        # **ここに置くこと自体が仕様**で、ビートが最後まで通ったときにしか
+        # renewTime は進まない。プロセスが生きていても止まっていれば古くなる
+        self.renew_lease(i, now)
         # admission gate に判定材料の写しを渡す (設計 rev3 Phase D)。
         # この写しの鮮度そのものが安全装置で、ビートが詰まればゲートは自動的に
         # 閉じる (reconcile.DISPATCH_SNAPSHOT_MAX_AGE_SECONDS)
@@ -704,6 +709,25 @@ class Heart:
         gitutil.commit_and_push_state(
             self.state_dir, self.cfg.state_branch, f"heart: beat {i}"
         )
+
+    def renew_lease(self, beat, now):
+        """生存の Lease を更新する (設計 state-out-of-git Phase 7)。
+
+        読み手はコアで、古ければ Telegram で人間に言う。**失敗してもビートは
+        落とさない** — 書けないなら Lease は自然に古くなり、沈黙として検知される
+        (fail-closed)。ここで例外を上げると、検知の道具が本体を殺すことになる。
+        """
+        body = lease.to_lease(
+            self.cfg.namespace,
+            holder=f"heart/{os.environ.get('HOSTNAME', 'unknown')}",
+            beat=beat,
+            now=now_iso(now),
+            stale_seconds=self.cfg.rules["heartbeat"]["stale_seconds"],
+        )
+        try:
+            self.k8s_client().apply_lease(self.cfg.namespace, lease.NAME, body)
+        except Exception as e:  # noqa: BLE001 — 書けないことは沈黙として現れる
+            log(f"lease renew failed: {e}")
 
     def sync_project_crs(self, doc, notifier=None, now=None):
         """projects.json の写しと、台帳の棄却案を Project CR に書く。
