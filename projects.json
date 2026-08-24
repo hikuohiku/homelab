@@ -7136,13 +7136,54 @@
       "spawn_count": 1,
       "job": "runner-p-0361-a1",
       "drift_count": 0
+    },
+    {
+      "id": "P-9010",
+      "title": "人間の声を運ぶバスが『消える』前提で動いている — NATS JetStream の耐久性を初めて実測する",
+      "state": "proposed",
+      "branch": "project/p-9010",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "test -f ops/security/nats_durability_audit.py && python3 ops/security/nats_durability_audit.py --selftest",
+        "test -s docs/security/nats-durability.md && grep -qE 'stream|retention' docs/security/nats-durability.md && grep -q 'veto' docs/security/nats-durability.md",
+        "! grep -qE 'TELEGRAM_BOT_TOKEN|AUTOPILOT_GITHUB_TOKEN|DISCORD_WEBHOOK' docs/security/nats-durability.md"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-9010",
+        "title": "人間の声を運ぶバスが『消える』前提で動いている — NATS JetStream の耐久性を初めて実測する",
+        "why": "2026-08-23 の設計 D16 で telegram-adapter → NATS JetStream → core/heart が新設され、人間のフィードバック・拒否権 (veto)・タスク依頼がこのバスを流れる唯一の経路になった (P-0328 採択の veto 疎通実測もこの上)。だが JetStream のストリーム設定 (retention / replicas / max_age / 重複排除)、メッセージの永続化、nats-jetstream PVC の実使用量と backup 対象かどうか (test_backup_coverage の網)、node01 喪失時に何が消えるか、consumer 不在時に publish されたメッセージが保持されるか — を実測した者は誰もいない (archive で jetstream は P-0242 の consumer 実装 1 件のみ)。『止めて』が届くことは P-0328 が測ったが、『届いた記録が失われないこと』は別次元。VISION が人間の介入の全てと定義するフィードバックと拒否権が、静かに消失しうる構造が未検査のまま残る。security の空白地帯 (過去 378 案に同型なし)。読み取り専用の監査で、クラスタの状態は変えない",
+        "cell": [
+          "security",
+          "investigate"
+        ],
+        "dod": "(1) ops/security/nats_durability_audit.py がクラスタ内から NATS の JetStream 状態を読み、stream ごとに {name, retention, replicas, max_age, max_bytes, subjects, current_msgs, consumers} を JSON で出す (届かない場合は reachable:false とその理由を正直に記録)。(2) nats-jetstream PVC の実使用量・容量・storageClassName と、test_backup_coverage が『実データを持つ PVC には backup CronJob がある』をどう判定するかを突き合わせ、この PVC が backup 対象か網の外かを確定する。(3) docs/security/nats-durability.md に『veto / フィードバック / タスク依頼が消えると何が困るか』を実測値付きで書き、必要なら改善提案 (replicas 化・backup 追加・max_age 延長・重複排除設定) を spec 断片として末尾に残す。(4) --selftest が同梱 fixture で stream 解析と判定ロジックを自己証明する (ネットワーク非依存)。",
+        "verify": [
+          "test -f ops/security/nats_durability_audit.py && python3 ops/security/nats_durability_audit.py --selftest",
+          "test -s docs/security/nats-durability.md && grep -qE 'stream|retention' docs/security/nats-durability.md && grep -q 'veto' docs/security/nats-durability.md",
+          "! grep -qE 'TELEGRAM_BOT_TOKEN|AUTOPILOT_GITHUB_TOKEN|DISCORD_WEBHOOK' docs/security/nats-durability.md"
+        ],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": false,
+        "confidence": "unsure",
+        "adopted": true,
+        "proposed_at": "2026-08-24T22:34:44Z"
+      },
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T22:25:45Z",
-  "last_activity_at": "2026-08-24T22:25:45Z",
+  "last_activity_at": "2026-08-24T22:35:40Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false,
-  "curriculum_registered_pr": 634
+  "curriculum_registered_pr": 637
 }
