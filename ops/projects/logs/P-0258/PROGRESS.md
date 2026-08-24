@@ -498,3 +498,29 @@ verify 1/2 の再実測と上表の更新だけでよい。
 merge された世界になったらセッション 3 記載の手順 (ArgoCD sync 確認 → 手動 Job or
 03:43 JST 待ち → reporter run 待ち) で初回計測を起こし、verify 3 を green にするのが
 最初で最後の残作業。
+
+## セッション 11 (2026-08-24 09:1x JST)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main は #579 → **#580 (P-0270 adguard) へ進んだが、新規 commit
+(#577〜#580, merge-base 4bdd5d39 以降) は本ブランチのファイルに一切触れない**
+(`git diff --name-only <merge-base>..origin/main | grep -E 'recovery-canary|ops-health-reporter|test_recovery_probe|ops/health'` で不在)
+ため conflict リスクは引き続きゼロ。reporter の最新 run も session 10 と同一
+(bd39f315f, 2026-08-24T09:00:12+09:00 = 00:00:07Z run)。3 項目を再実測:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 10 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 10 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | red (`recovery_probe: None`) — merge 前なので想定どおり |
+
+新たな発見は無し。
+
+## 次のセッションへの一言
+
+セッション 4〜10 と同じ。**やることは「merge 待ち」以外にない。** 起動したら最初に
+`git branch -r --merged origin/main | grep p-0258` で merge 済みか確認。未 merge なら
+verify 1/2 の再実測と上表の更新だけでよい。
+merge された世界になったらセッション 3 記載の手順 (ArgoCD sync 確認 → 手動 Job or
+03:43 JST 待ち → reporter run 待ち) で初回計測を起こし、verify 3 を green にするのが
+最初で最後の残作業。
