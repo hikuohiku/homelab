@@ -6507,11 +6507,52 @@
         ]
       },
       "stalled_reason": "gate_error"
+    },
+    {
+      "id": "P-9001",
+      "title": "常駐エージェント選択時に「transcript 信号を待っています」と出る不整合を直す",
+      "state": "stalled",
+      "branch": "project/p-9001",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "python3 -c \"import sys;s=open('apps/ops-dashboard/app/src/app/page.tsx').read();i=s.find('scope__empty');sys.exit(1 if i<0 else (0 if 'resident' in s[i:i+2000] else 1))\"",
+        "! grep -q '信号を待っています' apps/ops-dashboard/app/src/lib/snapshot.ts"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "dispatch_id": "d-5b629eb5dc3ffee8",
+      "requested_by": "core",
+      "spec": {
+        "id": "P-9001",
+        "title": "常駐エージェント選択時に「transcript 信号を待っています」と出る不整合を直す",
+        "why": "所有者が Telegram で明示依頼 (2026-08-24T17:41:24Z「dispatch_taskで送り直してくれる？」)。対象は既に request_task キューにも載せた件 (command_id=core-88af419dddaab42d) の即時着手版。\n\n何をしたいか: ops-dashboard で常駐エージェント (autopilot-core / autopilot-heart) を選んだときに出る「transcript 信号を待っています / ファイルが作られると自動で表示します」を、resident の場合は対象外であることが伝わる表示に変える。\n\nなぜ要るか (不整合の実体): apps/ops-dashboard/app/src/app/page.tsx:222-227 の空状態は agent がいれば役割に関係なく待機メッセージを出す。一方 apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 では resident の transcriptAvailable を false に固定しており、「ファイルが作られる」ことは設計上ない。つまり core/heart 選択時は、来る見込みのないものを「待っている」ように見える。所有者の指摘そのまま: 「transcriptAvailable を false にしたときのビューの表示に不整合がある transcript 信号を待っています と表示されている」。\n\nどこを見れば分かるか:\n- page.tsx の Scope コンポーネント内 scope__empty ブロック (222-227 行付近)。agent.resident フラグは同ファイルの AgentCard (75, 83 行) では既に使われているので、同じ分岐様式で空状態も差し替えるのが自然\n- 文言案は実装役に任せるが「常駐エージェントのため transcript 表示なし」等、待機でないことが伝わること\n\n注記: 常駐組の transcript 表示自体を追加する別件 (P-9000) が走っている。そちらが完了すればこの文言は再び変わる可能性があるが、P-9000 完了までの間も現状の誤解を招く表示は残るため、本件は独立して価値がある。",
+        "dod": "所有者が Telegram で明示依頼 (2026-08-24T17:41:24Z「dispatch_taskで送り直してくれる？」)。対象は既に request_task キューにも載せた件 (command_id=core-88af419dddaab42d) の即時着手版。\n\n何をしたいか: ops-dashboard で常駐エージェント (autopilot-core / autopilot-heart) を選んだときに出る「transcript 信号を待っています / ファイルが作られると自動で表示します」を、resident の場合は対象外であることが伝わる表示に変える。\n\nなぜ要るか (不整合の実体): apps/ops-dashboard/app/src/app/page.tsx:222-227 の空状態は agent がいれば役割に関係なく待機メッセージを出す。一方 apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 では resident の transcriptAvailable を false に固定しており、「ファイルが作られる」ことは設計上ない。つまり core/heart 選択時は、来る見込みのないものを「待っている」ように見える。所有者の指摘そのまま: 「transcriptAvailable を false にしたときのビューの表示に不整合がある transcript 信号を待っています と表示されている」。\n\nどこを見れば分かるか:\n- page.tsx の Scope コンポーネント内 scope__empty ブロック (222-227 行付近)。agent.resident フラグは同ファイルの AgentCard (75, 83 行) では既に使われているので、同じ分岐様式で空状態も差し替えるのが自然\n- 文言案は実装役に任せるが「常駐エージェントのため transcript 表示なし」等、待機でないことが伝わること\n\n注記: 常駐組の transcript 表示自体を追加する別件 (P-9000) が走っている。そちらが完了すればこの文言は再び変わる可能性があるが、P-9000 完了までの間も現状の誤解を招く表示は残るため、本件は独立して価値がある。",
+        "verify": [
+          "python3 -c \"import sys;s=open('apps/ops-dashboard/app/src/app/page.tsx').read();i=s.find('scope__empty');sys.exit(1 if i<0 else (0 if 'resident' in s[i:i+2000] else 1))\"",
+          "! grep -q '信号を待っています' apps/ops-dashboard/app/src/lib/snapshot.ts"
+        ],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": false,
+        "confidence": "unsure",
+        "adopted": true,
+        "proposed_by": "core-dispatch",
+        "cell": [
+          "self",
+          "feature"
+        ]
+      },
+      "stalled_reason": "gate_error"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T17:18:37Z",
-  "last_activity_at": "2026-08-24T17:55:04Z",
+  "last_activity_at": "2026-08-24T17:57:24Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": true,
   "stop_engaged": false,
