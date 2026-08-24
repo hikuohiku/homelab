@@ -93,7 +93,7 @@ class BeatCase(unittest.TestCase):
             ),
             mock.patch.object(
                 facts, "collect_feedback",
-                lambda gh, rd, cursors, *a, **k: (
+                lambda gh, cursors, *a, **k: (
                     [], [], False, [], False, [], [], dict(cursors)
                 ),
             ),

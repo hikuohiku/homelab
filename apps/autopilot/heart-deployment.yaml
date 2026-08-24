@@ -160,14 +160,14 @@ spec:
 
         # --- バス経路の受け口 (設計 D16 の段階 3) ---
         #
-        # 所有者の「止めて」が GitHub の可用性に依存している状態を解くための第 2 経路。
+        # 所有者の「止めて」が GitHub の可用性に依存している状態を解くための経路。
         # NATS の events.raw.> を durable pull consumer で読み、共有 PVC の
         # /data/feedback-bus/inbox/<id>.json に落とすだけ。判断は一切しない
-        # (triage は heart の純関数のまま)。heart は既存の issue #56 /
-        # ops-feedback ブランチと両読みし、同じ id は cursor が 1 回に落とす。
+        # (triage は heart の純関数のまま)。
         #
-        # このコンテナが死んでも heart は GitHub 経路で動き続ける。停止経路を運ぶ側が
-        # 可用性を下げてはいけないので、liveness/readiness は持たせない
+        # ops-feedback ブランチを畳んだ (state-out-of-git Phase 6) ので、書き置きが
+        # ファイルで届く経路はここ 1 本になった。読めなくなったことは heart の
+        # feedback_bus_alert が incident として人間へ運ぶ (黙って落とさない)
         - name: bus-sidecar
           # digest は merge commit c1e9de0 (PR #574) を build-heart-bus-image.yml が
           # ビルドした成果物の OCI index digest。registry API の

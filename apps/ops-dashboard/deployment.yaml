@@ -36,15 +36,8 @@ spec:
               value: autopilot
             - name: TRANSCRIPTS_DIR
               value: /data/transcripts
-            - name: GITHUB_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: ops-dashboard-github-token
-                  key: token
-                  # Secret が無くても閲覧は動かす (書き置きだけ 503 で issue #56 へ誘導)
-                  optional: true
-            # 書き置きの NATS 経路 (設計 state-out-of-git Phase 6)。
-            # seed が無ければ publish を試みず GitHub 側だけで動く
+            # 書き置きの publish 先 (設計 state-out-of-git Phase 6)。
+            # seed が無くても閲覧は動く (書き置きだけ 503 で issue #56 へ誘導)
             - name: NATS_URL
               value: nats://nats.autopilot.svc:4222
             - name: NATS_NKEY_SEED

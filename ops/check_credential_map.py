@@ -73,8 +73,7 @@ APPS_DIR = ROOT / "apps"
 # apps/ 配下の ExternalSecret が remoteRef.key で参照する Doppler (homelab/prd) キーの全種。
 DECLARED_DOPPLER_KEYS = frozenset(
     {
-        # autopilot 自身 (rules.json の allowed_autopilot_doppler_keys と重複するが別の意味論)。
-        # AUTOPILOT_GITHUB_TOKEN は ops-dashboard も参照する
+        # autopilot 自身 (rules.json の allowed_autopilot_doppler_keys と重複するが別の意味論)
         "AUTOPILOT_GITHUB_TOKEN",
         "CLAUDE_CODE_OAUTH_TOKEN",
         "DISCORD_WEBHOOK_URL",
@@ -134,7 +133,6 @@ DECLARED_SECRET_TARGETS = frozenset(
         "immich-restic-backup-credentials",
         "immich-restic-credentials",
         "operator-oauth",
-        "ops-dashboard-github-token",
         "ops-dashboard-nats-credentials",
         "autopilot-core-credentials",
         "nats-credentials",

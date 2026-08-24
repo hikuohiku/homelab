@@ -542,6 +542,10 @@ class Heart:
         # CPU 飽和前兆の警報すべき状態 (P-9037)。warn のときだけ中身があり、
         # ok/観測失敗は None (P-0128 の budget 警告と同じ 2 段階)
         saturation = facts.node_saturation_alert(health_doc)
+        # 書き置きのバス inbox が読めるか (設計 state-out-of-git Phase 6)。
+        # ops-feedback を畳んだので、ここが読めないと所有者の「止めて」を
+        # 落としたまま走り続ける。読めるときは None
+        bus_fault = facts.feedback_bus_alert(self.cfg.feedback_bus_dir)
         try:
             jobs = facts.collect_jobs(self.k8s_client(), self.cfg.namespace)
         except Exception as e:
@@ -560,9 +564,8 @@ class Heart:
             open_prs, merged_prs = {}, {}
         vetoes, acks, stop_all, review_needed, resume_all, task_requests, approves, cursors = (
             facts.collect_feedback(
-                self.gh, self.repo_dir, cursors, self.cfg.rules,
-                self.cfg.feedback_issue, self.cfg.feedback_branch,
-                self.cfg.feedback_bus_dir,
+                self.gh, cursors, self.cfg.rules,
+                self.cfg.feedback_issue, self.cfg.feedback_bus_dir,
             )
         )
         if vetoes or acks or approves or stop_all or review_needed or resume_all or task_requests:
@@ -668,6 +671,15 @@ class Heart:
                 f"Mission Control の描画断言が {smoke['status']} です: {smoke['reason']}"
             )
             smoke_queued = True
+        bus_incident_text = None
+        bus_queued = False
+        if facts.budget_alert_due(bus_fault, cursors.get("feedback_bus_alert"), today):
+            cursors["feedback_bus_alert"] = {
+                "status": bus_fault["status"],
+                "date": today,
+            }
+            bus_incident_text = f"書き置きのバス経路が読めません: {bus_fault['reason']}"
+            bus_queued = True
 
         # CPU 飽和前兆の警報 (P-9037)。流儀は上の budget / smoke 警報と同じ:
         # briefing-queue.jsonl への追記と incident 通知。同じ status の同一日内の
@@ -724,6 +736,16 @@ class Heart:
                 },
             )
             log(f"node_saturation alert: {saturation['status']} — queued to briefing")
+        if bus_queued:
+            self.work.append_jsonl(
+                "briefing-queue.jsonl",
+                {
+                    "at": now_iso(now),
+                    "source": f"feedback-bus ({bus_fault['status']})",
+                    "body": bus_fault["reason"],
+                },
+            )
+            log(f"feedback_bus alert: {bus_fault['status']} — queued to briefing")
         # タスク依頼の受領 (P-0091)。id 重複は merge_new が落とすので、
         # カーソル巻き戻り等で同じ note を再取り込みしても積み直さない
         queue = self.work.read_jsonl(tasks.QUEUE_FILE)
@@ -752,6 +774,11 @@ class Heart:
                 log(f"[shadow] notify[incident] {saturation_incident_text[:80]}")
             else:
                 notifier.send("incident", saturation_incident_text, now)
+        if bus_incident_text:
+            if self.cfg.shadow:
+                log(f"[shadow] notify[incident] {bus_incident_text[:80]}")
+            else:
+                notifier.send("incident", bus_incident_text, now)
 
         record = metrics.beat_record(
             now,

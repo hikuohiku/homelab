@@ -102,8 +102,8 @@ class BudgetAlertBeatTest(unittest.TestCase):
             mock.patch.object(
                 facts,
                 "collect_feedback",
-                # cursors (第 3 引数) をそのまま返す passthrough
-                lambda gh, rd, cursors, *a, **k: (
+                # cursors (第 2 引数) をそのまま返す passthrough
+                lambda gh, cursors, *a, **k: (
                     [], [], False, [], False, [], [], dict(cursors)
                 ),
             ),

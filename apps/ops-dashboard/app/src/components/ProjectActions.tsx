@@ -3,10 +3,10 @@
 // プロジェクトへの介入ボタン。issue #56 へコメントしに行かなくても、この画面から
 // 拒否・承認・既読化ができる。
 //
-// 送信先は書き置きと同じ /api/feedback (ops-feedback ブランチ)。heart の triage が
+// 送信先は書き置きと同じ /api/feedback (NATS 経由)。heart の triage が
 // "veto P-NNNN" / "approve P-NNNN" / "ack P-NNNN" を決定論で拾うので、専用の API も
-// 権限も要らない。この経路は autopilot に依存しない — heart が死んでいても意思は残り、
-// 復帰した heart が読む。
+// 権限も要らない。この経路は heart に依存しない — heart が死んでいても意思は
+// JetStream に残り、復帰した heart が読む。
 //
 // 押し間違いが取り返しのつかない操作になるので、2 段階にしてある (押す → 確定)。
 // 反映は heart のビート (最長 1 分) 後。押した直後に画面が変わらないのは正常。
