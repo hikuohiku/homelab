@@ -221,10 +221,19 @@ function TranscriptViewer({ agent }: { agent?: AgentSnapshot }) {
       </header>
       <div className="scope__screen" ref={scrollRef} onScroll={onScroll}>
         {events.length === 0 ? (
-          <div className="scope__empty">
-            <strong>{agent ? "transcript 信号を待っています" : "走行中の Job はありません"}</strong>
-            <span>{agent ? "ファイルが作られると自動で表示します" : "次の起動時にここへ会話が流れます"}</span>
-          </div>
+          // 常駐は transcript ファイルが生える設計でない (snapshot.ts が transcriptAvailable:
+          // false に固定)。「来る見込みのないものを待っている」ように見えないよう先に分岐
+          agent?.resident ? (
+            <div className="scope__empty">
+              <strong>常駐エージェントのため transcript 表示なし</strong>
+              <span>稼働状態はエージェントカードに表示されます</span>
+            </div>
+          ) : (
+            <div className="scope__empty">
+              <strong>{agent ? "transcript 信号を待っています" : "走行中の Job はありません"}</strong>
+              <span>{agent ? "ファイルが作られると自動で表示します" : "次の起動時にここへ会話が流れます"}</span>
+            </div>
+          )
         ) : events.map((event, index) => <TranscriptLine key={`${event.id}-${index}`} event={event} />)}
       </div>
       {!following && (
