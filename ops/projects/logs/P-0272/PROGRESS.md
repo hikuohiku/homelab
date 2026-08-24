@@ -46,3 +46,44 @@
 **次のセッションへ一言**: レビュー指摘があればそれを最優先。verify 1 が権限で落ちている間は
 「ツール単体の green 実測ログ (本ファイル上記) を証拠に、wrapper の実行ユーザー確認を依頼する」のが道筋。
 parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に触ること。
+
+### 2026-08-24 セッション 2 — verify 1 の環境問題を断定 (コード変更ゼロ。証跡と解消案を確定)
+
+**状況**: 唯一の failing は verify 1、レビュー指摘は無し。このセッションで原因の切り分けを完了した。
+**コードの変更は今回ゼロ** (実装はセッション 1 で完成しており、触るべき箇所が無かった)。
+
+**断定した事実 (すべてこのコンテナでの実測)**:
+
+- worker セッションも `uid=10001(autopilot)` で、wrapper と同一ユーザー。`sudo` は存在しない
+- `/tmp/opencode` は `root:root drwxr-xr-x` (2026-08-22 07:41 作成のまま不変)。uid 10001 に
+  書込権がなく特権も無いため、**この環境内では誰にも解消できない**
+- verify 1 再現: `write_text` で `PermissionError: [Errno 13] ... '/tmp/opencode/human-tasks.json'`、
+  rc=1 (wrapper 実測と同一トレース)。ディレクトリ書込権なしにその中へファイルを作る方法は
+  OS 上存在しない → **human_tasks.py の中身に関わらず、現環境では verify 1 は絶対に green にならない**
+- 一方、書き先を mktemp に変えただけの同一検証 (同一 assert 文) は **green 実測**: 4 件
+  (T-0107/T-0140/T-0141/T-0148)、全キー揃い、created join も機能 (age_days=18 @2026-08-24)、
+  出力順も古い順。ロジックは完成している
+- verify 2・3 も本日再実測 green (unittest 10 tests OK)
+
+**wrapper への依頼 (これで verify 1 が通る)**:
+
+- 最小修正: runner 内で root 権限により `chown autopilot:autopilot /tmp/opencode`
+  (または起動時に `install -d -o autopilot -g autopilot /tmp/opencode`)。`chmod 1777` でも可だが、
+  sticky bit 下では「他 uid の残した既存ファイル」への open('w') が EACCES になる罠があるため、
+  実行 uid 固定の chown の方が確実。修正時に既存の `human-tasks.json` があれば消すこと
+- 代替案: 受入コマンドのみ root で実行する / 以降の spec の受入は固定パスを避ける (curriculum 議論)
+
+**分かったこと / 罠**:
+
+- busybox mktemp はテンプレート末尾以外の `X` を許さない (`mktemp /tmp/hoge.XXXXXX.json` は
+  Invalid argument。素の `mktemp` を使う)
+- verify 1 が通った後も出力ファイルは実行 uid の所有物として残る。別 uid の再実行は上書きで
+  PermissionError になる → 環境修正時に一度掃除するのが安全
+
+**発見 (spec 外)**: 前セッションの「固定パス /tmp/opencode 問題」に一般化の根拠が加わっただけで
+新規なし。「受入コマンドの固定パスは実行 uid が変わると即死する」が実証された。
+
+**次のセッションへ一言**: コードは完成済み、やることは環境確認だけ。まず `ls -ld /tmp/opencode` を見よ。
+autopilot から書ける状態になっていれば verify 1 をそのまま実行して green を貼るだけでよい。
+まだ root 所有なら上記の wrapper への依頼が未処理ということ (コード側にやることは無い)。
+parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
