@@ -6719,11 +6719,87 @@
       "review_retries": 0,
       "review_cycles": 1,
       "merging_since": "2026-08-24T20:18:26Z"
+    },
+    {
+      "id": "P-9005",
+      "title": "常駐エージェント選択時に「transcript 信号を待っています」と出る不整合を直す",
+      "state": "active",
+      "branch": "project/p-9005",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "dispatch_id": "d-0f31db0547c99260",
+      "requested_by": "core",
+      "spec": {
+        "id": "P-9005",
+        "title": "常駐エージェント選択時に「transcript 信号を待っています」と出る不整合を直す",
+        "why": "所有者が Telegram で明示依頼 (2026-08-24T20:22:40Z)。前回 dispatch (P-9003, dispatch_id=d-6c9f83c7bf3e4e81) は ox-alpha-free の混雑で失敗したため、モデル切替 (opencode-go/deepseek-v4-flash) 後の再送。verify は所有者の指示により省略。\n\n何をしたいか: ops-dashboard で常駐エージェント (autopilot-core / autopilot-heart) を選んだときに出る「transcript 信号を待っています / ファイルが作られると自動で表示します」を、resident の場合は対象外であることが伝わる表示に変える。\n\nなぜ要るか (不整合の実体): apps/ops-dashboard/app/src/app/page.tsx:222-227 の空状態は agent がいれば役割に関係なく待機メッセージを出す。一方 apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 では resident の transcriptAvailable を false に固定しており、「ファイルが作られる」ことは設計上ない。つまり core/heart 選択時は、来る見込みのないものを「待っている」ように見える。所有者の指摘そのまま: 「transcriptAvailable を false にしたときのビューの表示に不整合がある transcript 信号を待っています と表示されている」。\n\nどこを見れば分かるか:\n- page.tsx の Scope コンポーネント内 scope__empty ブロック (222-227 行付近)。agent.resident フラグは同ファイルの AgentCard (75, 83 行) で既に使われているので同じ分岐様式で差し替えるのが自然\n- 文言案は実装役に任せるが「常駐エージェントのため transcript 表示なし」等、待機でないことが伝わること\n\n注記: 同趣向の P-0318 が 2026-08-24T18:43Z の立案ラウンドで不採択 (improve_hint: P-0317 merge 後の整理として再提出)。また P-9004 (resident transcript 表示の追加) と並走するため、そちらの merge 状況を見て文言を合わせる判断は実装役に委ねる。",
+        "dod": "所有者が Telegram で明示依頼 (2026-08-24T20:22:40Z)。前回 dispatch (P-9003, dispatch_id=d-6c9f83c7bf3e4e81) は ox-alpha-free の混雑で失敗したため、モデル切替 (opencode-go/deepseek-v4-flash) 後の再送。verify は所有者の指示により省略。\n\n何をしたいか: ops-dashboard で常駐エージェント (autopilot-core / autopilot-heart) を選んだときに出る「transcript 信号を待っています / ファイルが作られると自動で表示します」を、resident の場合は対象外であることが伝わる表示に変える。\n\nなぜ要るか (不整合の実体): apps/ops-dashboard/app/src/app/page.tsx:222-227 の空状態は agent がいれば役割に関係なく待機メッセージを出す。一方 apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 では resident の transcriptAvailable を false に固定しており、「ファイルが作られる」ことは設計上ない。つまり core/heart 選択時は、来る見込みのないものを「待っている」ように見える。所有者の指摘そのまま: 「transcriptAvailable を false にしたときのビューの表示に不整合がある transcript 信号を待っています と表示されている」。\n\nどこを見れば分かるか:\n- page.tsx の Scope コンポーネント内 scope__empty ブロック (222-227 行付近)。agent.resident フラグは同ファイルの AgentCard (75, 83 行) で既に使われているので同じ分岐様式で差し替えるのが自然\n- 文言案は実装役に任せるが「常駐エージェントのため transcript 表示なし」等、待機でないことが伝わること\n\n注記: 同趣向の P-0318 が 2026-08-24T18:43Z の立案ラウンドで不採択 (improve_hint: P-0317 merge 後の整理として再提出)。また P-9004 (resident transcript 表示の追加) と並走するため、そちらの merge 状況を見て文言を合わせる判断は実装役に委ねる。",
+        "verify": [],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": false,
+        "confidence": "unsure",
+        "adopted": true,
+        "proposed_by": "core-dispatch",
+        "cell": [
+          "self",
+          "feature"
+        ]
+      },
+      "job": "runner-p-9005-a1",
+      "spawn_count": 1,
+      "job_created_at": "2026-08-24T20:23:00Z",
+      "drift_count": 0
+    },
+    {
+      "id": "P-9004",
+      "title": "ダッシュボードのエージェントライブに core / heart の transcript 表示を追加",
+      "state": "active",
+      "branch": "project/p-9004",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "dispatch_id": "d-1627ee89ba3a5b42",
+      "requested_by": "core",
+      "spec": {
+        "id": "P-9004",
+        "title": "ダッシュボードのエージェントライブに core / heart の transcript 表示を追加",
+        "why": "所有者が Telegram で明示依頼 (2026-08-24T20:22:40Z)。前回 dispatch (P-9002, dispatch_id=d-4532c8ad284ce4a8) は ox-alpha-free の混雑で失敗したため、モデル切替 (opencode-go/deepseek-v4-flash) 後の再送。verify は所有者の指示により省略。\n\n何をしたいか: ops-dashboard のエージェントライブで、常駐エージェント (autopilot-core / autopilot-heart) の transcript を見えるようにする。\n\nなぜ要るか: 現行実装は apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 のコメント「常駐組 (heart/resident Deployment) は projectId / transcript を持たない」どおり、resident の transcriptAvailable を false に固定している。transcript 表示機構自体は Job 由来の役割名 (runner|reviewer|curriculum|critic|consolidation|chore)-<projectId>-aN しか parseAgentName で解釈しない (apps/ops-dashboard/app/src/lib/transcript.ts:172-177)。/data/transcripts/ 配下は worker/review/curriculum/critic のディレクトリのみで core/heart の出力はどこにも落ちていない。\n\nどこを見れば分かるか:\n- apps/ops-dashboard/app/src/lib/snapshot.ts (residentAgents を固定値で組んでいる箇所)\n- apps/ops-dashboard/app/src/lib/transcript.ts (findTranscriptFile / latestAction / transcriptMode)\n- apps/ops-dashboard/app/src/app/page.tsx (LIVE TRANSCRIPT パネル、SSE /api/agents/[agentId]/events)\n- transcript 実体は PVC autopilot-data の /data/transcripts/<role>/ 配下 (apps/ops-dashboard/deployment.yaml の DATA_DIR=/data/transcripts)\n\n実装の方向は実装役の判断に任せる。参考: 同趣向の P-0317 が 2026-08-24T18:43Z の立案ラウンドで採択済み — 重複するなら統合・破棄の判断は heart に委ねる。",
+        "dod": "所有者が Telegram で明示依頼 (2026-08-24T20:22:40Z)。前回 dispatch (P-9002, dispatch_id=d-4532c8ad284ce4a8) は ox-alpha-free の混雑で失敗したため、モデル切替 (opencode-go/deepseek-v4-flash) 後の再送。verify は所有者の指示により省略。\n\n何をしたいか: ops-dashboard のエージェントライブで、常駐エージェント (autopilot-core / autopilot-heart) の transcript を見えるようにする。\n\nなぜ要るか: 現行実装は apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 のコメント「常駐組 (heart/resident Deployment) は projectId / transcript を持たない」どおり、resident の transcriptAvailable を false に固定している。transcript 表示機構自体は Job 由来の役割名 (runner|reviewer|curriculum|critic|consolidation|chore)-<projectId>-aN しか parseAgentName で解釈しない (apps/ops-dashboard/app/src/lib/transcript.ts:172-177)。/data/transcripts/ 配下は worker/review/curriculum/critic のディレクトリのみで core/heart の出力はどこにも落ちていない。\n\nどこを見れば分かるか:\n- apps/ops-dashboard/app/src/lib/snapshot.ts (residentAgents を固定値で組んでいる箇所)\n- apps/ops-dashboard/app/src/lib/transcript.ts (findTranscriptFile / latestAction / transcriptMode)\n- apps/ops-dashboard/app/src/app/page.tsx (LIVE TRANSCRIPT パネル、SSE /api/agents/[agentId]/events)\n- transcript 実体は PVC autopilot-data の /data/transcripts/<role>/ 配下 (apps/ops-dashboard/deployment.yaml の DATA_DIR=/data/transcripts)\n\n実装の方向は実装役の判断に任せる。参考: 同趣向の P-0317 が 2026-08-24T18:43Z の立案ラウンドで採択済み — 重複するなら統合・破棄の判断は heart に委ねる。",
+        "verify": [],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": false,
+        "confidence": "unsure",
+        "adopted": true,
+        "proposed_by": "core-dispatch",
+        "cell": [
+          "self",
+          "feature"
+        ]
+      },
+      "job": "runner-p-9004-a1",
+      "spawn_count": 1,
+      "job_created_at": "2026-08-24T20:23:00Z",
+      "drift_count": 0
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T19:58:03Z",
-  "last_activity_at": "2026-08-24T20:20:45Z",
+  "last_activity_at": "2026-08-24T20:23:00Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": true,
   "stop_engaged": false,
