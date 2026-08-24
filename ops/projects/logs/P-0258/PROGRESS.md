@@ -926,3 +926,33 @@ spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで
 03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
 なお P-0279 が merge されたら `apps/ops-health-reporter/` の conflict 有無を先に確認
 してから verify を回すこと。
+
+## セッション 25 (2026-08-24、UTC 01:1x 開始 = JST 10:1x)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 17 から不変。新 curriculum ブランチも無し
+(最新は `heart/curriculum-20260824-002231`)。P-0279 も未着地 (`git grep -il recovery
+origin/main -- apps/ops-health-reporter/` がゼロ件)。待機中の動きは p-0243 (セッション
+28/29 の自己ログ追記、`b73498083` は PROGRESS.md +55 行のみを実測) と p-0272 の自己ログ追記
+(`b37cce93d` も PROGRESS.md のみ) のみで、本 spec への接触ゼロ、conflict リスク無し。
+ops-state も beat 84 (77f733404) から新着無し (`heartbeat.json`/`metrics.jsonl` のみの既知
+beat)。spec・runner 非接触。デッドロック世界に変化なし。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 23 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 23 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | 未再実行 — merge 前なので red 固定のため |
+
+新たな発見は無い。reporter 最新 ref も 7c3f208b2 のまま不変 (ls-remote で実測)。
+
+## 次のセッションへの一言
+
+セッション 13〜25 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+`git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
+spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
+(一時ファイルは必ず `mktemp`)。curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
+か runner escape hatch が着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or
+03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
+なお P-0279 が merge されたら `apps/ops-health-reporter/` の conflict 有無を先に確認
+してから verify を回すこと。
