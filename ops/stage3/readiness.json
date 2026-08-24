@@ -40,17 +40,17 @@
     },
     {
       "id": "loop-continuity-guarded",
-      "criterion": "ループの連続性が内側 (livenessProbe) と外側 (watchdog) の両方で守られている",
-      "threshold": "(a) heart Deployment に heartbeat 鮮度で再起動させる livenessProbe がある (b) GitHub Actions watchdog が 30 分毎に stale 判定し、沈黙を issue #56 で人間に届ける (c) stale_seconds など閾値が rules.json に単一情報源として宣言されている",
-      "current_value": "二重構え済み — heart-deployment.yaml の livenessProbe (initialDelaySeconds 300 / periodSeconds 30 / failureThreshold 3, P-0065 由来)、watchdog.yml cron */30 * * * *、check_heartbeat_fresh.py は fail-closed 判定 (rules.json heartbeat.stale_seconds=7200)",
-      "evidence_path": ".github/workflows/watchdog.yml",
+      "criterion": "ループの連続性が内側 (livenessProbe) と、ループの外に居る別プロセス (常駐コア) の両方で守られている",
+      "threshold": "(a) heart Deployment に heartbeat 鮮度で再起動させる livenessProbe がある (b) 常駐コアが heart の Lease の鮮度を見て、沈黙していたら Telegram で所有者に届ける (c) stale_seconds など閾値が rules.json に単一情報源として宣言されている",
+      "current_value": "二重構え済み — heart-deployment.yaml の livenessProbe (initialDelaySeconds 300 / periodSeconds 30 / failureThreshold 3, P-0065 由来)、コアの driver が 60 秒毎に Lease の renewTime と健全性レポートの generated_at を fail-closed で判定 (rules.json heartbeat.stale_seconds=7200 / health.stale_seconds=21600)。GitHub Actions の watchdog は state-out-of-git Phase 7 で撤去した (機械が git を定期的に叩く経路を残さない)。node01 ごと死ねばコアも死ぬが、そのとき Telegram が応答しなくなることが所有者に見える",
+      "evidence_path": "apps/autopilot-core/app/silence.go",
       "pass": true
     },
     {
       "id": "veto-machine-enforced",
       "criterion": "人間の拒否権が運用の善意ではなく機械条件として倒れる",
       "threshold": "ops/rules.json に veto 窓 (window_hours) と stop_keywords が宣言され、heart triage がそれを実装していること。irreversible プロジェクトは常に窓を待つこと",
-      "current_value": "宣言・実装済み — rules.json veto.window_hours=24 + stop_keywords 7 種 (irreversible=true は常に窓を待つ旨も明記)。triage.classify が veto P-NNNN / 停止キーワードを機械分類し、解釈できない停止命令は全停止に倒れる (watchdog 本文の不変条件まで test_check_heartbeat_fresh.py が固定)",
+      "current_value": "宣言・実装済み — rules.json veto.window_hours=24 + stop_keywords 7 種 (irreversible=true は常に窓を待つ旨も明記)。triage.classify が veto P-NNNN / 停止キーワードを機械分類し、解釈できない停止命令は全停止に倒れる",
       "evidence_path": "ops/rules.json",
       "pass": true
     }

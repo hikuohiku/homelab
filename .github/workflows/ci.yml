@@ -51,7 +51,7 @@ jobs:
       - name: ops state validate
         run: python3 ops/validate.py
 
-      - name: unit tests (heart / runner / watchdog logic)
+      - name: unit tests (heart / runner / ops)
         run: |
           python3 -m unittest discover -s ops/heart/tests -t .
           python3 -m unittest discover -s ops/runner/tests -t .
