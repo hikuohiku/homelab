@@ -5714,7 +5714,7 @@
     {
       "id": "P-0278",
       "title": "application-controller の 512Mi の壁を、30 日分の実測ピークから引き直して今日で終わらせる",
-      "state": "proposed",
+      "state": "active",
       "branch": "project/p-0278",
       "irreversible": false,
       "capabilities": [],
@@ -5775,12 +5775,13 @@
         "verdict": "all_fail",
         "passed": [],
         "broken": []
-      }
+      },
+      "veto_deadline": "2026-08-24T07:03:35Z"
     },
     {
       "id": "P-0279",
       "title": "健康レポートが自分への入力を 2 箇所で読み失敗している — heart の心拍 (HTTP 400) と画面スモーク (404) を今日の実測で復活させる",
-      "state": "proposed",
+      "state": "stalled",
       "branch": "project/p-0279",
       "irreversible": false,
       "capabilities": [],
@@ -5843,12 +5844,13 @@
           "git fetch origin ops-health-report --depth=1 && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); s=d.get('dashboard_smoke',{}); assert s.get('status') not in ('no_data',None), s\""
         ],
         "broken": []
-      }
+      },
+      "stalled_reason": "adopt_gate_some_pass"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T07:00:05Z",
-  "last_activity_at": "2026-08-24T07:00:05Z",
+  "last_activity_at": "2026-08-24T07:03:35Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
