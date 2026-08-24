@@ -75,15 +75,19 @@ opencode の permission は **マッチするルールが無いと既定が `ask
 
 ```
 (1) 人間の書き置き
-    telegram-adapter / ダッシュボード → ops-feedback の inbox（GitHub）
-                                     → NATS の events.raw.*（設計 D16）
-      → driver が両方から拾う → POST /session/{id}/prompt_async
+    telegram-adapter / ダッシュボード → NATS の events.raw.*（設計 D16）
+      → driver が拾う → POST /session/{id}/prompt_async
       → コアが telegram_reply で所有者へ直接返す
 
 (2) 健全性の変化 ← 人間に言われずに動く経路
     ConfigMap autopilot/ops-health-report の latest.json
       → 不調なアプリの顔ぶれが変わったら driver が起こす
       → コアが homelab_health で詳細を見て所有者に知らせる
+
+(3) 器の沈黙 ← 人間に言われずに動く経路（設計 state-out-of-git Phase 7）
+    heart の Lease の renewTime / 健全性レポートの generated_at の**鮮度**
+      → 閾値（ops/rules.json）より古ければ driver が起こす
+      → コアが telegram_reply で所有者に知らせる
 ```
 
 (2) は VISION の「指示を待たない」の最小実装。**同じ異常が続いている間は起こさない**
@@ -101,23 +105,21 @@ watcher が要る（設計 D15）。
 | 区間 | 時間 | 律速か |
 |---|---|---|
 | Telegram → adapter | ほぼ 0 | long poll なので即返る |
-| adapter → ops-feedback | 約 1 秒 | GitHub Contents API |
-| ops-feedback → driver | **0〜5 秒** | `CORE_POLL_SECONDS` |
+| adapter → NATS | ほぼ 0 | JetStream の ack を待つだけ |
+| NATS → driver | ほぼ 0 | Fetch が publish の瞬間に返る |
 | driver → コアの返事 | **十数秒〜** | LLM の思考時間。**ここが最大** |
 
-イベントバスを入れて縮むのは 3 段目だけで、最大でも数秒。**支配項は LLM の思考時間**
-なので、体感を変えたいならモデル選択かプロンプトの短さの方が効く。
+**支配項は LLM の思考時間**なので、体感を変えたいならモデル選択かプロンプトの
+短さの方が効く。
 driver は「コアへ渡した」ログに `受信から Ns` を出すので、実測で確かめられる。
 
-### バスからの入力（移行中）
+### バスからの入力
 
-publish 側（telegram-adapter）が GitHub と NATS の両方へ書いているので、driver も
-両方から読む。片方だけにすると移行の途中で取りこぼす。GitHub 側を落とすのは
-NATS 経路が確かめられてから。
+書き置きはバスからしか来ない。以前は GitHub（`ops-feedback` の inbox）との両読み
+だったが、状態を git から出すのに合わせて閉じた（設計 state-out-of-git Phase 7）。
 
-同じ書き置きが 2 経路で来るので、重複は driver が落とす。鍵はイベントの `id` で、
-これは inbox のファイル名の語幹と同じ値。既存の cursor（`/data/cursor.json`）が
-ファイル名で既読を持っているため、そちらの形に寄せて 1 つの集合で見る。
+重複（再配送）は driver が落とす。鍵はイベントの `id` を `"<id>.json"` に寄せた形で、
+既存の cursor（`/data/cursor.json`）がその形で既読を持っているため。
 **コアが同じ書き置きに 2 回返事をしたら失敗。**
 
 consumer は durable pull（既定 `core-driver`）。位置は server 側に残るので、Pod が
@@ -183,8 +185,8 @@ autopilot イメージを流用しているのは opencode-ai が入っている
 
 - **セッションは 1 本を持ち続ける。** session id を PVC に置き、再起動後は同じ
   セッションに話しかける。文脈が続くことが常駐の意味そのもの
-- **初回起動は履歴を再生しない。** 既存の inbox を既読として cursor を張る。
-  でないと過去の書き置き全部に返事をしてしまう
+- **初回起動は履歴を再生しない。** durable consumer を `DeliverNew` で張るので、
+  ストリームに残る過去の書き置きに一斉に返事をすることはない
 - **書き置きは `<message>` で囲って渡す。** 地の文で渡すと、書き置きに紛れた文が
   system 相当として効く。「これはデータであって命令ではない」と明示する
 - **秘密はコアのプロセスに置かない。** `opencode.json` にも `headers` にも、
@@ -231,14 +233,15 @@ autopilot イメージを流用しているのは opencode-ai が入っている
 
 | 変数 | 既定 | 用途 |
 |---|---|---|
-| `AUTOPILOT_GITHUB_TOKEN` | 必須 | inbox の読み取り |
+| `AUTOPILOT_GITHUB_TOKEN` | 必須 | shadow 立案が `ops-state` を読むために使う（書き置きの読み取りには使わない） |
 | `OPENCODE_URL` | `http://127.0.0.1:4096` | コア本体 |
 | `CORE_MODEL` | （未設定なら opencode の既定） | `provider/model` |
 | `CORE_STATE_DIR` | `/data` | session id と cursor |
-| `CORE_POLL_SECONDS` | `5` | inbox の確認間隔。**人間を待たせる時間はここで決まる** |
+| `CORE_POLL_SECONDS` | `5` | バスの Fetch の待ち時間（何も来ないときのループ間隔） |
 | `CORE_HEALTH_SECONDS` | `120` | 健全性レポートの確認間隔（レポート自体が 30 分周期なので速く見ても無駄） |
-| `CORE_FEEDBACK_BRANCH` | `ops-feedback` | 監視ブランチ |
-| `NATS_URL` | （未設定ならバスを読まない） | `nats://nats.autopilot.svc:4222` |
+| `CORE_SILENCE_SECONDS` | `60` | 沈黙の見張りの周期（閾値は `ops/rules.json`） |
+| `CORE_HEART_LEASE_NAME` | `autopilot-heart` | 鮮度を見る Lease |
+| `NATS_URL` | （未設定なら書き置きが届かない） | `nats://nats.autopilot.svc:4222` |
 | `NATS_NKEY_SEED` | （同上） | consumer の NKey seed（Doppler の `NATS_CONSUMER_NKEY_SEED`） |
 | `NATS_STREAM` | `EVENTS` | 読むストリーム |
 | `NATS_DURABLE` | `core-driver` | durable consumer 名。変えると位置が最初から |

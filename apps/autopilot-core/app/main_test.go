@@ -14,17 +14,6 @@ import (
 	"testing"
 )
 
-func TestUnseenSkipsKnownAndNonJSON(t *testing.T) {
-	names := []string{"b.json", "a.json", "README.md", "c.json"}
-	seen := map[string]bool{"b.json": true}
-
-	got := unseen(names, seen)
-	want := []string{"a.json", "c.json"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("got %v, want %v (名前順・未読のみ・.json だけ)", got, want)
-	}
-}
-
 func TestPruneSeenKeepsNewest(t *testing.T) {
 	seen := map[string]bool{"a": true, "b": true, "c": true, "d": true}
 	got := pruneSeen(seen, 2)
@@ -181,63 +170,6 @@ func TestPromptRejectsMalformedModel(t *testing.T) {
 	c := newClient(&config{opencodeURL: "http://127.0.0.1:1", model: "ox-alpha-free"})
 	if err := c.prompt(context.Background(), "ses_1", "hi"); err == nil {
 		t.Fatal("provider/model 形式でない CORE_MODEL は拒否すべき")
-	}
-}
-
-func TestListInboxReturnsFilesOnly(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.URL.RawQuery, "ref=ops-feedback") {
-			t.Errorf("ブランチを指定すべき: %q", r.URL.RawQuery)
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`[{"name":"a.json","type":"file"},{"name":"sub","type":"dir"}]`))
-	}))
-	defer server.Close()
-
-	c := newClient(&config{githubAPI: server.URL, githubToken: "t", repo: "o/r",
-		branch: "ops-feedback", inboxDir: "ops/feedback/inbox"})
-	names, err := c.listInbox(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(names) != 1 || names[0] != "a.json" {
-		t.Fatalf("ファイルだけ返すべき: %v", names)
-	}
-}
-
-func TestListInboxTreatsMissingDirAsEmpty(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-
-	c := newClient(&config{githubAPI: server.URL, githubToken: "t", repo: "o/r"})
-	names, err := c.listInbox(context.Background())
-	if err != nil {
-		t.Fatalf("inbox 未作成はエラーにしない: %v", err)
-	}
-	if len(names) != 0 {
-		t.Fatalf("got %v", names)
-	}
-}
-
-func TestFetchNoteParsesRaw(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("Accept") != "application/vnd.github.raw" {
-			t.Errorf("raw で取るべき: %q", r.Header.Get("Accept"))
-		}
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"id":"x","source":"telegram","received":"t","body":"本文"}`))
-	}))
-	defer server.Close()
-
-	c := newClient(&config{githubAPI: server.URL, githubToken: "t", repo: "o/r"})
-	n, err := c.fetchNote(context.Background(), "x.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n.Body != "本文" || n.Source != "telegram" {
-		t.Fatalf("got %+v", n)
 	}
 }
 

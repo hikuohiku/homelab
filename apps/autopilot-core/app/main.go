@@ -7,9 +7,8 @@
 // v0 の入力は 2 本:
 //
 //	(1) 人間の書き置き
-//	    telegram-adapter / ダッシュボード → ops-feedback の inbox (GitHub)
-//	                                     → NATS の events.raw.* (設計 D16)
-//	      → (この driver が両方から拾う) → POST /session/{id}/prompt_async
+//	    telegram-adapter / ダッシュボード → NATS の events.raw.* (設計 D16)
+//	      → (この driver が拾う) → POST /session/{id}/prompt_async
 //	      → コアが telegram_reply MCP ツールで人間へ直接返す
 //
 //	(2) 健全性の変化 (人間に言われずに動く経路)
@@ -24,16 +23,16 @@
 //	main の作業コピー (repo.go) — PVC 上に clone を持ち、周期的に main へ合わせる。
 //	opencode コンテナには read-only で mount してあり、コアはそこを読める
 //
-// (1) の経路が 2 本あるのは移行の途中だから。publish 側が両方に書いているので
-// consumer も両方から読み、重複は cursor で落とす (bus.go の冒頭を参照)。
-// GitHub 側を落とすのは NATS 経路が確かめられてから。
+// (1) は以前 GitHub (ops-feedback ブランチの inbox) との両読みだった。状態が git から
+// 出るのに合わせてバス 1 本に寄せた (設計 state-out-of-git Phase 7)。cursor は
+// 再配送の重複を落とすために残る。
 //
 // 設計上の要点:
 //
 //   - **セッションは 1 本を持ち続ける**。session id を PVC に置き、再起動後は
 //     同じセッションに話しかける。文脈が続くことが常駐の意味そのもの。
-//   - **初回は履歴を再生しない**。既存の inbox を既読として cursor を張る。
-//     でないと過去の書き置き全部に返事をしてしまう。
+//   - **初回は履歴を再生しない**。durable consumer を DeliverNew で張るので、
+//     初回起動が過去の書き置き全部に返事をすることはない (bus.go)。
 //   - **prompt を投げたら待たない** (prompt_async)。返信はコアが MCP ツールで
 //     自分で行うので、driver が応答を受け取る必要が無い。
 package main
@@ -63,8 +62,6 @@ type config struct {
 	githubToken   string
 	githubAPI     string
 	repo          string
-	branch        string
-	inboxDir      string
 	pollSeconds   int
 	healthSeconds int
 }
@@ -96,12 +93,8 @@ func loadConfig() (*config, error) {
 		stateDir:    envOr("CORE_STATE_DIR", "/data"),
 		githubAPI:   strings.TrimSuffix(envOr("GITHUB_API", "https://api.github.com"), "/"),
 		repo:        envOr("CORE_REPO", "hikuohiku/homelab"),
-		branch:      envOr("CORE_FEEDBACK_BRANCH", "ops-feedback"),
-		inboxDir:    envOr("CORE_INBOX_DIR", "ops/feedback/inbox"),
-		// 人間を待たせる時間はここで決まる。所有者の DM が inbox に載ってから
-		// コアが読むまでの遅延が、そのまま体感の「反応の悪さ」になる。
-		// 5 秒なら GitHub API の消費は 720 req/h で、共有トークンの上限
-		// (5000 req/h) に対して十分収まる
+		// バスから何も来ないときの待ち時間 (fetch の MaxWait を兼ねる)。
+		// イベントが来た瞬間に返るので、書き置きの待ち時間はこの値では決まらない
 		pollSeconds: 5,
 		// 健全性レポートは 30 分周期の CronJob が書くので、速く見ても意味が無い。
 		// inbox と同じ速さで叩くと API を無駄に食うだけなので分ける
@@ -137,26 +130,11 @@ type note struct {
 	Body     string `json:"body"`
 }
 
-// unseen は inbox のファイル名一覧から未読だけを名前順で返す。
-func unseen(names []string, seen map[string]bool) []string {
-	out := []string{}
-	for _, n := range names {
-		if !strings.HasSuffix(n, ".json") || seen[n] {
-			continue
-		}
-		out = append(out, n)
-	}
-	sort.Strings(out)
-	return out
-}
-
-// seenKey は経路によらない既読の鍵を返す。
+// seenKey は既読の鍵を返す。
 //
-// 同じ書き置きが 2 経路で来る: GitHub は inbox のファイル名 ("<id>.json")、NATS は
-// イベントの id ("<id>")。telegram-adapter が両方に同じ id を使うので、片方の形に
-// 寄せれば 1 つの集合で重複を落とせる。ファイル名の形に寄せるのは、既存の
-// /data/cursor.json がその形で既読を持っているため — id 側に揃えると、
-// 移行の瞬間に「全部未読」に見えて過去の書き置きに一斉に返事をする。
+// 形が "<id>.json" なのは、GitHub の inbox と両読みしていた頃の名残。
+// /data/cursor.json が既にその形で既読を持っているので、id 側に揃えると
+// 切り替えの瞬間に「全部未読」に見えて過去の書き置きに一斉に返事をする。
 func seenKey(idOrName string) string {
 	s := strings.TrimSpace(idOrName)
 	if s == "" {
@@ -342,52 +320,6 @@ func (c *client) github(ctx context.Context, path, accept string) (int, []byte, 
 	return resp.StatusCode, raw, err
 }
 
-func (c *client) listInbox(ctx context.Context) ([]string, error) {
-	status, raw, err := c.github(ctx,
-		fmt.Sprintf("/repos/%s/contents/%s?ref=%s", c.cfg.repo, c.cfg.inboxDir, c.cfg.branch),
-		"application/vnd.github+json")
-	if err != nil {
-		return nil, err
-	}
-	if status == http.StatusNotFound {
-		return nil, nil // inbox がまだ無い
-	}
-	if status != http.StatusOK {
-		return nil, fmt.Errorf("inbox 一覧の取得に失敗 (status=%d)", status)
-	}
-	var entries []struct {
-		Name string `json:"name"`
-		Type string `json:"type"`
-	}
-	if err := json.Unmarshal(raw, &entries); err != nil {
-		return nil, err
-	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if e.Type == "file" {
-			names = append(names, e.Name)
-		}
-	}
-	return names, nil
-}
-
-func (c *client) fetchNote(ctx context.Context, name string) (note, error) {
-	var n note
-	status, raw, err := c.github(ctx,
-		fmt.Sprintf("/repos/%s/contents/%s/%s?ref=%s", c.cfg.repo, c.cfg.inboxDir, name, c.cfg.branch),
-		"application/vnd.github.raw")
-	if err != nil {
-		return n, err
-	}
-	if status != http.StatusOK {
-		return n, fmt.Errorf("note %s を読めない (status=%d)", name, status)
-	}
-	if err := json.Unmarshal(raw, &n); err != nil {
-		return n, fmt.Errorf("note %s が JSON として壊れている: %w", name, err)
-	}
-	return n, nil
-}
-
 // --- cursor ---
 
 func writeJSON(path string, v any) error {
@@ -485,8 +417,8 @@ func runDriver() {
 	if err != nil {
 		log.Fatalf("起動できません: %v", err)
 	}
-	log.Printf("開始 (repo=%s branch=%s poll=%ds health=%ds model=%s)",
-		cfg.repo, cfg.branch, cfg.pollSeconds, cfg.healthSeconds, orDash(cfg.model))
+	log.Printf("開始 (repo=%s poll=%ds health=%ds model=%s)",
+		cfg.repo, cfg.pollSeconds, cfg.healthSeconds, orDash(cfg.model))
 
 	c := newClient(cfg)
 	ctx := context.Background()
@@ -507,17 +439,16 @@ func runDriver() {
 	watcher.sync(ctx)
 	lastMCPCheck := time.Now()
 
-	// バスからの入力。設定が無ければ nil で、その場合は GitHub 側だけを読む。
+	// 書き置きの唯一の入り口 (設計 state-out-of-git Phase 7 で GitHub 側を閉じた)。
 	//
-	// 繋がらないときに落とさないのは、この driver が所有者の「止めて」を運ぶ唯一の
-	// 経路だから。NATS の不調で driver ごと crashloop すると、生きている GitHub 経路
-	// まで止まる (移行の目的は可用性を上げることで、下げることではない)。
-	// 繋がるまで周期的に試み、その間はログで鳴らし続ける。
+	// 繋がらないときに落とさないのは、沈黙の見張りと健全性の見張りが同じループに
+	// 居るから。NATS の不調で driver ごと crashloop すると、器の異常を人間に言う口も
+	// 一緒に止まる。繋がるまで周期的に試み、その間はログで鳴らし続ける。
 	bus := connectBusOrLog()
 	if bus != nil {
 		defer bus.close()
 	} else {
-		log.Print("バス無しで開始 (未設定か、繋げなかった)。GitHub の inbox だけを読む")
+		log.Print("バスに繋がっていない。所有者の書き置きは届かない (再試行を続ける)")
 	}
 	lastBusRetry := time.Now()
 
@@ -537,7 +468,9 @@ func runDriver() {
 
 	cursorPath := filepath.Join(cfg.stateDir, "cursor.json")
 	healthCursorPath := filepath.Join(cfg.stateDir, "health-cursor.json")
-	seen, hadCursor := loadSeen(cursorPath)
+	// 既読は再配送の重複を落とすためだけに持つ。開始位置は durable consumer が
+	// server 側に持っている (bus.go の DeliverNew)
+	seen, _ := loadSeen(cursorPath)
 
 	sessionID := ""
 	var lastHealthCheck time.Time
@@ -559,57 +492,10 @@ func runDriver() {
 			sessionID = id
 		}
 
-		names, err := c.listInbox(ctx)
-		if err != nil {
-			log.Printf("inbox を読めない (継続): %v", err)
-			time.Sleep(time.Duration(cfg.pollSeconds) * time.Second)
-			continue
-		}
-
-		// 初回起動は履歴を再生しない。既存を既読にして次から新着だけ拾う
-		if !hadCursor {
-			for _, n := range names {
-				seen[n] = true
-			}
-			if err := saveSeen(cursorPath, pruneSeen(seen, maxSeen)); err != nil {
-				log.Printf("cursor を保存できない: %v", err)
-			}
-			hadCursor = true
-			log.Printf("初回起動: 既存 %d 件を既読として cursor を初期化", len(names))
-			continue
-		}
-
-		for _, name := range unseen(names, seen) {
-			n, err := c.fetchNote(ctx, name)
-			if err != nil {
-				// 壊れた 1 件で流れを止めない。既読にして次へ
-				log.Printf("%s: %v (既読にして飛ばす)", name, err)
-				seen[name] = true
-				_ = saveSeen(cursorPath, pruneSeen(seen, maxSeen))
-				continue
-			}
-			if strings.TrimSpace(n.Body) == "" {
-				seen[name] = true
-				_ = saveSeen(cursorPath, pruneSeen(seen, maxSeen))
-				continue
-			}
-			if err := c.prompt(ctx, sessionID, buildPrompt(n)); err != nil {
-				log.Printf("%s: コアへ渡せない (次の周回で再試行): %v", name, err)
-				// セッションが失われている可能性があるので張り直す
-				sessionID = ""
-				break
-			}
-			seen[name] = true
-			if err := saveSeen(cursorPath, pruneSeen(seen, maxSeen)); err != nil {
-				log.Printf("cursor を保存できない: %v", err)
-			}
-			log.Printf("コアへ渡した: %s (%s, %d chars%s)", name, n.Source, len(n.Body), lagSuffix(n.Received))
-		}
-
-		// バスから来たぶん。GitHub 経路と同じ書き置きが来るが、cursor が重複を落とす。
-		// Fetch は wait の間ブロックするので、バスがあるときはこれがループの間合いを
-		// 兼ねる (末尾の sleep を省く)。イベントが来た瞬間に返るため、
-		// 待たされる時間はポーリング間隔ではなく publish からの実時間になる
+		// 書き置きはここだけから来る (設計 state-out-of-git Phase 7 でバス 1 本にした)。
+		// Fetch は wait の間ブロックするので、これがループの間合いを兼ねる
+		// (末尾の sleep を省く)。イベントが来た瞬間に返るため、待たされる時間は
+		// ポーリング間隔ではなく publish からの実時間になる
 		paced := false
 		if bus == nil && time.Since(lastBusRetry) >= busRetryInterval {
 			lastBusRetry = time.Now()
