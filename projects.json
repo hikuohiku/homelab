@@ -6244,7 +6244,60 @@
         "used_tokens": 0
       },
       "created": "2026-08-24",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-24T09:07:03Z",
+        "verify": [
+          {
+            "cmd": "test $(ls ops/tests/fixtures/provider_stderr/*.jsonl 2>/dev/null | wc -l) -ge 3",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m pytest ops/tests/test_provider_classification.py -q",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "/usr/bin/python3: No module named pytest\n"
+          },
+          {
+            "cmd": "python3 ops/runner/runner.py --classify ops/tests/fixtures/provider_stderr --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get(\"provider_unavailable\",0)>=3 and d.get(\"error\",0)==0, d'",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,sys; d=json.load(sys.stdin); assert d.get(\"provider_unavailable\",0)>=3 and d.get(\"error\",0)==0, d\n                       ~~~~~~~~~^^^^^^^^^^^\n  File \"/usr/lib/python3.14/json/__init__.py\", line 298, in load\n    return loads(fp.read(),\n        cls=cls, object_hook=object_hook,\n        parse_float=parse_float, parse_int=parse_int,\n        parse_constant=parse_constant, object_pairs_hook=object_pairs_hook, **kw)\n  File \"/usr/lib/python3.14/json/__init__.py\", line 352, in loads\n    return _default_decoder.decode(s)\n           ~~~~~~~~~~~~~~~~~~~~~~~^^^\n  File \"/usr/lib/python3.14/json/decoder.py\", line 345, in decode\n    obj, end = self.raw_decode(s, idx=_w(s, 0).end())\n               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/json/decoder.py\", line 363, in raw_decode\n    raise JSONDecodeError(\"Expecting value\", s, err.value) from None\njson.decoder.JSONDecodeError: Expecting value: line 1 column 2 (char 1)\n"
+          },
+          {
+            "cmd": "python3 -m pytest ops/tests/test_provider_respawn.py -q",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "/usr/bin/python3: No module named pytest\n"
+          },
+          {
+            "cmd": "grep -q 'checkpoint' ops/prompts/worker.md && grep -q 'checkpoint' ops/prompts/curriculum-generate.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0304",
@@ -6265,7 +6318,51 @@
         "used_tokens": 0
       },
       "created": "2026-08-24",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-24T09:07:03Z",
+        "verify": [
+          {
+            "cmd": "python3 -m pytest ops/tests/test_adguard_config_guard.py -q",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "/usr/bin/python3: No module named pytest\n"
+          },
+          {
+            "cmd": "bash ops/adguard/config_guard.sh --selftest",
+            "ok": false,
+            "rc": 127,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "bash: ops/adguard/config_guard.sh: No such file or directory\n"
+          },
+          {
+            "cmd": "grep -q 'config-guard' apps/adguard/deployment.yaml",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "test -f docs/adguard-config-guard.md && grep -q 'last-known-good' docs/adguard-config-guard.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
