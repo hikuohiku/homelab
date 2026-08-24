@@ -243,6 +243,47 @@
    (status=fail の実データで 1 回通すと配線の実証になる。誤検出のぶんは
    rules.json の閾値を PR で上げる)
 
+### 2026-08-24 (worker #6) — レビュー差し戻し 3 件目のうち実測不要の半分を解消 (limits を外した)
+
+**やったこと** (レビュー指摘 3 件目の「実機 1 回実行の実測値で設定するか、実測できるまで
+limits を外すこと」の後者を実行):
+- `apps/immich/checksum-cronjob.yaml` の CronJob コンテナから `limits` (cpu: 300m /
+  memory: 128Mi) を削除。残したのは `requests` (cpu: 10m / memory: 32Mi) のみ。
+  コメントに理由を明記: 「縛る変更 (CHARTER §4) — limits は実機 1 回実行 (DoD 5) の
+  実測値が出るまで付けない。類推値 (download-ledger 等) で埋めない。memory limits は
+  OOMKill が回復しない (substrate 規則)。CPU limits は throttle で回復するが、実測まで
+  同様に外す」
+- 実機実行 (DoD 5) で得た `job.run_elapsed_s` と対象アセット数の実測をもとに、limits を
+  設定し直すのが次のステップ (worker #5 の「次への一言」1 と合流)
+
+**分かったこと**:
+- レビュー指摘 3 件目は「実測で設定するか、外すか」の 2 択で、サンドボックス (実機到達手段
+  なし) で満たせるのは「外す」側だけ。実機のメモリ/CPU 使用量を測れない以上、類推値を
+  残すより requests だけの方が CHARTER §4 / substrate 規則に沿う
+- 残り 2 件目 (DoD 5 / 実機実行) と 3 件目 (DoD 1 / 実機確定) は wrapper 側 (実機到達手段 +
+  Doppler の IMMICH_API_KEY 登録) の仕事。このセッションでは手が届かない
+- requests の cpu: 10m / memory: 32Mi は既存 CronJob 群と同じ最小値で、縛る変更 (limits) で
+  はないため残した
+
+**受入検証**: 4 項目とも自分で実測 → green
+(v1 CronJob+kustomization / v2 selftest 8 fixture / v3 docs / v4 report.py checksum)。
+`python3 -m unittest discover -s ops/tests -t .` → 583 件 green、heart 411 件 green。
+`check_immich_checksum_script_sync.py` / `check_version_sync.py` /
+`check_health_reporter_target.py` / `check_credential_map.py` すべて rc=0。
+
+**次への一言**:
+1. **DoD 5 / 実機 (レビュー差し戻し 2 件目)**: 実機実行は wrapper 側の仕事。
+   Doppler の `IMMICH_API_KEY` 登録 (人間) → `kubectl create job immich-checksum-manual
+   --from=cronjob/immich-checksum -n immich` → report.json の対象アセット数・
+   `job.run_elapsed_s`・結果を PROGRESS に残す。system config の
+   `integrityChecks.checksumFiles.timeLimit` 実値と内蔵 checksum cron の有効/無効も確認。
+   この実測をもとに limits を設定し直す (worker #6 で外した分)
+2. **DoD 1 の実機確定 (レビュー差し戻し 3 件目)**: 実機の summary レスポンスが
+   docs/immich_checksum_check.py の fixture と食い違ったら実測値で fixture を更新。
+   checkpoint 再開 (issue #29487 / PR #29516 の v3.1.0 修正) の実機挙動も確認
+3. 実機実行で latest.json の checksum 節が fail になったら、heart の checksum_alert →
+   briefing / incident 経路 (worker #5 が実装) が実際に鳴ることを確認できる
+
 ## 発見
 
 - (2026-08-24, worker #3) `test_health_report_path.py` は reader ClusterRole

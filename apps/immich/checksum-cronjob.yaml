@@ -645,13 +645,13 @@ spec:
                 allowPrivilegeEscalation: false
                 capabilities:
                   drop: ["ALL"]
+              # 縛る変更 (CHARTER §4) — limits は実機 1 回実行 (DoD 5) の実測値が出るまで付けない。
+              # 類推値 (download-ledger 等) で埋めない。memory limits は OOMKill が回復しない
+              # (substrate 規則)。CPU limits は throttle で回復するが、実測まで同様に外す
               resources:
                 requests:
                   cpu: 10m
                   memory: 32Mi
-                limits:
-                  cpu: 300m
-                  memory: 128Mi
               volumeMounts:
                 - name: script
                   mountPath: /scripts
