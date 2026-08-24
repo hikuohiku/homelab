@@ -23,10 +23,10 @@ from unittest import mock
 import yaml
 
 from ops.heart import facts, gitutil, projectcr, spawn, statefiles
-from ops.heart import heart as heart_mod
 from ops.heart.heart import Heart
 from ops.heart.notify import Notifier
 from ops.heart.statefiles import StateFiles
+from ops.heart.tests.fakek8s import FakeK8s
 
 REPO = Path(__file__).resolve().parents[3]
 CRD = REPO / "apps" / "autopilot" / "crd-project.yaml"
@@ -317,19 +317,30 @@ class BrokenK8s:
 class HalfBrokenK8s(BrokenK8s):
     """list は通るが apply が落ちる。"""
 
-    def __init__(self):
+    def __init__(self, items=()):
         self.attempts = []
+        self.items = list(items)
 
-    def list_custom(self, *a, **k):
-        return []
+    def list_custom(self, api_version, namespace, plural, label_selector=None):
+        return self.items if plural == projectcr.PLURAL else []
+
+    def get_custom(self, *a, **k):
+        raise RuntimeError("k8s API 404")
 
     def apply_custom(self, api_version, namespace, plural, name, body):
         self.attempts.append(name)
         raise RuntimeError("書けない")
 
 
-class BeatSurvivesCrFailure(unittest.TestCase):
-    """CR が壊れてもビートは落ちない。正はまだ projects.json。"""
+class BeatFailsClosedOnCrFailure(unittest.TestCase):
+    """CR が読めない・書けないビートは **落ちる** (設計 4b-2b)。
+
+    4a では逆だった (正が projects.json だったので、CR の失敗は写しのずれ)。
+    正が CR になった今:
+
+      - 読めない → 空の一覧で「やることが無い」と判断してはいけない
+      - 書けない → 状態が進んでいないのに進んだ顔をしてはいけない
+    """
 
     def setUp(self):
         tmp = tempfile.TemporaryDirectory()
@@ -376,37 +387,57 @@ class BeatSurvivesCrFailure(unittest.TestCase):
                 stack.enter_context(p)
             self.h.beat(1)
 
-    def seed(self):
-        doc = self.sf.load_projects()
-        doc["projects"] = [
-            {
-                "id": "P-0001", "title": "t", "state": "delivered",
-                "branch": "project/p-0001", "irreversible": False,
-                "capabilities": [], "budget": {"used_tokens": 0},
-                "created": "2026-08-24",
-            }
-        ]
-        self.sf.save_projects(doc)
+    def project(self):
+        return {
+            "id": "P-0001", "title": "t", "state": "active",
+            "branch": "project/p-0001", "irreversible": False,
+            "capabilities": [], "budget": {"used_tokens": 0},
+            "created": "2026-08-24",
+        }
 
-    def test_list_failure_does_not_stop_the_beat(self):
-        self.seed()
-        self.beat(BrokenK8s())
-        # ビートは最後まで通り、git 側の写しは書かれている
+    def test_list_failure_stops_the_beat(self):
+        with self.assertRaises(RuntimeError):
+            self.beat(BrokenK8s())
+        # heartbeat も書かれない — 状態が進んでいないのだから、外から見ても
+        # 進んでいないように見えるのが正しい
+        self.assertFalse((self.h.state_dir / "heartbeat.json").exists())
+
+    def test_apply_failure_stops_the_beat_and_rings(self):
+        k8s = HalfBrokenK8s(items=[projectcr.to_cr(self.project(), NS, TERMINAL)])
+        with self.assertRaises(RuntimeError) as cm:
+            self.beat(k8s)
+        self.assertIn("進んでいません", str(cm.exception))
+        self.assertFalse((self.h.state_dir / "heartbeat.json").exists())
+
+    def test_an_empty_cr_list_after_a_populated_one_stops_the_beat(self):
+        """CRD ごと消えた / RBAC を外された、を「プロジェクトは無かった」と読まない。
+
+        API は 200 を返すので例外にならない。床 (PVC) が唯一の歯止め。
+        """
+        self.beat(FakeK8s(projects=[self.project()]))
+        with self.assertRaises(RuntimeError) as cm:
+            self.beat(FakeK8s())
+        self.assertIn("0 件", str(cm.exception))
+
+    def test_a_first_beat_with_no_crs_is_allowed(self):
+        """床が無い初回は 0 件が正常 (まだ誰も居ない器)。"""
+        self.beat(FakeK8s())
         self.assertTrue((self.h.state_dir / "heartbeat.json").exists())
-        self.assertEqual(len(self.sf.load_projects()["projects"]), 1)
 
-    def test_apply_failure_does_not_stop_the_beat(self):
-        self.seed()
-        k8s = HalfBrokenK8s()
+    def test_the_git_copy_is_no_longer_written(self):
+        """projects.json への書き込みが止まっている (4b-2b の到達点)。"""
+        self.beat(FakeK8s(projects=[self.project()]))
+        self.assertFalse((self.h.state_dir / "projects.json").exists())
+
+    def test_the_cr_is_the_source_of_truth_not_the_git_copy(self):
+        """git に残った古い写しに何が書いてあっても、判断は CR を見る。"""
+        self.sf.save_projects({
+            "version": 1, "chores": [],
+            "projects": [dict(self.project(), id="P-9999", branch="project/p-9999")],
+        })
+        k8s = FakeK8s(projects=[self.project()])
         self.beat(k8s)
-        self.assertEqual(k8s.attempts, ["p-0001"])
-        self.assertTrue((self.h.state_dir / "heartbeat.json").exists())
-
-    def test_per_cr_failure_is_swallowed_inside_sync(self):
-        # 呼び出し側の try/except に頼らず、1 件の apply 失敗はここで飲まれる
-        self.h.k8s = HalfBrokenK8s()
-        with mock.patch.object(facts, "load_archive_records", lambda *a, **k: []):
-            self.h.sync_project_crs({"projects": [{"id": "P-0001", "state": "active"}]})
+        self.assertEqual([p["id"] for p in k8s.projects()], ["P-0001"])
 
 
 class CrdCoversEveryRealEntry(unittest.TestCase):
@@ -560,7 +591,7 @@ class PlanRejected(unittest.TestCase):
 
 
 class CrFailureAlarm(unittest.TestCase):
-    """CR の書き込みが続けて失敗したら人間に届く (2026-08-24 の P-0353)。"""
+    """CR の書き込み失敗はその場で人間に届き、ビートを落とす (2026-08-24 の P-0353)。"""
 
     class Spy:
         def __init__(self):
@@ -583,27 +614,25 @@ class CrFailureAlarm(unittest.TestCase):
 
     def fail(self, times):
         for _ in range(times):
-            self.h.note_cr_failures(1, self.spy, None)
+            with self.assertRaises(RuntimeError):
+                self.h.note_cr_failures(1, self.spy, None)
 
-    def test_a_single_failure_is_silent(self):
+    def test_the_first_failure_rings_and_raises(self):
+        """4a は 5 ビート待っていた。CR が正になった今、1 回目が欠損 (4b-2b)。"""
         self.fail(1)
-        self.assertEqual(self.spy.sent, [])
-
-    def test_a_streak_rings_once(self):
-        self.fail(heart_mod.CR_FAIL_ALERT_BEATS)
         self.assertEqual(len(self.spy.sent), 1)
         self.assertEqual(self.spy.sent[0][0], "incident")
         self.assertIn("crd-project.yaml", self.spy.sent[0][1])
+        self.assertIn("進んでいません", self.spy.sent[0][1])
 
     def test_a_success_resets_the_streak(self):
-        self.fail(heart_mod.CR_FAIL_ALERT_BEATS - 1)
+        self.fail(2)
         self.h.note_cr_failures(0, self.spy, None)
-        self.fail(heart_mod.CR_FAIL_ALERT_BEATS - 1)
-        self.assertEqual(self.spy.sent, [], "回復した後に鳴らさない")
+        self.assertEqual(self.h.cr_fail_streak, 0)
 
-    def test_it_does_not_ring_every_beat(self):
-        self.fail(heart_mod.CR_FAIL_ALERT_BEATS * 2 + 1)
-        self.assertEqual(len(self.spy.sent), 2, "鳴り続けると通知が壊れた側になる")
+    def test_a_success_is_silent(self):
+        self.h.note_cr_failures(0, self.spy, None)
+        self.assertEqual(self.spy.sent, [])
 
 
 if __name__ == "__main__":

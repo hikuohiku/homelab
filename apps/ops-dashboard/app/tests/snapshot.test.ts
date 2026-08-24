@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { parseKubeSnapshot } from "../src/lib/kubernetes";
-import { projectsFromCrs } from "../src/lib/ops-state";
+import { projectsFromCrs, stopEngagedFromCr } from "../src/lib/ops-state";
 import { buildAttention } from "../src/lib/snapshot";
 
 test("Kubernetes の active Job と heart ready を抽出する", () => {
@@ -51,3 +51,13 @@ test("Project CR から projects.json と同じプロジェクト一覧を組み
   assert.equal("spec" in projects[1], false);
 });
 
+
+// 「止めて」の置き場が ops-state の projects.json から HeartState CR に移った
+// (4b-2b)。git 側は凍った古い値なので、ここを間違えると停止が画面に出なくなる
+test("HeartState CR から stop_engaged を読む", () => {
+  assert.equal(stopEngagedFromCr({ spec: { stop_engaged: true } }), true);
+  assert.equal(stopEngagedFromCr({ spec: { stop_engaged: false } }), false);
+  // CR がまだ無い / spec が空 = まだ誰も止めていない
+  assert.equal(stopEngagedFromCr({}), false);
+  assert.equal(stopEngagedFromCr({ spec: {} }), false);
+});

@@ -10,7 +10,9 @@ Phase 3 で有効化。journal (エピソード) から ops/memory/ (意味記�
 
 1. `ops/journal/` の直近 (前回の consolidation 以降。git log で
    `ops/memory/` の最終更新を見ると分かる) を読む
-2. `ops/projects/archive.jsonl` の直近の完了・失敗プロジェクトを読む
+2. 直近の完了・失敗プロジェクトを読む (`kubectl get projects` / ダッシュボード。
+   `ops/projects/archive.jsonl` は 4b-2b で更新が止まった凍結記録なので、
+   直近を知る手段にはならない)
 3. 昇格に値する「教訓・事実」を抽出する。基準:
    - 二度使う知識か (一度きりの経緯は journal に残っていれば足りる)
    - 実測・実例に裏付けられているか (推測は昇格させない)

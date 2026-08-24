@@ -23,6 +23,7 @@ from unittest import mock
 from ops.heart import facts, gitutil, spawn, tasks
 from ops.heart.heart import Heart
 from ops.heart.notify import Notifier
+from ops.heart.tests.fakek8s import FakeK8s
 from ops.heart.statefiles import StateFiles
 
 REPO = Path(__file__).resolve().parents[3]
@@ -42,6 +43,8 @@ class CommandBeatTest(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         self.h = Heart(REPO)
+        # プロジェクトの正は Project CR (4b-2b)。記憶だけの k8s を差す
+        self.h._fake_k8s = FakeK8s()
 
     def write_command(self, command_id, body="ストリームが太っている", **kw):
         doc = {
@@ -63,7 +66,7 @@ class CommandBeatTest(unittest.TestCase):
             mock.patch.object(gitutil, "sync_state_branch", lambda *a, **k: None),
             mock.patch.object(gitutil, "commit_and_push_state", lambda *a, **k: None),
             mock.patch.object(type(self.h.gh), "ensure_branch", lambda *a, **k: None),
-            mock.patch.object(Heart, "k8s_client", lambda self: None),
+            mock.patch.object(Heart, "k8s_client", lambda self: self._fake_k8s),
             mock.patch.object(facts, "load_health", lambda *a, **k: ([], True, None)),
             mock.patch.object(facts, "load_adopted_specs", lambda *a, **k: {}),
             mock.patch.object(facts, "collect_jobs", lambda *a, **k: {}),
@@ -115,21 +118,21 @@ class CommandBeatTest(unittest.TestCase):
         self.assertEqual(len(self.ledger()), 1)
 
     def test_stop_engaged_defers_until_resume(self):
-        # 人間が止めている間は実行しない。台帳にも刻まないので依頼は消えない
-        sf = StateFiles(self.h.state_dir)
-        doc = sf.load_projects()
-        doc["stop_engaged"] = True
-        sf.save_projects(doc)
+        # 人間が止めている間は実行しない。台帳にも刻まないので依頼は消えない。
+        # stop_engaged の置き場は HeartState CR (4b-2b) — git の projects.json に
+        # 書いても、もう誰も読まない
+        self.h._fake_k8s = FakeK8s(scalars={"stop_engaged": True})
 
         self.write_command("core-def456")
         self._beat(1)
         self.assertEqual(self.queue(), [])
         self.assertEqual(self.ledger(), [])
+        self.assertTrue(
+            self.h._fake_k8s.scalars()["stop_engaged"], "止まったまま書き戻る"
+        )
 
         # 再開 (stop_engaged を落とす) すると次のビートで拾い直す
-        doc = StateFiles(self.h.state_dir).load_projects()
-        doc["stop_engaged"] = False
-        StateFiles(self.h.state_dir).save_projects(doc)
+        self.h._fake_k8s = FakeK8s(scalars={"stop_engaged": False})
         self._beat(2)
         self.assertEqual(len(self.queue()), 1)
         self.assertEqual(len(self.ledger()), 1)

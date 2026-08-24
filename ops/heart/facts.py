@@ -486,6 +486,30 @@ def collect_dispatches(data_dir):
     return out
 
 
+def load_proposal_records(data_dir):
+    """直近の curriculum が出した全案 (採択・棄却) を返す (設計 4b-2b)。
+
+    台帳 (archive.jsonl) への追記を止めたので、**これから落ちる案がここにしか
+    無い**。落とすと reject_reason / improve_hint が生成役へ戻らなくなり、
+    同型再提案が常態化する。
+
+    読み方は collect_curriculum と同じ result.json。壊れていたら空 —
+    ここで例外を出すと棄却案の取り込みのためにビートが落ちる。
+    """
+    path = Path(data_dir) / "projects" / "system" / "result.json"
+    if not path.exists():
+        return []
+    try:
+        with open(path) as f:
+            result = json.load(f)
+    except (OSError, ValueError):
+        return []
+    records = result.get("proposal_records") if isinstance(result, dict) else None
+    if not isinstance(records, list):
+        return []
+    return [r for r in records if isinstance(r, dict) and r.get("id")]
+
+
 def load_archive_records(repo_dir):
     """main の archive.jsonl の全行 (採否を問わない) をそのまま返す。
 
@@ -507,21 +531,6 @@ def load_archive_records(repo_dir):
             except ValueError:
                 continue
     return records
-
-
-def load_archived_ids(repo_dir):
-    """main の archive.jsonl に **採択行として載っている** id の集合。
-
-    残る用途は 1 つだけ: 台帳にまだ無い採択 spec を次の curriculum の PR に
-    まとめて載せる backfill (reconcile._archive_backfill)。台帳の書き込みは
-    4b-2a ではまだ続いているので、その欠落検知は git 側を見る必要がある。
-    採否の判断そのものは CR (load_adopted_specs) に移った。
-    """
-    return {
-        rec["id"]
-        for rec in load_archive_records(repo_dir)
-        if rec.get("adopted") and rec.get("id")
-    }
 
 
 def load_adopted_specs(k8s, namespace):

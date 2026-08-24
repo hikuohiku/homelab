@@ -8,6 +8,8 @@ projects.json / archive.jsonl にも残っているので、git 側は正しい�
 書き込みを止めるのが 4b-2b。
 """
 
+import copy
+
 GROUP = "autopilot.homelab.hikuohiku.dev"
 VERSION = "v1"
 API_VERSION = f"{GROUP}/{VERSION}"
@@ -186,6 +188,8 @@ LIVE_SELECTOR = f"lifecycle={LIVE}"
 # 棄却案だけを外す。ダッシュボードや reconcile が見たいのは「一度は動いた案」で、
 # それには終端の delivered / stalled / vetoed も含まれる
 NOT_REJECTED_SELECTOR = "state!=rejected"
+# 逆向き。棄却案の取り込みが済んでいるかを見るときだけ使う (heart.plan_rejected_crs)
+REJECTED_SELECTOR = "state=rejected"
 
 
 def projects_from_items(items):
@@ -249,3 +253,43 @@ def proposal_digest(items):
         })
     rows.sort(key=lambda r: r["id"], reverse=True)
     return rows
+
+
+# --- doc の復元 (設計 state-out-of-git 4b-2b「projects.json を止める」) ---
+
+# doc のトップレベルのうちプロジェクト一覧でないもの。CR には載らないので
+# HeartState CR (ops/heart/heartstate.py) が持つ
+DOC_DEFAULTS = {"version": 1, "projects": [], "chores": []}
+
+
+def working_set(items):
+    """状態機械が触る作業集合 (純関数)。棄却案は **含めない**。
+
+    250 件超の墓標を混ぜると decide が毎ビート全部を舐めるうえ、
+    validate_projects の不変条件も墓標のために緩める羽目になる。棄却理由を
+    読むのは立案役で、そちらは proposal_digest が別に返す。
+
+    **写しを返す**。CR の spec をそのまま返すと doc の更新が existing 側にも
+    及び、plan() が「変わっていない」と判断して書き込みを丸ごと飛ばす。
+    """
+    return [
+        copy.deepcopy(p)
+        for p in projects_from_items(items)
+        if p.get("state") != "rejected"
+    ]
+
+
+def doc_from_crs(items, scalars=None):
+    """Project CR の一覧と HeartState のスカラから projects doc を組み立てる (純関数)。
+
+    projects.json を読み込んでいた heart.beat の入り口の置き換え。
+    scalars 側の projects は無視する — 一覧の正は CR ひとつだけにする。
+    """
+    doc = dict(DOC_DEFAULTS)
+    for key, value in (scalars or {}).items():
+        if key != "projects":
+            doc[key] = value
+    doc["projects"] = working_set(items)
+    doc.setdefault("chores", [])
+    doc.setdefault("version", 1)
+    return doc

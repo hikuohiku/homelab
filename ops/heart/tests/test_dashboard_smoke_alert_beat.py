@@ -34,6 +34,7 @@ from ops.heart import facts, gitutil
 from ops.heart import heart as heart_module
 from ops.heart.heart import Heart
 from ops.heart.statefiles import StateFiles
+from ops.heart.tests.fakek8s import FakeK8s
 
 REPO = Path(__file__).resolve().parents[3]
 # 同日内の連続ビートを見るため時刻は固定 (日付が変わると抑制は解けるのが正)
@@ -84,6 +85,8 @@ class DashboardSmokeAlertBeatTest(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         self.h = Heart(REPO)
+        # プロジェクトの正は Project CR (4b-2b)。記憶だけの k8s を差す
+        self.h._fake_k8s = FakeK8s()
 
     def _patch_externals(self, health_returns):
         """git / GitHub / k8s / フィードバック経路をパッチする。
@@ -101,7 +104,7 @@ class DashboardSmokeAlertBeatTest(unittest.TestCase):
             mock.patch.object(gitutil, "commit_and_push_state", lambda *a, **k: None),
             mock.patch.object(type(self.h.gh), "ensure_branch", lambda *a, **k: None),
             # 引数評価で K8s クライアント (SA token 読み) が走るのでクライアントごと止める
-            mock.patch.object(Heart, "k8s_client", lambda self: None),
+            mock.patch.object(Heart, "k8s_client", lambda self: self._fake_k8s),
             mock.patch.object(facts, "load_health", lambda *a, **k: health_returns),
             mock.patch.object(facts, "load_adopted_specs", lambda *a, **k: {}),
             mock.patch.object(facts, "collect_jobs", lambda *a, **k: {}),

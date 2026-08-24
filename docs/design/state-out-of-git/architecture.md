@@ -208,6 +208,37 @@ id / title / cell / 採否 / reject_reason / improve_hint に絞って返す。
 **手動採択の入口は塞がった**。`archive.jsonl` に `adopted` 行を足しても動き出さない。
 admission gate への移設は下記 Phase 4.5 のまま。
 
+### 進捗 — 4b-2b (2026-08-24): git への書き込みを止める
+
+**`ops-state` の `projects.json` と main の `ops/projects/archive.jsonl` への書き込みが
+止まった。** Project CR が正になった。ブランチもファイルも消していない — 実物の削除は
+Phase 7 で、実機で CR 経路が動いているのを見てから。
+
+| 変わったこと | |
+|---|---|
+| heart の doc | 毎ビート Project CR (`state!=rejected`) + HeartState CR から組み立てる。`sf.save_projects()` は消えた |
+| doc のスカラ | **`HeartState` CR** (`autopilot.homelab.hikuohiku.dev/v1`, name=`heart`)。`stop_engaged` / `last_*` は 1 件 1 プロジェクトの Project CR に載らない |
+| 台帳 | curriculum Job は追記 PR を出さない。全案 (棄却含む) は `result.json` の `proposal_records` で heart に渡り、heart が `rejected` の CR にする。`archive.jsonl` は過去分の埋め直しのために **読むだけ** |
+| dashboard | `stop_engaged` を HeartState CR から読む。git を引くのは心拍 (`heartbeat.json`) だけになった |
+
+**なぜ ConfigMap でなく CR か。** `autopilot-writer` (宣言制注入でプロジェクト Job に
+渡る SA) は configmaps に `*` を持っていて、RBAC には名前で穴を塞ぐ手段が無い。
+ConfigMap に置くと Job が「止めて」を解除できる。API グループ
+`autopilot.homelab.hikuohiku.dev` は autopilot-writer に渡していないので、CR なら
+API が書き手を heart 1 人に縛る。
+
+**失敗の扱いが 4a から反転した。** 4a は「CR の書き込みが失敗してもビートは落とさない
+(正は projects.json)」だった。CR が正になった今、書けないことは状態が進まないこと
+そのもの。握り潰すと announce 済みの予告や spawn 済みの job 名が次のビートで消え、
+同じ副作用が繰り返される。だから **1 回目の失敗で incident を鳴らし、例外でビートを
+落とす**。この後の heartbeat も Lease も更新されないので、外から見た heart は
+止まって見える — 状態が進んでいないのだから、そう見えるのが正しい。
+
+**fail-closed の穴を 1 つ塞いだ。** CR が 0 件でも API は 200 を返す (CRD ごと消えた・
+RBAC を外された・namespace が違う)。空を「プロジェクトが無い」と読むと器は静かに
+止まるので、直前のビートで見えた件数を PVC (`project-floor.json`) に置き、
+0 件に落ちたらビートを落とす。git を読み戻さないために床は PVC に置く (原則 1)。
+
 ### 手動採択の入口を admission gate へ
 
 `reconcile.py` は「人間が `archive.jsonl` に `adopted` 行を足したら動き出す」という

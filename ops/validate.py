@@ -369,10 +369,14 @@ def check_heart_config() -> None:
 def check_projects_archive() -> None:
     """ops/projects/archive.jsonl の検査。
 
+    **4b-2b で追記が止まった**。台帳の正は Project CR で、curriculum が PR を
+    出すこともない。ここに残っているのは過去分の凍結された記録で、実物を消すのは
+    Phase 7 (実機で CR 経路が動いているのを見てから)。
+
     - 各行が JSON で、採択済み (adopted) 行は runner が動ける最低限のフィールドを持つ
     - 追記のみ: origin/main 時点の内容が先頭一致で残っていること (改変・削除の検知)。
-      origin/main が参照できない環境 (shallow CI checkout) では追記検査をスキップする
-      — heart / 手元では常に効く
+      書き手が居なくなった今、この検査が守るのは「人間や機械が過去を書き換えない」
+      こと。origin/main が参照できない環境 (shallow CI checkout) ではスキップする
     """
     path = OPS / "projects" / "archive.jsonl"
     if not path.exists():

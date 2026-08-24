@@ -154,6 +154,16 @@ class StateFiles:
             raise ValueError("projects.json validation: " + "; ".join(errors))
         self._save_json("projects.json", doc)
 
+    # --- project-floor.json (直前ビートで見えた CR 件数。設計 4b-2b) ---
+    # 「Project CR が突然 0 件になった」を観測失敗として弾くための床。API は
+    # CRD ごと消えても 200 を返すので、例外だけでは fail-closed にならない。
+    # PVC に置くのは git を読み戻さないため (原則 1)
+    def load_project_floor(self):
+        return int(self._load_json("project-floor.json", {}).get("count", 0) or 0)
+
+    def save_project_floor(self, count):
+        self._save_json("project-floor.json", {"count": int(count)})
+
     # --- trust.json ---
     def load_trust(self):
         return self._load_json(

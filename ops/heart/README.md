@@ -72,37 +72,44 @@ runner は「セッションが 1 度正常に終わった」時点で PR を出
 curriculum 由来の spec (`P-0NNN`) に対する採択ゲートは**そのまま残っている**。
 そちらは verify を持つので測れる。
 
-## dispatch の正は ops-state の projects.json (設計 rev3 Phase E / D32)
+## プロジェクトの正は Project CR (設計 state-out-of-git 4b-2b)
 
-採択 spec の読み先を main の `ops/projects/archive.jsonl` から **ops-state の
-`projects.json`** へ移した。**採択から着手までの経路から、main への PR・CI・merge が
-消えている** (2026-08-24 の実測でここが 6.5 時間かかった)。
+`ops-state` の `projects.json` と main の `ops/projects/archive.jsonl` への書き込みは
+**止まった**。git に残っている両ファイルは凍結された過去の写しで、誰も読み戻さない
+(実物の削除は Phase 7)。
 
 ```
-curriculum Job --result.json (spec 全文)--> heart --> ops-state/projects.json --> runner
-                        |                                   ^                      (spec の正)
-                        +--PR--> main の archive.jsonl <-----+ 台帳 (非同期・バッチ)
+curriculum Job --result.json (全案の spec)--> heart --> Project CR   --> runner (Job の env)
+                                               |        HeartState CR --> dashboard / core
+                                               +-- git には何も書かない
 ```
 
-- **改竄耐性は落ちない**。`main` は CI を通る PR なら誰でも書けるが、`ops-state` は
-  heart しか書けない。runner は ops-state を**読むだけ** (GitHub API で 1 ファイル。
-  clone / fetch は増やさない)
-- **runner の読み先は Job の env `HEART_SPEC_JSON` だけ** (4b-2a)。以前の 3 段
-  (ops-state の `projects.json` → `origin/main` の `archive.jsonl` → env) は畳んだ。
-  worker Job はトークン automount 無しで走るので CR を直接読む形は採らない
-- **archive.jsonl は台帳として残る**。curriculum の全案 (棄却含む) はその回の PR で、
-  台帳を待たずに動き出した spec (即時 dispatch を含む) は次の curriculum の PR に
-  **まとめて** (`ARCHIVE_BACKFILL_JSON`)。採択も棄却もいずれ必ず載る
-- **手動採択の入口は塞がった** (4b-2a)。採択 spec の読み先が Project CR に移り、
-  人間が `archive.jsonl` に `adopted: true` 行を足しても動き出さない。admission
-  gate への移設は設計の Phase 4.5
-- **意味論の変更**: 台帳 PR を close しても採択は取り消されない。取り消しは veto
-  (予告窓) で行う
+- **書けるのは heart の SA だけ**。「単一書き手」は ops-state の時代は慣習で、Job が
+  push するのを止めるものが無かった。今は API が止める (`apps/autopilot/rbac.yaml` の
+  `project-writer` / `heart-state-writer`)
+- **doc のスカラ (`stop_engaged` / `last_curriculum_at` …) は HeartState CR**。
+  1 件 1 プロジェクトの Project CR には載らないため。ConfigMap にしないのは
+  `autopilot-writer` が configmaps に `*` を持っていて、RBAC には名前で穴を塞ぐ
+  手段が無いから — 置けばプロジェクト Job が「止めて」を解除できてしまう
+- **runner の読み先は Job の env `HEART_SPEC_JSON` だけ** (4b-2a)。worker Job は
+  トークン automount 無しで走るので CR を直接読む形は採らない。env は Pod spec に
+  固定され、プロジェクトブランチからは書き換えられない
+- **読めない・書けないビートは落ちる** (fail-closed)。空の一覧で進めると decide は
+  「やることが無い」と読み、器は静かに止まる。書き込み失敗はそのまま状態の欠落なので、
+  その場で incident を鳴らして例外を上げる (heartbeat も Lease も更新されないので、
+  外から見た heart は止まって見える)
+- **手動採択の入口は塞がった** (4b-2a)。人間が `archive.jsonl` に `adopted: true`
+  行を足しても動き出さない。admission gate への移設は設計の Phase 4.5
 
 ### 棄却案は Project CR にも入る (設計 state-out-of-git 4b-1)
 
-台帳の `adopted: false` 行は毎ビート `state: rejected` の Project CR に取り込まれる
-(`heart.sync_project_crs` → `projectcr.plan_rejected`、1 ビート 25 件ずつ)。
+棄却案は `state: rejected` の Project CR になる (`heart.plan_rejected_crs` →
+`projectcr.plan_rejected`、1 回 25 件ずつ)。読み先は 2 つ:
+
+- **curriculum の `result.json` (`proposal_records`)** — これから落ちる案の唯一の経路。
+  台帳への追記が止まったので、ここを落とすと死因が生成役へ戻らない。
+  `consume_curriculum` が result.json を退避するより **前** に取り込む
+- **main の `archive.jsonl`** — 過去 250 件超の埋め直し。読むだけで、10 ビートに 1 回
 `rejected` は終端なので状態機械は触らず、`projects.json` にも載らない。
 
 コアのサブエージェント (立案役 / 判定役) はこの CR を MCP の `homelab_proposals` で

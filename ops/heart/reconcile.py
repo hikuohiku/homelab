@@ -47,10 +47,6 @@ QUOTA_WAIT_MAX_HOURS = 24
 # 自己観測 (critic) の間隔。指標 (状態別滞留・アイドル率) は日次の粒度で足り、
 # それより短くしても同じ 24h の窓を読み直すだけになる (P-0045)
 CRITIC_INTERVAL_HOURS = 24
-# 1 回の curriculum PR に載せる台帳の遅延追記 (backfill) の上限。env 経由で
-# 渡すので上限を置く。溢れた分は次の curriculum が拾う
-ARCHIVE_BACKFILL_LIMIT = 20
-
 # 「まだ一度も記録していない」と「None を記録した」を区別する番人
 _UNSET = object()
 
@@ -298,30 +294,6 @@ def _register_spec(doc, spec, now):
             "spec": dict(spec),
         }
     )
-
-
-def _archive_backfill(doc, facts, limit=ARCHIVE_BACKFILL_LIMIT):
-    """main の archive.jsonl にまだ載っていない採択 spec を返す (純関数)。
-
-    dispatch の正が ops-state に移った結果、採択は台帳への追記を待たずに
-    動き出す (D32)。台帳が欠落しないよう、次の curriculum Job にまとめて
-    渡して同じ PR で追記させる。即時 dispatch の P-9NNN もここで拾われる。
-
-    見るのは facts["archived_ids"] (= 台帳に載っている採択 id) で、
-    adopted_specs ではない。4b-2a で adopted_specs の読み先が Project CR に
-    移り、**CR は doc の写しなので「まだ台帳に無い」を判定できなくなった**
-    (全件が「載っている」に見えて backfill が永久に空になる)。
-    """
-    in_archive = set(facts.get("archived_ids") or [])
-    out = []
-    for p in doc["projects"]:
-        spec = p.get("spec")
-        if not isinstance(spec, dict) or not spec.get("id"):
-            continue
-        if spec["id"] in in_archive:
-            continue
-        out.append(spec)
-    return out[:limit]
 
 
 def _critic_due(doc, now):
@@ -936,13 +908,9 @@ def decide(doc, facts, rules, now):
         gap_ok = True
     if curriculum_idle and gap_ok and not stop_all:
         doc["last_curriculum_at"] = now_iso(now)
-        actions.append(
-            _action(
-                "spawn_curriculum", adopt_limit=free_slots,
-                # 台帳の遅延追記をこの Job の PR にまとめて載せる (D32)
-                archive_backfill=_archive_backfill(doc, facts),
-            )
-        )
+        # 台帳 (archive.jsonl) の遅延追記は 4b-2b で無くなった。棄却案を含む
+        # 全案は curriculum の result.json から heart が Project CR にする
+        actions.append(_action("spawn_curriculum", adopt_limit=free_slots))
 
     # --- 活動の記録 (critic の due 判定の材料) ---
     # ここまでに積んだ action だけを「活動」と数える。この行より後に積む critic 自身の

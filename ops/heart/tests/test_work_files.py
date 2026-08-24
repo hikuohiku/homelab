@@ -23,13 +23,16 @@ from unittest import mock
 from ops.heart import facts, gitutil, metrics, spawn
 from ops.heart.heart import Heart
 from ops.heart.notify import Notifier
+from ops.heart.tests.fakek8s import FakeK8s
 from ops.heart.statefiles import WORK_FILES, StateFiles, migrate_plan
 
 REPO = Path(__file__).resolve().parents[3]
 
 # ops-state に残ってよいもの。metrics.jsonl は旧ダッシュボード向けの経過措置で、
 # 最新 1 行だけが載る (設計 Phase 1)
-KEPT_IN_GIT = ("projects.json", "heartbeat.json", "metrics.jsonl")
+# 4b-2b で projects.json への書き込みが止まった。git に残るのは心拍と
+# 旧ダッシュボード用の 1 行だけ (どちらも Phase 7 で消える)
+KEPT_IN_GIT = ("heartbeat.json", "metrics.jsonl")
 
 
 class MigratePlanTest(unittest.TestCase):
@@ -61,6 +64,8 @@ class MigrateBeatTest(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         self.h = Heart(REPO)
+        # プロジェクトの正は Project CR (4b-2b)。記憶だけの k8s を差す
+        self.h._fake_k8s = FakeK8s()
         self.h.state_dir.mkdir(parents=True, exist_ok=True)
 
     def _beat(self, n=1):
@@ -69,7 +74,7 @@ class MigrateBeatTest(unittest.TestCase):
             mock.patch.object(gitutil, "sync_state_branch", lambda *a, **k: None),
             mock.patch.object(gitutil, "commit_and_push_state", lambda *a, **k: None),
             mock.patch.object(type(self.h.gh), "ensure_branch", lambda *a, **k: None),
-            mock.patch.object(Heart, "k8s_client", lambda self: None),
+            mock.patch.object(Heart, "k8s_client", lambda self: self._fake_k8s),
             mock.patch.object(facts, "load_health", lambda *a, **k: ([], True, None)),
             mock.patch.object(facts, "load_adopted_specs", lambda *a, **k: {}),
             mock.patch.object(facts, "collect_jobs", lambda *a, **k: {}),
@@ -125,7 +130,7 @@ class MigrateBeatTest(unittest.TestCase):
         # ops-state に残るのは外から見えるものだけ
         left = sorted(p.name for p in self.h.state_dir.iterdir() if p.is_file())
         self.assertEqual(left, sorted(set(left) & set(KEPT_IN_GIT)))
-        self.assertIn("projects.json", left)
+        self.assertNotIn("projects.json", left, "正は Project CR (4b-2b)")
 
     def test_migration_is_idempotent_and_does_not_clobber_pvc(self):
         sf = self.seed_state_branch()

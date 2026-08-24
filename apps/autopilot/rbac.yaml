@@ -315,6 +315,71 @@ subjects:
     name: autopilot-heart
     namespace: autopilot
 ---
+# HeartState CR (設計 state-out-of-git Phase 4b-2b)。doc のトップレベルにある
+# スカラ — stop_engaged / last_curriculum_at など — の置き場。projects.json への
+# 書き込みを止めた今、ここが「止めて」の唯一の永続先。
+#
+# **ConfigMap にしなかった理由は上の autopilot-writer**。あちらは configmaps に
+# `*` を持っていて、RBAC には名前で穴を塞ぐ手段が無い。ConfigMap に置くと
+# プロジェクト Job が「止めて」を解除できてしまう。API グループ
+# autopilot.homelab.hikuohiku.dev は autopilot-writer に渡していないので、
+# CR にすれば API が書き手を heart 1 人に縛る。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: heart-state-writer
+  namespace: autopilot
+rules:
+  - apiGroups: ["autopilot.homelab.hikuohiku.dev"]
+    resources: ["heartstates"]
+    verbs: ["get", "list", "watch", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: heart-state-writer
+  namespace: autopilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: heart-state-writer
+subjects:
+  - kind: ServiceAccount
+    name: autopilot-heart
+    namespace: autopilot
+---
+# 同じ CR の読み手。**書き込み動詞は無い** (コアに write を渡さない。設計 D29)。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: heart-state-reader
+  namespace: autopilot
+rules:
+  - apiGroups: ["autopilot.homelab.hikuohiku.dev"]
+    resources: ["heartstates"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: heart-state-reader
+  namespace: autopilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: heart-state-reader
+subjects:
+  # Mission Control。stop_engaged (止まっているか) を出す。heart が死んでも
+  # 読めるのが要点で、heart の /healthz では代わりにならない
+  - kind: ServiceAccount
+    name: ops-dashboard
+    namespace: autopilot
+  # 常駐コア。今は heart の /healthz から取っているが、heart が居ないときの
+  # 読み先としてここも開けておく
+  - kind: ServiceAccount
+    name: autopilot-core
+    namespace: autopilot
+---
 # 読み手。ClusterRole にしてあるのは、tailnet から見る人間とエージェント
 # (apps/agent-rbac の agent-reader) にも同じものを bind するため。
 # **書き込み動詞は 1 つも無い** — 特にコアには渡さない (設計 D29)。

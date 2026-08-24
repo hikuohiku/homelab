@@ -1803,47 +1803,11 @@ class TestDispatchSourceOfTruth(unittest.TestCase):
         d, _ = reconcile.decide(doc(), facts(adopted_specs=[self.SPEC]), RULES, NOW)
         self.assertEqual(d["projects"][0]["spec"], self.SPEC)
 
-    # --- 台帳の遅延追記 (backfill) ---
-    def test_backfill_carries_specs_missing_from_the_ledger(self):
-        """台帳に無い採択 spec は次の curriculum の PR にまとめて載る。"""
+    # --- 台帳の遅延追記 (backfill) は 4b-2b で無くなった ---
+    def test_curriculum_spawn_carries_no_ledger_backfill(self):
+        """archive.jsonl への追記を止めたので、Job に渡す backfill も無い。"""
         p = project(id="P-9001", branch="project/p-9001", state="active",
                     spec={"id": "P-9001", "verify": ["false"]})
         _, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
         spawn = [a for a in actions if a["type"] == "spawn_curriculum"][0]
-        self.assertEqual([s["id"] for s in spawn["archive_backfill"]], ["P-9001"])
-
-    def test_backfill_skips_specs_already_in_the_ledger(self):
-        p = project(id="P-0009", branch="project/p-0009", state="active",
-                    spec=self.SPEC)
-        _, actions = reconcile.decide(
-            doc(p), facts(archived_ids=["P-0009"]), RULES, NOW
-        )
-        spawn = [a for a in actions if a["type"] == "spawn_curriculum"][0]
-        self.assertEqual(spawn["archive_backfill"], [])
-
-    def test_backfill_does_not_look_at_the_cr_specs(self):
-        """CR は doc の写しなので、そこを見ると backfill が永久に空になる。
-
-        4b-2a で adopted_specs の読み先が Project CR に移った。台帳の欠落は
-        git 側 (archived_ids) にしか答えが無い。
-        """
-        p = project(id="P-9001", branch="project/p-9001", state="active",
-                    spec={"id": "P-9001", "verify": ["false"]})
-        _, actions = reconcile.decide(
-            doc(p), facts(adopted_specs=[{"id": "P-9001", "verify": ["false"]}]),
-            RULES, NOW,
-        )
-        spawn = [a for a in actions if a["type"] == "spawn_curriculum"][0]
-        self.assertEqual([s["id"] for s in spawn["archive_backfill"]], ["P-9001"])
-
-    def test_backfill_is_capped(self):
-        projects = [
-            project(id=f"P-9{n:03d}", branch=f"project/p-9{n:03d}", state="delivered",
-                    spec={"id": f"P-9{n:03d}", "verify": ["false"]})
-            for n in range(reconcile.ARCHIVE_BACKFILL_LIMIT + 5)
-        ]
-        _, actions = reconcile.decide(doc(*projects), facts(), RULES, NOW)
-        spawn = [a for a in actions if a["type"] == "spawn_curriculum"][0]
-        self.assertEqual(
-            len(spawn["archive_backfill"]), reconcile.ARCHIVE_BACKFILL_LIMIT
-        )
+        self.assertNotIn("archive_backfill", spawn)

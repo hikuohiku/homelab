@@ -23,8 +23,7 @@ interface DailyUsage {
   cost_usd?: number; tokens?: number; sessions?: number; empty_sessions?: number;
 }
 
-// 心拍と「止めて」は **まだ ops-state ブランチ**。heartbeat の移設 (Lease 化) は
-// 設計の Phase 7 で、この段では触っていない
+// 心拍は **まだ ops-state ブランチ**、「止めて」は HeartState CR (4b-2b)
 interface HeartState {
   heartbeat: { beat?: number; at?: string; usage?: DailyUsage };
   stopEngaged: boolean;
@@ -92,34 +91,40 @@ async function ensureRepository(): Promise<void> {
   }
 }
 
-async function loadHeart(): Promise<HeartState> {
+// 「止めて」が効いているかは HeartState CR から読む (設計 4b-2b)。
+// projects.json への書き込みが止まったので、git 側の stop_engaged は凍った古い値。
+// heart の /healthz を見ないのは、**heart が死んだと見せる**のがこの画面の
+// 存在意義の一つで、heart 経由では止まった瞬間に読めなくなるため
+const HEART_STATE_PATH =
+  `/apis/autopilot.homelab.hikuohiku.dev/v1/namespaces/${NAMESPACE}/heartstates/heart`;
+
+export function stopEngagedFromCr(cr: { spec?: { stop_engaged?: boolean } }): boolean {
+  return Boolean(cr?.spec?.stop_engaged);
+}
+
+async function loadStopEngaged(): Promise<boolean> {
   if (LOCAL_DIR) {
-    const [projectsText, heartbeatText] = await Promise.all([
-      readFile(`${LOCAL_DIR}/projects.json`, "utf8"),
-      readFile(`${LOCAL_DIR}/heartbeat.json`, "utf8"),
-    ]);
-    return {
-      heartbeat: parseJson(heartbeatText, {}),
-      stopEngaged: Boolean(parseJson<{ stop_engaged?: boolean }>(projectsText, {}).stop_engaged),
-    };
+    const text = await readFile(`${LOCAL_DIR}/heart-state.json`, "utf8").catch(() => "{}");
+    return Boolean(parseJson<{ stop_engaged?: boolean }>(text, {}).stop_engaged);
+  }
+  return stopEngagedFromCr(await kubeGet(HEART_STATE_PATH));
+}
+
+// 心拍は **まだ ops-state ブランチ**。Lease 化は設計の Phase 7 で、ここでは触らない
+async function loadHeartbeat(): Promise<HeartState["heartbeat"]> {
+  if (LOCAL_DIR) {
+    return parseJson(await readFile(`${LOCAL_DIR}/heartbeat.json`, "utf8"), {});
   }
   await ensureRepository();
-  // main はもう引かない: archive.jsonl による題名補完が CR の spec.spec に移った
   await git([
     "fetch", "--quiet", "--no-tags", "--depth=1", "origin",
     "+refs/heads/ops-state:refs/remotes/origin/ops-state",
   ]);
-  const [projectsText, heartbeatText] = await Promise.all([
-    git(["show", "origin/ops-state:projects.json"]),
-    git(["show", "origin/ops-state:heartbeat.json"]),
-  ]);
-  return {
-    heartbeat: parseJson(heartbeatText, {}),
-    stopEngaged: Boolean(parseJson<{ stop_engaged?: boolean }>(projectsText, {}).stop_engaged),
-  };
+  return parseJson(await git(["show", "origin/ops-state:heartbeat.json"]), {});
 }
 
-// 読み先が 2 つ (CR と ops-state) になったので、片方の失敗でもう片方まで
+// 読み先が 3 つ (Project CR / HeartState CR / ops-state の心拍) になったので、
+// 1 つの失敗で残りまで
 // 巻き添えにしない。**黙って空を返さない** — プロジェクト 0 件は「全部終わった」に
 // 見えるので、直近の写しがあれば警告つきで出し、無ければ取得失敗だと言い切る
 async function refresh(): Promise<OpsState> {
@@ -143,16 +148,26 @@ async function refreshOnce(): Promise<OpsState> {
       (previous ? "（直近の写しを表示中）" : "（表示できるものが無い）"),
     );
   }
-  let heart: HeartState = { heartbeat: previous?.heartbeat ?? {}, stopEngaged: previous?.stopEngaged ?? false };
+  let heartbeat = previous?.heartbeat ?? {};
   try {
-    heart = await loadHeart();
+    heartbeat = await loadHeartbeat();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    warnings.push(`ops-state 更新失敗: ${message}`);
+    warnings.push(`心拍 (ops-state) 更新失敗: ${message}`);
+  }
+  // **読めないときは直近の値を保つ**。false に倒すと「止めて」と言った後に
+  // 画面上だけ動いているように見える
+  let stopEngaged = previous?.stopEngaged ?? false;
+  try {
+    stopEngaged = await loadStopEngaged();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    warnings.push(`停止状態 (HeartState CR) 取得失敗: ${message}`);
   }
   const value: OpsState = {
     projects,
-    ...heart,
+    heartbeat,
+    stopEngaged,
     warning: warnings.length ? warnings.join(" / ") : undefined,
   };
   // 警告つきでも cached は更新する (取れた側は新しいので)

@@ -8,7 +8,7 @@
   2. 事実収集 (health / Job / PVC の result / PR / フィードバック 2 経路)
   3. reconcile.decide() — 判断はすべて純関数側
   4. actions 実行 (shadow モードでは記録のみ)
-  5. 指標追記・heartbeat・ops-state push
+  5. Project CR / HeartState CR へ書き戻し・指標追記・heartbeat
 
 heartbeat は旧 loop.sh と同じ書式で stdout に出す。ops-health-reporter の
 HEARTBEAT_RE (report.py) がこれを拾って自己ハング検知に使うため、
@@ -31,6 +31,7 @@ from . import (
     facts,
     gate,
     gitutil,
+    heartstate,
     lease,
     metrics,
     projectcr,
@@ -40,11 +41,14 @@ from . import (
 )
 from .gh import Gh, GhError
 from .notify import Notifier, veto_footer
-from .statefiles import TERMINAL_STATES, StateFiles, migrate_plan, now_iso
+from .statefiles import (
+    TERMINAL_STATES,
+    StateFiles,
+    migrate_plan,
+    now_iso,
+    validate_projects,
+)
 
-# Project CR の書き込み失敗を人間に鳴らすまでの連続ビート数 (note_cr_failures)。
-# 120s/beat なので 5 ビート ≒ 10 分。瞬断は黙って通り、スキーマの穴は鳴る
-CR_FAIL_ALERT_BEATS = 5
 
 _stop = False
 
@@ -66,17 +70,12 @@ def log(msg):
 
 
 def spec_env(project):
-    """projects.json に載っている spec を Job の env にも積む。
+    """doc に載っている spec を Job の env に積む。**runner の読み先の第 1 段**。
 
-    spec の正は ops-state の projects.json で、runner はそこから読む
-    (設計 rev3 D32)。env はその写しで、runner の読み先の最後段になる:
-
-    - 即時 dispatch は **Job 作成がビートの commit より先**なので、走り出しの
-      瞬間だけ ops-state にまだ載っていない。そこを env が埋める
-    - GitHub API が読めないビートでも走り出せる
-
-    経路は違うが**書き手が heart だけ**という性質は同じで、Job の spec に
-    固定される env は runner のブランチからは書き換えられない。
+    プロジェクトの正が Project CR に移った後 (4b-2a)、runner はここから spec を
+    読む。CR を直接読ませないのは worker Job が SA トークンを automount して
+    いないため。改竄耐性は落ちない — env は Pod spec に固定され、走り出した後は
+    プロジェクトブランチからもコンテナの中からも書き換えられない。
     """
     spec = (project or {}).get("spec")
     if not spec:
@@ -107,8 +106,8 @@ class Heart:
         # 保持窓ぶんだけ置く。誰も読み戻さないので、消えても判断は狂わない
         self.metrics_store = StateFiles(self.cfg.data_dir / "metrics")
         # heart しか読まない作業ファイル (キュー・監査・カーソル) は git に出さない
-        # (設計 state-out-of-git Phase 3)。ops-state に残るのは外から見える
-        # projects.json / heartbeat.json だけ
+        # (設計 state-out-of-git Phase 3)。projects.json も止めた (4b-2b) ので、
+        # ops-state に残るのは heartbeat.json と旧ダッシュボード用の metrics 1 行だけ
         self.work_dir = self.cfg.data_dir / "work"
         self.work = StateFiles(self.work_dir)
         self.transcripts = self.cfg.data_dir / "transcripts"
@@ -215,13 +214,6 @@ class Heart:
                                 "ADOPT_LIMIT": a.get("adopt_limit", 2),
                                 "TASK_REQUESTS": tasks.for_env(
                                     self.work.read_jsonl(tasks.QUEUE_FILE)
-                                ),
-                                # 台帳 (archive.jsonl) にまだ載っていない採択 spec。
-                                # 着手はもう台帳を待たないので、動き出した spec を
-                                # この Job の PR にまとめて載せる (設計 rev3 D32)
-                                "ARCHIVE_BACKFILL_JSON": json.dumps(
-                                    a.get("archive_backfill") or [],
-                                    ensure_ascii=False,
                                 ),
                                 **history,
                             },
@@ -509,7 +501,10 @@ class Heart:
             self.cfg.feedback_issue,
         )
 
-        doc = sf.load_projects()
+        # プロジェクトの正は Project CR + HeartState (設計 4b-2b)。git の
+        # projects.json はもう書かれない。読めなければビートを落とす — 空の
+        # 一覧を渡すと decide は「やることが無い」と読み、器は静かに止まる
+        doc, cr_items = self.load_projects_doc()
         cursors = self.work.load_cursors()
 
         # --- 観測。失敗した項目は None (「無い」と区別する。decide が保守的に扱う) ---
@@ -611,11 +606,6 @@ class Heart:
             "curriculum": curriculum,
             "critic": critic,
             "adopted_specs": adopted_specs,
-            # 台帳 (main の archive.jsonl) に既に載っている採択 id。
-            # **台帳の欠落検知はここだけが git を見る** — 4b-2a では台帳への
-            # 書き込みが残っているので、何がまだ載っていないかは git 側にしか
-            # 答えが無い。台帳を止める 4b-2b でこの facts ごと消える
-            "archived_ids": sorted(facts.load_archived_ids(self.repo_dir)),
             "commands": commands,
             "processed_commands": processed_commands,
             # 即時 dispatch (設計 rev3 Phase D) の結末。gate スレッドが
@@ -665,8 +655,12 @@ class Heart:
         # --- 一段目: 状態遷移を副作用より先に永続化する (レビュー指摘 [8])。
         # ここで落ちても副作用は未実行なので、次のビートが同じ判断をやり直すだけ。
         # 逆順 (実行→保存) だと、保存失敗の翌ビートが「実行済みの副作用」を知らずに
-        # 二重実行する
-        sf.save_projects(doc)
+        # 二重実行する。**保存先は Project CR** (設計 4b-2b)。
+        #
+        # 棄却案の取り込みも **ここ**でやる。curriculum の result.json を読むが、
+        # そのファイルはこの後の execute() の consume_curriculum が退避するので、
+        # 二段目まで待つと今回落ちた案が CR にならない
+        self.sync_project_crs(doc, notifier, now, existing=cr_items)
         self.work.save_cursors(cursors)
 
         for item in review_needed:
@@ -738,14 +732,17 @@ class Heart:
         # **最新の 1 行だけ**に切り詰める。新イメージを pin したらこの行ごと消す
         # (設計 state-out-of-git Phase 1)
         sf.rewrite_jsonl("metrics.jsonl", [record])
-        sf.save_projects(doc)
-        # 二重書き (設計 state-out-of-git Phase 4a)。git 側の写しはそのまま残し、
-        # 同じ内容を Project CR にも置く。CR が壊れてもビートは止めない
-        try:
-            self.sync_project_crs(doc, notifier, now)
-        except Exception as e:  # noqa: BLE001 — CR はまだ写し。正は projects.json
-            log(f"project CR sync failed: {e}")
-            self.note_cr_failures(1, notifier, now)
+        # 二段目の永続化 (設計 4b-2b)。**projects.json はもう書かない** — 正は
+        # Project CR + HeartState で、git 側に写しを残すと「どちらが本当か」が
+        # 曖昧なまま Phase 7 まで残る。
+        #
+        # 4a では「CR が壊れてもビートは止めない」だった。CR が正になった今、
+        # 書けないことは状態が進まないことそのもので、握り潰すと announce 済みの
+        # 予告や spawn 済みの job 名が次のビートで消え、同じ副作用が繰り返される。
+        # だから例外を上げてビートを 1 回死なせる — この後の heartbeat も Lease も
+        # gate.update も走らないので、**外から見た heart は止まって見える**。
+        # 状態が進んでいないのだから、そう見えるのが正しい。
+        self.sync_project_crs(doc, notifier, now, rejected=False)
         # usage は heartbeat に載せる。ダッシュボードの唯一の metrics 利用が
         # 「最終行の usage」だけで、そのために 8.9 MB の metrics.jsonl を
         # 20 秒ごとに fetch していた (設計 state-out-of-git Phase 1)
@@ -788,39 +785,88 @@ class Heart:
         except Exception as e:  # noqa: BLE001 — 書けないことは沈黙として現れる
             log(f"lease renew failed: {e}")
 
-    def sync_project_crs(self, doc, notifier=None, now=None):
-        """projects.json の写しと、台帳の棄却案を Project CR に書く。
+    # --- 正の読み書き (設計 state-out-of-git 4b-2b) ---
+    def load_projects_doc(self):
+        """Project CR + HeartState から projects doc を作る。(doc, CR の一覧) を返す。
 
-        Phase 4a で始めた二重書きに、4b-1 で棄却案の取り込みを足した
-        (設計 state-out-of-git「棄却された案も CR にする」)。
+        **fail-closed**。API が落ちれば例外はそのまま上がり、ビートが 1 回死ぬ。
+        空の doc で先へ進めると decide は全プロジェクトが消えたと読み、announce も
+        spawn も止まったまま「正常なビート」を積む。
 
-        **正はまだ projects.json** なので、ここが失敗してもビートは落とさない。
-        変わった CR だけを送る。消えたプロジェクトは消さない (projectcr.plan)。
+        「CR が 0 件」は API が成功しても起きうる (CRD ごと消えた・namespace が
+        違う・RBAC を外された)。直前まで居たプロジェクトが 0 件になったら、
+        これも観測失敗として扱って落とす。床は PVC に置く — git を読み戻さない。
+        """
+        k8s = self.k8s_client()
+        items = k8s.list_custom(
+            projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL,
+            label_selector=projectcr.NOT_REJECTED_SELECTOR,
+        )
+        try:
+            hs = k8s.get_custom(
+                projectcr.API_VERSION, self.cfg.namespace,
+                heartstate.PLURAL, heartstate.NAME,
+            )
+        except Exception as e:  # noqa: BLE001 — 初回は存在しないのが正常
+            log(f"HeartState を読めない (既定値で続行): {e}")
+            hs = None
+        doc = projectcr.doc_from_crs(items, heartstate.from_cr(hs))
+        floor = self.work.load_project_floor()
+        if not doc["projects"] and floor:
+            raise RuntimeError(
+                f"Project CR が 0 件 (直前は {floor} 件)。CRD / RBAC / namespace を疑う。"
+                "空の一覧では判断しない"
+            )
+        if len(doc["projects"]) < floor:
+            log(
+                f"Project CR が減っている ({floor} → {len(doc['projects'])} 件)。"
+                "終端 CR は消さない設計なので、消えた理由を確かめること"
+            )
+        self.work.save_project_floor(len(doc["projects"]))
+        return doc, items
+
+    def sync_project_crs(self, doc, notifier=None, now=None, existing=None,
+                         rejected=True):
+        """doc を Project CR + HeartState に書き戻す。**ここが正の書き込み**。
+
+        失敗は握り潰さない (note_cr_failures が鳴らして例外を上げる)。理由は
+        呼び出し側のコメント。変わった CR だけを送り、消えたプロジェクトの CR は
+        消さない (projectcr.plan)。
+
+        existing を渡せば LIST を省く。ビートの間 CR を触るのは heart だけなので、
+        取り直しても同じものが返る。
+
+        rejected=False は一段目 (副作用の前) の保存で使う。棄却案の取り込みは
+        遷移の永続化と関係がなく、1 ビートに 2 度やる意味が無い。
 
         棄却案の入り口を **1 回きりの移行スクリプトにしていない**理由: 器の外に
         kubectl を持った人間が居ない前提で回っており、手で流す前提の経路は
-        「誰も流さないまま 4b-2 に進む」で終わる。毎ビート台帳を突き合わせれば
-        取り込みは自力で収束し、restic からの復元後もひとりでに埋め直る。
-        4b-2 で台帳の書き込みを止めるときは、読み先を archive.jsonl から
-        curriculum の result.json に差し替えるだけで plan_rejected は動く。
+        「誰も流さないまま先へ進む」で終わる。毎ビート突き合わせれば取り込みは
+        自力で収束し、restic からの復元後もひとりでに埋め直る。
         """
+        # 不変条件の検査はここが唯一のゲートになった。projects.json への
+        # save_projects() が通していたもので、CRD のスキーマでは見られない
+        # (id の重複、非終端の branch が project/ で始まること) を見る
+        errors = validate_projects(doc)
+        if errors:
+            raise ValueError("projects doc validation: " + "; ".join(errors))
         k8s = self.k8s_client()
-        existing = k8s.list_custom(
-            projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL
-        )
+        if existing is None:
+            existing = k8s.list_custom(
+                projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL,
+                label_selector=projectcr.NOT_REJECTED_SELECTOR,
+            )
         write, orphans = projectcr.plan(
             doc, existing, self.cfg.namespace, TERMINAL_STATES
         )
-        # 棄却案は projects.json に居ない (居させない) ので、台帳から直接引く。
-        # 1 ビートの取り込み件数は REJECTED_BATCH_LIMIT で抑える
-        rejected = projectcr.plan_rejected(
-            facts.load_archive_records(self.repo_dir),
-            existing,
-            self.cfg.namespace,
-            {p["id"] for p in doc.get("projects", [])},
-        )
+        # 棄却案は doc に居ない (居させない) ので別経路で入れる。読み先は
+        # 「curriculum が今回落とした案」と「台帳の過去分」の 2 つ。台帳への
+        # 書き込みは 4b-2b で止めたので、これから落ちる案は前者からしか来ない。
+        # 台帳を読むのは過去 250 件超の取り込みが未収束のときだけで、
+        # archive.jsonl の実物を消す Phase 7 でこの行ごと消える
+        rejected_crs = self.plan_rejected_crs(doc) if rejected else []
         failed = 0
-        for cr in write + rejected:
+        for cr in write + rejected_crs:
             try:
                 k8s.apply_custom(
                     projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL,
@@ -829,47 +875,89 @@ class Heart:
             except Exception as e:  # noqa: BLE001 — 1 件の失敗で残りを諦めない
                 failed += 1
                 log(f"project CR apply failed: {cr['metadata']['name']}: {e}")
-        if write or rejected or orphans:
+        # doc のスカラ (stop_engaged / last_*) は 1 件 1 プロジェクトの CR には
+        # 載らないので HeartState へ。ここが落ちると次のビートが古い stop_engaged を
+        # 読む = 人間の「止めて」が消える。Project CR と同じ勘定に入れる
+        try:
+            k8s.apply_custom(
+                projectcr.API_VERSION, self.cfg.namespace, heartstate.PLURAL,
+                heartstate.NAME, heartstate.to_cr(self.cfg.namespace, doc),
+            )
+        except Exception as e:  # noqa: BLE001
+            failed += 1
+            log(f"HeartState apply failed: {e}")
+        if write or rejected_crs or orphans:
             log(
-                f"project CR sync: applied={len(write) + len(rejected) - failed} "
-                f"failed={failed} rejected={len(rejected)} "
+                f"project CR sync: applied={len(write) + len(rejected_crs) - failed} "
+                f"failed={failed} rejected={len(rejected_crs)} "
                 f"orphans={','.join(orphans) if orphans else '-'}"
             )
         self.note_cr_failures(failed, notifier, now)
 
-    def note_cr_failures(self, failed, notifier=None, now=None):
-        """CR の書き込み失敗が続いていることを人間に届ける。
+    # 棄却案を掃き集める間隔 (ビート)。**毎ビートやらない** — 収束後は 1 件も
+    # 書かないのに終端 250 件超の LIST だけが残るため。120s/beat なら 20 分ごと
+    REJECTED_SWEEP_BEATS = 10
 
-        1 回の失敗は API の瞬断でよくある。**続く**失敗はスキーマの穴で、
-        2026-08-24 に `.spec.spec.budget` が未宣言だったために P-0353 の CR が
-        毎ビート 500 で拒否され続けた (誰も鳴らさなかったので気づくのに丸一日
-        かかった)。CR が正になる 4b-2 の後、これは静かなデータ欠損そのものになる。
+    def plan_rejected_crs(self, doc):
+        """まだ CR になっていない棄却案を返す。
+
+        読み先は 2 つ:
+
+          - curriculum Job の result.json — **これから落ちる案の唯一の経路**。
+            台帳 (archive.jsonl) への追記は 4b-2b で止めた
+          - main の archive.jsonl — 過去 250 件超の取り込み。読むだけで、
+            実物を消す Phase 7 でこの経路ごと消える
+
+        後に来た方が勝つ (projectcr.latest_records) ので、curriculum を後ろに置く。
+
+        **result.json は毎ビート見る**。そのファイルは consume_curriculum が
+        退避するので、掃き掃除の周期まで待つと今回落ちた案が永久に CR にならない。
+        台帳の方は 250 件超の LIST を毎ビート引く価値が無いので周期で回す。
+        """
+        fresh = facts.load_proposal_records(self.cfg.data_dir)
+        self.rejected_sweep = getattr(self, "rejected_sweep", 0) + 1
+        sweep = self.rejected_sweep % self.REJECTED_SWEEP_BEATS == 1
+        if not fresh and not sweep:
+            return []
+        have = self.k8s_client().list_custom(
+            projectcr.API_VERSION, self.cfg.namespace, projectcr.PLURAL,
+            label_selector=projectcr.REJECTED_SELECTOR,
+        )
+        records = (facts.load_archive_records(self.repo_dir) if sweep else []) + fresh
+        return projectcr.plan_rejected(
+            records, have, self.cfg.namespace, {p["id"] for p in doc.get("projects", [])}
+        )
+
+    def note_cr_failures(self, failed, notifier=None, now=None):
+        """CR / HeartState の書き込み失敗を人間に届け、ビートを落とす。
+
+        4a では連続 5 ビートで初めて鳴らしていた — 正が projects.json だったので、
+        1 回の失敗は写しがずれるだけだった。**CR が正になった今 (4b-2b)、1 回の
+        失敗がそのまま状態の欠落**なので、初回から鳴らして例外で落とす。
+        2026-08-24 に `.spec.spec.budget` が未宣言で P-0353 の CR が毎ビート 500 に
+        なったときは、誰も鳴らさなかったので気づくのに丸一日かかった。
 
         指標に載せずに通知にしたのは、metrics.jsonl が PVC 内で読み手が居らず、
-        「載せた」が「届く」にならないため。連続 CR_FAIL_ALERT_BEATS ビートごとに
-        1 回だけ鳴らす (毎ビート鳴らすと通知が壊れた側になる)。
-        数えるのはプロセス内だけで、再起動で 0 に戻る — 失敗が続いていれば
-        すぐまた積み上がるので、状態として持ち出す価値が無い。
+        「載せた」が「届く」にならないため。連続回数は文面のためだけに数え、
+        プロセス内に留める (再起動で 0 に戻ってよい)。
         """
-        if failed:
-            self.cr_fail_streak += 1
-        else:
+        if not failed:
             self.cr_fail_streak = 0
             return
-        if self.cr_fail_streak % CR_FAIL_ALERT_BEATS:
-            return
+        self.cr_fail_streak += 1
         text = (
-            f"Project CR の書き込みが {self.cr_fail_streak} ビート連続で失敗しています。"
+            f"Project CR / heart 状態の書き込みに {failed} 件失敗しました "
+            f"(連続 {self.cr_fail_streak} ビート)。**状態はこのビートぶん進んでいません**。"
             "CRD のスキーマに未宣言のフィールドがあると server-side apply は 500 で拒否します "
             "(apps/autopilot/crd-project.yaml)。heart のログに失敗した CR 名が出ています"
         )
         if notifier is None:
             log(f"[cr-alert] {text}")
-            return
-        if self.cfg.shadow:
+        elif self.cfg.shadow:
             log(f"[shadow] notify[incident] {text[:80]}")
         else:
             notifier.send("incident", text, now)
+        raise RuntimeError(text)
 
     def prune_metrics(self, now):
         """保持窓より古い指標行を落とす。行数が変わったときだけ書き直す。"""

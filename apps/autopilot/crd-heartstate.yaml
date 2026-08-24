@@ -1,0 +1,76 @@
+# heart の doc スカラ (設計 state-out-of-git Phase 4b-2)。
+#
+# Project CR がプロジェクト 1 件を持つのに対し、こちらは doc のトップレベルに
+# あるもの — 「止めて」が効いているか、最後に立案したのはいつか。1 namespace に
+# 1 個 (metadata.name: heart) だけ置く。
+#
+# **ConfigMap ではなく CR なのは RBAC のため**。autopilot-writer (宣言制注入で
+# プロジェクト Job に渡る SA) は configmaps に `*` を持っていて、RBAC には
+# 名前で穴を塞ぐ手段が無い。API グループ autopilot.homelab.hikuohiku.dev は
+# autopilot-writer に渡していないので、CR なら API が書き手を heart 1 人に縛る。
+#
+# ここに CR 本体は置かない (heart が毎ビート書くもので、ArgoCD の管理対象ではない)。
+# 構造スキーマは未宣言のフィールドを持つ CR を **500 で丸ごと拒否する**ので、
+# doc にキーを足したらここも足すこと (ops/heart/tests/test_heart_state.py が
+# `doc["x"] =` の代入と突き合わせる)。
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: heartstates.autopilot.homelab.hikuohiku.dev
+spec:
+  group: autopilot.homelab.hikuohiku.dev
+  scope: Namespaced
+  names:
+    kind: HeartState
+    listKind: HeartStateList
+    plural: heartstates
+    singular: heartstate
+  versions:
+    - name: v1
+      served: true
+      storage: true
+      additionalPrinterColumns:
+        - name: Stopped
+          type: boolean
+          jsonPath: .spec.stop_engaged
+        - name: LastCurriculum
+          type: string
+          jsonPath: .spec.last_curriculum_at
+        - name: LastActivity
+          type: string
+          jsonPath: .spec.last_activity_at
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              properties:
+                version:
+                  type: integer
+                # 人間の「止めて」。ここが true の間は誰も走らない
+                stop_engaged:
+                  type: boolean
+                last_curriculum_at:
+                  type: string
+                last_activity_at:
+                  type: string
+                last_critic_at:
+                  type: string
+                last_curriculum_dry:
+                  type: boolean
+                # 採択を取り込み済みの curriculum PR 番号。PR を持たない回は null
+                curriculum_registered_pr:
+                  type: integer
+                  nullable: true
+                # 雑務のキュー。今は誰も積んでいない (statefiles.CHORE_STATES)
+                chores:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id:
+                        type: string
+                      state:
+                        type: string

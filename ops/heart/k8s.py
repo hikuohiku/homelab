@@ -96,6 +96,11 @@ class K8s:
             path += f"?labelSelector={urllib.parse.quote(label_selector)}"
         return self.request("GET", path).get("items", [])
 
+    def get_custom(self, api_version, namespace, plural, name):
+        return self.request(
+            "GET", f"/apis/{api_version}/namespaces/{namespace}/{plural}/{name}"
+        )
+
     def apply_custom(self, api_version, namespace, plural, name, body):
         """server-side apply。存在しなければ作り、あれば heart の持ち分を上書きする。
 
