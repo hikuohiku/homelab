@@ -2187,9 +2187,40 @@ spec・runner 非接触。最小プロトコルを踏襲:
 直接要因 (spec 修正・escape hatch) はまだ含まないが、**main が次に動くのはおそらく
 これ** — 着地検知を最優先で見ること。
 
+## セッション 75 (2026-08-24)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 17 から不変。pull ref 一致を確認
+(local HEAD = origin/project/p-0258 = 399341972d = session 74 commit、ahead/behind 無し)。
+
+**新たな動き: PR #581 の head ブランチ `pr-581` が origin から削除された**
+(`git fetch origin --prune` で `[deleted] -> origin/pr-581` を実測)。ただし実質的変化は
+無い: GitHub API 直叩き (gh 無しのため `curl https://api.github.com/repos/.../pulls/581`)
+で **state=open, merged=false, closed_at=null** を実測 — merge でも close でもない。
+`refs/pull/581/head` = 00de3c47b は session 74 実測と同一 hash で中身不変。
+なお PR タイトルは「curriculum: プロジェクト立案 20260824-002231」であり、session 74 が
+記録した「curriculum: 6 案 (採択 2)」は commit subject だった (両者は別物。PR 自体は
+当初からこのタイトル。hash 不変なので force-push も無し)。
+
+ops-state は beat 212〜217 (edb5d0ddf..2b2f7e334) に進んだが、beat 215 decide が
+projects.json を触ったのは **P-0243 の state active→stalled 化のみ**
+(stalled_reason: budget_exhausted)。P-0258 エントリは不変を再実測 (state=active /
+veto_deadline 2026-08-23T22:56:36Z / spawn_count 1 / drift_count 0)。p-0243 ブランチも
+aa4bc483a..e940946be まで動いたが自己ログ PROGRESS.md +75 行のみで非関連。
+reporter ブランチは不変 (ec5443b69、ls-remote 実測) のため verify 3 は参考確認のみ —
+`recovery_probe: None` で **red 継続**。spec・runner 非接触。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 73 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 73 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | reporter ブランチ不変につき参考確認のみ — recovery_probe: None で red 継続 |
+
+新たな発見は無し (PR #581 の branch 削除は上記のとおり実質ノイズ)。
+
 ## 次のセッションへの一言
 
-セッション 13〜74 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+セッション 13〜75 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
 `git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
 spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
 (一時ファイルは必ず `mktemp`)。
@@ -2200,8 +2231,16 @@ spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで
 コード (report.py / rbac.yaml) が載っていれば明示 fetch の上 verify 3 を正式再実測
 (session 30/41/51/62/72 の前例) — ただし P-0278/P-0279 は recovery_probe を足さないので
 red 継続の見込み。reporter ブランチの routine データ beat だけなら従来どおり参考確認で可。
+
+PR #581 の head を見るときは **origin の実ブランチ `pr-581` は session 75 時点で消滅済み**
+なので `git fetch origin refs/pull/581/head:refs/remotes/origin/pr-581-head` (session 75 が
+作成した tracking ref。更新はこれで上書き可) か ls-remote 直参照を使うこと。
+GitHub API の PR 状態確認は gh 無しでも
+`curl -s https://api.github.com/repos/hikuohiku/homelab/pulls/581` で可 (session 75 実測)。
 ops-state beat の `projects.json` は毎 beat の全プロジェクト状態ダンプなので、
 **自プロジェクトの status 文字列が変わった時だけ**注意深く見ればよい (session 42 確認済み)。
+decide commit が来たら projects.json diff を見る価値はある (beat 215 は P-0243 stalled 化
+だけだったが、次は自プロジェクト関連が来る可能性もある)。
 curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
 か runner escape hatch が着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or
 03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
