@@ -651,3 +651,39 @@ spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで
 (一時ファイルは必ず `mktemp`)。curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
 か runner escape hatch が着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or
 03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
+
+## セッション 16 (2026-08-24 10:4x JST)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。pull ref 再確認 (556 refs 全件に対し本ブランチ固有 commit の一致ゼロ)。
+main 先頭は #580 (59169fddf) のまま session 15 から不変。
+
+新しい curriculum ブランチ `heart/curriculum-20260824-002231` (6 案・採択 2) を精査したが、
+差分は `ops/projects/archive.jsonl` への追記のみで **P-0258 spec 自体は無変更**
+(P-0258 への言及は却下案 P-0277 の reject_reason 内の先行例引用のみ)。runner も非接触。
+デッドロック世界に変化なし。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 14 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 14 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | red (`recovery_probe: None`) — merge 前なので想定どおり |
+
+reporter 最新 run も bd39f315f (00:00:07Z) のまま。
+
+### 発見
+
+- 新採択 P-0279「健康レポートが自分への入力を 2 箇所で読み失敗」は本ブランチが触った
+  `apps/ops-health-reporter/` (rbac.yaml / report.py 周辺) と将来接触する可能性がある。
+  着地時に conflict リスクを再評価すること (現時点では main 未着地、無接触)
+
+## 次のセッションへの一言
+
+セッション 13〜16 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+`git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
+spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
+(一時ファイルは必ず `mktemp`)。curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
+か runner escape hatch が着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or
+03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
+なお P-0279 が merge されたら `apps/ops-health-reporter/` の conflict 有無を先に確認
+してから verify を回すこと。
