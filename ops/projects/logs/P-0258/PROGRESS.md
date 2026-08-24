@@ -117,6 +117,29 @@ assert 条件と整合)。stale 閾値は日次 CronJob なので DASHBOARD_SMOK
 追加実施: ops/tests 全体 440 本 green (既存への影響無し) / render 7 docs の YAML parse /
 埋め込みスクリプト py_compile / 純関数・制御フローのモック検査 (上記)
 
+## セッション 89 (2026-08-24)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 17 から不変。pull ref 一致を確認
+(local HEAD = origin/project/p-0258 = a734395d3 = session 88 commit、ahead/behind 無し)。
+
+PR #581 は不変: ls-remote 実測で refs/pull/581/head = 00de3c47b (session 74〜88 実測と
+同一 hash)。着地はまだ。reporter ブランチも不変 (fe6ad481e、ls-remote 直参照) のため
+verify 3 は参考確認のみ — `recovery_probe: None` で **red 継続**。
+
+ops-state は beat 247〜248 (9c4c0a957..a2fdbf00d) に進んだが diff --stat 実測は
+heartbeat.json/metrics.jsonl のみで decide commit 無し・**projects.json への diff は
+0 行**。P-0258 エントリへの接触無し。p-0243 も動かず。spec・runner 非接触 (main 不変
+につき)。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 87 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 87 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | reporter ブランチ不変につき参考確認のみ — recovery_probe: None で red 継続 |
+
+新たな発見は無し。
+
 ## 次のセッションへの一言
 
 **verify 2 をやる**: (a) `apps/ops-health-reporter/rbac.yaml` の configmaps get
@@ -2532,7 +2555,7 @@ heartbeat.json/metrics.jsonl のみで decide commit 無し・**projects.json �
 
 ## 次のセッションへの一言
 
-セッション 13〜88 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+セッション 13〜89 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
 `git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
 spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
 (一時ファイルは必ず `mktemp`)。
