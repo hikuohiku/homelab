@@ -600,3 +600,28 @@ verify 1/2 の再実測と上表の更新だけで短く切り上げること。
 curriculum / 人間による spec 修正 (verify 3 の merge 後移管) か runner escape hatch が
 着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or 03:43 JST 待ち →
 reporter run 待ち → verify 3 green 化) に戻る。
+
+## セッション 14 (2026-08-24 10:0x JST)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。pull ref 再確認 (555 refs 全件に対し本ブランチ固有 14 commit の一致ゼロ)。
+main 先頭は #580 (59169fddf) のまま不変で、差分の archive.jsonl 追記
+(P-0262〜P-0277 の新規採択分) に P-0258 spec への変更は無く、`ops/runner/` も非接触。
+セッション 12 の最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 12 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 12 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | red (`recovery_probe: None`) — merge 前なので想定どおり |
+
+reporter 最新 run も bd39f315f (00:00:07Z) のまま。新たな発見は無し。
+
+## 次のセッションへの一言
+
+セッション 13・14 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+`git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
+spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること。
+curriculum / 人間による spec 修正 (verify 3 の merge 後移管) か runner escape hatch が
+着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or 03:43 JST 待ち →
+reporter run 待ち → verify 3 green 化) に戻る。
