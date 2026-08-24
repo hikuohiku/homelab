@@ -6723,7 +6723,7 @@
     {
       "id": "P-9005",
       "title": "常駐エージェント選択時に「transcript 信号を待っています」と出る不整合を直す",
-      "state": "in_review",
+      "state": "merging",
       "branch": "project/p-9005",
       "irreversible": false,
       "capabilities": [],
@@ -6761,7 +6761,8 @@
         611
       ],
       "review_requested_at": "2026-08-24T20:34:30Z",
-      "review_retries": 0
+      "review_retries": 0,
+      "merging_since": "2026-08-24T20:39:46Z"
     },
     {
       "id": "P-9004",
@@ -6804,7 +6805,7 @@
     {
       "id": "P-0325",
       "title": "来る見込みのない待機を UI から消す — transcript 空状態を transcriptAvailable に正直にする (人間依頼)",
-      "state": "proposed",
+      "state": "stalled",
       "branch": "project/p-0325",
       "irreversible": false,
       "capabilities": [],
@@ -6840,12 +6841,13 @@
         "adopted": true,
         "proposed_at": "2026-08-24T20:26:13Z"
       },
-      "adopt_gate_attempts": 3
+      "adopt_gate_attempts": 3,
+      "stalled_reason": "adopt_gate_unmeasurable"
     },
     {
       "id": "P-0328",
       "title": "「止めて」は今日届くのか — 人間の拒否権の伝路 (Telegram→NATS→core / inbox 代替) を、本物の停止を出さずに初めて撃つ",
-      "state": "proposed",
+      "state": "stalled",
       "branch": "project/p-0328",
       "irreversible": false,
       "capabilities": [
@@ -6883,12 +6885,13 @@
         "adopted": true,
         "proposed_at": "2026-08-24T20:26:13Z"
       },
-      "adopt_gate_attempts": 3
+      "adopt_gate_attempts": 3,
+      "stalled_reason": "adopt_gate_unmeasurable"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T19:58:03Z",
-  "last_activity_at": "2026-08-24T20:34:30Z",
+  "last_activity_at": "2026-08-24T20:39:46Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false,
