@@ -5850,11 +5850,80 @@
         "broken": []
       },
       "stalled_reason": "adopt_gate_some_pass"
+    },
+    {
+      "id": "P-0284",
+      "title": "エージェントライブに Core を映す — 常駐組は Job でなく「住人」として登録し、次の住人からは label だけで増えるようにする",
+      "state": "proposed",
+      "branch": "project/p-0284",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "cd apps/ops-dashboard/app && npx tsx --test tests/core.test.ts",
+        "grep -q 'autopilot-core' apps/ops-dashboard/app/src/lib/kubernetes.ts || grep -rq 'heart/resident' apps/ops-dashboard/app/src/lib/",
+        "grep -q 'heart/resident' apps/autopilot-core/deployment.yaml"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2000000
+      },
+      "created": "2026-08-24",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0285",
+      "title": "tailnet の DNS が今も落ちている — AdGuard Home の 84 回 CrashLoop を今日止め、壊れ方ごと直す",
+      "state": "proposed",
+      "branch": "project/p-0285",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "kubectl wait --for=condition=Available deployment/adguard -n adguard --timeout=120s",
+        "kubectl run ag-dns-probe-$(date +%s) --rm -i --restart=Never --image=busybox:1.36 -n adguard --command -- nslookup doubleclick.net adguard.adguard.svc.cluster.local",
+        "kubectl get pod -n adguard -l app=adguard -o jsonpath='{.items[0].status.containerStatuses[0].restartCount}' | grep -qx '0'",
+        "test -s docs/adguard-runbook.md"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2500000
+      },
+      "created": "2026-08-24",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0288",
+      "title": "PBS が要らないことを証明する最初の一歩 — coder workspace home の restic バックアップを実際に戻し、dotfiles が生きて返ることを見る",
+      "state": "proposed",
+      "branch": "project/p-0288",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "bash ops/drills/coder_home_restore_drill.sh",
+        "python3 -c \"import json,glob,time,sys; f=sorted(glob.glob('ops/drills/results/coder-home-restore-*.json'))[-1]; d=json.load(open(f)); assert d.get('ok') is True and time.time()-d['finished_at']<30*86400, 'drill 未成功または古い'\"",
+        "if grep -qnE 'restic +(forget|prune|unlock)' ops/drills/coder_home_restore_drill.sh; then echo '削除系コマンドは禁止'; exit 1; fi",
+        "grep -q 'coder-workspace-home の復元試験' docs/backup.md"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 3000000
+      },
+      "created": "2026-08-24",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-24T07:00:05Z",
-  "last_activity_at": "2026-08-24T07:48:09Z",
+  "last_curriculum_at": "2026-08-24T07:49:21Z",
+  "last_activity_at": "2026-08-24T07:49:21Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
