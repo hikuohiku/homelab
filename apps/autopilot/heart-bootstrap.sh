@@ -15,8 +15,11 @@ git config --global credential."https://github.com".helper \
   '!f() { printf "username=x-access-token\npassword=%s\n" "${AUTOPILOT_GITHUB_TOKEN}"; }; f'
 git config --global credential."https://github.com".username x-access-token
 
+# blobless clone (--filter=blob:none)。素の clone はこの repo で 65s / 124MB、
+# blobless は 2s / 9.2MB (2026-08-24 実測)。shallow にしないのは heart が
+# origin/ops-feedback など main 以外の ref も見るため (ops/heart/gitutil.py)
 if [ ! -d "${REPO_DIR}/.git" ]; then
-  git clone --quiet "${REPO_URL}" "${REPO_DIR}"
+  git clone --quiet --filter=blob:none "${REPO_URL}" "${REPO_DIR}"
 fi
 cd "${REPO_DIR}"
 git fetch --prune --quiet origin

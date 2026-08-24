@@ -10,6 +10,7 @@ SA の選択がここの安全上の本体 (決定 #5 宣言制注入):
     載ったプロジェクトの Job にだけ autopilot-writer を注入する
 """
 
+from . import gitutil
 from .k8s import K8sError
 
 
@@ -110,7 +111,11 @@ def build_job(cfg, kind, *, project=None, project_id=None, attempt=0, extra_env=
         "git config --global credential.\"https://github.com\".helper "
         "'!f() { printf \"username=x-access-token\\npassword=%s\\n\" "
         "\"${AUTOPILOT_GITHUB_TOKEN}\"; }; f'; "
-        "git clone --quiet https://github.com/" + cfg.repo + ".git /work/repo; "
+        # blobless clone。素の clone はこの repo で 65s / 124MB かかり、全 Job が
+        # 着手前にその待ちを払っていた (blobless は 2s / 9.2MB)。shallow にしないのは
+        # runner がブランチを切って push し、merge-base も見るため (gitutil.BLOBLESS)
+        "git clone --quiet " + gitutil.BLOBLESS
+        + " https://github.com/" + cfg.repo + ".git /work/repo; "
         "cd /work/repo; exec python3 ops/runner/runner.py"
     )
 

@@ -12,9 +12,32 @@ main の履歴とレビュー窓が運用ノイズで埋まるため)。
 import subprocess
 from pathlib import Path
 
+# clone は blobless (partial clone) で打つ。状態ブランチ 4 本の履歴で .git が 124MB あり、
+# 素の clone はこの回線で 65s、ops-state 1 本でも 54s かかる (2026-08-24 実測)。採択ゲートの
+# clone はこれで 120s 上限を越えて落ちていた。--filter=blob:none なら 2s / 9.2MB。
+# **shallow (--depth=1) にはしない。** ここの checkout は push もするし merge-base も要る。
+# --single-branch は remote.origin.fetch を 1 本に固定し、以後 fetch しても
+# origin/ops-state が生えない (P-0014, ops/memory/substrate.md)。
+# blob は使うときに 1 つずつ取りに行く = clone 後の操作にネットワークが要ることに注意。
+BLOBLESS = "--filter=blob:none"
+
 
 class GitError(Exception):
     pass
+
+
+def clone_args(repo_url, dest, branch=None, single_branch=False):
+    """clone のコマンド列を組み立てる (純関数。テストがネットワークに出ずに検査する)。
+
+    branch を渡すとその ref を checkout する。single_branch は「そのブランチしか
+    見ない」と言い切れる用途 (state_dir) だけ。
+    """
+    args = ["clone", "--quiet", BLOBLESS]
+    if branch:
+        args += ["--branch", branch]
+    if single_branch:
+        args.append("--single-branch")
+    return [*args, repo_url, str(dest)]
 
 
 def run(args, cwd=None, check=True):
@@ -31,7 +54,7 @@ def sync_main(repo_dir, repo_url):
     repo_dir = Path(repo_dir)
     if not (repo_dir / ".git").is_dir():
         repo_dir.parent.mkdir(parents=True, exist_ok=True)
-        run(["clone", "--quiet", repo_url, str(repo_dir)])
+        run(clone_args(repo_url, repo_dir))
     run(["fetch", "--prune", "--quiet", "origin"], cwd=repo_dir)
     run(["checkout", "--quiet", "-B", "main", "origin/main"], cwd=repo_dir)
     run(["reset", "--hard", "--quiet", "origin/main"], cwd=repo_dir)
@@ -62,10 +85,7 @@ def sync_state_branch(state_dir, repo_url, branch):
     state_dir = Path(state_dir)
     if not (state_dir / ".git").is_dir():
         state_dir.parent.mkdir(parents=True, exist_ok=True)
-        run(
-            ["clone", "--quiet", "--branch", branch, "--single-branch",
-             repo_url, str(state_dir)]
-        )
+        run(clone_args(repo_url, state_dir, branch=branch, single_branch=True))
     run(["fetch", "--quiet", "origin", branch], cwd=state_dir)
     ahead = run(
         ["rev-list", "--count", f"origin/{branch}..HEAD"], cwd=state_dir, check=False
