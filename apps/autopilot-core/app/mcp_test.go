@@ -60,7 +60,8 @@ func TestToolsListKeepsWindowsNarrow(t *testing.T) {
 		schema, _ := json.Marshal(tool.InputSchema)
 		// 観測ツールは引数を取らせない。URL やクエリを渡せるようにすると、
 		// 「用途を固定した窓」という性質が崩れる
-		if tool.Name != "request_task" && strings.Contains(string(schema), "required") {
+		if tool.Name != "request_task" && tool.Name != "dispatch_task" &&
+			strings.Contains(string(schema), "required") {
 			t.Fatalf("%s は引数を取らないべき: %s", tool.Name, schema)
 		}
 		// 依頼ツールも「何を頼むか」以外の自由度を持たない。宛先・Job 種別・
@@ -76,7 +77,7 @@ func TestToolsListKeepsWindowsNarrow(t *testing.T) {
 	want := []string{
 		"homelab_status", "homelab_health",
 		"homelab_applications", "homelab_pods", "homelab_events",
-		"request_task",
+		"request_task", "dispatch_task",
 	}
 	if len(parsed.Tools) != len(want) {
 		t.Fatalf("窓は %d 個だけ: %+v", len(want), parsed.Tools)

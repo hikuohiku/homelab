@@ -52,6 +52,13 @@ spec:
           image: ghcr.io/hikuohiku/homelab-autopilot@sha256:93a898cf0a1ec7a0363e9e2824f39670db2e3a8ca76674e755438ce8273c7bcb
           terminationMessagePolicy: FallbackToLogsOnError
           command: ["bash", "/config/heart-bootstrap.sh"]
+          ports:
+            # admission gate (設計 rev3 Phase D)。コアが dispatch_task で同期に
+            # 着手を要求する口。cluster 内の autopilot-core からしか届かない
+            # (heart-service.yaml の ClusterIP + NetworkPolicy)
+            - name: gate
+              containerPort: 8099
+              protocol: TCP
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -123,6 +130,11 @@ spec:
               value: /work/home
             - name: HEART_DATA_DIR
               value: /data
+            # admission gate の listen (設計 rev3 Phase D)。空にすると gate を
+            # 起こさない = コアの dispatch_task が isError になり、request_task
+            # (バス経由の起票) だけの構成に切り戻る
+            - name: HEART_GATE_LISTEN
+              value: 0.0.0.0:8099
           resources:
             # memory limits は実測が無いうちは付けない (CHARTER §4)。
             # CPU の limits は付ける（throttle なので超過しても回復する）。

@@ -205,6 +205,14 @@ spec:
                 secretKeyRef:
                   name: autopilot-core-credentials
                   key: NATS_CORE_NKEY_SEED
+            # heart の admission gate (設計 rev3 Phase D)。dispatch_task の宛先。
+            # cluster 内の ClusterIP だけで、認証は持たない (持たせると
+            # ops/rules.json の Doppler 鍵 allowlist を触ることになる)。
+            # 送信元はこの Pod に限られる (apps/autopilot/heart-service.yaml の
+            # NetworkPolicy)。ここを空にすると dispatch_task が届かず isError に
+            # なり、コアは request_task の経路に案内する
+            - name: CORE_HEART_GATE_URL
+              value: http://autopilot-heart.autopilot.svc:8099
             - name: TZ
               value: Asia/Tokyo
           resources:

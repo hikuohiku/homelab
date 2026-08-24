@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import gitutil, tasks, triage
+from . import dispatch, gitutil, tasks, triage
 from .statefiles import parse_iso
 
 
@@ -432,6 +432,41 @@ def collect_commands(command_dir):
             "title": str(command.get("title") or "").strip(),
             "body": body,
         })
+    return out
+
+
+def collect_dispatches(data_dir):
+    """即時 dispatch (設計 rev3 Phase D) の結末を名前順に返す。
+
+    書き手は同じプロセスの gate スレッド (ops/heart/gate.py)。gate は採択ゲートの
+    実測と Job 作成まで済ませてから <data_dir>/dispatch/inbox/<id>.json を置く。
+    ここで読んだものを reconcile.decide() が projects.json に折り込み、
+    execute() が consume_dispatch でファイルを退避する。
+
+    collect_commands と同じ規約: 読めない・壊れているものは黙って飛ばす
+    (ビートを落とす方が害が大きい)。
+    """
+    if data_dir is None:
+        return []
+    inbox = Path(data_dir) / dispatch.DISPATCH_DIR / dispatch.INBOX
+    try:
+        paths = sorted(
+            p for p in inbox.iterdir()
+            if p.is_file() and p.name.endswith(".json") and not p.name.startswith(".")
+        )
+    except OSError:
+        return []
+    out = []
+    for path in paths:
+        try:
+            record = json.loads(path.read_text())
+        except (OSError, ValueError):
+            continue
+        if not isinstance(record, dict):
+            continue
+        if not record.get("dispatch_id") or not record.get("project_id"):
+            continue
+        out.append(record)
     return out
 
 
