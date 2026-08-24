@@ -7417,13 +7417,56 @@
       "review_requested_at": "2026-08-24T23:19:37Z",
       "review_retries": 0,
       "merging_since": "2026-08-24T23:21:52Z"
+    },
+    {
+      "id": "P-9034",
+      "title": "『Healthy なのに届かない』を最初の 1 時間で捕まえる — 全アプリの Service (clusterIP / tailnet) 到達性マトリクスを常設する",
+      "state": "proposed",
+      "branch": "project/p-9034",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "test -f ops/tools/reachability_probe.py",
+        "python3 -m pytest ops/tests/test_reachability_probe.py -q",
+        "python3 ops/tools/reachability_probe.py --selftest"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-9034",
+        "title": "『Healthy なのに届かない』を最初の 1 時間で捕まえる — 全アプリの Service (clusterIP / tailnet) 到達性マトリクスを常設する",
+        "why": "critic 2026-08-24 の利用者所見 4 への直接応答: adguard が 242 回 CrashLoopBackOff で tailnet DNS 全停でも 2 日間人間に届かなかった。ArgoCD の health は Deployment と Job 失敗しか見ず、『人間が実際に叩く入口 (Service / tailnet) が応答するか』は別の失敗モード。P-0036 (observability 枠で棄却) を k8s 本体の計器に組み替え、クラスタ Service の dual-path 到達性を baseline + CI 検査で常設する — 画面の変更ではないため observability の枠を跨がない。",
+        "cell": [
+          "k8s",
+          "feature"
+        ],
+        "dod": "1. ops/tools/reachability_probe.py — 各アプリの Service を clusterIP 経由で、tailnet 公開アプリは MagicDNS 経由でも叩き、結果を ops/health/reachability.json に出力\n2. adguard の『DNS 死』がこの計器のどの検査で捕まるかを fixture で再現する unittest + --selftest\n3. baseline (今日の応答マップ) を docs に残す",
+        "verify": [
+          "test -f ops/tools/reachability_probe.py",
+          "python3 -m pytest ops/tests/test_reachability_probe.py -q",
+          "python3 ops/tools/reachability_probe.py --selftest"
+        ],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": false,
+        "confidence": "unsure",
+        "proposed_by": "",
+        "request_id": "",
+        "adopted": true,
+        "proposed_at": "2026-08-24T23:22:06Z"
+      },
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T23:07:31Z",
-  "last_activity_at": "2026-08-24T23:21:52Z",
+  "last_activity_at": "2026-08-24T23:23:00Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false,
-  "curriculum_registered_pr": 643
+  "curriculum_registered_pr": 646
 }
