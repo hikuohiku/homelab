@@ -197,10 +197,9 @@ def clone_fresh(repo_url, dest, branch="main"):
 
     **`--depth=1` を使わない。** shallow clone は `--single-branch` を含み、
     `remote.origin.fetch` が clone したブランチ 1 本だけになるため、以後
-    `git fetch origin` を何度打っても `origin/ops-state` が生えない
-    (`ops/memory/substrate.md`。P-0014 の worker が踏んだ)。verify に
-    `git show origin/ops-state:projects.json` を含む spec (ダッシュボード系) が
-    `origin/main` と `origin/ops-state` の両方を要るので、ref は全部見える形にする。
+    `git fetch origin` を何度打っても `origin/main` 以外の ref が生えない
+    (`ops/memory/substrate.md`。P-0014 の worker が踏んだ)。verify が main 以外の
+    ref を見る spec は書けるので、ref は全部見える形にしておく。
 
     素の clone は 65s / 124MB (2026-08-24 実測) で、`gitutil.run` の 120s 上限を
     回線次第で越えて落ちていた (P-0341 の stalled)。blobless clone なら 2s / 9.2MB で、

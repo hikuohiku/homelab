@@ -310,6 +310,73 @@ def collect_download_budget():
     return download_budget.build_report(entries)
 
 
+# 上流版の観測 (P-0126) の集約対象。産出側は version-watcher namespace の CronJob が
+# 毎晩 inventory 全対象を観測し、専用 ConfigMap `version-drift` の report.json キーへ
+# 書く契約 (download-budget / dashboard-smoke と同じ「産出側が専用 ConfigMap に書き、
+# reporter が読む」分離)。以前は watcher が ops-health-report ブランチの latest.json に
+# GET→merge→PUT で相乗りしていたが、レポートが ConfigMap へ移った (state-out-of-git
+# Phase 5) 時点でその latest.json の読み手が消え、version_drift だけが誰も読まない枝に
+# 積もっていた
+VERSION_DRIFT_NAMESPACE = "version-watcher"
+# 夜間 1 回の CronJob より長く沈黙していたら「装置が回っていない」(stale)。
+# 24h + 12h マージン。#49 型の静かな放置を防ぐ装置自身が静かに止まるのを見逃さない
+VERSION_DRIFT_STALE_AFTER_S = 36 * 3600
+
+
+def _version_drift_summary(payload, now):
+    """ConfigMap の report.json (watch.py の observe() 戻り値) を latest.json に載せる形へ。
+
+    鮮度を最優先で判定する: 古い drift 一覧より「観測が止まっている」を先に報せる。
+    """
+    generated_at = payload["generated_at"]
+    age = (
+        now - datetime.datetime.strptime(generated_at, "%Y-%m-%dT%H:%M:%SZ").replace(
+            tzinfo=datetime.timezone.utc
+        )
+    ).total_seconds()
+    summary = payload["summary"]
+    if not isinstance(summary, dict):
+        raise ValueError("version-drift の summary が object でない")
+    out = {
+        "generated_at": generated_at,
+        "age_seconds": int(age),
+        "summary": summary,
+        "drifted": payload.get("drifted", []),
+        "errors": payload.get("errors", []),
+    }
+    if age > VERSION_DRIFT_STALE_AFTER_S:
+        out["status"] = "stale"
+        out["reason"] = "最終観測が {} 時間前 (夜間 CronJob が回っていない)".format(
+            int(age // 3600)
+        )
+    else:
+        out["status"] = "ok"
+    return out
+
+
+def collect_version_drift():
+    """version-watcher ns の version-drift ConfigMap を読み、要約を返す (P-0126)。"""
+    now = datetime.datetime.now(datetime.timezone.utc)
+    try:
+        data = k8s_get(
+            "/api/v1/namespaces/{}/configmaps/version-drift".format(
+                VERSION_DRIFT_NAMESPACE
+            )
+        )
+        raw = data.get("data", {}).get("report.json")
+        if not raw:
+            raise KeyError(
+                "configmap version-drift に report.json キーが無い (産出側が未稼働)"
+            )
+        return _version_drift_summary(json.loads(raw), now)
+    except Exception as e:  # noqa: BLE001 — 他の収集を止めない
+        return {
+            "status": "no_data",
+            "reason": "configmap version-drift を読めない",
+            "error": "{}: {}".format(type(e).__name__, e),
+        }
+
+
 # Mission Control 描画スモーク (P-0193) の集約対象。産出側は autopilot namespace の
 # CronJob dashboard-smoke が、headless chromium での実際の描画断言結果を専用
 # ConfigMap `dashboard-smoke` の report.json キーへ書く契約 (download-budget と同じ
@@ -782,6 +849,7 @@ def main():
         "externalsecrets": collect(collect_externalsecrets),
         "autopilot": collect(collect_autopilot_health),
         "dashboard_smoke": collect(collect_dashboard_smoke),
+        "version_drift": collect(collect_version_drift),
         "notes": (
             "コンテナ/ノードの実メモリ・CPU 使用量は metrics-server (metrics.k8s.io) から取得 "
             "(pod_metrics/node_metrics)。PVC の実ディスク使用量は namespace ごとの pvc-usage-reporter "
@@ -830,6 +898,10 @@ def main():
              "briefing / incident へ流す）。loadavg は PID namespace で仮想化されないため node01 上の "
              "pod から host 全体の load が読める（2026-08-24 実測）。kubelet stats/summary には host "
              "load が無い（P-9029 審査指摘）ため取得源は /proc に倒している。"
+             " version_drift キーは inventory 全対象の上流最新版の観測（P-0126）。version-watcher "
+             "namespace の夜間 CronJob が専用 ConfigMap version-drift の report.json キーへ書いたものを "
+             "集約する。status は ok / stale（最終観測が 36h より古い = 観測が止まっている）/ "
+             "no_data（産出側未稼働・記録破損）。drifted に id / current / latest / upstream の列が並ぶ。"
         ),
     }
 

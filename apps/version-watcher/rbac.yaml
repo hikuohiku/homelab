@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: version-watcher
+  namespace: version-watcher
+---
+# 自 namespace の ConfigMap 1 個だけを get/create/update できる最小権限
+# (apps/*/pvc-usage-cronjob.yaml の pvc-usage-reporter と同じ形)。
+# create は RBAC で名前を絞れないため resourceNames を持てないが、この namespace には
+# version-watcher 自身しか居ないので取れる余地が無い。
+#
+# 以前この CronJob は k8s API を一切読まず token も mount していなかった (GitHub API と
+# だけ話していたため)。健全性レポートが git のブランチから ConfigMap へ移り
+# (state-out-of-git Phase 5)、version_drift の書き先も ConfigMap になったので、
+# 「GitHub の Contents write」を「自 namespace の ConfigMap 1 個の write」に置き換えた。
+# 権限の総量は減っている (リポジトリ全体への書き込みが消えた)。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: version-watcher
+  namespace: version-watcher
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["version-drift"]
+    verbs: ["get", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: version-watcher
+  namespace: version-watcher
+subjects:
+  - kind: ServiceAccount
+    name: version-watcher
+    namespace: version-watcher
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: version-watcher

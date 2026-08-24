@@ -28,7 +28,11 @@ rules:
     # DOWNLOAD_BUDGET_NAMESPACES コメント参照)。resourceNames の追加分だけ権限が増える
     # dashboard-smoke (P-0193) は autopilot ns の描画スモーク CronJob が書く
     # Mission Control 描画断言の記録 (report.py 参照)
-    resourceNames: ["pvc-usage-report", "download-budget", "dashboard-smoke"]
+    # version-drift (P-0126) は version-watcher ns の CronJob が書く上流版の観測。
+    # 以前は ops-health-report ブランチの latest.json に相乗りしていたが、レポートが
+    # ConfigMap へ移った時点で読み手が消えたので同じ「専用 ConfigMap」の形に揃えた
+    resourceNames:
+      ["pvc-usage-report", "download-budget", "dashboard-smoke", "version-drift"]
     verbs: ["get"]
   - apiGroups: ["apps"]
     resources: ["deployments"]

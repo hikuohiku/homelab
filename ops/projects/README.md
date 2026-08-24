@@ -21,7 +21,6 @@ curriculum が立てた **全案** (採択・棄却を問わず) の追記専用
  "adopted": true, "proposed_at": "2026-08-07T12:00:00Z"}
 ```
 
-採択案は heart が merge 後に ops-state ブランチの projects.json へ登録し、
-予告 (Discord) を経て runner Job になる。ライフサイクルの実行状態は
-projects.json 側にあり、ここには残らない (結果は heart が `result` フィールド付きの
-行として追記する)。
+採択案は heart が `Project` CR (`autopilot.homelab.hikuohiku.dev/v1`) へ登録し、
+予告 (Discord) を経て runner Job になる。ライフサイクルの実行状態は CR 側にあり、
+ここには残らない (`kubectl -n autopilot get projects` で見える)。

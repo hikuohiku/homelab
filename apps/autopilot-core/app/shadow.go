@@ -20,7 +20,8 @@
 // 起動条件は決定論で持つ (LLM の気分で走らせない): 有効化されていて、前回から
 // 間隔が空いていて、stop_engaged でなく、パイプラインに空きがあるとき。
 // heart が curriculum を spawn する条件 (reconcile.py) と同じ材料を、
-// ops-state の projects.json から読んで判断する。
+// Project CR と heart の /healthz から読んで判断する (4b-2a で ops-state の
+// projects.json から移した)。
 package main
 
 import (
