@@ -14,10 +14,13 @@
 //   - allowlist 未設定なら初期化に失敗する (fail-closed)。受信側と同じ向き。
 //   - GitHub トークンを要求しない。このモードは inbox に触らない。
 //
-// 使い方 (opencode の場合、~/.config/opencode/opencode.json 等):
+// 転送は 2 通り。既定は stdio で、`--listen host:port` を渡すと HTTP streamable に
+// なる (mcp_http.go)。本番のコアは後者を使う — stdio だと opencode の子プロセスに
+// なるため、Telegram のトークンを opencode 自身の env に置くことになり、
+// bash を持つコアから読めてしまう。
 //
-//	{"mcp": {"telegram": {"type": "local", "command": ["/telegram-adapter", "mcp"],
-//	  "environment": {"TELEGRAM_BOT_TOKEN": "...", "TELEGRAM_ALLOWED_USER_ID": "..."}}}}
+//	{"mcp": {"telegram": {"type": "remote", "url": "http://127.0.0.1:4097/mcp",
+//	  "enabled": true, "oauth": false}}}
 package main
 
 import (
@@ -32,6 +35,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // 送信 1 通の上限。Telegram の 4096 文字制限より手前で切って、
@@ -143,7 +147,10 @@ func (c *client) sendReply(ctx context.Context, text string) (int64, error) {
 
 type mcpServer struct {
 	client *client
-	out    *json.Encoder
+	// out は応答の書き出し先。stdio では stdout、HTTP では 1 リクエストごとの
+	// バッファへ差し替える (mcp_http.go の handleBuffered)。mu はその差し替えの排他
+	out *json.Encoder
+	mu  sync.Mutex
 }
 
 func (s *mcpServer) respond(id json.RawMessage, result any) {
@@ -238,7 +245,9 @@ func (s *mcpServer) serve(ctx context.Context, in io.Reader) error {
 	return scanner.Err()
 }
 
-func runMCP() {
+// runMCP は MCP サーバを 1 つ起動する。listen が空なら stdio、
+// そうでなければ HTTP streamable でその addr を待ち受ける。
+func runMCP(listen string) {
 	log.SetFlags(0)
 	log.SetPrefix("[telegram-adapter/mcp] ")
 	// stdout は JSON-RPC 専用。ログは必ず stderr へ出す
@@ -253,6 +262,13 @@ func runMCP() {
 	}
 
 	server := &mcpServer{client: newClient(cfg), out: json.NewEncoder(os.Stdout)}
+	if listen != "" {
+		log.SetFlags(log.LstdFlags | log.LUTC)
+		if err := serveHTTPMCP(server, listen); err != nil {
+			log.Fatalf("%v", err)
+		}
+		return
+	}
 	if err := server.serve(context.Background(), os.Stdin); err != nil {
 		log.Fatalf("stdin の読み取りに失敗: %v", err)
 	}

@@ -6,7 +6,7 @@ Go 標準ライブラリのみの単一バイナリで、2 つのモードを持
 | モード | 起動 | 役割 |
 |---|---|---|
 | adapter | 引数なし | **受信**。`getUpdates` を long poll し、allowlist の private DM を `ops-feedback` の inbox へ保存する |
-| mcp | `mcp` | **送信**。MCP stdio サーバとして `telegram_reply` ツールを提供する |
+| mcp | `mcp [--listen host:port]` | **送信**。MCP サーバとして `telegram_reply` ツールを提供する（既定は stdio、`--listen` で HTTP streamable） |
 
 同じバイナリに同居させているのは、allowlist の解釈と Telegram の呼び出し方を
 一箇所に保つため。受信と送信で判定がずれると、拾わない相手に喋る事故になる。
@@ -41,29 +41,31 @@ telegram_reply(text) → allowlist の所有者へ DM を送る
 到達先は変わらない。`TELEGRAM_ALLOWED_USER_ID` が未設定なら起動そのものが失敗する
 (fail-closed)。
 
-opencode から使うときの設定:
+転送は 2 通り。既定の stdio では opencode の**子プロセス**になるため、Telegram の
+トークンを opencode 自身の env に置くことになる。コアに bash があると
+`cat /proc/self/environ` でそれが読めるので、**本番のコアは HTTP を使う** —
+別コンテナで待ち受け、秘密はそちらの env にだけ置く（`apps/autopilot-core`）。
 
 ```json
 {
   "mcp": {
     "telegram": {
-      "type": "local",
-      "command": ["/telegram-adapter", "mcp"],
-      "environment": {
-        "TELEGRAM_BOT_TOKEN": "...",
-        "TELEGRAM_ALLOWED_USER_ID": "..."
-      }
+      "type": "remote",
+      "url": "http://127.0.0.1:4097/mcp",
+      "enabled": true,
+      "oauth": false
     }
   }
 }
 ```
 
+`"oauth": false` は必須。省くと OAuth の自動検出が走り、401 を `needs_auth` として
+扱う経路に入る。`headers` に秘密を置かないこと — opencode の `GET /config` は
+`{env:...}` 展開後の値をそのまま返す。同一 Pod の loopback はネットワーク名前空間が
+境界なので、そもそも認証が要らない。
+
 MCP モードは inbox に触らないので `AUTOPILOT_GITHUB_TOKEN` を要求しない。
 stdout は JSON-RPC 専用で、ログはすべて stderr に出す。
-
-**未了**: 常駐コアはまだ無い。コアを立てるときに、この bin をコア側のイメージへ
-運ぶ経路 (adapter イメージからの multi-stage COPY 等) を決める必要がある。
-設計は [`docs/design/event-driven-core/`](../../docs/design/event-driven-core/) を参照。
 
 ## 環境変数
 
