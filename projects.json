@@ -6548,13 +6548,97 @@
         ]
       },
       "stalled_reason": "gate_error"
+    },
+    {
+      "id": "P-0317",
+      "title": "常駐組の声を画面に流す — core/heart のセッション出力を transcript パイプラインに乗せ、Mission Control でライブ表示する",
+      "state": "proposed",
+      "branch": "project/p-0317",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "cd apps/ops-dashboard/app && npx tsx --test tests/resident-transcript.test.ts",
+        "grep -q 'transcripts/resident' apps/ops-dashboard/app/src/lib/transcript.ts",
+        "grep -rqE 'transcripts/resident' apps/autopilot-core/app apps/autopilot/"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-0317",
+        "title": "常駐組の声を画面に流す — core/heart のセッション出力を transcript パイプラインに乗せ、Mission Control でライブ表示する",
+        "why": "人間のタスク依頼 (Telegram 経由, request_id 2c3645e5045b4b27, 2026-08-24T16:37Z「起票して」): 「ダッシュボードでcoreとheartのtranscriptが見えないのは仕様ですか？」。P-0284 が常駐組を「住人」として Ready 数だけ映したのが v1 で、transcript 連携は範囲外と明示して切り捨てられた残り半分。現状の実測: apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 が resident を transcriptAvailable:false に固定、transcript.ts の parseAgentName は Job 由来の役割名 (runner|reviewer|…)-<projectId>-aN のみ解釈、/data/transcripts/ 配下は worker/review/curriculum/critic の 4 ディレクトリのみで core/heart の出力は PVC のどこにも落ちていない。人間が毎日開く画面から器の中身が見えないのは、VISION の「人間の介入はフィードバックと拒否権だけ」を支える pull 面として本体。",
+        "cell": [
+          "observability",
+          "feature"
+        ],
+        "dod": "(1) 生産側: core (opencode セッション) と heart (beat ログ) の出力を PVC autopilot-data の /data/transcripts/resident/<agent>.jsonl (core / heart) へ JSONL 追記で tee する経路を作る (Job ランナの tee と同型。サイズ上限のローテーションも一緒に)。(2) 表示側: transcript.ts に resident モードを追加する (parseAgentName が \"core\"/\"heart\" を解釈、findTranscriptFile が transcripts/resident/ を見る)。snapshot.ts の常駐組は transcriptAvailable を実ファイルの存在から出す。既存ビューア (normalizeTranscriptEvent 経由) で表示できるイベント形式で吐く。(3) tests/resident-transcript.test.ts を新設し、fixture ファイルからの resident 解釈・最新ファイル選択・イベント正規化をクラスタ外 unit test で検証する。",
+        "verify": [
+          "cd apps/ops-dashboard/app && npx tsx --test tests/resident-transcript.test.ts",
+          "grep -q 'transcripts/resident' apps/ops-dashboard/app/src/lib/transcript.ts",
+          "grep -rqE 'transcripts/resident' apps/autopilot-core/app apps/autopilot/"
+        ],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": true,
+        "confidence": "confident",
+        "proposed_by": "human-request",
+        "request_id": "2c3645e5045b4b27",
+        "adopted": true,
+        "proposed_at": "2026-08-24T18:43:28Z"
+      },
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0321",
+      "title": "秘書に暦を開店させる (改) — Radicale を tailnet に置き、運用予定台帳 YAML から webcal フィードを生成する",
+      "state": "proposed",
+      "branch": "project/p-0321",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "kubectl kustomize apps/radicale >/dev/null",
+        "python3 ops/life/calendar_feed.py --check",
+        "curl -fsS http://radicale.radicale.svc.cluster.local:5232/ | grep -qi radicale"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-0321",
+        "title": "秘書に暦を開店させる (改) — Radicale を tailnet に置き、運用予定台帳 YAML から webcal フィードを生成する",
+        "why": "life-prep/feature。P-0313 は合計 8 点まで評価されながら、verify(4) の kubectl run に存在しないフラグ --rm-if-present (--rm のみが実在) があるため「作業を完遂しても無条件に検収が落ちる」と棄却された。improve_hint は「フラグ除去の上で再提出を歓迎する。VISION (段階 3 Calendar) への寄与は本輪 2 番目に高い」と明言しており、この応答案。段階 3 の表で暦は未着手領域への最初の足で、「忘れると困る日」を器の自前台帳 (ops/life/calendar.yaml) に持ち、Radicale の webcal として tailnet 全端末から購読できる形は syncthing/adguard 実績型の公開パターンをそのまま踏襲できる。朝の brief 系 (P-0174 系の到達面) に「今日の予定」を載せる受け皿にもなる。",
+        "cell": [
+          "life-prep",
+          "feature"
+        ],
+        "dod": "(1) apps/radicale/ を新設 (既存実績型の backup・NetworkPolicy・inventory 台帳登録を標準装備。認証は tailnet 内のみ + 単一ユーザ)。(2) ops/life/calendar.yaml (運用予定の台帳) から ICS を生成する決定的スクリプト ops/life/calendar_feed.py と Radicale コレクションへの反映経路。webcal URL が tailnet のどこからでも購読できること。(3) 台帳に初期エントリを最低 1 件 (運用上本当に忘れると困る日) 入れ、--check が YAML→ICS の決定性を検証する。",
+        "verify": [
+          "kubectl kustomize apps/radicale >/dev/null",
+          "python3 ops/life/calendar_feed.py --check",
+          "curl -fsS http://radicale.radicale.svc.cluster.local:5232/ | grep -qi radicale"
+        ],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": true,
+        "confidence": "confident",
+        "adopted": true,
+        "proposed_at": "2026-08-24T18:43:28Z"
+      },
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T18:19:22Z",
-  "last_activity_at": "2026-08-24T18:19:22Z",
+  "last_activity_at": "2026-08-24T18:43:38Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
-  "last_curriculum_dry": true,
+  "last_curriculum_dry": false,
   "stop_engaged": false,
-  "curriculum_registered_pr": 601
+  "curriculum_registered_pr": 605
 }
