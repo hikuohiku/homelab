@@ -47,6 +47,12 @@ QUOTA_WAIT_MAX_HOURS = 24
 # 自己観測 (critic) の間隔。指標 (状態別滞留・アイドル率) は日次の粒度で足り、
 # それより短くしても同じ 24h の窓を読み直すだけになる (P-0045)
 CRITIC_INTERVAL_HOURS = 24
+# 1 回の curriculum PR に載せる台帳の遅延追記 (backfill) の上限。env 経由で
+# 渡すので上限を置く。溢れた分は次の curriculum が拾う
+ARCHIVE_BACKFILL_LIMIT = 20
+
+# 「まだ一度も記録していない」と「None を記録した」を区別する番人
+_UNSET = object()
 
 # --- 即時 dispatch の admission gate (設計 rev3 Phase D) ---
 #
@@ -276,7 +282,12 @@ def _stall(p, actions, reason, ntype=None, text=None):
 
 
 def _register_spec(doc, spec, now):
-    """main の archive.jsonl で採択された spec を proposed として登録する。"""
+    """採択された spec を proposed として projects.json に登録する。
+
+    spec 全文を **projects.json に持たせる** (設計 rev3 D32)。ここが runner の
+    読み先になり、着手が main への PR / CI / merge を待たなくなる。ops-state の
+    書き手は heart だけなので、正を移しても改竄耐性は落ちない。
+    """
     doc["projects"].append(
         {
             "id": spec["id"],
@@ -291,8 +302,31 @@ def _register_spec(doc, spec, now):
             # 消費量は計測として持つだけ (上限は無い)
             "budget": {"used_tokens": 0},
             "created": now_iso(now)[:10],
+            # runner が読む spec の正 (dispatch 経路の to_project() と同じ形)
+            "spec": dict(spec),
         }
     )
+
+
+def _archive_backfill(doc, facts, limit=ARCHIVE_BACKFILL_LIMIT):
+    """main の archive.jsonl にまだ載っていない採択 spec を返す (純関数)。
+
+    dispatch の正が ops-state に移った結果、採択は台帳への追記を待たずに
+    動き出す (D32)。台帳が欠落しないよう、次の curriculum Job にまとめて
+    渡して同じ PR で追記させる。即時 dispatch の P-9NNN もここで拾われる。
+    """
+    in_archive = {
+        s.get("id") for s in (facts.get("adopted_specs") or []) if isinstance(s, dict)
+    }
+    out = []
+    for p in doc["projects"]:
+        spec = p.get("spec")
+        if not isinstance(spec, dict) or not spec.get("id"):
+            continue
+        if spec["id"] in in_archive:
+            continue
+        out.append(spec)
+    return out[:limit]
 
 
 def _critic_due(doc, now):
@@ -354,17 +388,54 @@ def decide(doc, facts, rules, now):
         1 for p in doc["projects"] if p["state"] in ("active", "in_review", "merging")
     )
 
-    # --- 採択の正は main の archive.jsonl。projects に無い採択 spec を登録する ---
-    # curriculum の PR 経由でも人間の手動採択でも、「main に載れば動き出す」で意味論を
-    # 統一する (2026-08-08 パイロット準備で発覚: curriculum result 経由の登録しか無く、
-    # 手動採択が永遠に放置される欠落があった)。終端 (delivered/stalled/vetoed) の
-    # エントリも projects に残るため、済んだ spec がここで蘇ることはない。
-    # projects.json の終端エントリを将来間引くときは、登録済み id の記録を別に持つこと
+    # --- 台帳 (main の archive.jsonl) に載った採択 spec も登録する ---
+    # 着手の正は ops-state の projects.json に移った (設計 rev3 D32) が、この経路は
+    # 残す。人間が archive.jsonl に adopted 行を足す手動採択の入口がここだからで、
+    # 「main に載れば動き出す」という意味論は**手動採択については変えていない**。
+    # 変わったのは curriculum の採択で、そちらは PR の merge を待たずに
+    # result.json 経由で登録される (下の curriculum 節)。
+    # 終端 (delivered/stalled/vetoed) のエントリも projects に残るため、済んだ spec が
+    # ここで蘇ることはない。projects.json の終端エントリを将来間引くときは、
+    # 登録済み id の記録を別に持つこと
     existing_ids = {p["id"] for p in doc["projects"]}
     for spec in facts.get("adopted_specs") or []:
         if spec.get("id") and spec["id"] not in existing_ids:
             _register_spec(doc, spec, now)
             existing_ids.add(spec["id"])
+
+    # --- curriculum の採択は台帳 PR を待たずに登録する (設計 rev3 D32) ---
+    # spec は result.json に載っている。ここで projects.json (= dispatch の正) に
+    # 登録した時点で採択ゲート → 予告 → 着手が始まり、main への PR・CI・merge は
+    # 台帳の追記として非同期に流れる (下の curriculum 節が merge を進める)。
+    # **意味論の変更**: 台帳 PR を人間が close しても採択は取り消されない。
+    # 取り消しは veto (予告窓) で行う — 窓は従来どおり効いている。
+    # 同じ result を毎ビート読み直すので、登録は PR 番号で 1 度に畳む。
+    # **この位置で登録する** — 下の curriculum 節はプロジェクトの状態機械より後ろに
+    # あり、そこで登録すると採択ゲートの実測が 1 ビート遅れる
+    cur_facts = facts.get("curriculum") or {}
+    if (
+        cur_facts.get("state") == "curriculum_done"
+        # 既定値は None でなく番人にする — PR 番号が None のときに
+        # 「登録済み」と読み違えて 1 ラウンド丸ごと落とさないため
+        and doc.get("curriculum_registered_pr", _UNSET) != cur_facts.get("pr")
+    ):
+        adopted = [
+            s for s in (cur_facts.get("adopted_specs") or []) if s.get("id")
+        ]
+        for spec in adopted:
+            if spec["id"] not in existing_ids:
+                _register_spec(doc, spec, now)
+                existing_ids.add(spec["id"])
+        # 実りの有無を記録する。次のアイドルで即座に立案してよいか (実りあり) /
+        # min_interval の間隔を置くべきか (空振り) の判定に使う (2026-08-10)
+        doc["last_curriculum_dry"] = not adopted
+        # 採択された依頼由来の案 (request_id 持ち) があれば、その依頼を処理済みに
+        # する (P-0091)。対応づけは案に埋まった request_id の一致だけで決定論。
+        # 実行は heart.execute() が tasks.mark_processed() で行う (冪等)
+        done = tasks.done_ids(adopted)
+        if done:
+            actions.append(_action("mark_task_requests_done", ids=done))
+        doc["curriculum_registered_pr"] = cur_facts.get("pr")
 
     # --- 既読化 (ack P-NNNN): 終端プロジェクトの墓標を要対応キューから下げる ---
     # 状態は変えない (歴史は残す)。ダッシュボードが acknowledged を隠す
@@ -790,27 +861,11 @@ def decide(doc, facts, rules, now):
     curriculum_pending = False
     if cur and cur.get("state") == "curriculum_done":
         curriculum_pending = True
+        # 採択の登録と依頼の処理済み化は decide の冒頭で済んでいる (D32)。
+        # ここは台帳 PR の後始末だけ — merge するか、諦めて結果を捨てるか
         if cur.get("pr_unknown"):
-            pass  # PR の状態が観測できないビートでは判断しない
+            pass  # PR の状態が観測できないビートでは merge/破棄の判断をしない
         elif cur.get("pr_merged"):
-            # 登録自体は上の「archive.jsonl reconcile」が担う (merge されれば main の
-            # archive に載っているので、次のビートまでに必ず登録される)。ここでは
-            # 消費の後始末だけを行う
-            existing = {p["id"] for p in doc["projects"]}
-            for spec in cur.get("adopted_specs", []):
-                if spec.get("id") and spec["id"] not in existing:
-                    _register_spec(doc, spec, now)
-                    existing.add(spec["id"])
-            # 実りの有無を記録する。次のアイドルで即座に立案してよいか (実りあり) /
-            # min_interval の間隔を置くべきか (空振り) の判定に使う (2026-08-10)
-            doc["last_curriculum_dry"] = not cur.get("adopted_specs")
-            # 採択された依頼由来の案 (request_id 持ち) があれば、その依頼を
-            # 処理済みにする (P-0091)。対応づけは案に埋まった request_id の
-            # 一致だけで決定論。実行は heart.execute() が tasks.mark_processed()
-            # で行う (冪等なので再実行しても二重に刻まない)
-            done = tasks.done_ids(cur.get("adopted_specs", []))
-            if done:
-                actions.append(_action("mark_task_requests_done", ids=done))
             actions.append(_action("consume_curriculum"))
             curriculum_pending = False
         elif cur.get("pr_open") and cur.get("checks_green"):
@@ -818,7 +873,9 @@ def decide(doc, facts, rules, now):
         elif cur.get("pr") is None or (
             not cur.get("pr_open") and not cur.get("pr_merged")
         ):
-            # PR が無い、または merge されずに close された (人間の拒否)。結果を破棄する
+            # PR が無い、または merge されずに close された。結果 (result.json) を
+            # 破棄する。採択は既に projects.json に登録済みなので、これは台帳への
+            # 追記が流れなかったというだけ — 次の curriculum の backfill が拾う
             actions.append(_action("consume_curriculum"))
             curriculum_pending = False
     elif cur and cur.get("state") == "error":
@@ -874,7 +931,13 @@ def decide(doc, facts, rules, now):
         gap_ok = True
     if curriculum_idle and gap_ok and not stop_all:
         doc["last_curriculum_at"] = now_iso(now)
-        actions.append(_action("spawn_curriculum", adopt_limit=free_slots))
+        actions.append(
+            _action(
+                "spawn_curriculum", adopt_limit=free_slots,
+                # 台帳の遅延追記をこの Job の PR にまとめて載せる (D32)
+                archive_backfill=_archive_backfill(doc, facts),
+            )
+        )
 
     # --- 活動の記録 (critic の due 判定の材料) ---
     # ここまでに積んだ action だけを「活動」と数える。この行より後に積む critic 自身の

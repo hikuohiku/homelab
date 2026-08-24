@@ -1646,3 +1646,104 @@ class DispatchFolding(unittest.TestCase):
             all(line["requested_by"] == "core" for line in consume["audit"])
         )
         self.assertIn("spawn_runner", [line["action"] for line in consume["audit"]])
+
+
+class TestDispatchSourceOfTruth(unittest.TestCase):
+    """dispatch の正が ops-state の projects.json に移ったこと (設計 rev3 D32)。
+
+    採択から着手までの経路から、main への PR・CI・merge が消えている。
+    archive.jsonl は非同期の台帳として残り、欠落は backfill が埋める。
+    """
+
+    SPEC = {"id": "P-0009", "title": "t", "why": "なぜ", "dod": "どこまで",
+            "verify": ["false"], "cell": ["self", "repair"], "irreversible": False,
+            "capabilities": [], "touches_apps": False, "confidence": "confident",
+            "adopted": True}
+
+    def cur(self, **kw):
+        base = {"state": "curriculum_done", "pr": 7, "pr_open": True,
+                "checks_green": False, "pr_merged": False,
+                "adopted_specs": [self.SPEC]}
+        base.update(kw)
+        return base
+
+    # --- 登録は PR を待たない ---
+    def test_registers_before_the_archive_pr_is_merged(self):
+        d, actions = reconcile.decide(doc(), facts(curriculum=self.cur()), RULES, NOW)
+        p = d["projects"][0]
+        self.assertEqual(p["id"], "P-0009")
+        self.assertEqual(p["state"], "proposed")
+        # 着手に向けた歩みも同じビートで始まる (採択ゲートの実測)
+        self.assertIn("run_adopt_gate", kinds(actions))
+        # 台帳の PR は非同期に流れるだけで、着手を止めていない
+        self.assertNotIn("consume_curriculum", kinds(actions))
+
+    def test_registers_even_when_the_pr_state_is_unreadable(self):
+        d, _ = reconcile.decide(
+            doc(), facts(curriculum=self.cur(pr_unknown=True)), RULES, NOW
+        )
+        self.assertEqual([p["id"] for p in d["projects"]], ["P-0009"])
+
+    def test_registration_happens_once_per_curriculum_pr(self):
+        """同じ result を毎ビート読み直しても二重登録・二重通知をしない。"""
+        d, _ = reconcile.decide(doc(), facts(curriculum=self.cur()), RULES, NOW)
+        d, actions = reconcile.decide(d, facts(curriculum=self.cur()), RULES, NOW)
+        self.assertEqual(len(d["projects"]), 1)
+        self.assertNotIn("mark_task_requests_done", kinds(actions))
+
+    def test_merge_still_consumes_the_result(self):
+        """台帳 PR が merge されたら結果を消費する (立案の枠が空く)。"""
+        d, actions = reconcile.decide(
+            doc(), facts(curriculum=self.cur(pr_merged=True)), RULES, NOW
+        )
+        self.assertIn("consume_curriculum", kinds(actions))
+        self.assertEqual(len(d["projects"]), 1)
+
+    def test_closed_pr_does_not_take_the_adoption_back(self):
+        """人間が台帳 PR を close しても採択は残る (取り消しは veto で行う)。"""
+        d, _ = reconcile.decide(doc(), facts(curriculum=self.cur()), RULES, NOW)
+        d, actions = reconcile.decide(
+            d, facts(curriculum=self.cur(pr_open=False)), RULES, NOW
+        )
+        self.assertIn("consume_curriculum", kinds(actions))
+        self.assertEqual(d["projects"][0]["id"], "P-0009")
+
+    # --- runner が読む spec は projects.json に載る ---
+    def test_spec_is_stored_in_projects_json(self):
+        d, _ = reconcile.decide(doc(), facts(curriculum=self.cur()), RULES, NOW)
+        self.assertEqual(d["projects"][0]["spec"], self.SPEC)
+
+    def test_manual_adoption_also_stores_the_spec(self):
+        """人間が archive.jsonl に足す手動採択の経路は生きている。"""
+        d, _ = reconcile.decide(doc(), facts(adopted_specs=[self.SPEC]), RULES, NOW)
+        self.assertEqual(d["projects"][0]["spec"], self.SPEC)
+
+    # --- 台帳の遅延追記 (backfill) ---
+    def test_backfill_carries_specs_missing_from_the_ledger(self):
+        """台帳に無い採択 spec は次の curriculum の PR にまとめて載る。"""
+        p = project(id="P-9001", branch="project/p-9001", state="active",
+                    spec={"id": "P-9001", "verify": ["false"]})
+        _, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
+        spawn = [a for a in actions if a["type"] == "spawn_curriculum"][0]
+        self.assertEqual([s["id"] for s in spawn["archive_backfill"]], ["P-9001"])
+
+    def test_backfill_skips_specs_already_in_the_ledger(self):
+        p = project(id="P-0009", branch="project/p-0009", state="active",
+                    spec=self.SPEC)
+        _, actions = reconcile.decide(
+            doc(p), facts(adopted_specs=[self.SPEC]), RULES, NOW
+        )
+        spawn = [a for a in actions if a["type"] == "spawn_curriculum"][0]
+        self.assertEqual(spawn["archive_backfill"], [])
+
+    def test_backfill_is_capped(self):
+        projects = [
+            project(id=f"P-9{n:03d}", branch=f"project/p-9{n:03d}", state="delivered",
+                    spec={"id": f"P-9{n:03d}", "verify": ["false"]})
+            for n in range(reconcile.ARCHIVE_BACKFILL_LIMIT + 5)
+        ]
+        _, actions = reconcile.decide(doc(*projects), facts(), RULES, NOW)
+        spawn = [a for a in actions if a["type"] == "spawn_curriculum"][0]
+        self.assertEqual(
+            len(spawn["archive_backfill"]), reconcile.ARCHIVE_BACKFILL_LIMIT
+        )

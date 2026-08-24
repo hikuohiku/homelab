@@ -34,6 +34,24 @@ class FakeGh:
         return []
 
 
+class FakeCurriculumGh:
+    """台帳 PR の状態だけを返す最小の GitHub クライアント。"""
+
+    def __init__(self, merged=False, error=False):
+        self.merged = merged
+        self.error = error
+
+    def pr(self, number):
+        if self.error:
+            raise RuntimeError("api down")
+        return {"merged_at": "2026-08-24T00:00:00Z" if self.merged else None,
+                "state": "closed" if self.merged else "open",
+                "head": {"sha": "deadbeef"}}
+
+    def pr_combined_status(self, sha):
+        return {"check_runs": []}
+
+
 def note_raw(kind=None, body="vaultwarden を最新化して"):
     doc = {"body": body}
     if kind is not None:
@@ -253,3 +271,55 @@ class TestCollectCommands(unittest.TestCase):
         self.write("b.json", {"command_id": "core-b", "type": "task-request"})
         self.write("c.json", {"command_id": "core-c", "body": "type が無い"})
         self.assertEqual(facts.collect_commands(self.dir), [])
+
+
+class TestCollectCurriculum(unittest.TestCase):
+    """採択 spec の観測 (設計 rev3 D32)。
+
+    spec は curriculum Job の result.json に載っている。台帳 PR の状態を
+    見る前に拾うので、着手は main への PR / CI / merge を待たない。
+    """
+
+    SPEC = {"id": "P-0009", "title": "t", "verify": ["false"]}
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.data = Path(self.tmp.name) / "data"
+        self.repo = Path(self.tmp.name) / "repo"
+        (self.data / "projects" / "system").mkdir(parents=True)
+        (self.repo / "ops" / "projects").mkdir(parents=True)
+
+    def result(self, **kw):
+        doc = {"state": "curriculum_done", "pr": 7, "adopted": ["P-0009"]}
+        doc.update(kw)
+        (self.data / "projects" / "system" / "result.json").write_text(
+            json.dumps(doc, ensure_ascii=False)
+        )
+
+    def archive(self, *records):
+        (self.repo / "ops" / "projects" / "archive.jsonl").write_text(
+            "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
+        )
+
+    def collect(self, gh):
+        return facts.collect_curriculum(self.data, self.repo, gh)
+
+    def test_specs_come_from_the_result_before_the_pr_is_merged(self):
+        self.result(adopted_specs=[self.SPEC])
+        out = self.collect(FakeCurriculumGh(merged=False))
+        self.assertEqual(out["adopted_specs"], [self.SPEC])
+        self.assertFalse(out["pr_merged"])
+
+    def test_specs_survive_an_unreadable_pr(self):
+        self.result(adopted_specs=[self.SPEC])
+        out = self.collect(FakeCurriculumGh(error=True))
+        self.assertTrue(out["pr_unknown"])
+        self.assertEqual(out["adopted_specs"], [self.SPEC])
+
+    def test_old_result_without_specs_still_reads_the_ledger(self):
+        """後方互換: D32 より前の curriculum Job が書いた result.json。"""
+        self.result()
+        self.archive({**self.SPEC, "adopted": True})
+        out = self.collect(FakeCurriculumGh(merged=True))
+        self.assertEqual([s["id"] for s in out["adopted_specs"]], ["P-0009"])

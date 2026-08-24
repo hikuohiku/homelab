@@ -45,6 +45,32 @@ core (MCP) --HTTP--> gate スレッド --判定--> reconcile.admit() (純関数)
 - **止め方**: `HEART_GATE_LISTEN` を空にすると gate を起こさない。コアの
   `dispatch_task` は isError になり、`request_task` (バス経由の起票) に戻る
 
+## dispatch の正は ops-state の projects.json (設計 rev3 Phase E / D32)
+
+採択 spec の読み先を main の `ops/projects/archive.jsonl` から **ops-state の
+`projects.json`** へ移した。**採択から着手までの経路から、main への PR・CI・merge が
+消えている** (2026-08-24 の実測でここが 6.5 時間かかった)。
+
+```
+curriculum Job --result.json (spec 全文)--> heart --> ops-state/projects.json --> runner
+                        |                                   ^                      (spec の正)
+                        +--PR--> main の archive.jsonl <-----+ 台帳 (非同期・バッチ)
+```
+
+- **改竄耐性は落ちない**。`main` は CI を通る PR なら誰でも書けるが、`ops-state` は
+  heart しか書けない。runner は ops-state を**読むだけ** (GitHub API で 1 ファイル。
+  clone / fetch は増やさない)
+- **runner の読み先は 3 段**: ops-state の `projects.json` → `origin/main` の
+  `archive.jsonl` (この変更より前の走行中プロジェクトの後方互換) → Job の env
+  `HEART_SPEC_JSON` (即時 dispatch の走り出し。Job 作成は ops-state への commit より先)
+- **archive.jsonl は台帳として残る**。curriculum の全案 (棄却含む) はその回の PR で、
+  台帳を待たずに動き出した spec (即時 dispatch を含む) は次の curriculum の PR に
+  **まとめて** (`ARCHIVE_BACKFILL_JSON`)。採択も棄却もいずれ必ず載る
+- **手動採択は変えていない**。人間が `archive.jsonl` に `adopted: true` 行を足せば、
+  従来どおり「main に載れば動き出す」
+- **意味論の変更**: 台帳 PR を close しても採択は取り消されない。取り消しは veto
+  (予告窓) で行う
+
 ## 原則 (実装の理由)
 
 - **判断は reconcile.py の純関数だけ**。heart.py は観測と実行。テストは遷移表

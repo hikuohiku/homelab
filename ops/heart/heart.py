@@ -52,13 +52,17 @@ def log(msg):
 
 
 def spec_env(project):
-    """即時 dispatch されたプロジェクトの spec を Job に渡す env。
+    """projects.json に載っている spec を Job の env にも積む。
 
-    通常のプロジェクトの spec は main の archive.jsonl にあり、runner が
-    そこから読む (ブランチからは改竄できない)。コアが即時 dispatch したものは
-    main を経由しないので、heart が持っている spec を env で渡す。
-    経路は違うが**書き手が heart だけ**という性質は同じ。
-    通常のプロジェクトでは空 dict を返す = 従来と 1 bit も変わらない。
+    spec の正は ops-state の projects.json で、runner はそこから読む
+    (設計 rev3 D32)。env はその写しで、runner の読み先の最後段になる:
+
+    - 即時 dispatch は **Job 作成がビートの commit より先**なので、走り出しの
+      瞬間だけ ops-state にまだ載っていない。そこを env が埋める
+    - GitHub API が読めないビートでも走り出せる
+
+    経路は違うが**書き手が heart だけ**という性質は同じで、Job の spec に
+    固定される env は runner のブランチからは書き換えられない。
     """
     spec = (project or {}).get("spec")
     if not spec:
@@ -182,6 +186,13 @@ class Heart:
                                 "ADOPT_LIMIT": a.get("adopt_limit", 2),
                                 "TASK_REQUESTS": tasks.for_env(
                                     sf.read_jsonl(tasks.QUEUE_FILE)
+                                ),
+                                # 台帳 (archive.jsonl) にまだ載っていない採択 spec。
+                                # 着手はもう台帳を待たないので、動き出した spec を
+                                # この Job の PR にまとめて載せる (設計 rev3 D32)
+                                "ARCHIVE_BACKFILL_JSON": json.dumps(
+                                    a.get("archive_backfill") or [],
+                                    ensure_ascii=False,
                                 ),
                             },
                         )
