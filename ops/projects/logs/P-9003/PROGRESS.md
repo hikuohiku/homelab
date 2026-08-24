@@ -55,3 +55,37 @@
 - レビュー差戻りがあればその解消を最優先。なければ本件は完了見込み。
 - 差し戻しが文言への指摘の場合、P-9002 系の merge 状況を先に確認してから変えること
   (単独で変えると二度手間)。
+
+## s3 (2026-08-24, worker)
+
+### やったこと
+
+- reviewer が verdict を書かなかったため差戻し事項は無し。s2 の実装 (`f3ce65450`, ワークツリー
+  クリーンで同一内容) を**このセッションの手で再実測**した:
+  - `npm ci` 後に `npm run lint` (tsc --noEmit) green / `npm test` green (9 pass, fail 0)。
+  - jsdom + React 19 `act` のクライアント描画スモークを s2 の罠メモに従って再構築し、
+    **3 分岐 10 アサーション全パス**: resident 選択時に「常駐エージェントのため transcript
+    表示なし」+ 補足が出て待機文言・「ファイルが作られると自動で表示します」が出ない /
+    `.resident-badge` がある / worker 選択時と agent 無しで従来文言が出る。
+    スクリプトは使い捨て (rm -rf 済み、ワークツリーはクリーンを確認)。
+- 受入チェックリスト 2 項目はこの実測で両方満たされている。判定は引き続き reviewer と CI へ
+  (verify 空の仕様につき完成宣言はしない)。
+
+### 分かったこと
+
+- `origin/project/p-9002` は依然 main 同位置 (2026-08-24 再実測)。文言合わせの必要なし。
+  P-9002 系 merge 時に文言要再検討、は引き続き有効。
+
+### 罠 (次のセッションへ)
+
+- s2 の罠メモに加えて: app/tsconfig.json の include が `**/*.tsx` を拾うため、smoke dir を
+  app 配下に置いたまま `npm run lint` を回すと smoke スクリプトまで型検査されて落ちる。
+  スモーク → lint の順でなく、**smoke dir は rm -rf してから lint** を回すこと。
+- Home の import は jsdom グローバル設定後に行う (静的 import は hoist されるので
+  dynamic import 推奨)。react 19 では `act` が react 本体から export されており
+  `IS_REACT_ACT_ENVIRONMENT = true` を set すれば警告も消える。
+
+### 次のセッションへの一言
+
+- 実装・検証とも済んでおり、残作業は想定していない。差戻しが来た場合のみ対応
+  (文言への指摘なら P-9002 系の merge 状況を先に確認)。
