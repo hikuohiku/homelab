@@ -54,7 +54,7 @@ spec:
       initContainers:
         # 以下すべての core イメージ digest は必ず同じ値にする。
         # ops/check_version_sync.py の "autopilot-core image digest" が一致を検査する。
-        # ac9d7bc7adf19a089a760b468cca397a272992de (PR #617 = 健全性レポートを ConfigMap へ) の
+        # 8ad8abcbb558d75490b63260fbbfaee33e20e67c (PR #629 = homelab_proposals) の
         # OCI index digest を registry API の docker-content-digest で実測したもの
         #
         # ConfigMap は read-only mount なので、opencode が書ける場所へ配置し直す
@@ -62,7 +62,7 @@ spec:
         # subPath で mount するため。subPath のディレクトリが無いと kubelet が
         # root 所有で作ってしまい、10001 で走る driver が作業コピーを書けなくなる
         - name: bootstrap-workdir
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:80fc3a3e2193c2b67c8c780b514c92fd5468ea0d40b5e14f851a2ebc18b03ce9
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:1866c86848da7c9f878816e74f93d4d64c44bb7b95181f3004d966fe4fa3c43f
           command:
             - sh
             - -c
@@ -142,7 +142,7 @@ spec:
         # opencode.json の headers にトークンを置くのは**逆効果**で、GET /config が
         # {env:...} 展開後の値をそのまま返すためコアから丸見えになる。
         - name: telegram-adapter
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:80fc3a3e2193c2b67c8c780b514c92fd5468ea0d40b5e14f851a2ebc18b03ce9
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:1866c86848da7c9f878816e74f93d4d64c44bb7b95181f3004d966fe4fa3c43f
           terminationMessagePolicy: FallbackToLogsOnError
           command: ["/usr/local/bin/telegram-adapter", "mcp", "--listen", "127.0.0.1:4097"]
           env:
@@ -173,14 +173,15 @@ spec:
         # --- コアの目と手 (MCP サイドカー) ---
         #
         # homelab_status / homelab_health / homelab_applications / homelab_pods /
-        # homelab_events / request_task。GitHub トークンと NATS の seed はここにだけ置く。
+        # homelab_events / homelab_proposals / request_task。
+        # GitHub トークンと NATS の seed はここにだけ置く。
         # この 2 つを消せば request_task が「経路が無い」と返り、読み取りツールは動き続ける。
         #
         # k8s API のトークン (kube-api-access) は opencode コンテナには mount しない。
         # 権限は ClusterRole `autopilot-reader` の get/list と、健全性レポートの
         # ConfigMap 1 個の get だけで、Secret も書き込み動詞も含まれない (rbac.yaml)
         - name: core-driver-mcp
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:80fc3a3e2193c2b67c8c780b514c92fd5468ea0d40b5e14f851a2ebc18b03ce9
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:1866c86848da7c9f878816e74f93d4d64c44bb7b95181f3004d966fe4fa3c43f
           terminationMessagePolicy: FallbackToLogsOnError
           command: ["/usr/local/bin/core-driver", "mcp", "--listen", "127.0.0.1:4098"]
           volumeMounts:
@@ -224,7 +225,7 @@ spec:
 
         # --- イベントを渡す係 ---
         - name: driver
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:80fc3a3e2193c2b67c8c780b514c92fd5468ea0d40b5e14f851a2ebc18b03ce9
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:1866c86848da7c9f878816e74f93d4d64c44bb7b95181f3004d966fe4fa3c43f
           terminationMessagePolicy: FallbackToLogsOnError
           env:
             - name: AUTOPILOT_GITHUB_TOKEN
