@@ -349,8 +349,7 @@ def check_heart_config() -> None:
             ("veto", "window_hours"),
             ("soak", "minutes"),
             ("notify", "daily_budget"),
-            ("breaker", "daily_cost_usd"),
-            ("runner", "default_soft_cap_tokens"),
+            ("runner", "max_sessions_per_project"),
             ("review", "max_cycles"),
         ):
             if not isinstance(rules.get(section, {}).get(key), (int, float)):

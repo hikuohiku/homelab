@@ -14,11 +14,7 @@
   },
   "notify": {
     "daily_budget": 6,
-    "_comment": "Discord への即時送信は 1 日この件数まで。超過分は digest に畳む。即時送信してよい型は予告 (announce)・納品 (deliver)・question・障害 (incident) のみ"
-  },
-  "breaker": {
-    "daily_cost_usd": 100.0,
-    "_comment": "stream-json result の total_cost_usd の当日合計がこの値を超えたら新規 spawn のみ停止して通知する。走行中の Job は殺さない (決定 #9)。値は名目コスト (OAuth 定額でも計上される) で、実請求と一致しない点に注意"
+    "_comment": "Discord への即時送信は 1 日この件数まで。超過分は digest に畳む。即時送信してよい型は予告 (announce)・納品 (deliver)・question・障害 (incident) のみ。**これは人間の注意力の予算であって金銭ではない** (金額のサーキットブレーカーは 2026-08-24 に廃止した)"
   },
   "runner": {
     "max_concurrent": 6,
@@ -26,15 +22,13 @@
     "inactivity_nudge_seconds": 1800,
     "inactivity_kill_seconds": 3600,
     "_timeout_comment": "session_max は inactivity_kill より十分大きくすること。2026-08-22 人間の指示『動いているのに止めるのはもったいない』で 7200→259200 (k8s Job の activeDeadline 3 日と同値 = 実質撤廃)。無活動 kill (1h) は残す — あれは働いていないセッションしか殺さない。長すぎる走行は Mission Control で人間が気づく前提",
-    "default_soft_cap_tokens": 3000000,
     "max_sessions_per_project": 300,
     "unknown_error_max_rounds": 3,
     "_unknown_comment": "unknown のまま残った死 (直後の API プローブでも死因を確定できなかった回, P-0141) の連続閾値。既知死因の 3 連続 error とは別カウンタ。超えたら incident 型で人間に渡す",
-    "_comment": "soft_cap はプロジェクト採択時に上書き可。超過で checkpoint 最終ターン→終了 (硬い上限ではない。heart が状況を通知し、継続価値があれば予算を積んで再開する)"
+    "_comment": "max_sessions_per_project は金額の予算ではなく**無限ループの最後の歯止め**。トークンの soft cap と金額のサーキットブレーカーは 2026-08-24 に廃止した (定額移行済みで、名目コストが実請求と一致しないまま仕事を止めていた)。消費量の計測は metrics.jsonl と projects.json に残す"
   },
   "chore": {
-    "max_concurrent": 1,
-    "soft_cap_tokens": 300000
+    "max_concurrent": 1
   },
   "review": {
     "max_cycles": 3,

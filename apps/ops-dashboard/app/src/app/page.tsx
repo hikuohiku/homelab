@@ -253,9 +253,8 @@ function EmptyShift({ snapshot, now }: { snapshot: Snapshot; now: number }) {
 }
 
 function ProjectCard({ project, now }: { project: Project; now: number }) {
+  // 消費量は上限のない計測値 (2026-08-24 に soft cap 廃止)。棒グラフは出さない
   const used = project.budget?.used_tokens ?? 0;
-  const cap = project.budget?.soft_cap ?? 0;
-  const ratio = cap > 0 ? Math.min(100, used / cap * 100) : 0;
   return (
     <article className={`project-card ${project.irreversible ? "project-card--irreversible" : ""}`}>
       <div className="project-card__id">
@@ -268,9 +267,8 @@ function ProjectCard({ project, now }: { project: Project; now: number }) {
       )}
       {project.stalled_reason && <div className="project-card__reason">{project.stalled_reason}</div>}
       {project.state === "announced" && <ProjectActions projectId={project.id} actions={["approve", "veto"]} />}
-      <div className="budget"><span style={{ width: `${ratio}%` }} /></div>
       <footer>
-        <span>{compactNumber(used)} / {cap ? compactNumber(cap) : "—"} tokens</span>
+        <span>{compactNumber(used)} tokens</span>
         {project.prs?.length ? <span>PR #{project.prs.at(-1)}</span> : null}
       </footer>
     </article>

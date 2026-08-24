@@ -12,7 +12,8 @@ const REFRESH_MS = Number(process.env.OPS_STATE_REFRESH_MS ?? 20_000);
 interface OpsState {
   projects: Project[];
   heartbeat: { beat?: number; at?: string };
-  metrics: { breaker?: { cost_usd?: number; sessions?: number } };
+  // usage は当日の消費量の計測 (2026-08-24 以前は breaker キー。過去の state も読む)
+  metrics: { usage?: { cost_usd?: number; sessions?: number }; breaker?: { cost_usd?: number; sessions?: number } };
   stopEngaged: boolean;
   warning?: string;
 }

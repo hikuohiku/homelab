@@ -102,7 +102,7 @@ Claude Agent SDK ではなく opencode を使う（D17）。思考エンジン�
 
 ### 5. heart は「変えない」ではなく「拡張する」
 
-reconcile の純関数、reviewer + CI + soak の納品ゲート、breaker、ops-state 単一書き手 —
+reconcile の純関数、reviewer + CI + soak の納品ゲート、並列上限、ops-state 単一書き手 —
 この骨格は維持する。ただし bus command を消費する経路は**新規実装が必要**であり、
 これを設計の一部として明記する（D21）。現行 `facts.py` は Git/K8s/PVC しか収集せず、
 `reconcile.py` に bus command の遷移は無く、`spawn.py` は調査 spawn を知らない。
@@ -135,7 +135,7 @@ command_id による処理済み台帳（台帳を永続化してから ack）/ 
   publish とし、commit は heart だけが行う（単一書き手の不変条件を維持）。
 - **D6. GitHub は poller adapter**: cursor 付き 60 秒 poll → publish。外部公開はしない。
 - **D7. コアは K8s write を持たない**: 調査 spawn も bus 経由で heart が実行し、
-  breaker・並列上限・監査を一元維持する。障害初動は第一報を即時に出す。
+  並列上限・監査を一元維持する。障害初動は第一報を即時に出す。
 - **D9. digest は 6 時間毎**: batch 判定イベントは 6h 毎に 1 通へ束ねて wake。
 - **D11. 声は Phase 2 でコアに一元化**: heart の announce / deliver / question も
   コアが人語で伝える。コア停止時のフォールバックは D22 を参照。
@@ -247,5 +247,5 @@ command_id による処理済み台帳（台帳を永続化してから ack）/ 
 - journal / seeds を main に反映する経路（curriculum は main から読むため、
   ops-state に置くなら明示注入、main に置くなら PR 経路が要る）
 - 立案者の owner フェンス（`planning_owner=heart|core` と lease）
-- コアと分類器の消費量を breaker の集計対象に含める（現行は runner result のみ）
+- コアと分類器の消費量を当日消費の計測に含める（現行は runner result のみ）
 - コアのシステムプロンプト（CHARTER のどの節を継承するか）と compact 閾値の実測調整

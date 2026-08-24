@@ -7,7 +7,6 @@ from pathlib import Path
 from ops.heart import metrics
 
 RULES = {
-    "breaker": {"daily_cost_usd": 1.0},
     "transcripts": {"retention_days": 30, "max_total_gb": 10},
 }
 NOW = datetime(2026, 8, 7, 12, 0, 0, tzinfo=timezone.utc)
@@ -25,34 +24,35 @@ def write_transcript(dir_, name, costs):
             )
 
 
-class TestBreaker(unittest.TestCase):
-    def test_under_threshold(self):
+class TestDailyUsage(unittest.TestCase):
+    """当日の消費量は**計測するだけ**。閾値も判定も持たない
+    (2026-08-24 にサーキットブレーカーを廃止)。"""
+
+    def test_sums_the_day(self):
         with tempfile.TemporaryDirectory() as d:
             write_transcript(d, "2026-08-07T10-loop.jsonl", [0.3, 0.4])
-            tripped, info = metrics.breaker_tripped(None, RULES, Path(d), NOW)
-            self.assertFalse(tripped)
+            info = metrics.daily_usage(Path(d), NOW)
             self.assertAlmostEqual(info["cost_usd"], 0.7)
             self.assertEqual(info["sessions"], 2)
 
-    def test_over_threshold_trips(self):
+    def test_no_amount_is_a_verdict(self):
+        # いくら積み上がっても返るのは数字だけ。「止める」を意味する値は無い
         with tempfile.TemporaryDirectory() as d:
-            write_transcript(d, "2026-08-07T10-a.jsonl", [0.8])
-            write_transcript(d, "sub/2026-08-07T11-b.jsonl", [0.5])
-            tripped, _ = metrics.breaker_tripped(None, RULES, Path(d), NOW)
-            self.assertTrue(tripped)
+            write_transcript(d, "2026-08-07T10-a.jsonl", [500.0])
+            write_transcript(d, "sub/2026-08-07T11-b.jsonl", [500.0])
+            info = metrics.daily_usage(Path(d), NOW)
+            self.assertAlmostEqual(info["cost_usd"], 1000.0)
+            self.assertEqual(sorted(info), ["cost_usd", "day", "sessions"])
 
     def test_other_days_ignored(self):
         with tempfile.TemporaryDirectory() as d:
             write_transcript(d, "2026-08-06T10-a.jsonl", [9.9])
-            tripped, info = metrics.breaker_tripped(None, RULES, Path(d), NOW)
-            self.assertFalse(tripped)
+            info = metrics.daily_usage(Path(d), NOW)
+            self.assertEqual(info["cost_usd"], 0.0)
             self.assertEqual(info["sessions"], 0)
 
     def test_missing_dir_is_zero(self):
-        tripped, info = metrics.breaker_tripped(
-            None, RULES, Path("/nonexistent-heart-test"), NOW
-        )
-        self.assertFalse(tripped)
+        info = metrics.daily_usage(Path("/nonexistent-heart-test"), NOW)
         self.assertEqual(info["cost_usd"], 0.0)
 
 

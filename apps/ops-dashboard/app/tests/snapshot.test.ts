@@ -20,7 +20,7 @@ test("Kubernetes の active Job と heart ready を抽出する", () => {
 test("stalled、質問待ち、未来の veto window を要対応にする", () => {
   const now = new Date("2026-08-22T10:00:00Z");
   const items = buildAttention([
-    { id: "P-0001", title: "質問", state: "stalled", stalled_reason: "budget_exhausted" },
+    { id: "P-0001", title: "質問", state: "stalled", stalled_reason: "session_limit" },
     { id: "P-0002", title: "停止", state: "stalled", stalled_reason: "error" },
     { id: "P-0003", title: "予告", state: "announced", veto_deadline: "2026-08-22T11:00:00Z", irreversible: true },
     { id: "P-0004", title: "期限切れ", state: "announced", veto_deadline: "2026-08-22T09:00:00Z" },

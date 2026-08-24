@@ -410,22 +410,26 @@ def build_archive_records(proposals, adopted):
 
 
 class Budget:
-    def __init__(self, soft_cap_tokens, max_sessions):
-        self.soft_cap = soft_cap_tokens
+    """消費量の**計測**と、無限ループの最後の歯止め (セッション数) だけを持つ。
+
+    2026-08-24: トークンの soft cap を廃止した。定額移行済みで、消費量を理由に
+    仕事を止めるのは実害だけがあった (stalled の最多要因の 1 つ)。
+    used_tokens / used_cost_usd は記録として残す。"""
+
+    def __init__(self, max_sessions):
         self.max_sessions = max_sessions
         self.used_tokens = 0
         self.used_cost = 0.0
         self.sessions = 0
 
-    def exhausted(self):
-        return self.used_tokens >= self.soft_cap or self.sessions >= self.max_sessions
+    def session_limit_reached(self):
+        return self.sessions >= self.max_sessions
 
     def snapshot(self):
         return {
             "used_tokens": self.used_tokens,
             "used_cost_usd": round(self.used_cost, 4),
             "sessions": self.sessions,
-            "soft_cap": self.soft_cap,
         }
 
 
@@ -608,10 +612,7 @@ class Runner:
         self.trust_workspace()
         self.setup_opencode()
         self.spec = self.load_spec()
-        soft_cap = (self.spec.get("budget") or {}).get(
-            "soft_cap_tokens", self.rules["runner"]["default_soft_cap_tokens"]
-        )
-        self.budget = Budget(soft_cap, self.rules["runner"]["max_sessions_per_project"])
+        self.budget = Budget(self.rules["runner"]["max_sessions_per_project"])
 
     # --- 共通部品 ---
     def trust_workspace(self):
@@ -711,7 +712,8 @@ class Runner:
         kind = f" kind={info['failure_kind']}" if info.get("failure_kind") else ""
         log(
             f"session {tag}: {outcome}{kind} tokens+={usage['tokens']} "
-            f"total={self.budget.used_tokens}/{self.budget.soft_cap}"
+            f"total={self.budget.used_tokens} "
+            f"sessions={self.budget.sessions}/{self.budget.max_sessions}"
         )
         return outcome
 
@@ -874,10 +876,10 @@ class Runner:
                 )
                 return 1
             while True:
-                if self.budget.exhausted():
+                if self.budget.session_limit_reached():
                     # max_sessions_per_project は無限ループの最後の歯止め
                     # (待機予算とは別軸)。上限リトライでもここは外さない
-                    self.write_result("budget_exhausted", verify=verify)
+                    self.write_result("session_limit", verify=verify)
                     return 0
                 outcome = self.run_session(
                     self.prompt_text("initializer"), "s0-init"
@@ -929,10 +931,10 @@ class Runner:
                 pr = self.ensure_pr()
                 self.write_result("ready_for_review", pr=pr, verify=verify)
                 return 0
-            if self.budget.exhausted():
+            if self.budget.session_limit_reached():
                 self.run_session(self.prompt_text("checkpoint"), "checkpoint")
                 self.push_if_committed()
-                self.write_result("budget_exhausted", verify=verify)
+                self.write_result("session_limit", verify=verify)
                 return 0
             extra = {
                 "PROGRESS_TAIL": progress.read_text()[-4000:] if progress.exists() else "",
