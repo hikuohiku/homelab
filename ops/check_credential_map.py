@@ -84,6 +84,8 @@ DECLARED_DOPPLER_KEYS = frozenset(
         "NATS_CONSUMER_NKEY_SEED",
         # コア専用 (events.heart.> への publish + events.raw.> の subscribe)
         "NATS_CORE_NKEY_SEED",
+        # ダッシュボードの書き置き投稿口専用 (events.raw.homelab.dashboard の publish だけ)
+        "NATS_DASHBOARD_NKEY_SEED",
         "NATS_PRODUCER_NKEY_SEED",
         # telegram-adapter (apps/telegram-adapter)。OpenClaw の置き換えで
         # OPENCLAW_GATEWAY_TOKEN は不要になった (control plane を持たない)
@@ -133,6 +135,7 @@ DECLARED_SECRET_TARGETS = frozenset(
         "immich-restic-credentials",
         "operator-oauth",
         "ops-dashboard-github-token",
+        "ops-dashboard-nats-credentials",
         "autopilot-core-credentials",
         "nats-credentials",
         "syncthing-restic-backup-credentials",

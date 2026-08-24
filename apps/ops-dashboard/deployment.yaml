@@ -43,6 +43,16 @@ spec:
                   key: token
                   # Secret が無くても閲覧は動かす (書き置きだけ 503 で issue #56 へ誘導)
                   optional: true
+            # 書き置きの NATS 経路 (設計 state-out-of-git Phase 6)。
+            # seed が無ければ publish を試みず GitHub 側だけで動く
+            - name: NATS_URL
+              value: nats://nats.autopilot.svc:4222
+            - name: NATS_NKEY_SEED
+              valueFrom:
+                secretKeyRef:
+                  name: ops-dashboard-nats-credentials
+                  key: NATS_NKEY_SEED
+                  optional: true
           ports:
             - name: http
               containerPort: 3000
