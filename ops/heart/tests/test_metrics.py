@@ -12,48 +12,177 @@ RULES = {
 NOW = datetime(2026, 8, 7, 12, 0, 0, tzinfo=timezone.utc)
 
 
-def write_transcript(dir_, name, costs):
+def claude_result(cost, tokens_in=0, tokens_out=0):
+    """claude CLI (stream-json) の 1 セッション終端イベント。"""
+    return {"type": "result", "subtype": "success", "total_cost_usd": cost,
+            "usage": {"input_tokens": tokens_in, "output_tokens": tokens_out}}
+
+
+def opencode_step_finish(cost, tokens_in, tokens_out):
+    """opencode v1.18.21 実測形 (ops/runner/tests/test_engine.py と同じ形)。"""
+    return {"type": "step_finish", "part": {
+        "type": "step-finish", "cost": cost,
+        "tokens": {"total": tokens_in + tokens_out, "input": tokens_in,
+                   "output": tokens_out, "reasoning": 0,
+                   "cache": {"write": 0, "read": 0}}}}
+
+
+def write_events(dir_, name, events):
+    """1 transcript = 1 セッション。events をそのまま 1 行 1 JSON で書く。
+
+    ファイル名は live の実物と同じ `<YYYY-MM-DD>T<HHMMSS>-...jsonl`
+    (runner.transcript_path / loop.sh の命名)。"""
     path = Path(dir_) / name
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w") as f:
-        for c in costs:
-            f.write(json.dumps({"type": "assistant", "message": {}}) + "\n")
-            f.write(
-                json.dumps({"type": "result", "subtype": "success",
-                            "total_cost_usd": c}) + "\n"
-            )
+        for ev in events:
+            f.write(json.dumps(ev) + "\n")
+    return path
 
 
 class TestDailyUsage(unittest.TestCase):
     """当日の消費量は**計測するだけ**。閾値も判定も持たない
     (2026-08-24 にサーキットブレーカーを廃止)。"""
 
-    def test_sums_the_day(self):
+    def test_opencode_only_transcript_is_counted(self):
+        """回帰 (2026-08-24): 全ロールが opencode に移った後、`result` しか見て
+        いなかったせいで当日消費が常に 0 を返していた。step_finish を数えること。"""
         with tempfile.TemporaryDirectory() as d:
-            write_transcript(d, "2026-08-07T10-loop.jsonl", [0.3, 0.4])
+            write_events(d, "curriculum/2026-08-07T101010-p-0001-gen.jsonl", [
+                {"type": "step_start", "part": {"type": "step-start"}},
+                opencode_step_finish(0.0, 8718, 19),
+                opencode_step_finish(0.0, 100, 5),
+            ])
+            info = metrics.daily_usage(Path(d), NOW)
+            self.assertEqual(info["tokens"], 8842)
+            self.assertEqual(info["sessions"], 1)
+
+    def test_claude_only_transcript_is_counted(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_events(d, "loop/2026-08-07T101010-i3.jsonl", [
+                {"type": "assistant", "message": {}},
+                claude_result(0.7, 1000, 250),
+            ])
             info = metrics.daily_usage(Path(d), NOW)
             self.assertAlmostEqual(info["cost_usd"], 0.7)
+            self.assertEqual(info["tokens"], 1250)
+            self.assertEqual(info["sessions"], 1)
+
+    def test_both_engines_are_summed(self):
+        with tempfile.TemporaryDirectory() as d:
+            write_events(d, "worker/2026-08-07T101010-p-0278-s0-init.jsonl", [claude_result(0.5, 10, 5)])
+            write_events(d, "curriculum/2026-08-07T111010-system-gen.jsonl",
+                         [opencode_step_finish(0.25, 200, 50)])
+            info = metrics.daily_usage(Path(d), NOW)
+            self.assertAlmostEqual(info["cost_usd"], 0.75)
+            self.assertEqual(info["tokens"], 265)
             self.assertEqual(info["sessions"], 2)
+            self.assertEqual(sorted(info), ["cost_usd", "day", "empty_sessions",
+                                            "sessions", "tokens"])
 
     def test_no_amount_is_a_verdict(self):
         # いくら積み上がっても返るのは数字だけ。「止める」を意味する値は無い
         with tempfile.TemporaryDirectory() as d:
-            write_transcript(d, "2026-08-07T10-a.jsonl", [500.0])
-            write_transcript(d, "sub/2026-08-07T11-b.jsonl", [500.0])
+            write_events(d, "worker/2026-08-07T101010-p-0278-s0-init.jsonl", [claude_result(500.0)])
+            write_events(d, "worker/2026-08-07T111010-p-0278-s1-work.jsonl", [claude_result(500.0)])
             info = metrics.daily_usage(Path(d), NOW)
             self.assertAlmostEqual(info["cost_usd"], 1000.0)
-            self.assertEqual(sorted(info), ["cost_usd", "day", "sessions"])
 
     def test_other_days_ignored(self):
+        """当日でない日付プレフィクスのファイルは数えない。"""
         with tempfile.TemporaryDirectory() as d:
-            write_transcript(d, "2026-08-06T10-a.jsonl", [9.9])
+            write_events(d, "worker/2026-08-06T235959-p-0001-s0-init.jsonl",
+                         [claude_result(9.9, 100, 100)])
+            write_events(d, "curriculum/2026-08-08T000001-system-gen.jsonl",
+                         [opencode_step_finish(0.0, 100, 100)])
             info = metrics.daily_usage(Path(d), NOW)
             self.assertEqual(info["cost_usd"], 0.0)
+            self.assertEqual(info["tokens"], 0)
             self.assertEqual(info["sessions"], 0)
+
+    def test_empty_sessions_counted_separately(self):
+        """出力ゼロで死んだセッション (2026-08-23 は 88 本中 82 本) を、走った本数と
+        取り違えない。"""
+        with tempfile.TemporaryDirectory() as d:
+            write_events(d, "worker/2026-08-07T070445-p-0278-s0-init.jsonl", [
+                {"type": "step_start", "part": {"type": "step-start"}},
+                {"type": "error", "error": {"name": "APIError", "data": {
+                    "message": "Provider finish_reason: network_error"}}},
+            ])
+            write_events(d, "worker/2026-08-07T071000-p-0278-s1-work.jsonl",
+                         [opencode_step_finish(0.0, 100, 10)])
+            info = metrics.daily_usage(Path(d), NOW)
+            self.assertEqual(info["sessions"], 2)
+            self.assertEqual(info["empty_sessions"], 1)
+            self.assertEqual(info["tokens"], 110)
+
+    def test_broken_lines_do_not_break_the_tally(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = write_events(d, "worker/2026-08-07T101010-p-0278-s0-init.jsonl",
+                                [opencode_step_finish(0.0, 100, 10)])
+            with open(path, "a") as f:
+                f.write('{"type": "step_finish", "part": {"tok\n')  # 途中で切れた行
+                f.write('{"type": "result", "total_cost_usd": "?"}\n')  # 型が違う
+                f.write("\x00\x00 not json at all\n")
+                f.write(json.dumps(claude_result(0.25, 4, 1)) + "\n")
+            info = metrics.daily_usage(Path(d), NOW)
+            self.assertAlmostEqual(info["cost_usd"], 0.25)
+            self.assertEqual(info["tokens"], 115)
+            self.assertEqual(info["sessions"], 1)
+
+    def test_unreadable_file_does_not_break_the_tally(self):
+        import os
+
+        with tempfile.TemporaryDirectory() as d:
+            bad = write_events(d, "worker/2026-08-07T090000-p-0278-bad.jsonl",
+                               [claude_result(1.0, 1, 1)])
+            os.chmod(bad, 0o000)
+            write_events(d, "worker/2026-08-07T100000-p-0278-ok.jsonl",
+                         [opencode_step_finish(0.0, 50, 5)])
+            try:
+                info = metrics.daily_usage(Path(d), NOW)
+            finally:
+                os.chmod(bad, 0o600)
+            self.assertEqual(info["tokens"], 55)
 
     def test_missing_dir_is_zero(self):
         info = metrics.daily_usage(Path("/nonexistent-heart-test"), NOW)
         self.assertEqual(info["cost_usd"], 0.0)
+        self.assertEqual(info["tokens"], 0)
+        self.assertEqual(info["empty_sessions"], 0)
+
+
+class TestEngineInterpretationMatchesRunner(unittest.TestCase):
+    """heart (metrics) と runner (consume_stream_event) の使用量解釈を一致させる。
+
+    heart は常駐プロセス、runner は Job 側の wrapper なので import で結ばない。
+    代わりに、同じイベントを両方に食わせて同じ数字になることをここで固定する。
+    片方だけ直したら落ちる。
+    """
+
+    CASES = [
+        {"type": "result", "total_cost_usd": 0.5,
+         "usage": {"input_tokens": 100, "output_tokens": 20}},
+        {"type": "result", "is_error": True, "subtype": "error_during_execution",
+         "result": "usage limit reached"},
+        opencode_step_finish(0.0, 8718, 19),
+        opencode_step_finish(0.125, 1, 2),
+        {"type": "error", "error": {"name": "APIError",
+         "data": {"message": "Provider finish_reason: network_error"}}},
+        {"type": "step_start", "part": {"type": "step-start"}},
+        {"type": "text", "part": {"text": "hi"}},
+    ]
+
+    def test_same_cost_and_tokens_as_runner(self):
+        from ops.runner.runner import consume_stream_event
+
+        for ev in self.CASES:
+            with self.subTest(ev=ev.get("type")):
+                usage = {"tokens": 0, "cost": 0.0}
+                consume_stream_event(ev, usage, [])
+                cost, tokens = metrics.transcript_usage_from_event(ev)
+                self.assertAlmostEqual(cost, usage["cost"])
+                self.assertEqual(tokens, usage["tokens"])
 
 
 class TestRotate(unittest.TestCase):
