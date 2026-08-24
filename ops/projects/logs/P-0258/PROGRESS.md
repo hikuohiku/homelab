@@ -524,3 +524,53 @@ verify 1/2 の再実測と上表の更新だけでよい。
 merge された世界になったらセッション 3 記載の手順 (ArgoCD sync 確認 → 手動 Job or
 03:43 JST 待ち → reporter run 待ち) で初回計測を起こし、verify 3 を green にするのが
 最初で最後の残作業。
+
+## セッション 12 (2026-08-24 09:2x JST)
+
+**実装は無し。ブランチは未 merge。** verify 1/2 再 green (11 回目の実測)、verify 3 red
+(`recovery_probe: None`)。ただし本セッションで重大な発見 1 件 —
+**「merge 待ち」は構造的に終わらないことが確定した。**
+
+### 発見 (重大): 本ブランチには PR が存在せず、このループは自力では抜けられない
+
+証跡は 3 点:
+
+1. **PR が一度も開かれたことがない**: `git ls-remote origin 'refs/pull/*/head'` (555 refs)
+   の全 SHA に対し「p-0258 固有 commit (main に無い) の祖先か」を判定した結果、
+   一致ゼロ。open も close 済みも含めて PR は存在しない
+2. **wrapper は verify 全項目 green でしか PR を作らない**: `ops/runner/runner.py:927`
+   の `if verify and all(v["ok"] for v in verify)` を通ったときだけ `ensure_pr()`
+   (runner.py:929) → `ready_for_review` (runner.py:930)。heart の merge は review pass 後の
+   `merging` 状態でのみ発火するので、PR 無し = review 無し = merge 無し
+3. **verify 3 は merge 前に絶対に green にならない**: verify 3 は
+   `origin/ops-health-report` (= cluster 内 reporter が書く) を読む。reporter は
+   main から deploy されており、`collect_recovery_probe` は本ブランチにしか無い。
+   ゆえに「merge → deploy → 夜間 run」まで同キーは出現しない
+
+1+2+3 の合流: **all-green が永久に成立しないため PR が開かれず、merge という
+verify 3 の前提が永遠に来ない。** セッション 4〜11 の「merge 待ち」は
+発生し得ないイベントを待っていた。このままだと唯一の出口は budget 枯渴
+(soft_cap 3M tokens / max_sessions 300) による `budget_exhausted` で、
+実装完成済みのまま納品に至らない。
+
+### 抜け道 (worker の権限外。curriculum / 人間が拾うべき)
+
+- **spec 修正案**: verify 3 を「merge 後確認」へ移す。前例は P-0193
+  (dashboard-smoke) — in-cluster 初回実行を実績づけは merge 後の残作業として
+  PROGRESS に明記し、merge 前 verify は代替可能な 4 項目のみで通した
+  (ops/projects/logs/P-0193/PROGRESS.md:267-282)。本 spec なら verify 1/2 +
+  「reporter 3 点セットの静的検査」等の代置で review に進める
+- **runner 改修案**: 「post-merge 依存 verify」の escape hatch (例: spec フラグで
+  ready_for_review 判定から除外し、soak 中に実測する)。汎用化すれば同型の死を
+  未来の全 project で防げる
+
+worker は spec (archive.jsonl) も runner も触れないため、上記はここに記すにとどめる。
+
+## 次のセッションへの一言
+
+**「待つ」戦略は撤回。** 上の発見節のとおり、何もしない限り merge は来ない。
+次セッションは最小コストで: (1) `git branch -r --merged origin/main | grep p-0258`
+と pull ref の再確認だけ行い、(2) 未 merge かつ spec 未修正なら verify 再実測以外の
+作業はせず短く切り上げる (トークンを積むだけのセッションを量産しない)。
+spec 修正 / runner 改修が入った世界になったら、初めて通常の残作業
+(ArgoCD sync 確認 → 初回計測 → verify 3 green 化) に戻る。
