@@ -41,7 +41,6 @@ def proposal(**over):
         "irreversible": False,
         "capabilities": [],
         "touches_apps": False,
-        "budget": {"soft_cap_tokens": 300000},
         "confidence": "confident",
     }
     base.update(over)
@@ -172,9 +171,6 @@ class TestCheckProposalsPure(unittest.TestCase):
             ("irreversible 型", [proposal(irreversible="no")], "irreversible"),
             ("capabilities 型", [proposal(capabilities={})], "capabilities"),
             ("touches_apps 型", [proposal(touches_apps=None)], "touches_apps"),
-            ("budget 型", [proposal(budget={})], "soft_cap_tokens"),
-            ("budget bool", [proposal(budget={"soft_cap_tokens": True})],
-             "soft_cap_tokens"),
             ("confidence 語彙", [proposal(confidence="sure")], "confidence"),
             ("human-request 必須", [proposal(proposed_by="human-request")],
              "request_id"),

@@ -27,7 +27,7 @@ def project(**kw):
         "branch": "project/p-0001",
         "irreversible": False,
         "capabilities": [],
-        "budget": {"used_tokens": 0, "soft_cap": 1000},
+        "budget": {"used_tokens": 0},
         "created": "2026-08-07",
     }
     base.update(kw)
@@ -52,7 +52,6 @@ def facts(**kw):
         "health_fresh": True,
         "vetoes": [],
         "stop_all": False,
-        "breaker_tripped": False,
         "running_runners": 0,
         "curriculum": None,
     }
@@ -134,12 +133,46 @@ class TestAnnounce(unittest.TestCase):
         )
         self.assertEqual(d["projects"][0]["veto_deadline"], "2026-08-07T12:00:00Z")
 
-    def test_breaker_blocks_new_announce(self):
+
+class TestCostIsNotAGate(unittest.TestCase):
+    """消費量 (金額・トークン) では止まらない。2026-08-24 にサーキットブレーカーと
+    soft cap を廃止した。廃止済みの fact (breaker_tripped) を渡しても、器は
+    従来どおり仕事を作り続けること — 再導入をここで固定する。"""
+
+    def test_cost_does_not_block_announce(self):
         d, actions = reconcile.decide(
             doc(project(adopt_gate=gate())), facts(breaker_tripped=True), RULES, NOW
         )
-        self.assertEqual(d["projects"][0]["state"], "proposed")
-        self.assertNotIn("announce", kinds(actions))
+        self.assertEqual(d["projects"][0]["state"], "active")
+        self.assertIn("announce", kinds(actions))
+        self.assertIn("spawn_runner", kinds(actions))
+
+    def test_cost_does_not_block_the_adopt_gate(self):
+        _, actions = reconcile.decide(
+            doc(project()), facts(breaker_tripped=True), RULES, NOW
+        )
+        self.assertIn("run_adopt_gate", kinds(actions))
+
+    def test_cost_does_not_hold_the_quota_ticket(self):
+        p = project(
+            state="active", job="runner-p-0001-a1",
+            quota_wait_until="2026-08-07T11:59:00Z",
+        )
+        d, actions = reconcile.decide(doc(p), facts(breaker_tripped=True), RULES, NOW)
+        self.assertNotIn("quota_wait_until", d["projects"][0])
+        self.assertIn("spawn_runner", kinds(actions))
+
+    def test_cost_does_not_block_curriculum(self):
+        _, actions = reconcile.decide(doc(), facts(breaker_tripped=True), RULES, NOW)
+        self.assertIn("spawn_curriculum", kinds(actions))
+
+    def test_cost_does_not_block_critic(self):
+        d, actions = reconcile.decide(
+            doc(last_activity_at="2026-08-07T11:00:00Z"),
+            facts(breaker_tripped=True), RULES, NOW,
+        )
+        self.assertIn("spawn_critic", kinds(actions))
+        self.assertEqual(d["last_critic_at"], "2026-08-07T12:00:00Z")
 
 
 class TestAdoptGate(unittest.TestCase):
@@ -153,13 +186,6 @@ class TestAdoptGate(unittest.TestCase):
         self.assertIn("run_adopt_gate", kinds(actions))
         self.assertNotIn("announce", kinds(actions))
         self.assertNotIn("veto_deadline", p)
-
-    def test_breaker_blocks_the_gate_too(self):
-        """breaker 中は新しい仕事を作らない。clone も走らせない。"""
-        _, actions = reconcile.decide(
-            doc(project()), facts(breaker_tripped=True), RULES, NOW
-        )
-        self.assertNotIn("run_adopt_gate", kinds(actions))
 
     def test_gate_is_measured_only_once(self):
         """測定済みなら再実行しない (毎ビート clone しない)。"""
@@ -416,12 +442,13 @@ class TestActiveObservation(unittest.TestCase):
         self.assertEqual(d["projects"][0]["state"], "active")
         self.assertIn("spawn_runner", kinds(actions))
 
-    def test_budget_exhausted_stalls_with_question_and_consumes(self):
+    def test_session_limit_stalls_with_question_and_consumes(self):
         p = project(state="active", job="runner-p-0001-a1")
         d, actions = reconcile.decide(
-            doc(p), facts(results={"P-0001": {"state": "budget_exhausted"}}), RULES, NOW
+            doc(p), facts(results={"P-0001": {"state": "session_limit"}}), RULES, NOW
         )
         self.assertEqual(d["projects"][0]["state"], "stalled")
+        self.assertEqual(d["projects"][0]["stalled_reason"], "session_limit")
         self.assertIn("consume_result", kinds(actions))
         notifies = [a for a in actions if a["type"] == "notify"]
         self.assertEqual(notifies[0]["ntype"], "question")
@@ -502,18 +529,6 @@ class TestQuotaWait(unittest.TestCase):
         self.assertEqual(len(spawns), 1)
         self.assertTrue(spawns[0]["respawn"])
 
-    def test_breaker_holds_the_ticket_instead_of_dropping_it(self):
-        p = project(
-            state="active", job="runner-p-0001-a1",
-            quota_wait_until="2026-08-07T11:59:00Z",
-        )
-        d, actions = reconcile.decide(doc(p), facts(breaker_tripped=True), RULES, NOW)
-        self.assertEqual(kinds(actions), [])
-        # 札を落とすと次のビートで job 梯子に落ちて即 respawn してしまう
-        self.assertEqual(
-            d["projects"][0]["quota_wait_until"], "2026-08-07T11:59:00Z"
-        )
-
     def test_human_stop_still_wins_over_quota_wait(self):
         p = project(
             state="active", job="runner-p-0001-a1",
@@ -523,14 +538,43 @@ class TestQuotaWait(unittest.TestCase):
         self.assertEqual(d["projects"][0]["state"], "stalled")
         self.assertNotIn("spawn_runner", kinds(actions))
 
-    def test_repeated_quota_waits_are_bounded(self):
-        # 「恒久的に黙って待つ状態を作らない」は上限待ちにも掛かる。runner の
-        # 待機予算は 1 プロセス内の上限にすぎず、waiting_quota → respawn →
-        # また waiting_quota の周回には時限が無い。max_concurrent=1 では
-        # この 1 件が他の全プロジェクトのスロットを塞ぎ続ける (レビュー指摘 [1])
+    def test_first_wait_records_when_it_started(self):
+        # 打ち切りの基準は回数ではなく実時間。起点をここで刻む
+        p = project(state="active", job="runner-p-0001-a1")
+        d, _ = reconcile.decide(
+            doc(p), facts(results={"P-0001": self.result("2026-08-07T14:00:00Z")}),
+            RULES, NOW,
+        )
+        p = d["projects"][0]
+        self.assertEqual(p["quota_wait_since"], "2026-08-07T12:00:00Z")
+        self.assertEqual(p["quota_wait_count"], 1)
+
+    def test_waiting_under_the_time_limit_keeps_waiting(self):
+        # 何回待とうと、実時間が閾値未満なら止めない。上限待ちは予算方式の廃止で
+        # 「異常」ではなく通常の運転状態になった (2026-08-24)
+        started = NOW - timedelta(hours=reconcile.QUOTA_WAIT_MAX_HOURS - 1)
         p = project(
             state="active", job="runner-p-0001-a1",
-            quota_wait_count=reconcile.QUOTA_WAIT_MAX_ROUNDS,
+            quota_wait_count=99,
+            quota_wait_since=started.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        )
+        d, actions = reconcile.decide(
+            doc(p), facts(results={"P-0001": self.result("2026-08-07T14:00:00Z")}),
+            RULES, NOW,
+        )
+        p = d["projects"][0]
+        self.assertEqual(p["state"], "active")
+        self.assertEqual(p["quota_wait_until"], "2026-08-07T14:00:00Z")
+        self.assertNotIn("notify", kinds(actions))
+
+    def test_waiting_past_the_time_limit_asks_the_human(self):
+        # 「恒久的に黙って待つ状態を作らない」は上限待ちにも掛かる。
+        # 連続 QUOTA_WAIT_MAX_HOURS を超えたら人間に判断を渡す
+        started = NOW - timedelta(hours=reconcile.QUOTA_WAIT_MAX_HOURS + 1)
+        p = project(
+            state="active", job="runner-p-0001-a1",
+            quota_wait_count=3,
+            quota_wait_since=started.strftime("%Y-%m-%dT%H:%M:%SZ"),
         )
         d, actions = reconcile.decide(
             doc(p), facts(results={"P-0001": self.result("2026-08-07T14:00:00Z")}),
@@ -539,19 +583,22 @@ class TestQuotaWait(unittest.TestCase):
         p = d["projects"][0]
         self.assertEqual(p["state"], "stalled")
         self.assertEqual(p["stalled_reason"], "quota_wait_exhausted")
-        # 札も回数も落とす。残すと人間が active に戻した次の waiting_quota で
+        # 札も回数も起点も落とす。残すと人間が active に戻した次の waiting_quota で
         # 即また stalled になり、再開できない停止になる
         self.assertNotIn("quota_wait_until", p)
         self.assertNotIn("quota_wait_count", p)
+        self.assertNotIn("quota_wait_since", p)
         self.assertIn("consume_result", kinds(actions))
         notes = [a for a in actions if a["type"] == "notify"]
         self.assertEqual([n["ntype"] for n in notes], ["question"])
 
-    def test_a_non_quota_result_resets_the_round_count(self):
-        # 数えるのは「連続」の待ち。間にセッションが動いた回があれば数え直す
+    def test_a_non_quota_result_resets_the_clock(self):
+        # 数えるのは「連続」の待ち。間にセッションが動いた回があれば起点を捨てる
+        started = NOW - timedelta(hours=reconcile.QUOTA_WAIT_MAX_HOURS + 1)
         p = project(
             state="active", job="runner-p-0001-a1",
-            quota_wait_count=reconcile.QUOTA_WAIT_MAX_ROUNDS,
+            quota_wait_count=9,
+            quota_wait_since=started.strftime("%Y-%m-%dT%H:%M:%SZ"),
             prs=[42],
         )
         d, _ = reconcile.decide(
@@ -562,21 +609,7 @@ class TestQuotaWait(unittest.TestCase):
         p = d["projects"][0]
         self.assertEqual(p["state"], "in_review")
         self.assertNotIn("quota_wait_count", p)
-
-    def test_rounds_below_the_limit_keep_waiting(self):
-        p = project(
-            state="active", job="runner-p-0001-a1",
-            quota_wait_count=reconcile.QUOTA_WAIT_MAX_ROUNDS - 1,
-        )
-        d, actions = reconcile.decide(
-            doc(p), facts(results={"P-0001": self.result("2026-08-07T14:00:00Z")}),
-            RULES, NOW,
-        )
-        p = d["projects"][0]
-        self.assertEqual(p["state"], "active")
-        self.assertEqual(p["quota_wait_count"], reconcile.QUOTA_WAIT_MAX_ROUNDS)
-        self.assertEqual(p["quota_wait_until"], "2026-08-07T14:00:00Z")
-        self.assertNotIn("notify", kinds(actions))
+        self.assertNotIn("quota_wait_since", p)
 
 
 class TestReviewFlow(unittest.TestCase):
@@ -855,7 +888,7 @@ class TestMergeAndSoak(unittest.TestCase):
 class TestArchiveAdoption(unittest.TestCase):
     SPEC = {"id": "P-0001", "title": "パイロット", "verify": ["false"],
             "irreversible": False, "capabilities": [], "touches_apps": False,
-            "budget": {"soft_cap_tokens": 500}, "confidence": "confident"}
+            "confidence": "confident"}
 
     def test_adopted_spec_registers_and_gates_before_announcing(self):
         """main の archive で採択済み・projects 未登録の spec は登録され、
@@ -865,7 +898,8 @@ class TestArchiveAdoption(unittest.TestCase):
         p = d["projects"][0]
         self.assertEqual(p["id"], "P-0001")
         self.assertEqual(p["state"], "proposed")
-        self.assertEqual(p["budget"]["soft_cap"], 500)
+        # 消費量は計測として 0 から始まるだけ (上限は持たない)
+        self.assertEqual(p["budget"], {"used_tokens": 0})
         self.assertIn("run_adopt_gate", kinds(actions))
         self.assertNotIn("announce", kinds(actions))
         # 登録された spec は同ビートの立案の adopt_limit を 1 減らす
@@ -907,10 +941,6 @@ class TestCurriculum(unittest.TestCase):
         )
         self.assertNotIn("spawn_curriculum", kinds(actions))
 
-    def test_breaker_blocks_curriculum(self):
-        d, actions = reconcile.decide(doc(), facts(breaker_tripped=True), RULES, NOW)
-        self.assertNotIn("spawn_curriculum", kinds(actions))
-
     def test_pending_result_blocks_next_curriculum(self):
         """未処理の立案結果がある間は次の立案をしない (PR 無限蓄積の防止 [9])。"""
         d, actions = reconcile.decide(
@@ -934,8 +964,7 @@ class TestCurriculum(unittest.TestCase):
     def test_curriculum_merged_registers_projects_and_consumes(self):
         spec = {"id": "P-0009", "title": "t", "verify": ["false"],
                 "irreversible": True, "capabilities": ["kubectl-write"],
-                "touches_apps": True, "budget": {"soft_cap_tokens": 99},
-                "confidence": "confident"}
+                "touches_apps": True, "confidence": "confident"}
         d, actions = reconcile.decide(
             doc(), facts(curriculum={"state": "curriculum_done", "pr": 7,
                                      "pr_merged": True, "adopted_specs": [spec]}),
@@ -947,7 +976,7 @@ class TestCurriculum(unittest.TestCase):
         self.assertEqual(p["state"], "proposed")
         self.assertEqual(p["branch"], "project/p-0009")
         self.assertTrue(p["irreversible"])
-        self.assertEqual(p["budget"]["soft_cap"], 99)
+        self.assertEqual(p["budget"], {"used_tokens": 0})
 
     def test_curriculum_pr_rejected_discards_result(self):
         d, actions = reconcile.decide(
@@ -1185,14 +1214,6 @@ class TestCritic(unittest.TestCase):
         # 活動が increment されていない以上、24h 経っていても次は due にならない
         self.assertEqual(d["last_critic_at"], "2026-08-07T12:00:00Z")
 
-    def test_breaker_blocks_critic(self):
-        d, actions = reconcile.decide(
-            doc(last_activity_at="2026-08-07T11:00:00Z"),
-            facts(breaker_tripped=True), RULES, NOW,
-        )
-        self.assertNotIn("spawn_critic", kinds(actions))
-        self.assertNotIn("last_critic_at", d)
-
     def test_stop_all_blocks_critic(self):
         d, actions = reconcile.decide(
             doc(last_activity_at="2026-08-07T11:00:00Z"),
@@ -1253,16 +1274,6 @@ class TestApprove(unittest.TestCase):
         # 承認が無ければ不可逆案は窓が明けるまで着手しない (従来どおり)
         d = doc(self._announced())
         out, actions = reconcile.decide(d, facts(), RULES, NOW)
-
-        self.assertEqual(out["projects"][0]["state"], "announced")
-        self.assertNotIn("spawn_runner", [a["type"] for a in actions])
-
-    def test_approve_does_not_bypass_breaker(self):
-        # 承認は窓を畳むだけ。予算遮断は迂回させない
-        d = doc(self._announced())
-        out, actions = reconcile.decide(
-            d, facts(approves=["P-0001"], breaker_tripped=True), RULES, NOW
-        )
 
         self.assertEqual(out["projects"][0]["state"], "announced")
         self.assertNotIn("spawn_runner", [a["type"] for a in actions])
@@ -1403,14 +1414,6 @@ class TestCoreCommands(unittest.TestCase):
             doc(), facts(commands=[self.command(command_id="")]), RULES, NOW
         )
         self.assertEqual(self.ingests(actions), [])
-
-    def test_breaker_does_not_block_ingestion(self):
-        """取り込みは仕事を作らない (立案・spawn 側が breaker を見る)。
-        ここで落とすと、遮断中に来た依頼が黙って消える。"""
-        _, actions = reconcile.decide(
-            doc(), facts(commands=[self.command()], breaker_tripped=True), RULES, NOW
-        )
-        self.assertEqual(len(self.ingests(actions)), 1)
 
     def test_no_commands_is_a_quiet_beat(self):
         _, actions = reconcile.decide(doc(), facts(), RULES, NOW)

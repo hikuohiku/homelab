@@ -79,7 +79,7 @@ initializer が実測した結果、**2 項目とも現時点で failing**
 
   | ntype | stalled_reason |
   |---|---|
-  | `question` (=人間の回答待ち) | `budget_exhausted` / `quota_wait_exhausted` / `merge_timeout` / `pr_closed` / `adopt_gate_<verdict>` (reconcile.py 190 行) |
+  | `question` (=人間の回答待ち) | `session_limit` / `quota_wait_exhausted` / `merge_timeout` / `pr_closed` / `adopt_gate_<verdict>` (reconcile.py 190 行) |
   | `incident` | `adopt_gate_unmeasurable` / `no_pr_reported` / `no_pr_to_merge` / `job_missing` / `runner_crash_loop` / `review_timeout` / `soak_failed` / runner の result state そのもの (`error` / `spec_error` 等、313 行) |
   | `review` | `review_rejected` |
   | (なし) | `human_stop` (143 行。`_stall()` を経由せず直接代入) |

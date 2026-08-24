@@ -17,7 +17,7 @@ curriculum が立てた **全案** (採択・棄却を問わず) の追記専用
 {"id": "P-0001", "title": "...", "why": "...", "cell": ["領域", "種類"],
  "dod": "...", "verify": ["bash コマンド", "..."], "irreversible": false,
  "capabilities": [], "touches_apps": false,
- "budget": {"soft_cap_tokens": 3000000}, "confidence": "confident",
+ "confidence": "confident",
  "adopted": true, "proposed_at": "2026-08-07T12:00:00Z"}
 ```
 

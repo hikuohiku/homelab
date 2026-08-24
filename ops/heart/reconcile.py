@@ -11,8 +11,9 @@ review_cycles を数える (上限 rules.review.max_cycles で stalled)。
 「実行経路で強制」の該当箇所:
   - merge は verdict=pass かつ CI green のときだけ action になる (LLM は納品判断に関与しない)
   - veto は他のどの遷移よりも先に評価される
-  - breaker が落ちている間は新しい仕事 (announce / spawn) を一切作らない。
-    走行中は殺さない (決定 #9)
+  - 消費量 (金額・トークン) を理由に仕事を止めることはしない。2026-08-24 に
+    サーキットブレーカーと soft cap を廃止した。歯止めは max_concurrent /
+    max_sessions_per_project / 無活動 kill / 連続エラー / review_cycles が担う
 
 観測の扱い (2026-08-07 レビューで確定した規約):
   - facts["jobs"] が None のときは「観測に失敗した」であり「Job が無い」ではない。
@@ -37,11 +38,12 @@ MERGING_TIMEOUT_HOURS = 24
 MERGE_CONFLICT_STATUS = 405
 MERGE_CONFLICT_MARKER = "merge conflict"
 ADOPT_GATE_MAX_ATTEMPTS = 3  # 測定が書き戻されないまま回り続ける proposed を打ち切る
-# 上限待ち (P-0026) も例外にしない。runner の 7200s は 1 プロセス内の上限にすぎず、
+# 上限待ち (P-0026) も例外にしない。runner の待機予算は 1 プロセス内の上限にすぎず、
 # waiting_quota → respawn → また waiting_quota の周回そのものには時限が無い。
-# max_concurrent=1 では上限待ちの 1 件が他の全プロジェクトのスロットを塞ぐので、
-# 連続で数えて打ち切る (FAILURE_PATTERNS の誤検知でここに落ちる可能性もある)
-QUOTA_WAIT_MAX_ROUNDS = 6
+# 2026-08-24: 予算方式の廃止で「プロバイダ側のレート上限で待つ」は異常ではなく
+# 通常の運転状態になった。ラウンド数はビート周期に依存して意味を持たない
+# (毎分のビートなら 6 回は数分) ので、**連続して待ち続けた実時間**で打ち切る。
+QUOTA_WAIT_MAX_HOURS = 24
 # 自己観測 (critic) の間隔。指標 (状態別滞留・アイドル率) は日次の粒度で足り、
 # それより短くしても同じ 24h の窓を読み直すだけになる (P-0045)
 CRITIC_INTERVAL_HOURS = 24
@@ -100,7 +102,7 @@ def _stall(p, actions, reason, ntype=None, text=None):
         actions.append(_action("notify", p["id"], ntype=ntype, text=text))
 
 
-def _register_spec(doc, spec, rules, now):
+def _register_spec(doc, spec, now):
     """main の archive.jsonl で採択された spec を proposed として登録する。"""
     doc["projects"].append(
         {
@@ -113,13 +115,8 @@ def _register_spec(doc, spec, rules, now):
             "touches_apps": bool(spec.get("touches_apps")),
             "verify": spec.get("verify", []),
             "confidence": spec.get("confidence", "unsure"),
-            "budget": {
-                "used_tokens": 0,
-                "soft_cap": (spec.get("budget") or {}).get(
-                    "soft_cap_tokens",
-                    rules["runner"]["default_soft_cap_tokens"],
-                ),
-            },
+            # 消費量は計測として持つだけ (上限は無い)
+            "budget": {"used_tokens": 0},
             "created": now_iso(now)[:10],
         }
     )
@@ -166,7 +163,6 @@ def decide(doc, facts, rules, now):
     if stop_all:
         doc["stop_engaged"] = True
     stop_all = stop_all or bool(doc.get("stop_engaged"))
-    breaker = facts.get("breaker_tripped", False)
     jobs = facts.get("jobs")  # None = 観測失敗 (「無い」と区別する)
     results = facts.get("results", {})
     reviews = facts.get("reviews", {})
@@ -187,7 +183,7 @@ def decide(doc, facts, rules, now):
     existing_ids = {p["id"] for p in doc["projects"]}
     for spec in facts.get("adopted_specs") or []:
         if spec.get("id") and spec["id"] not in existing_ids:
-            _register_spec(doc, spec, rules, now)
+            _register_spec(doc, spec, now)
             existing_ids.add(spec["id"])
 
     # --- 既読化 (ack P-NNNN): 終端プロジェクトの墓標を要対応キューから下げる ---
@@ -202,7 +198,7 @@ def decide(doc, facts, rules, now):
     # 可逆案の窓は空きスロットがあれば自動で繰り上がるので、これが効くのは実質
     # 不可逆案 (窓が明けるまで着手しない) と満席のとき。状態は変えない —
     # deadline を今にするだけで、着手の可否は下の announced 分岐が従来どおり判断する
-    # (breaker・並列上限を迂回させない)。停止中は効かせない
+    # (並列上限を迂回させない)。停止中は効かせない
     approves = set(facts.get("approves", []))
     if approves and not stop_all:
         for p in doc["projects"]:
@@ -226,8 +222,8 @@ def decide(doc, facts, rules, now):
     # --- コア発の command (設計 D3/D7/D21) ---
     # 常駐コアは git にも K8s にも書かない。実装依頼は bus に publish され、
     # サイドカーがファイルに落とし、ここで初めて heart の仕事になる。
-    # 取り込みは仕事を作らない (立案・spawn 側が breaker と並列上限を見る) ので、
-    # breaker 中でも受け取る。落とすと遮断中に来た依頼が黙って消える。
+    # 取り込みは仕事を作らない (立案・spawn 側が並列上限を見る) ので、停止中でない
+    # 限りいつでも受け取る。落とすと来た依頼が黙って消える。
     #
     # 守るのは 2 つ:
     #   - command_id の台帳で二重実行しない。同じ依頼で 2 つプロジェクトが立つのは
@@ -297,9 +293,6 @@ def decide(doc, facts, rules, now):
             continue
 
         if state == "proposed":
-            # breaker 中は新しい仕事を作らない (走行中は別条項で守る)
-            if breaker:
-                continue
             # --- 採択ゲート: 予告の前に、新品 clone で verify を実測する (P-0015) ---
             # 壊れた spec (開始前に pass する / コマンドが壊れている) を予告の前に殺す。
             # ここで殺せば announce も veto 窓も Job も一切消費しない。
@@ -344,8 +337,7 @@ def decide(doc, facts, rules, now):
             p["veto_deadline"] = _veto_deadline(p, facts, rules, now)
             actions.append(_action("announce", pid))
             # 窓ゼロ (アイドルかつ可逆) なら同じビートで着手する。予告→着手の間で
-            # 1 ビートを空費しない (2026-08-09 テンポ改善)。breaker はこの分岐の
-            # 冒頭で弾いてあるのでここでは capacity だけ見る
+            # 1 ビートを空費しない (2026-08-09 テンポ改善)。見るのは capacity だけ
             if (
                 parse_iso(p["veto_deadline"]) <= now
                 and running < rules["runner"]["max_concurrent"]
@@ -365,8 +357,6 @@ def decide(doc, facts, rules, now):
                 ):
                     continue
                 p["veto_deadline"] = now_iso(now)
-            if breaker:
-                continue
             if running >= rules["runner"]["max_concurrent"]:
                 continue
             p["state"] = "active"
@@ -383,10 +373,6 @@ def decide(doc, facts, rules, now):
             if wait_until:
                 if parse_iso(wait_until) > now:
                     continue
-                if breaker:
-                    # breaker 中は新しい仕事を作らない。待ち札は持ったまま、
-                    # 復帰したビートで再開する
-                    continue
                 # max_concurrent は見ない: このプロジェクトは active のまま
                 # スロットを占めており、再開しても同時実行数は増えない
                 p.pop("quota_wait_until", None)
@@ -399,6 +385,7 @@ def decide(doc, facts, rules, now):
                 # 上限以外の結果が返ってきた = 上限は明けてセッションが動いた。
                 # 連続待ちの数え直し (数えるのは「連続」でなければ意味がない)
                 p.pop("quota_wait_count", None)
+                p.pop("quota_wait_since", None)
             if result and result.get("state") == "ready_for_review":
                 if result.get("pr") is not None:
                     prs_list = p.setdefault("prs", [])
@@ -420,12 +407,14 @@ def decide(doc, facts, rules, now):
                 p["review_retries"] = 0
                 actions.append(_action("consume_result", pid))
                 actions.append(_action("spawn_reviewer", pid))
-            elif result and result.get("state") == "budget_exhausted":
+            elif result and result.get("state") == "session_limit":
                 actions.append(_action("consume_result", pid))
                 _stall(
-                    p, actions, "budget_exhausted", "question",
-                    f"{pid} が予算 (soft cap) を使い切りました。"
-                    "継続する価値があれば予算を積んで再開を指示してください",
+                    p, actions, "session_limit", "question",
+                    f"{pid} が 1 プロジェクトあたりのセッション上限 "
+                    f"({rules['runner']['max_sessions_per_project']}) に達しました。"
+                    "同じところを回り続けている可能性があります。"
+                    "続ける価値があるか判断してください",
                 )
             elif result and result.get("state") == "waiting_quota":
                 # アカウントの利用上限は器の外側の事実であって、プロジェクトの停滞
@@ -435,18 +424,23 @@ def decide(doc, facts, rules, now):
                 # 作らない」はこの待ちにも掛かる
                 actions.append(_action("consume_result", pid))
                 p["quota_wait_count"] = p.get("quota_wait_count", 0) + 1
-                if p["quota_wait_count"] > QUOTA_WAIT_MAX_ROUNDS:
-                    # 上限が明けないまま周回し続けている。器の側では直せない
-                    # (待つ以外に手が無い) ので、budget_exhausted と同じ流儀で
-                    # 人間に判断を渡す。スロットもここで解放される。
-                    # 札と回数は落とす — 残すと人間が active に戻した次の
-                    # waiting_quota で即また stalled になる (再開できない停止)
+                # 打ち切りの基準は回数ではなく**連続して待った実時間**。待ち始めた
+                # 時刻を doc に持ち、そこからの経過で測る (回数はビート周期に依存する
+                # ので閾値として意味を持たない。回数は記録としてだけ残す)
+                since = p.setdefault("quota_wait_since", now_iso(now))
+                if (now - parse_iso(since)) > timedelta(hours=QUOTA_WAIT_MAX_HOURS):
+                    # 上限が明けないまま丸一日待ち続けている。器の側では直せない
+                    # (待つ以外に手が無い) ので人間に判断を渡す。スロットもここで
+                    # 解放される。札・回数・起点は落とす — 残すと人間が active に
+                    # 戻した次の waiting_quota で即また stalled になる (再開できない停止)
                     rounds = p.pop("quota_wait_count")
                     p.pop("quota_wait_until", None)
+                    p.pop("quota_wait_since", None)
                     _stall(
                         p, actions, "quota_wait_exhausted", "question",
-                        f"{pid} がアカウントの利用上限で {rounds} 回続けて"
-                        "待機に入りました。上限が明けていないか、死因の判定が"
+                        f"{pid} がアカウントの利用上限で "
+                        f"{QUOTA_WAIT_MAX_HOURS} 時間以上 ({rounds} 回) 連続して"
+                        "待機し続けています。上限が明けていないか、死因の判定が"
                         "誤っています。再開の判断をください",
                     )
                     continue
@@ -618,7 +612,7 @@ def decide(doc, facts, rules, now):
             existing = {p["id"] for p in doc["projects"]}
             for spec in cur.get("adopted_specs", []):
                 if spec.get("id") and spec["id"] not in existing:
-                    _register_spec(doc, spec, rules, now)
+                    _register_spec(doc, spec, now)
                     existing.add(spec["id"])
             # 実りの有無を記録する。次のアイドルで即座に立案してよいか (実りあり) /
             # min_interval の間隔を置くべきか (空振り) の判定に使う (2026-08-10)
@@ -691,7 +685,7 @@ def decide(doc, facts, rules, now):
     gap_ok = last_curriculum is None or (now - parse_iso(last_curriculum)) >= min_gap
     if doc.get("last_curriculum_dry") is False:
         gap_ok = True
-    if curriculum_idle and gap_ok and not breaker and not stop_all:
+    if curriculum_idle and gap_ok and not stop_all:
         doc["last_curriculum_at"] = now_iso(now)
         actions.append(_action("spawn_curriculum", adopt_limit=free_slots))
 
@@ -721,9 +715,9 @@ def decide(doc, facts, rules, now):
                          f"{str(critic.get('error', ''))[:200]}",
                 )
             )
-    # breaker / stop_all 中は新しい仕事を作らない (冒頭の不変条件)。
+    # stop_all 中は新しい仕事を作らない (冒頭の不変条件)。
     # max_concurrent は見ない — critic は runner スロットを消費しない別 Job
-    if _critic_due(doc, now) and not breaker and not stop_all:
+    if _critic_due(doc, now) and not stop_all:
         doc["last_critic_at"] = now_iso(now)
         actions.append(_action("spawn_critic"))
 

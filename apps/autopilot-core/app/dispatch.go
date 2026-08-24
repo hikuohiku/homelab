@@ -2,7 +2,7 @@
 //
 // コアは git にも K8s にも書かない。実装依頼 (task-request) は
 // events.heart.<domain>.<command> へ publish するだけで、ops-state への commit も
-// Job の spawn も heart が行う。単一書き手の不変条件と、breaker・並列上限・監査の
+// Job の spawn も heart が行う。単一書き手の不変条件と、並列上限・監査の
 // 一元化をここで壊さないため。
 //
 // 失敗がどう返るか (実装前に実サーバで確かめた点):

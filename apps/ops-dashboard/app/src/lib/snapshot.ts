@@ -3,7 +3,8 @@ import { getOpsState } from "./ops-state";
 import { latestAction } from "./transcript";
 import type { AttentionItem, Project, Snapshot } from "./types";
 
-const QUESTION_REASONS = new Set(["budget_exhausted", "quota_wait_exhausted", "merge_timeout", "pr_closed"]);
+// budget_exhausted は 2026-08-24 に session_limit へ改名。過去の projects.json も読むので両方残す
+const QUESTION_REASONS = new Set(["session_limit", "budget_exhausted", "quota_wait_exhausted", "merge_timeout", "pr_closed"]);
 const FLOW_ORDER = ["proposed", "announced", "active", "in_review", "merging", "soaking", "delivered", "stalled", "vetoed"];
 
 export function buildAttention(projects: Project[], now = new Date()): AttentionItem[] {
@@ -54,7 +55,7 @@ export async function getSnapshot(): Promise<Snapshot> {
     };
   }));
   const heartbeatAt = state.heartbeat.at ? Date.parse(state.heartbeat.at) : 0;
-  const breaker = state.metrics.breaker ?? {};
+  const usage = state.metrics.usage ?? state.metrics.breaker ?? {};
   const warnings = [state.warning, kube.warning].filter((value): value is string => Boolean(value));
   const projects = [...state.projects].sort((a, b) => {
     const ai = FLOW_ORDER.indexOf(a.state);
@@ -73,8 +74,8 @@ export async function getSnapshot(): Promise<Snapshot> {
       deploymentReady: kube.heartReady,
       stopEngaged: state.stopEngaged,
     },
-    todayCostUsd: Number(breaker.cost_usd ?? 0),
-    todaySessions: Number(breaker.sessions ?? 0),
+    todayCostUsd: Number(usage.cost_usd ?? 0),
+    todaySessions: Number(usage.sessions ?? 0),
     warnings,
   };
 }

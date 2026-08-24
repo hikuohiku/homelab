@@ -429,9 +429,7 @@ class Heart:
         )
         critic = facts.collect_critic(self.cfg.data_dir)
         adopted_specs = list(facts.load_adopted_specs(self.repo_dir).values())
-        tripped, breaker_info = metrics.breaker_tripped(
-            sf, self.cfg.rules, self.transcripts, now
-        )
+        usage_info = metrics.daily_usage(self.transcripts, now)
 
         running = sum(
             1 for p in doc["projects"] if p["state"] in ("active", "in_review", "merging")
@@ -450,7 +448,6 @@ class Heart:
             "approves": approves,
             "stop_all": stop_all,
             "resume_all": resume_all,
-            "breaker_tripped": tripped,
             "running_runners": running,
             "curriculum": curriculum,
             "critic": critic,
@@ -561,7 +558,7 @@ class Heart:
                 "open_prs": len(open_prs),
                 "unhealthy_apps": unhealthy_apps,
                 "health_fresh": health_fresh,
-                "breaker": breaker_info,
+                "usage": usage_info,
                 "budget_status": budget["status"] if budget else None,
                 "dashboard_smoke_status": smoke["status"] if smoke else None,
                 "vetoes": vetoes,

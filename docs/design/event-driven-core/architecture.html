@@ -864,7 +864,7 @@
         </div>
         <div class="label">heart</div>
         <div class="tech">決定論 reconcile（現行のまま）</div>
-        <div class="port">納品ゲート · breaker</div>
+        <div class="port">納品ゲート · 並列上限</div>
         <span class="step-badge">·</span>
       </div>
 
@@ -1282,7 +1282,7 @@ const flows = {
         from:"core", to:"heart", color:"--c-orch",
         title:"調査 spawn を heart に依頼",
         route:"PUB events.heart",
-        desc:"コアは K8s write を持たない。<em>spawn も heart 経由</em>にすることで breaker・並列上限・監査が一元のまま保たれる（副作用の実行者は heart の決定論だけ）。",
+        desc:"コアは K8s write を持たない。<em>spawn も heart 経由</em>にすることで並列上限・監査が一元のまま保たれる（副作用の実行者は heart の決定論だけ）。",
         payloadActive:
 `SUBJ events.heart
 {
@@ -1299,7 +1299,7 @@ const flows = {
         from:"heart", to:"runner", color:"--c-compute",
         title:"次ビートで spawn",
         route:"batch/v1 Job (read-only SA)",
-        desc:"heart が bus を pull し、breaker と max_concurrent を確認してから<em>read-only SA の使い捨て Job</em> を起動。初動の遅延は最大 60 秒。",
+        desc:"heart が bus を pull し、max_concurrent を確認してから<em>read-only SA の使い捨て Job</em> を起動。初動の遅延は最大 60 秒。",
         payload:
 `// heart reconcile → spawn
 {
@@ -1307,7 +1307,7 @@ const flows = {
     "project": null,
     "origin": "core/incident-immich"
 }`,
-        chips:["breaker 適用","最大 60s 遅延"]
+        chips:["並列上限 適用","最大 60s 遅延"]
       },
       {
         from:"runner", to:"core", color:"--c-compute",

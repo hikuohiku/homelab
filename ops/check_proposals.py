@@ -32,7 +32,7 @@ CELL_KINDS = {"repair", "prevent", "feature", "investigate", "experiment"}
 CONFIDENCES = {"confident", "unsure"}
 REQUIRED_KEYS = {
     "id", "title", "why", "cell", "dod", "verify",
-    "irreversible", "capabilities", "touches_apps", "budget", "confidence",
+    "irreversible", "capabilities", "touches_apps", "confidence",
 }
 QUOTA_EPS = 1e-9
 
@@ -119,11 +119,8 @@ def check_proposals(data, quota):
         if not isinstance(p.get("touches_apps"), bool):
             errors.append(f"{where}: touches_apps は真偽値")
 
-        budget = p.get("budget")
-        soft_cap = budget.get("soft_cap_tokens") if isinstance(budget, dict) else None
-        # bool は int の子孫なので True を数値扱いさせない
-        if not isinstance(soft_cap, int) or isinstance(soft_cap, bool):
-            errors.append(f"{where}: budget.soft_cap_tokens が整数でない")
+        # budget.soft_cap_tokens は 2026-08-24 に廃止 (定額移行で、消費量を理由に
+        # 仕事を止めない)。古い案が付けてきても無視する
 
         if p.get("confidence") not in CONFIDENCES:
             errors.append(

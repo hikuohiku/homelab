@@ -1,7 +1,7 @@
 <!--
 chore レーン: プロジェクト税 (spec 固定・予告・レビューゲート) を課すほどでない小雑務。
 heart が env CHORE_TASK で内容を渡して spawn する。Phase 3 で有効化。
-フレッシュ 1 セッション + 小予算 (rules.json chore.soft_cap_tokens)。
+フレッシュ 1 セッションで終わらせる。
 -->
 
 あなたは chore 役。次の小雑務を 1 つだけ片付ける:

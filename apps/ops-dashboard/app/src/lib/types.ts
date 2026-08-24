@@ -57,7 +57,7 @@ export interface Project {
   review_cycles?: number;
   merging_since?: string;
   prs?: number[];
-  budget?: { used_tokens?: number; soft_cap?: number };
+  budget?: { used_tokens?: number };
 }
 
 export interface AttentionItem {

@@ -195,14 +195,16 @@ def summarize_stalled(projects_doc):
     return dict(sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])))
 
 
-def breaker_tripped(statefiles, rules, transcripts_dir, now=None):
-    """当日の名目コスト合計が閾値超なら True。走行中を殺す判断はここでしない
-    (decide が『新規を作らない』だけに使う)。"""
+def daily_usage(transcripts_dir, now=None):
+    """当日の名目コスト合計とセッション数。**計測だけで、判断はしない。**
+
+    2026-08-24 まではこの値で新規 spawn を止めるサーキットブレーカーがあったが、
+    定額移行済みで名目コストが実請求と一致せず、仕事を止める根拠にならないので
+    廃止した。値は metrics.jsonl とダッシュボードの表示用に残す。"""
     now = now or datetime.now(timezone.utc)
     day = now.strftime("%Y-%m-%d")
     cost, sessions = scan_transcript_costs(transcripts_dir, day)
-    tripped = cost > rules["breaker"]["daily_cost_usd"]
-    return tripped, {"day": day, "cost_usd": round(cost, 4), "sessions": sessions}
+    return {"day": day, "cost_usd": round(cost, 4), "sessions": sessions}
 
 
 def rotate_transcripts(transcripts_dir, rules, now=None):

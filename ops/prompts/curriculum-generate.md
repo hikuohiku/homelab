@@ -75,7 +75,6 @@ heart から渡される。空 (`[]`) ならこの節は飛ばしてよい。
  "irreversible": false,
  "capabilities": [],
  "touches_apps": false,
- "budget": {"soft_cap_tokens": 3000000},
  "confidence": "confident または unsure",
  "proposed_by": "(任意) human-request — 人間のタスク依頼から生まれた案のみ付ける。通常の案では省略",
  "request_id": "(proposed_by: human-request のとき必須) 元依頼の id"}

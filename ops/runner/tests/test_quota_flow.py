@@ -55,7 +55,6 @@ class FakeRunner(R.Runner):
             "runner": {
                 "session_max_seconds": session_max_seconds,
                 "max_sessions_per_project": 50,
-                "default_soft_cap_tokens": 10**9,
                 "inactivity_nudge_seconds": 60,
                 "inactivity_kill_seconds": 120,
                 # P-0141: rules.json runner.unknown_error_max_rounds と同じ値
@@ -64,7 +63,7 @@ class FakeRunner(R.Runner):
             "review": {"max_cycles": 3},
         }
         self.spec = {"verify": ["true"], "title": "テスト"}
-        self.budget = R.Budget(10**9, 50)
+        self.budget = R.Budget(50)
         self.last_session = {}
         self.outcomes = list(outcomes)
         self.verify_seq = list(verify_seq)
@@ -162,10 +161,10 @@ class TestInitializerQuota(QuotaFlowTest):
         r = FakeRunner(
             self.tmp, outcomes=[("error", "usage_limit")], verify_seq=[FAIL]
         )
-        r.budget = R.Budget(10**9, 1)
+        r.budget = R.Budget(1)
         rc = r.mode_worker()
         self.assertEqual(rc, 0)
-        self.assertEqual(r.result_doc()["state"], "budget_exhausted")
+        self.assertEqual(r.result_doc()["state"], "session_limit")
         self.assertEqual(r.tags, ["s0-init"])
 
     def test_other_failures_still_error_and_name_the_kind(self):

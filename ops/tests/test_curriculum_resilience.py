@@ -14,7 +14,7 @@
      に落ち、直後の API プローブ 401 によって auth に寄せられること —
      これが failures.md の `root_cause: auth` の根拠チェーン全体。
      6 種のうち usage_limit / auth / network は分類器とプローブ写像、
-     timeout は outcome=session_timeout、budget は state=budget_exhausted と
+     timeout は outcome=session_timeout、セッション上限は state=session_limit と
      別層で表現される (PROJECT.md 前提)。unknown は最後の砦として残る
   2. **歯止めの発火条件** (DoD 3/4)。curriculum_next_action() の 4 値
      ('done' | 'retry' | 'quota_wait' | 'give_up') マッピング。usage_limit は
@@ -124,9 +124,9 @@ class TestFailureKindMapping(unittest.TestCase):
                 self.assertEqual(info["failure_kind"], want)
         self.assertEqual(prober.calls, [])
 
-    def test_timeout_and_budget_are_represented_outside_classifier(self):
-        # timeout は outcome (session_timeout)、budget は result state
-        # (budget_exhausted) という別層の表現であることが現行契約
+    def test_timeout_and_session_limit_are_represented_outside_classifier(self):
+        # timeout は outcome (session_timeout)、セッション上限は result state
+        # (session_limit) という別層の表現であることが現行契約
         # (PROJECT.md 前提)。分類器がこれらを内包しに来たら、その時点で
         # このテストは更新すること
         kinds = {"usage_limit", "auth", "network", "unknown"}
