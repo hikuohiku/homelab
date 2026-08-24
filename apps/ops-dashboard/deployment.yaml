@@ -29,7 +29,7 @@ spec:
         - name: web
           # Mission Control (Next.js)。digest の更新手順は images/autopilot/Dockerfile
           # 冒頭コメントと同じ (build-dashboard-image.yml が push → 実測 → 反映)
-          image: ghcr.io/hikuohiku/homelab-dashboard@sha256:721639a8616ffbc945505e2deb34576e1a42083881b9c6696e6cc45ee5491941
+          image: ghcr.io/hikuohiku/homelab-dashboard@sha256:956eb1688d0f8d176d794b4c24a9f26b03dfbfb461a7f1c580d271962ab9933e
           terminationMessagePolicy: FallbackToLogsOnError
           env:
             - name: AUTOPILOT_NAMESPACE
