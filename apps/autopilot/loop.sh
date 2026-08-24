@@ -104,9 +104,12 @@ iterate() {
   # 空のままにし、main() 側で「変化なし」と同じ扱いにする
   CURRENT_MAIN_SHA=""
 
+  # blobless clone (--filter=blob:none)。素の clone はこの repo で 65s / 124MB、
+  # blobless は 2s / 9.2MB (2026-08-24 実測)。shallow にしないのは push と
+  # merge-base で罠を踏むため
   if [ ! -d "${REPO_DIR}/.git" ]; then
     log "cloning ${REPO_URL} into ${REPO_DIR}"
-    git clone --quiet "${REPO_URL}" "${REPO_DIR}" || { FAIL_REASON="git clone failed"; return 1; }
+    git clone --quiet --filter=blob:none "${REPO_URL}" "${REPO_DIR}" || { FAIL_REASON="git clone failed"; return 1; }
   fi
 
   cd "${REPO_DIR}" || { FAIL_REASON="cd to repo failed"; return 1; }

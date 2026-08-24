@@ -31,8 +31,13 @@ autopilot namespace の Pod (heart / runner / reviewer / …) が動く環境の
 - 復旧は明示 refspec `git fetch origin '+refs/heads/*:refs/remotes/origin/*'`。
   打った直後に `origin/main` が生えるのを実測した。**shallow のままでも
   `git show origin/<branch>:<path>` は成功する**ので `--unshallow` は要らない — verified_at: 2026-08-08, P-0015
-- 他ブランチを見る必要がある使い捨て clone では `--depth=1` を使わず、full clone +
-  明示 refspec の fetch にする。実装は `ops/heart/adoptgate.py` の `clone_fresh()` — verified_at: 2026-08-08, P-0015
+- 他ブランチを見る必要がある使い捨て clone では `--depth=1` を使わず、
+  **`--filter=blob:none` (blobless clone)** にする。ref は全部生え、blob は使うときに取る。
+  実装は `ops/heart/gitutil.py` の `clone_args()`、それを使う `adoptgate.clone_fresh()` — verified_at: 2026-08-24
+- **この repo の素の clone は 65s / 124MB** (状態ブランチ 4 本の履歴。ops-state 1 本の
+  clone でも 54s)。`gitutil.run` の 120s 上限を回線次第で越え、採択ゲートが落ちて
+  P-0341 を stalled にした。blobless なら 2s / 9.2MB、`git show origin/ops-state:...` は
+  0.7s (blob を 1 つ取りに行く) — verified_at: 2026-08-24
 
 ## Kubernetes
 

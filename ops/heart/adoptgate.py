@@ -198,16 +198,15 @@ def clone_fresh(repo_url, dest, branch="main"):
     **`--depth=1` を使わない。** shallow clone は `--single-branch` を含み、
     `remote.origin.fetch` が clone したブランチ 1 本だけになるため、以後
     `git fetch origin` を何度打っても `origin/ops-state` が生えない
-    (`ops/memory/substrate.md`。P-0014 の worker が踏んだ)。ここでは full clone に
-    加えて refspec を明示した fetch を打ち、`origin/main` と `origin/ops-state` の
-    両方が見える状態を作る — verify に `git show origin/ops-state:projects.json` を
-    含む spec (ダッシュボード系) がこれを要る。
+    (`ops/memory/substrate.md`。P-0014 の worker が踏んだ)。verify に
+    `git show origin/ops-state:projects.json` を含む spec (ダッシュボード系) が
+    `origin/main` と `origin/ops-state` の両方を要るので、ref は全部見える形にする。
+
+    素の clone は 65s / 124MB (2026-08-24 実測) で、`gitutil.run` の 120s 上限を
+    回線次第で越えて落ちていた (P-0341 の stalled)。blobless clone なら 2s / 9.2MB で、
+    ref は全部生える。blob は verify が触ったときに取りに行く。
     """
-    gitutil.run(["clone", "--quiet", repo_url, str(dest)])
-    gitutil.run(
-        ["fetch", "--quiet", "origin", "+refs/heads/*:refs/remotes/origin/*"],
-        cwd=dest,
-    )
+    gitutil.run(gitutil.clone_args(repo_url, dest))
     gitutil.run(["checkout", "--quiet", "-B", branch, f"origin/{branch}"], cwd=dest)
 
 
