@@ -15,6 +15,9 @@ interface OpsState {
   metrics: { breaker?: { cost_usd?: number; sessions?: number } };
   stopEngaged: boolean;
   warning?: string;
+  // 『人間の鍵作業』抽出用の生テキスト (P-0272)。seeds.md は main、backlog.json も main
+  seedsMarkdown: string;
+  backlogText: string;
 }
 
 let cached: { loadedAt: number; value: OpsState } | undefined;
@@ -77,11 +80,13 @@ async function loadFromGit(): Promise<OpsState> {
     "+refs/heads/ops-state:refs/remotes/origin/ops-state",
     "+refs/heads/main:refs/remotes/origin/main",
   ]);
-  const [projectsText, heartbeatText, metricsText, archiveText] = await Promise.all([
+  const [projectsText, heartbeatText, metricsText, archiveText, seedsText, backlogText] = await Promise.all([
     git(["show", "origin/ops-state:projects.json"]),
     git(["show", "origin/ops-state:heartbeat.json"]),
     git(["show", "origin/ops-state:metrics.jsonl"]),
     git(["show", "origin/main:ops/projects/archive.jsonl"]),
+    git(["show", "origin/main:ops/projects/seeds.md"]),
+    git(["show", "origin/main:ops/backlog.json"]),
   ]);
   const projectDoc = parseJson<{ projects?: Project[]; stop_engaged?: boolean }>(projectsText, {});
   return {
@@ -89,15 +94,19 @@ async function loadFromGit(): Promise<OpsState> {
     heartbeat: parseJson(heartbeatText, {}),
     metrics: parseJsonlLast(metricsText),
     stopEngaged: Boolean(projectDoc.stop_engaged),
+    seedsMarkdown: seedsText,
+    backlogText,
   };
 }
 
 async function loadFromDirectory(directory: string): Promise<OpsState> {
-  const [projectsText, heartbeatText, metricsText, archiveText] = await Promise.all([
+  const [projectsText, heartbeatText, metricsText, archiveText, seedsText, backlogText] = await Promise.all([
     readFile(`${directory}/projects.json`, "utf8"),
     readFile(`${directory}/heartbeat.json`, "utf8"),
     readFile(`${directory}/metrics.jsonl`, "utf8"),
     readFile(`${directory}/archive.jsonl`, "utf8").catch(() => ""),
+    readFile(`${directory}/ops/projects/seeds.md`, "utf8").catch(() => ""),
+    readFile(`${directory}/ops/backlog.json`, "utf8").catch(() => ""),
   ]);
   const projectDoc = parseJson<{ projects?: Project[]; stop_engaged?: boolean }>(projectsText, {});
   return {
@@ -105,6 +114,8 @@ async function loadFromDirectory(directory: string): Promise<OpsState> {
     heartbeat: parseJson(heartbeatText, {}),
     metrics: parseJsonlLast(metricsText),
     stopEngaged: Boolean(projectDoc.stop_engaged),
+    seedsMarkdown: seedsText,
+    backlogText,
   };
 }
 
@@ -116,7 +127,7 @@ async function refresh(): Promise<OpsState> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (cached) return { ...cached.value, warning: `ops-state 更新失敗: ${message}` };
-    return { projects: [], heartbeat: {}, metrics: {}, stopEngaged: false, warning: `ops-state 取得失敗: ${message}` };
+    return { projects: [], heartbeat: {}, metrics: {}, stopEngaged: false, seedsMarkdown: "", backlogText: "", warning: `ops-state 取得失敗: ${message}` };
   } finally {
     refreshInFlight = undefined;
   }

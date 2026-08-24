@@ -211,6 +211,14 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
 .irreversible-flag { position: absolute; right: 15px; bottom: 5px; color: var(--danger); font-size: 10px; }
 .queue-empty { border: 1px dashed var(--line); border-radius: 10px; min-height: 200px; display: grid; place-items: center; color: var(--muted); }
 
+/* 『あなたの手が要ること』(P-0272)。器の出す状態ではなく人間への依頼なので、
+   要対応キューとは別セクション。左罫はアクセント色で veto/stalled と混線させない */
+.human-tasks { max-width: 1200px; margin: 0 auto 55px; padding: 0 28px; }
+.human-tasks .section-heading p a { color: var(--accent); }
+.queue-item--human { border-left-color: var(--accent); }
+.queue-item--human .queue-item__kind { color: var(--accent); }
+.queue-item--human .queue-item__deadline strong { color: var(--accent); }
+
 @keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 980px) {
@@ -223,6 +231,7 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
   .live-view { padding: 16px 18px 24px; min-height: calc(100vh - 150px); }
   .scope { height: calc(100vh - 320px); min-height: 480px; }
   .board, .attention { padding: 26px 18px 45px; }
+  .human-tasks { padding: 0 18px; margin-bottom: 45px; }
 }
 
 @media (max-width: 640px) {

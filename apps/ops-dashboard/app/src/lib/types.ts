@@ -69,6 +69,15 @@ export interface AttentionItem {
   irreversible?: boolean;
 }
 
+// seeds.md の『人間の鍵作業』から機械抽出した、人間への依頼 (P-0272)。
+// 器からは進められない物理・認証系の仕事で、人間が見ない限り滞留し続ける
+export interface HumanTask {
+  id: string;
+  title: string;
+  ageDays: number;
+  created?: string;
+}
+
 export interface HeartStatus {
   beat?: number;
   at?: string;
@@ -82,6 +91,7 @@ export interface Snapshot {
   agents: AgentSnapshot[];
   projects: Project[];
   attention: AttentionItem[];
+  humanTasks: HumanTask[];
   heart: HeartStatus;
   todayCostUsd: number;
   todaySessions: number;

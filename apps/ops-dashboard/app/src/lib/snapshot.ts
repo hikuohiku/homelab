@@ -1,4 +1,5 @@
 import { getKubeSnapshot } from "./kubernetes";
+import { backlogCreatedIndex, parseHumanTasks } from "./human-tasks";
 import { getOpsState } from "./ops-state";
 import { latestAction } from "./transcript";
 import type { AttentionItem, Project, Snapshot } from "./types";
@@ -66,6 +67,8 @@ export async function getSnapshot(): Promise<Snapshot> {
     agents,
     projects,
     attention: buildAttention(projects),
+    // 『人間の鍵作業』(P-0272)。parse 済みで古い順。完了報告の口は feedback POST の案内のみ
+    humanTasks: parseHumanTasks(state.seedsMarkdown, backlogCreatedIndex(state.backlogText)),
     heart: {
       beat: state.heartbeat.beat,
       at: state.heartbeat.at,

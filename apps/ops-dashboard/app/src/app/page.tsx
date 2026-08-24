@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AgentRole, AgentSnapshot, Project, Snapshot, TranscriptEvent } from "@/lib/types";
+import type { AgentRole, AgentSnapshot, HumanTask, Project, Snapshot, TranscriptEvent } from "@/lib/types";
 import { mergeTranscriptEvent } from "@/lib/transcript-client";
 import ProjectActions, { type ProjectAction } from "@/components/ProjectActions";
 
@@ -332,6 +332,32 @@ function AttentionQueue({ snapshot, now }: { snapshot: Snapshot; now: number }) 
   );
 }
 
+function HumanTasksSection({ tasks }: { tasks: HumanTask[] }) {
+  return (
+    <section className="human-tasks" aria-labelledby="human-tasks-title">
+      <div className="section-heading">
+        <div><span>HUMAN KEY TASKS</span><h2 id="human-tasks-title">あなたの手が要ること</h2></div>
+        <p>器からは進められない物理・認証系の作業。古い順。解消したら下の「✍ 書き置き」から報告を (例: 「T-0140 を解消した」)。GitHub 側なら <a href="https://github.com/hikuohiku/homelab/issues/56" target="_blank" rel="noreferrer">#56 へのコメント</a>でも届きます。</p>
+      </div>
+      {tasks.length === 0 ? <div className="queue-empty">人間への依頼はありません。</div> : (
+        <div className="queue-list">
+          {tasks.map((task) => (
+            <article className="queue-item queue-item--human" key={task.id}>
+              <div className="queue-item__kind">HUMAN</div>
+              <div>
+                <strong>{task.id}</strong>
+                <h3>{task.title}</h3>
+                {task.created && <p>起票 {task.created}</p>}
+              </div>
+              <div className="queue-item__deadline"><span>滞留</span><strong>{task.ageDays}日</strong></div>
+            </article>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Home() {
   const [snapshot, setSnapshot] = useState<Snapshot>();
   const [loadError, setLoadError] = useState("");
@@ -407,7 +433,12 @@ export default function Home() {
             </div>
           )}
           {view === "projects" && <ProjectBoard projects={snapshot.projects} now={now} />}
-          {view === "attention" && <AttentionQueue snapshot={snapshot} now={now} />}
+          {view === "attention" && (
+            <>
+              <AttentionQueue snapshot={snapshot} now={now} />
+              <HumanTasksSection tasks={snapshot.humanTasks} />
+            </>
+          )}
         </>
       )}
     </main>
