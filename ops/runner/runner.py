@@ -8,6 +8,10 @@ wrapper がプロンプトに依存せず強制するもの (決定 #5〜#10 の
   - 開始前: verify 全項目が fail であることの実測確認 (未完了の仕事を
     「完了済み」から始めさせない)
   - 毎セッション後: verify 実行 (完成宣言は wrapper の実測のみが下す)
+  - **verify を持たない spec (dispatch 由来。2026-08-24 の所有者判断) では
+    上の 2 つは効かない。** セッションが 1 度正常に終わった時点で PR を出し、
+    完成の判断は reviewer とコアの確認に移る。PR が無ければ heart が
+    no_pr_reported で止める (PR は機械が確認できる事実なので緩めない)
   - 予算: usage 累積がソフト上限を超えたら checkpoint 最終セッション → 終了
   - 無活動: stream イベントが途絶えたセッションを kill
   - transcript: 生 stream-json を PVC に tee (git には持ち出さない)
@@ -956,8 +960,13 @@ class Runner:
             f"heart-and-projects の runner が作成。\n\n"
             f"- project: {self.project_id}\n"
             f"- spec: ops/projects/archive.jsonl の {self.project_id}\n"
-            f"- 検証: wrapper が verify 全項目 green を実測済み。"
-            f"独立レビュー (reviewer Job) が再実測してから merge される\n"
+            + (
+                "- 検証: wrapper が verify 全項目 green を実測済み。"
+                "独立レビュー (reviewer Job) が再実測してから merge される\n"
+                if self.spec.get("verify")
+                else "- 検証: この仕様は受入検証を持たない (dispatch 由来)。"
+                "完成の判断は独立レビュー (reviewer Job) と CI が担う\n"
+            )
         )
         pr = self.gh.request(
             "POST", f"/repos/{self.repo}/pulls",
@@ -981,7 +990,9 @@ class Runner:
         quota_wait_budget = self.rules["runner"]["session_max_seconds"]
         quota_waited = 0
         if first_time:
-            if any(v["ok"] for v in verify):
+            # verify を持たない spec (dispatch 由来) はこのゲートを素通りする。
+            # 測る基準が無いことは spec の不良ではない (2026-08-24 の所有者判断)
+            if verify and any(v["ok"] for v in verify):
                 # 始める前から通っている受入基準は「基準になっていない」。
                 # spec の作り直しを要求する (plan 検証 #5)
                 self.write_result(
@@ -1046,12 +1057,19 @@ class Runner:
         # (レビュー指摘 [2])
         findings = os.environ.get("REVIEW_FINDINGS", "")
         findings_pending = bool(findings.strip())
+        # verify を持たない spec では「作業を終えた」の唯一の機械可読な合図が
+        # セッションの正常終了になる。1 セッション回してから PR を出す
+        session_done = False
         while True:
             verify = self.run_verify()
             (self.project_dir / "verify.json").write_text(
                 json.dumps({"at": now_iso(), "results": verify}, ensure_ascii=False)
             )
-            if verify and all(v["ok"] for v in verify) and not findings_pending:
+            # 完成の判定。verify があるならその全 green、無いならセッションが
+            # 1 度正常に終わったこと (2026-08-24 の所有者判断で dispatch 経路から
+            # verify を外した。完成の判断は reviewer とコアが担う)
+            done = all(v["ok"] for v in verify) if verify else session_done
+            if done and not findings_pending:
                 self.push_if_committed()
                 pr = self.ensure_pr()
                 self.write_result("ready_for_review", pr=pr, verify=verify)
@@ -1123,6 +1141,7 @@ class Runner:
                 consecutive_inactive = 0
                 consecutive_error = 0
                 consecutive_unknown = 0
+                session_done = True
 
     # --- review ---
     def mode_review(self):
@@ -1163,8 +1182,10 @@ class Runner:
             except ValueError:
                 pass
         # 機械強制: wrapper の実測で verify が全 green でなければ、
-        # レビューアが何と言おうと pass にしない (自己申告の排除は reviewer にも適用)
-        if not (verify and all(v["ok"] for v in verify)):
+        # レビューアが何と言おうと pass にしない (自己申告の排除は reviewer にも適用)。
+        # verify を持たない spec (dispatch 由来) にはこの強制が無い — 判断は
+        # reviewer と CI に委ねる (2026-08-24 の所有者判断)
+        if not all(v["ok"] for v in verify):
             verdict["verdict"] = "fail"
             verdict.setdefault("findings", []).append(
                 "wrapper 実測で verify が green でない"

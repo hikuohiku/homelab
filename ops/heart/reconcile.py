@@ -80,7 +80,7 @@ def admit(request, snapshot, rules, now, *, inflight=(), recent=()):
     """即時 dispatch 要求の可否を導く純関数。I/O を書かない。
 
     引数:
-      request  {"title", "body", "verify", "capabilities"} — コアが投げた生の要求
+      request  {"title", "body", "capabilities"} — コアが投げた生の要求
       snapshot heart が直近のビートで公開した状態の写し。None は「まだ写しが無い」
                {"at", "stop_engaged", "running", "dispatch_ids"}
       inflight 受理済みでまだ snapshot に反映されていない dispatch_id の集合。
@@ -91,8 +91,8 @@ def admit(request, snapshot, rules, now, *, inflight=(), recent=()):
       status は accepted / duplicate / denied。duplicate は失敗ではない
       (同じ要求の再送 = 冪等に 1 件へ畳んだ、という応答)。
     """
-    title, body, verify = dispatch.normalize(request)
-    did = dispatch.dispatch_id(title, body, verify)
+    title, body = dispatch.normalize(request)
+    did = dispatch.dispatch_id(title, body)
 
     def out(status, reason, message):
         return {
@@ -125,18 +125,10 @@ def admit(request, snapshot, rules, now, *, inflight=(), recent=()):
         return out(ADMIT_DENIED, "invalid", "title が空です。何をするのか 1 行で書いてください")
     if not body:
         return out(ADMIT_DENIED, "invalid", "body が空です。何をどうしたいかを書いてください")
-    if not verify:
-        return out(ADMIT_DENIED, "invalid",
-                   "verify が空です。受入検証が無い依頼は完成を宣言できる者が居ないので受け付けません")
     if len(title) > dispatch.MAX_TITLE_CHARS:
         return out(ADMIT_DENIED, "invalid", f"title が長すぎます ({len(title)} 文字)")
     if len(body) > dispatch.MAX_BODY_CHARS:
         return out(ADMIT_DENIED, "invalid", f"body が長すぎます ({len(body)} 文字)。要点に絞ってください")
-    if len(verify) > dispatch.MAX_VERIFY_COMMANDS:
-        return out(ADMIT_DENIED, "invalid",
-                   f"verify が多すぎます ({len(verify)} 本)")
-    if any(len(v) > dispatch.MAX_VERIFY_CHARS for v in verify):
-        return out(ADMIT_DENIED, "invalid", "verify の 1 本が長すぎます")
 
     # --- capability の宣言連鎖 (決定 #5) ---
     # spec が宣言し、予告に載ったものだけが write SA を得る。即時 dispatch は
@@ -545,45 +537,52 @@ def decide(doc, facts, rules, now):
 
         if state == "proposed":
             # --- 採択ゲート: 予告の前に、新品 clone で verify を実測する (P-0015) ---
-            # 壊れた spec (開始前に pass する / コマンドが壊れている) を予告の前に殺す。
-            # ここで殺せば announce も veto 窓も Job も一切消費しない。
-            # 測定は I/O なので heart.execute() が run_adopt_gate action で行い、
-            # 生レコードを p["adopt_gate"]["verify"] に書き戻す。判定 (classify) は
-            # 純関数なのでここで導く — 信念でなく実測レコードから毎回導き直す
-            gate = p.get("adopt_gate")
-            if not gate:
-                # 測るまで進めない。このビートは proposed のまま次を待つ
-                # (ゲートは spec 1 件につき 1 回。毎ビート clone しない)。
-                # ただし**この待ちにも見張り時限を置く** (冒頭の不変条件)。
-                # clone 失敗・/tmp の枯渇・git の timeout が続くと adopt_gate が
-                # 永久に書き戻されず、proposed は非終端なので non_terminal が空に
-                # ならず curriculum_idle も False に固定される = ビートは回っている
-                # のに仕事が一切進まない沈黙状態になる。試行を数えて人間に渡す
-                attempts = p.get("adopt_gate_attempts", 0)
-                if attempts >= ADOPT_GATE_MAX_ATTEMPTS:
-                    # 測れないのは spec の不良ではなく仕組みの故障。incident で渡す
+            # **dispatch 由来 (P-9NNN) で verify を持たない spec は通さない**
+            # (2026-08-24 の所有者判断)。verify を書くのも LLM なので迂回でき、
+            # 機械の判定として意味を成さない。ゲートを積まずに次へ進める —
+            # ここで積むと adoptgate.classify() が「verify が空 = broken_command」と
+            # 判定し、依頼が必ず stalled (終端) に落ちる。
+            # curriculum 由来 (verify を持つ) は今までどおり測る
+            if not (p.get("dispatch_id") and not p.get("verify")):
+                # 壊れた spec (開始前に pass する / コマンドが壊れている) を予告の前に殺す。
+                # ここで殺せば announce も veto 窓も Job も一切消費しない。
+                # 測定は I/O なので heart.execute() が run_adopt_gate action で行い、
+                # 生レコードを p["adopt_gate"]["verify"] に書き戻す。判定 (classify) は
+                # 純関数なのでここで導く — 信念でなく実測レコードから毎回導き直す
+                gate = p.get("adopt_gate")
+                if not gate:
+                    # 測るまで進めない。このビートは proposed のまま次を待つ
+                    # (ゲートは spec 1 件につき 1 回。毎ビート clone しない)。
+                    # ただし**この待ちにも見張り時限を置く** (冒頭の不変条件)。
+                    # clone 失敗・/tmp の枯渇・git の timeout が続くと adopt_gate が
+                    # 永久に書き戻されず、proposed は非終端なので non_terminal が空に
+                    # ならず curriculum_idle も False に固定される = ビートは回っている
+                    # のに仕事が一切進まない沈黙状態になる。試行を数えて人間に渡す
+                    attempts = p.get("adopt_gate_attempts", 0)
+                    if attempts >= ADOPT_GATE_MAX_ATTEMPTS:
+                        # 測れないのは spec の不良ではなく仕組みの故障。incident で渡す
+                        _stall(
+                            p, actions, "adopt_gate_unmeasurable", "incident",
+                            f"{pid} の採択ゲートが {ADOPT_GATE_MAX_ATTEMPTS} 回続けて"
+                            "測定できませんでした (新品 clone か verify 実行が失敗している)。"
+                            "heart の audit.jsonl に例外が残っています",
+                        )
+                        continue
+                    p["adopt_gate_attempts"] = attempts + 1
+                    actions.append(_action("run_adopt_gate", pid))
+                    continue
+                verdict = adoptgate.classify(gate.get("verify", []))
+                if verdict["verdict"] != adoptgate.ALL_FAIL:
+                    # incident ではなく「採択の不良」。spec の直しを促す question で渡す。
+                    # 理由の実体は p["adopt_gate"] に残る = projects.json に残る
                     _stall(
-                        p, actions, "adopt_gate_unmeasurable", "incident",
-                        f"{pid} の採択ゲートが {ADOPT_GATE_MAX_ATTEMPTS} 回続けて"
-                        "測定できませんでした (新品 clone か verify 実行が失敗している)。"
-                        "heart の audit.jsonl に例外が残っています",
+                        p, actions, "adopt_gate_" + verdict["verdict"], "question",
+                        f"{pid} を予告せず差し戻しました "
+                        f"(新品 clone での verify 実測 = {verdict['verdict']})。"
+                        f"{adoptgate.describe(verdict)}。"
+                        "spec を直して新しい id で採択し直してください",
                     )
                     continue
-                p["adopt_gate_attempts"] = attempts + 1
-                actions.append(_action("run_adopt_gate", pid))
-                continue
-            verdict = adoptgate.classify(gate.get("verify", []))
-            if verdict["verdict"] != adoptgate.ALL_FAIL:
-                # incident ではなく「採択の不良」。spec の直しを促す question で渡す。
-                # 理由の実体は p["adopt_gate"] に残る = projects.json に残る
-                _stall(
-                    p, actions, "adopt_gate_" + verdict["verdict"], "question",
-                    f"{pid} を予告せず差し戻しました "
-                    f"(新品 clone での verify 実測 = {verdict['verdict']})。"
-                    f"{adoptgate.describe(verdict)}。"
-                    "spec を直して新しい id で採択し直してください",
-                )
-                continue
             p["state"] = "announced"
             p["veto_deadline"] = _veto_deadline(p, facts, rules, now)
             actions.append(_action("announce", pid))

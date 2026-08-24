@@ -1,14 +1,20 @@
 """即時 dispatch (設計 rev3 Phase D) のレコード組み立て。純関数のみ。
 
 コアは `dispatch_task` で「いま着手してほしい」を heart に**同期で**頼む。
-判定 (可否) は reconcile.admit()、実行 (採択ゲートと Job 作成) は gate.py、
+判定 (可否) は reconcile.admit()、実行 (Job 作成) は gate.py、
 ops-state への登録は reconcile.decide() が担う。ここはその 3 者が受け渡す
 レコードの形だけを持つ。
 
 なぜ id を内容から導くか:
   コアが同じ依頼を 2 回投げても Job が 2 本立ってはいけない。dispatch_id は
-  (title, body, verify) のハッシュなので、再送・再試行は必ず同じ id になり、
+  (title, body) のハッシュなので、再送・再試行は必ず同じ id になり、
   台帳と Job 名の両方で 1 件に畳まれる。
+
+verify を取らないこと (2026-08-24, 所有者判断):
+  受入検証も採択ゲートも dispatch 経路から外した。verify を書くのは LLM なので
+  いくらでも迂回でき、機械の判定として意味を成さない。残る機械のゲートは
+  CI と soak だけで、完成の判断は reviewer とコアの確認に移る
+  (ops/heart/README.md の「dispatch 経路で失われる保証」)。
 
 なぜプロジェクト id を P-9NNN にするか:
   curriculum が archive.jsonl から採番する系列 (P-0NNN) と衝突させないため。
@@ -37,30 +43,27 @@ PROJECT_ID_MAX = 9999
 # heart 側にも置くのは、バス経由でない直の HTTP を信用しないため
 MAX_TITLE_CHARS = 120
 MAX_BODY_CHARS = 4000
-MAX_VERIFY_COMMANDS = 10
-MAX_VERIFY_CHARS = 500
 
-# ゲートの結末。inbox のレコードが持つ状態はこれだけ
-DISPATCHED = "dispatched"  # 採択ゲートを通り、Job を作った
-GATE_REJECTED = "gate_rejected"  # 新品 clone での verify 実測が all_fail でなかった
-ABORTED = "aborted"  # ゲート実行中に停止がかかった / 測定できなかった
+# 受理の結末。inbox のレコードが持つ状態はこれだけ
+DISPATCHED = "dispatched"  # Job を作った
+ABORTED = "aborted"  # 受理から Job 作成までの間に停止がかかった / 作れなかった
 
 
-def dispatch_id(title, body, verify):
+def dispatch_id(title, body):
     """要求の内容から決定論的に導く id。時刻も乱数も混ぜない (冪等の要)。"""
-    raw = "\x00".join([str(title), str(body), *[str(v) for v in verify or []]])
+    raw = "\x00".join([str(title), str(body)])
     return "d-" + hashlib.sha256(raw.encode()).hexdigest()[:16]
 
 
 def normalize(request):
-    """HTTP で来た dict を (title, body, verify) に正規化する。"""
+    """HTTP で来た dict を (title, body) に正規化する。
+
+    verify は受け取らない。付いて来ても黙って落とす — 古いコアからの要求でも
+    dispatch_id が内容だけで決まり、冪等が壊れないようにするため。
+    """
     title = str(request.get("title") or "").strip()
     body = str(request.get("body") or "").strip()
-    raw_verify = request.get("verify") or []
-    if isinstance(raw_verify, str):
-        raw_verify = [raw_verify]
-    verify = [str(v).strip() for v in raw_verify if str(v).strip()]
-    return title, body, verify
+    return title, body
 
 
 def allocate_project_id(used):
@@ -73,7 +76,7 @@ def allocate_project_id(used):
     return None
 
 
-def spec_of(title, body, verify, project_id):
+def spec_of(title, body, project_id):
     """runner が読む spec。main の archive.jsonl には載らないので、heart が
     Job の env (HEART_SPEC_JSON) で渡す。改竄不能なのは、これを組むのが
     heart だけで、runner のブランチからは触れないため。"""
@@ -82,7 +85,9 @@ def spec_of(title, body, verify, project_id):
         "title": title,
         "why": body,
         "dod": body,
-        "verify": list(verify),
+        # 受入検証は持たない。runner は「作業を終えた」時点で PR を出し、
+        # 完成の判断は reviewer とコアが担う (2026-08-24 の所有者判断)
+        "verify": [],
         "irreversible": False,
         # コアは capability を宣言できない (admit が要求ごと弾く)。
         # ここを空で固定するのが SA 宣言連鎖の入口側の守り
@@ -95,20 +100,18 @@ def spec_of(title, body, verify, project_id):
     }
 
 
-def new_record(title, body, verify, project_id, now=None):
+def new_record(title, body, project_id, now=None):
     """受理した dispatch 1 件。gate が台帳に刻み、結末を書き足して inbox に置く。"""
     return {
-        "dispatch_id": dispatch_id(title, body, verify),
+        "dispatch_id": dispatch_id(title, body),
         "project_id": project_id,
         "requested_by": "core",
         "accepted_at": now_iso(now),
         "title": title,
         "body": body,
-        "verify": list(verify),
-        "spec": spec_of(title, body, verify, project_id),
+        "spec": spec_of(title, body, project_id),
         "status": None,
         "job": None,
-        "adopt_gate": None,
     }
 
 
@@ -127,8 +130,7 @@ def ledger_entry(record, event, now=None, **extra):
 def to_project(record, now=None):
     """inbox のレコードを projects.json のエントリにする。
 
-    dispatched は **active** で登録する — Job は既に走っているので、
-    proposed から始めると採択ゲートを二度測る。gate_rejected / aborted は
+    dispatched は **active** で登録する (Job は既に走っている)。aborted は
     終端 (stalled) で登録し、なぜ動かなかったかを projects.json に残す。
     """
     pid = record["project_id"]
@@ -140,7 +142,7 @@ def to_project(record, now=None):
         "irreversible": False,
         "capabilities": [],
         "touches_apps": False,
-        "verify": list(record.get("verify") or []),
+        "verify": [],
         "confidence": "unsure",
         "budget": {"used_tokens": 0},
         "created": now_iso(now)[:10],
@@ -150,8 +152,6 @@ def to_project(record, now=None):
         # main の archive.jsonl に spec が無いので、Job へは heart が env で渡す
         "spec": record.get("spec") or {},
     }
-    if record.get("adopt_gate"):
-        project["adopt_gate"] = record["adopt_gate"]
     if record.get("status") == DISPATCHED:
         project["job"] = record.get("job") or ""
         project["spawn_count"] = 1

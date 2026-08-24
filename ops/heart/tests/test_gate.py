@@ -13,7 +13,7 @@ import urllib.request
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from ops.heart import adoptgate, dispatch, gate, reconcile, spawn
+from ops.heart import dispatch, gate, reconcile, spawn
 
 RULES_PATH = Path(__file__).resolve().parents[2] / "rules.json"
 with open(RULES_PATH) as f:
@@ -54,13 +54,11 @@ class GateTest(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.cfg = FakeCfg(self.tmp.name)
         self.k8s = FakeK8s()
-        self.verify_results = [{"cmd": "test -f x", "ok": False}]
         self.gate = gate.AdmissionGate(
             cfg_provider=lambda: self.cfg,
             k8s_provider=lambda: self.k8s,
             data_dir=self.tmp.name,
             repo_url="https://example.invalid/repo.git",
-            run_gate=lambda url, verify: list(self.verify_results),
             now=lambda: NOW,
         )
         self.publish()
@@ -73,7 +71,6 @@ class GateTest(unittest.TestCase):
         base = {
             "title": "ops-dashboard の 500 を直す",
             "body": "snapshot API が 500 を返している",
-            "verify": ["test -f ops/dashboard-fix.md"],
         }
         base.update(kw)
         return base
@@ -94,9 +91,8 @@ class GateTest(unittest.TestCase):
         self.assertEqual(code, 202)
         self.assertEqual(body["status"], reconcile.ADMIT_ACCEPTED)
         self.assertTrue(body["project_id"].startswith(dispatch.PROJECT_ID_PREFIX))
-        # 同期の応答は Job を待たない (採択ゲートは非同期)
+        # 同期の応答は Job を待たない (Job 作成は非同期)
         self.assertEqual(self.k8s.created, [])
-        self.assertIn("ゲート", body["message"])
 
         [record] = self.drain()
         self.assertEqual(record["status"], dispatch.DISPATCHED)
@@ -153,7 +149,8 @@ class GateTest(unittest.TestCase):
         }
         spec = json.loads(env["HEART_SPEC_JSON"])
         self.assertEqual(spec["capabilities"], [])
-        self.assertEqual(spec["verify"], ["test -f ops/dashboard-fix.md"])
+        # 受入検証は持たない (2026-08-24 の所有者判断)
+        self.assertEqual(spec["verify"], [])
         self.assertTrue(env["PROJECT_BRANCH"].startswith("project/p-9"))
 
     # --- 断る ---
@@ -164,8 +161,8 @@ class GateTest(unittest.TestCase):
         self.assertEqual(body["reason"], "stop_engaged")
         self.assertEqual(self.k8s.created, [])
 
-    def test_stop_during_the_gate_aborts_before_the_job(self):
-        """採択ゲートは最大 300 秒かかる。その間に来た停止を無視しない。"""
+    def test_stop_after_admission_aborts_before_the_job(self):
+        """受理してから Job を作るまでの間に来た停止を無視しない。"""
         self.post()
         self.publish(stop_engaged=True)
         [record] = self.drain()
@@ -188,24 +185,25 @@ class GateTest(unittest.TestCase):
         _, body = self.post()
         self.assertEqual(body["reason"], "state_stale")
 
-    def test_gate_rejection_creates_no_job(self):
-        self.verify_results = [{"cmd": "true", "ok": True}]
+    def test_no_adopt_gate_runs_before_the_job(self):
+        """採択ゲートは通さない (2026-08-24 の所有者判断)。
+        受理したらそのまま Job を作る — verify が無いことは差し戻し理由にならない。"""
         self.post()
         [record] = self.drain()
-        self.assertEqual(record["status"], dispatch.GATE_REJECTED)
-        self.assertEqual(record["reason"], "adopt_gate_" + adoptgate.SOME_PASS)
-        self.assertEqual(self.k8s.created, [])
+        self.assertEqual(record["status"], dispatch.DISPATCHED)
+        self.assertNotIn("adopt_gate", record)
+        self.assertEqual(len(self.k8s.created), 1)
 
-    def test_gate_error_is_recorded_not_swallowed(self):
-        def boom(url, verify):
-            raise RuntimeError("clone できない")
+    def test_spawn_error_is_recorded_not_swallowed(self):
+        def boom(*a, **kw):
+            raise RuntimeError("k8s に届かない")
 
-        self.gate._run_gate = boom
+        self.gate._create_job = boom
         self.post()
         [record] = self.drain()
         self.assertEqual(record["status"], dispatch.ABORTED)
-        self.assertEqual(record["reason"], "gate_error")
-        self.assertIn("clone", record["detail"])
+        self.assertEqual(record["reason"], "spawn_error")
+        self.assertIn("k8s", record["detail"])
 
     # --- ビートへの受け渡し ---
     def test_result_lands_in_the_inbox_for_the_next_beat(self):
@@ -225,7 +223,6 @@ class GateTest(unittest.TestCase):
             k8s_provider=lambda: self.k8s,
             data_dir=self.tmp.name,
             repo_url="https://example.invalid/repo.git",
-            run_gate=lambda url, verify: list(self.verify_results),
             now=lambda: NOW,
         )
         # 払い出し済みの id を覚え直している = 再起動後に同じ id を配らない
@@ -262,7 +259,6 @@ class GateHTTPTest(unittest.TestCase):
             k8s_provider=lambda: FakeK8s(),
             data_dir=self.tmp.name,
             repo_url="https://example.invalid/repo.git",
-            run_gate=lambda url, verify: [{"cmd": "x", "ok": False}],
             now=lambda: NOW,
         )
         self.gate.update({"version": 1, "projects": []}, RULES, NOW, False)
@@ -284,7 +280,7 @@ class GateHTTPTest(unittest.TestCase):
 
     def test_dispatch_over_http(self):
         code, body = self.call("/dispatch", {
-            "title": "直す", "body": "壊れている", "verify": ["test -f x"],
+            "title": "直す", "body": "壊れている",
         })
         self.assertEqual(code, 202)
         self.assertEqual(body["status"], reconcile.ADMIT_ACCEPTED)

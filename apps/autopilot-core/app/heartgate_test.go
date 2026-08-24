@@ -25,7 +25,7 @@ func callDispatch(t *testing.T, s *mcpServer, out *strings.Builder, args string)
 	return resultOf(t, firstResponse(t, out.String()))
 }
 
-const goodArgs = `{"title":"ops-dashboard の 500 を直す","body":"snapshot API が 500 を返している","verify":["test -f ops/fix.md"]}`
+const goodArgs = `{"title":"ops-dashboard の 500 を直す","body":"snapshot API が 500 を返している"}`
 
 func gateServer(t *testing.T, status int, body string) *httptest.Server {
 	t.Helper()
@@ -40,7 +40,7 @@ func gateServer(t *testing.T, status int, body string) *httptest.Server {
 		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
 			t.Errorf("要求を解釈できない: %v", err)
 		}
-		if got.Title == "" || got.Body == "" || len(got.Verify) == 0 {
+		if got.Title == "" || got.Body == "" {
 			t.Errorf("検証に落ちた要求を送っている: %+v", got)
 		}
 		w.WriteHeader(status)
@@ -138,9 +138,8 @@ func TestDispatchRejectsIncompleteRequestsWithoutCallingHeart(t *testing.T) {
 	t.Setenv("CORE_HEART_GATE_URL", server.URL)
 
 	for name, args := range map[string]string{
-		"title 無し":  `{"title":"","body":"b","verify":["x"]}`,
-		"body 無し":   `{"title":"t","body":"","verify":["x"]}`,
-		"verify 無し": `{"title":"t","body":"b","verify":[]}`,
+		"title 無し": `{"title":"","body":"b"}`,
+		"body 無し":  `{"title":"t","body":""}`,
 	} {
 		s, out := newMCP(t, &config{})
 		res := callDispatch(t, s, out, args)
@@ -154,25 +153,50 @@ func TestDispatchRejectsIncompleteRequestsWithoutCallingHeart(t *testing.T) {
 }
 
 func TestNewGateRequestTrimsAndBoundsInput(t *testing.T) {
-	req, err := newGateRequest("  直す  ", " 壊れている ", []string{" test -f x ", "", "  "})
+	req, err := newGateRequest("  直す  ", " 壊れている ")
 	if err != nil {
 		t.Fatal(err)
 	}
 	if req.Title != "直す" || req.Body != "壊れている" {
 		t.Fatalf("前後の空白は落とすこと: %+v", req)
 	}
-	if len(req.Verify) != 1 || req.Verify[0] != "test -f x" {
-		t.Fatalf("空の検証は落とすこと: %+v", req.Verify)
-	}
-	if _, err := newGateRequest(strings.Repeat("あ", maxCommandTitleRunes+1), "b", []string{"x"}); err == nil {
+	if _, err := newGateRequest(strings.Repeat("あ", maxCommandTitleRunes+1), "b"); err == nil {
 		t.Fatal("長すぎる題名は断ること")
 	}
-	long := make([]string, maxVerifyCommands+1)
-	for i := range long {
-		long[i] = "x"
+	if _, err := newGateRequest("t", strings.Repeat("あ", maxCommandBodyRunes+1)); err == nil {
+		t.Fatal("長すぎる本文は断ること")
 	}
-	if _, err := newGateRequest("t", "b", long); err == nil {
-		t.Fatal("検証が多すぎるものは断ること")
+}
+
+// dispatch_task のスキーマは title と body の 2 つだけ。
+func TestDispatchSchemaIsTitleAndBodyOnly(t *testing.T) {
+	for _, tool := range toolDefs() {
+		if tool.Name != "dispatch_task" {
+			continue
+		}
+		schema, _ := json.Marshal(tool.InputSchema)
+		if strings.Contains(string(schema), "verify") {
+			t.Fatalf("verify は取らない: %s", schema)
+		}
+		if !strings.Contains(string(schema), `"required":["title","body"]`) {
+			t.Fatalf("必須は title と body だけ: %s", schema)
+		}
+		return
+	}
+	t.Fatal("dispatch_task が tools/list に無い")
+}
+
+// dispatch_task は verify を取らない (2026-08-24 の所有者判断)。
+// 送られてきても引数として存在しないので、要求には載らない。
+func TestDispatchTakesNoVerify(t *testing.T) {
+	gateServer(t, http.StatusAccepted,
+		`{"status":"accepted","message":"受理しました (P-9000)。","dispatch_id":"d-abc","project_id":"P-9000"}`)
+
+	s, out := newMCP(t, &config{})
+	res := callDispatch(t, s, out,
+		`{"title":"直す","body":"壊れている","verify":["test -f x"]}`)
+	if res.IsError {
+		t.Fatalf("verify が付いていても受理を妨げないこと: %+v", res)
 	}
 }
 

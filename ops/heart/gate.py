@@ -26,10 +26,18 @@
 
 ## 非同期にしてあるところ
 
-採択ゲート (新品 clone で verify を実測、最大 300 秒) は同期呼び出しの中でやらない。
-コアには「受理した、ゲート実行中」を即座に返し、ゲートの結末は
-/data/dispatch/inbox/<id>.json に落として次のビートが projects.json に取り込む。
-コアは同じ内容で dispatch_task を呼び直せば現在の扱いを聞ける (冪等)。
+Job 作成 (k8s API) は同期呼び出しの中でやらない。コアには「受理した」を即座に
+返し、結末は /data/dispatch/inbox/<id>.json に落として次のビートが
+projects.json に取り込む。コアは同じ内容で dispatch_task を呼び直せば現在の
+扱いを聞ける (冪等)。
+
+## 採択ゲートを通さない (2026-08-24, 所有者判断)
+
+以前は着手の前に新品 clone で verify を実測していた。**外した** — verify を書くのも
+LLM なので迂回でき、機械の判定として意味を成さないため。dispatch 経路に残る機械の
+ゲートは CI と soak だけで、完成の判断は reviewer とコアが担う
+(ops/heart/README.md「dispatch 経路で失われる保証」)。curriculum 由来の spec に
+対する採択ゲートはそのまま残っている。
 
 ## スレッドと単一書き手
 
@@ -46,7 +54,7 @@ from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from . import adoptgate, dispatch, reconcile, spawn
+from . import dispatch, reconcile, spawn
 from .statefiles import now_iso, parse_iso
 
 DEFAULT_LISTEN = "0.0.0.0:8099"
@@ -60,15 +68,14 @@ def _utcnow():
 
 
 class AdmissionGate:
-    """判定・採択ゲート実測・Job 作成を持つ本体。HTTP は薄い殻 (下の handler)。"""
+    """判定と Job 作成を持つ本体。HTTP は薄い殻 (下の handler)。"""
 
     def __init__(self, cfg_provider, k8s_provider, data_dir, repo_url,
-                 run_gate=None, create_job=None, now=None):
+                 create_job=None, now=None):
         self._cfg = cfg_provider
         self._k8s = k8s_provider
         self.data_dir = Path(data_dir)
         self.repo_url = repo_url
-        self._run_gate = run_gate or adoptgate.run_gate
         self._create_job = create_job or spawn.create
         self._now = now or _utcnow
 
@@ -171,7 +178,7 @@ class AdmissionGate:
             code = 200 if verdict["status"] == reconcile.ADMIT_DUPLICATE else 409
             return code, verdict
 
-        title, body, verify = dispatch.normalize(payload)
+        title, body = dispatch.normalize(payload)
         with self.lock:
             used = set(self.allocated) | set(self.inflight.values())
             if snapshot:
@@ -183,7 +190,7 @@ class AdmissionGate:
                     "message": "即時 dispatch のプロジェクト id 空間が尽きています",
                     "dispatch_id": verdict["dispatch_id"],
                 }
-            record = dispatch.new_record(title, body, verify, pid, now)
+            record = dispatch.new_record(title, body, pid, now)
             self.allocated.add(pid)
             self.inflight[record["dispatch_id"]] = pid
             self.recent = (self.recent + [now_iso(now)])[-RECENT_KEEP:]
@@ -192,8 +199,7 @@ class AdmissionGate:
         return 202, {
             "status": reconcile.ADMIT_ACCEPTED,
             "reason": "",
-            "message": f"受理しました ({pid})。新品 clone での採択ゲートを実行中です "
-                       "(最大 300 秒)。通れば runner Job をそのまま起動します",
+            "message": f"受理しました ({pid})。runner Job を起動します",
             "dispatch_id": record["dispatch_id"],
             "project_id": pid,
         }
@@ -211,47 +217,39 @@ class AdmissionGate:
             "inflight": inflight,
         }
 
-    # --- 採択ゲートと Job 作成 (非同期・最大 300 秒) ---
+    # --- Job 作成 (非同期) ---
 
     def run_one(self, record):
-        """1 件ぶんの採択ゲート実測 → Job 作成 → inbox への書き出し。"""
+        """1 件ぶんの Job 作成 → inbox への書き出し。"""
         try:
-            results = self._run_gate(self.repo_url, record["verify"])
-            verdict = adoptgate.classify(results)
-            record["adopt_gate"] = {"at": now_iso(self._now()), "verify": results, **verdict}
-            if verdict["verdict"] != adoptgate.ALL_FAIL:
-                record["status"] = dispatch.GATE_REJECTED
-                record["reason"] = "adopt_gate_" + verdict["verdict"]
-                record["detail"] = adoptgate.describe(verdict)
+            # 受理から Job 作成までの間に「止めて」が来ていないか見直す
+            with self.lock:
+                stopped = bool(self.snapshot and self.snapshot.get("stop_engaged"))
+            if stopped:
+                record["status"] = dispatch.ABORTED
+                record["reason"] = "human_stop"
+                record["detail"] = "Job を作る前に全停止が指示されました"
             else:
-                # ゲートに 300 秒かかりうる。その間に「止めて」が来ていないか見直す
-                with self.lock:
-                    stopped = bool(self.snapshot and self.snapshot.get("stop_engaged"))
-                if stopped:
-                    record["status"] = dispatch.ABORTED
-                    record["reason"] = "human_stop"
-                    record["detail"] = "採択ゲートの実行中に全停止が指示されました"
-                else:
-                    record["job"] = self._create_job(
-                        self._k8s(), self._cfg(), "runner",
-                        project={
-                            "id": record["project_id"],
-                            # **空で固定する** — spawn.build_job はここに
-                            # kubectl-write があるときだけ writer SA を注入する。
-                            # 即時 dispatch は capability を名乗れない (admit が弾く)
-                            "capabilities": [],
-                            "branch": f"project/{record['project_id'].lower()}",
-                        },
-                        attempt=1,
-                        # main の archive.jsonl に spec が無いので env で渡す。
-                        # runner.load_spec() がこれを読む
-                        extra_env={"HEART_SPEC_JSON": json.dumps(
-                            record["spec"], ensure_ascii=False)},
-                    )
-                    record["status"] = dispatch.DISPATCHED
+                record["job"] = self._create_job(
+                    self._k8s(), self._cfg(), "runner",
+                    project={
+                        "id": record["project_id"],
+                        # **空で固定する** — spawn.build_job はここに
+                        # kubectl-write があるときだけ writer SA を注入する。
+                        # 即時 dispatch は capability を名乗れない (admit が弾く)
+                        "capabilities": [],
+                        "branch": f"project/{record['project_id'].lower()}",
+                    },
+                    attempt=1,
+                    # main の archive.jsonl に spec が無いので env で渡す。
+                    # runner.load_spec() がこれを読む
+                    extra_env={"HEART_SPEC_JSON": json.dumps(
+                        record["spec"], ensure_ascii=False)},
+                )
+                record["status"] = dispatch.DISPATCHED
         except Exception as e:  # noqa: BLE001 — 何が起きても inbox に理由を残す
             record["status"] = dispatch.ABORTED
-            record["reason"] = "gate_error"
+            record["reason"] = "spawn_error"
             record["detail"] = str(e)[:300]
         self._write_inbox(record)
         self._append_ledger(dispatch.ledger_entry(
