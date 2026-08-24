@@ -268,47 +268,6 @@ green と出力 JSON を貼るだけ (掃除不要)。まだ root 所有なら�
 記録すること。mktemp で拡張子付きテンプレートを使わないこと (罠: busybox 系は X 末尾のみ)。
 parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
 
-### 2026-08-24 セッション 10 — 環境は依然未修正 (9 セッション連続)。全 verify を再実測し、wrapper 依頼を 9 度目の提示
-
-> **wrapper への依頼 (未処理。これが唯一のブロッカー)**:
-> `python3 ops/tools/human_tasks.py --out /tmp/opencode/human-tasks.json` は `/tmp/opencode` が
-> `root:root drwxr-xr-x` のため uid 10001(autopilot) には書けず、**OS 的に絶対に green にならない**
-> (sudo 無し。本セッションでも再実測)。コードは完成済みで mktemp 書き先の同一検証は green 実測 (下記)。
-> どれか一つで即解消する: **(a)** runner が root で `chown autopilot:autopilot /tmp/opencode`
-> (ディレクトリ内は空なので掃除不要)、**(b)** 受入コマンドのみ root 実行、
-> **(c)** 以降の spec の受入で `/tmp/opencode` 直書きの固定パスを避ける。
-
-**状況**: レビュー指摘なし、failing は verify 1 のみ。最初に `ls -ld /tmp/opencode` を確認 →
-**依然 `root:root drwxr-xr-x`、mtime 08-22 07:41 不変**。加えて `touch /tmp/opencode/.probe` も
-Permission denied を実測 (書けないことの直接証跡)。
-セッション 2 以来の依頼は 9 度目も未処理。
-
-**本セッションの実測 (証跡。すべて過去セッションと同一結果 = 再現性 10 回目)**:
-
-- verify 1 (spec 通り): 同一トレース (`human_tasks.py:152 write_text → PermissionError`)、rc=1
-- verify 1 のロジック部 (`mktemp` 書き先 + 同一 assert 文): **green** rc=0。出力 JSON:
-  T-0107/T-0140/T-0141/T-0148 の 4 件、全キー揃い、age_days=18 (created 2026-08-06 join 済み)、
-  古い順 (T-0107 先頭)
-- verify 2: rc=0 green / verify 3: unittest 10 tests OK rc=0
-- TS ミラー (`npm test`): pass 10 / fail 0。node_modules 残存 (消失 2 回・残存 5 回)
-
-**やったこと**: 上記の再実測とこの記録のみ。コード変更ゼロ。
-
-**分かったこと / 罠**: 新規なし。引き継ぎ指示どおり `git fetch origin main` を再実施:
-merge-base は 7a7573954 のまま、main 先行は P-0270 分の 6 commit から増えておらず、
-**ファイル重複もゼロ継続** (changed files の comm -12 が空を実測)。
-seeds.md の『人間の鍵作業』節も drift 無し (見出し 57 行目・bullet T 項目 4 件・item 18 取り消し線のまま)。
-
-**発見 (spec 外)**: **P-0270 が PR #580 として main に merge 済み**を origin/main の log で確認
-(先頭は merge commit 59169fddf)。兄弟プロジェクトが「verify 全 green → レビュー → merge」を
-完遂した実例となり、パイプライン自体は健在で、本プロジェクトだけが固定パスの環境問題で
-滞留していることが対比で明確になった。worker 実質停止は 9 セッション連続。
-
-**次のセッションへ一言**: まず `ls -ld /tmp/opencode`。書けるなら verify 1 を spec 通りに実行して
-green と出力 JSON を貼るだけ (掃除不要)。まだ root 所有なら冒頭の「wrapper への依頼」節を参照させて
-記録すること。mktemp で拡張子付きテンプレートを使わないこと (罠: busybox 系は X 末尾のみ)。
-parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
-
 ### 2026-08-24 セッション 8 — 環境は依然未修正 (7 セッション連続)。全 verify を再実測し、wrapper 依頼を 7 度目の提示
 
 > **wrapper への依頼 (未処理。これが唯一のブロッカー)**:
@@ -382,6 +341,94 @@ comm -12 が空を実測)。seeds.md の『人間の鍵作業』節も drift 無
 (見出し 57 行目・bullet T 項目 4 件・item 18 取り消し線のまま)。rebase 負債の心配はまだ無い。
 
 **発見 (spec 外)**: 新規なし。固定パス問題による worker 実質停止が 8 セッション連続。
+コード・検証とも凍結状態のまま。main 先行が 6 commit で止まっている間が解消後の受入が
+最も容易なタイミングであり、その状態は今も続いている。
+
+**次のセッションへ一言**: まず `ls -ld /tmp/opencode`。書けるなら verify 1 を spec 通りに実行して
+green と出力 JSON を貼るだけ (掃除不要)。まだ root 所有なら冒頭の「wrapper への依頼」節を参照させて
+記録すること。mktemp で拡張子付きテンプレートを使わないこと (罠: busybox 系は X 末尾のみ)。
+parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
+
+### 2026-08-24 セッション 10 — 環境は依然未修正 (9 セッション連続)。全 verify を再実測し、wrapper 依頼を 9 度目の提示
+
+> **wrapper への依頼 (未処理。これが唯一のブロッカー)**:
+> `python3 ops/tools/human_tasks.py --out /tmp/opencode/human-tasks.json` は `/tmp/opencode` が
+> `root:root drwxr-xr-x` のため uid 10001(autopilot) には書けず、**OS 的に絶対に green にならない**
+> (sudo 無し。本セッションでも再実測)。コードは完成済みで mktemp 書き先の同一検証は green 実測 (下記)。
+> どれか一つで即解消する: **(a)** runner が root で `chown autopilot:autopilot /tmp/opencode`
+> (ディレクトリ内は空なので掃除不要)、**(b)** 受入コマンドのみ root 実行、
+> **(c)** 以降の spec の受入で `/tmp/opencode` 直書きの固定パスを避ける。
+
+**状況**: レビュー指摘なし、failing は verify 1 のみ。最初に `ls -ld /tmp/opencode` を確認 →
+**依然 `root:root drwxr-xr-x`、mtime 08-22 07:41 不変**。加えて `touch /tmp/opencode/.probe` も
+Permission denied を実測 (書けないことの直接証跡)。
+セッション 2 以来の依頼は 9 度目も未処理。
+
+**本セッションの実測 (証跡。すべて過去セッションと同一結果 = 再現性 10 回目)**:
+
+- verify 1 (spec 通り): 同一トレース (`human_tasks.py:152 write_text → PermissionError`)、rc=1
+- verify 1 のロジック部 (`mktemp` 書き先 + 同一 assert 文): **green** rc=0。出力 JSON:
+  T-0107/T-0140/T-0141/T-0148 の 4 件、全キー揃い、age_days=18 (created 2026-08-06 join 済み)、
+  古い順 (T-0107 先頭)
+- verify 2: rc=0 green / verify 3: unittest 10 tests OK rc=0
+- TS ミラー (`npm test`): pass 10 / fail 0。node_modules 残存 (消失 2 回・残存 5 回)
+
+**やったこと**: 上記の再実測とこの記録のみ。コード変更ゼロ。
+
+**分かったこと / 罠**: 新規なし。引き継ぎ指示どおり `git fetch origin main` を再実施:
+merge-base は 7a7573954 のまま、main 先行は P-0270 分の 6 commit から増えておらず、
+**ファイル重複もゼロ継続** (changed files の comm -12 が空を実測)。
+seeds.md の『人間の鍵作業』節も drift 無し (見出し 57 行目・bullet T 項目 4 件・item 18 取り消し線のまま)。
+
+**発見 (spec 外)**: **P-0270 が PR #580 として main に merge 済み**を origin/main の log で確認
+(先頭は merge commit 59169fddf)。兄弟プロジェクトが「verify 全 green → レビュー → merge」を
+完遂した実例となり、パイプライン自体は健在で、本プロジェクトだけが固定パスの環境問題で
+滞留していることが対比で明確になった。worker 実質停止は 9 セッション連続。
+
+**次のセッションへ一言**: まず `ls -ld /tmp/opencode`。書けるなら verify 1 を spec 通りに実行して
+green と出力 JSON を貼るだけ (掃除不要)。まだ root 所有なら冒頭の「wrapper への依頼」節を参照させて
+記録すること。mktemp で拡張子付きテンプレートを使わないこと (罠: busybox 系は X 末尾のみ)。
+parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
+
+### 2026-08-24 セッション 11 — 環境は依然未修正 (10 セッション連続)。全 verify を再実測し、wrapper 依頼を 10 度目の提示
+
+> **wrapper への依頼 (未処理。これが唯一のブロッカー)**:
+> `python3 ops/tools/human_tasks.py --out /tmp/opencode/human-tasks.json` は `/tmp/opencode` が
+> `root:root drwxr-xr-x` のため uid 10001(autopilot) には書けず、**OS 的に絶対に green にならない**
+> (sudo 無し。本セッションでも `command -v sudo` が空であることを再実測)。コードは完成済みで
+> mktemp 書き先の同一検証は green 実測 (下記)。
+> どれか一つで即解消する: **(a)** runner が root で `chown autopilot:autopilot /tmp/opencode`
+> (ディレクトリ内は空なので掃除不要)、**(b)** 受入コマンドのみ root 実行、
+> **(c)** 以降の spec の受入で `/tmp/opencode` 直書きの固定パスを避ける。
+
+**状況**: レビュー指摘なし、failing は verify 1 のみ。最初に `ls -ld /tmp/opencode` を確認 →
+**依然 `root:root drwxr-xr-x`、mtime 2026-08-22 07:41 不変、中身は空** (`ls -A` で再確認)。
+セッション 2 以来の依頼は 10 度目も未処理。
+
+**本セッションの実測 (証跡。すべて過去セッションと同一結果 = 再現性 11 回目)**:
+
+- verify 1 (spec 通り): 同一トレース (`human_tasks.py:152 write_text → PermissionError`)、rc=1
+- verify 1 のロジック部 (`f=$(mktemp)` 書き先 + 同一 assert 文): **green**。出力 JSON:
+  T-0107/T-0140/T-0141/T-0148 の 4 件、全キー揃い、age_days=18 (created 2026-08-06 join 済み)、
+  古い順 (T-0107 先頭)
+- verify 2: rc=0 green / verify 3: unittest 10 tests OK
+- TS ミラー (`npm test`): tests 10 / pass 10 / fail 0。node_modules 残存 (消失 2 回・残存 6 回)
+
+**やったこと**: 上記の再実測とこの記録のみ。コード変更ゼロ。
+
+**分かったこと / 罠**: 新規なし。引き継ぎ指示どおり `git fetch origin main` を再実施:
+merge-base は 7a7573954 のまま、main 先行は P-0270 分の 6 commit から増えておらず、
+**ファイル重複もゼロ継続** (merge-base..HEAD と merge-base..origin/main の changed files の
+comm -12 が空を実測)。seeds.md の『人間の鍵作業』節も drift 無し
+(見出し 57 行目・bullet T 項目 4 件・item 78 行目の取り消し線のまま)。rebase 負債の心配はまだ無い。
+
+**罠 (wrapper 文脈の鮮度)**: 渡された文脈に埋め込まれていた「PROGRESS.md の末尾」は
+前セッション (79b1459cc = セッション 10) のエントリを含まない古いスナップショットで、
+git log とは食い違っていた。**埋め込み文脈より実ファイルと git log が常に正**。
+また旧セッション 10 エントリがファイル内で時系列順序を外れた位置 (S7 と S8 の間) に
+挿入されていたのを本セッションで S9 の後に移動した。以降の追記は必ず EOF へ。
+
+**発見 (spec 外)**: 新規なし。固定パス問題による worker 実質停止が 10 セッション連続。
 コード・検証とも凍結状態のまま。main 先行が 6 commit で止まっている間が解消後の受入が
 最も容易なタイミングであり、その状態は今も続いている。
 
