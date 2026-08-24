@@ -6466,11 +6466,52 @@
       },
       "adopt_gate_attempts": 3,
       "stalled_reason": "adopt_gate_unmeasurable"
+    },
+    {
+      "id": "P-9000",
+      "title": "ダッシュボードのエージェントライブに core / heart の transcript 表示を追加",
+      "state": "stalled",
+      "branch": "project/p-9000",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "! grep -q 'transcriptAvailable: false' apps/ops-dashboard/app/src/lib/snapshot.ts",
+        "python3 -c \"import sys;s=open('apps/ops-dashboard/app/src/lib/snapshot.ts').read();i=s.find('residentAgents');j=s.find('const agents');sys.exit(0 if i>=0 and j>i and 'latestAction' in s[i:j] else 1)\""
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "dispatch_id": "d-13512d95c099b422",
+      "requested_by": "core",
+      "spec": {
+        "id": "P-9000",
+        "title": "ダッシュボードのエージェントライブに core / heart の transcript 表示を追加",
+        "why": "所有者が Telegram で明示依頼 (2026-08-24T17:41:24Z「dispatch_taskで送り直してくれる？」)。対象は既に request_task キューにも載せた件 (command_id=core-450a4594dd18bbf6) の即時着手版。\n\n何をしたいか: ops-dashboard のエージェントライブで、常駐エージェント (autopilot-core / autopilot-heart) の transcript を見えるようにする。\n\nなぜ要るか: 現行実装は apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 のコメント「常駐組 (heart/resident Deployment) は projectId / transcript を持たない」どおり、resident の transcriptAvailable を false に固定している。transcript 表示機構自体は Job 由来の役割名 (runner|reviewer|curriculum|critic|consolidation|chore)-<projectId>-aN しか parseAgentName で解で解釈しない (apps/ops-dashboard/app/src/lib/transcript.ts:172-177)。所有者は「ダッシュボードでcoreとheartのtranscriptが見えないのは仕様ですか？」と問い、仕様であることを確認したうえで変更を求めている。\n\nどこを見れば分かるか:\n- apps/ops-dashboard/app/src/lib/snapshot.ts (residentAgents を固定値で組んでいる箇所)\n- apps/ops-dashboard/app/src/lib/transcript.ts (findTranscriptFile / latestAction / transcriptMode)\n- apps/ops-dashboard/app/src/app/page.tsx (LIVE TRANSCRIPT パネル、SSE /api/agents/[agentId]/events)\n- transcript 実体は PVC autopilot-data の /data/transcripts/<role>/ 配下 (apps/ops-dashboard/deployment.yaml の DATA_DIR=/data/transcripts)\n\n実装の方向は実装役の判断に任せるが、core/heart セッション側で transcript ファイルを新設する場合はその書き出し元 (apps/autopilot/ 配下) も範囲に入る。ダッシュボードだけの変更で済むならそれが望ましい。",
+        "dod": "所有者が Telegram で明示依頼 (2026-08-24T17:41:24Z「dispatch_taskで送り直してくれる？」)。対象は既に request_task キューにも載せた件 (command_id=core-450a4594dd18bbf6) の即時着手版。\n\n何をしたいか: ops-dashboard のエージェントライブで、常駐エージェント (autopilot-core / autopilot-heart) の transcript を見えるようにする。\n\nなぜ要るか: 現行実装は apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 のコメント「常駐組 (heart/resident Deployment) は projectId / transcript を持たない」どおり、resident の transcriptAvailable を false に固定している。transcript 表示機構自体は Job 由来の役割名 (runner|reviewer|curriculum|critic|consolidation|chore)-<projectId>-aN しか parseAgentName で解で解釈しない (apps/ops-dashboard/app/src/lib/transcript.ts:172-177)。所有者は「ダッシュボードでcoreとheartのtranscriptが見えないのは仕様ですか？」と問い、仕様であることを確認したうえで変更を求めている。\n\nどこを見れば分かるか:\n- apps/ops-dashboard/app/src/lib/snapshot.ts (residentAgents を固定値で組んでいる箇所)\n- apps/ops-dashboard/app/src/lib/transcript.ts (findTranscriptFile / latestAction / transcriptMode)\n- apps/ops-dashboard/app/src/app/page.tsx (LIVE TRANSCRIPT パネル、SSE /api/agents/[agentId]/events)\n- transcript 実体は PVC autopilot-data の /data/transcripts/<role>/ 配下 (apps/ops-dashboard/deployment.yaml の DATA_DIR=/data/transcripts)\n\n実装の方向は実装役の判断に任せるが、core/heart セッション側で transcript ファイルを新設する場合はその書き出し元 (apps/autopilot/ 配下) も範囲に入る。ダッシュボードだけの変更で済むならそれが望ましい。",
+        "verify": [
+          "! grep -q 'transcriptAvailable: false' apps/ops-dashboard/app/src/lib/snapshot.ts",
+          "python3 -c \"import sys;s=open('apps/ops-dashboard/app/src/lib/snapshot.ts').read();i=s.find('residentAgents');j=s.find('const agents');sys.exit(0 if i>=0 and j>i and 'latestAction' in s[i:j] else 1)\""
+        ],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": false,
+        "confidence": "unsure",
+        "adopted": true,
+        "proposed_by": "core-dispatch",
+        "cell": [
+          "self",
+          "feature"
+        ]
+      },
+      "stalled_reason": "gate_error"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T17:18:37Z",
-  "last_activity_at": "2026-08-24T17:26:24Z",
+  "last_activity_at": "2026-08-24T17:55:04Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": true,
   "stop_engaged": false,
