@@ -6075,7 +6075,7 @@
     {
       "id": "P-0291",
       "title": "台本はできている、舞台が残っている — immich postgres を予行演習済みの手順で 16.14-1.1.1 に載せ替え、3 週間凍結の宿題を決着させる",
-      "state": "proposed",
+      "state": "stalled",
       "branch": "project/p-0291",
       "irreversible": true,
       "capabilities": [
@@ -6161,12 +6161,13 @@
           "PG=$(kubectl -n immich get pods -o name | grep -i postgres | head -1) && ! kubectl -n immich logs \"$PG\" --since=30m 2>&1 | grep -qi 'FATAL'"
         ],
         "broken": []
-      }
+      },
+      "stalled_reason": "adopt_gate_some_pass"
     },
     {
       "id": "P-0297",
       "title": "壁の地図を裏から押して描き直す — 「拒否されること」だけを実測する権限差分表を作り、BLAST-RADIUS.md と substrate の更新で完結させる (validate.py は触らない)",
-      "state": "proposed",
+      "state": "active",
       "branch": "project/p-0297",
       "irreversible": false,
       "capabilities": [],
@@ -6216,12 +6217,13 @@
         "verdict": "all_fail",
         "passed": [],
         "broken": []
-      }
+      },
+      "veto_deadline": "2026-08-24T08:32:18Z"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T08:29:11Z",
-  "last_activity_at": "2026-08-24T08:29:11Z",
+  "last_activity_at": "2026-08-24T08:32:18Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
