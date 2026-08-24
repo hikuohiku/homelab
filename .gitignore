@@ -53,4 +53,6 @@ apps/*/charts/
 # ops/dashboard/build.py の生成物。ops/*.json から再生成できるのでコミット不要
 # （T-0035, issue #56 2026-08-04 20:54:53 の指摘。全タスク PR で衝突する最大の面だった）
 ops/dashboard/index.html
+# ops/tools/reachability_probe.py の生成物 (P-9034)。実測スナップショットで毎回変わる
+ops/health/
 __pycache__/

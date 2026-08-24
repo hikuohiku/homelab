@@ -1,0 +1,11 @@
+{
+  "scenario": "adguard-dns-dead",
+  "detail": "2026-08-24 の実事故を再現する fixture。adguard Pod が 242 回 CrashLoopBackOff で、53/tcp・53/udp への DNS 応答が無い (clusterIP 経由: 接続拒否 / 応答タイムアウト。tailnet 経由: DNS 応答タイムアウト)。名前解決は通る前提にして「DNS 応答の死」だけを再現する (MagicDNS 名自体の消滅による解決失敗は別経路。2026-08-24 baseline に実測あり)。他の Service は正常 (default)。",
+  "fail": {
+    "adguard:clusterip:53:dns-tcp": {"detail": "接続拒否 (ECONNREFUSED)"},
+    "adguard:clusterip:53:dns-udp": {"detail": "DNS (udp) 応答タイムアウト (3.0s)"},
+    "adguard:tailnet:53:dns-tcp": {"detail": "DNS (tcp) 応答タイムアウト (3.0s)"},
+    "adguard:tailnet:53:dns-udp": {"detail": "DNS (udp) 応答タイムアウト (3.0s)"}
+  },
+  "default": {"detail": "ok"}
+}
