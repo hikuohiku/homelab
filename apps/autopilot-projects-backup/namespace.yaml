@@ -1,0 +1,18 @@
+# Project CR の書き出しと restic backup だけが住む namespace。
+#
+# **なぜ autopilot namespace に置かないか**: この CronJob は B2 の credential を要る。
+# autopilot namespace に restic の Secret を置くと、autopilot-writer capability を
+# 宣言したプロジェクト Job が pods を自由に作れる (apps/autopilot/rbac.yaml) 以上、
+# retention 用の **削除権限つき B2 鍵** に手が届く。届けば全アプリのバックアップを
+# 消せる。ops/rules.json の allowed_autopilot_doppler_keys が
+# 「autopilot Pod は restic を直接触らない (backup CronJob 側の namespace に閉じる)」と
+# 宣言しているのはこの壁のことで、CI (ops/validate.py の check_autopilot_secret_allowlist)
+# も autopilot 宛の ExternalSecret を allowlist で縛っている。
+# 壁を崩して allowlist を広げるのではなく、壁の外に namespace を 1 つ立てる。
+#
+# Project CR の読み取りは autopilot namespace の RoleBinding `project-reader` に
+# この SA を足して渡す (apps/autopilot/rbac.yaml)。read-only。
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: autopilot-projects-backup

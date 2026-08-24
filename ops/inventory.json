@@ -320,11 +320,12 @@
       "mirrors": [
         "apps/coder/pvc-usage-cronjob.yaml",
         "apps/vaultwarden/pvc-usage-cronjob.yaml",
-        "apps/vaultwarden/restic-backup-cronjob.yaml"
+        "apps/vaultwarden/restic-backup-cronjob.yaml",
+        "apps/autopilot-projects-backup/restic-backup-cronjob.yaml"
       ],
       "upstream": "dockerhub:library/python",
       "policy": "auto",
-      "note": "T-0080 (#163) で新設。3 namespace (immich/vaultwarden/coder) に同じタグを持つ同型 CronJob をコピーして配置しているため、ops-health-reporter-image と同様に揃えて更新すること（T-0082）。T-0069 (run #48) で apps/vaultwarden/restic-backup-cronjob.yaml の sqlite-snapshot initContainer にも同じイメージを採用（apk での実行時パッケージ追加を避けるため。標準ライブラリの sqlite3 モジュールを使う）したため4箇所目として追加。check_version_sync.py の GROUPS にも同じファイルを追加済み",
+      "note": "T-0080 (#163) で新設。3 namespace (immich/vaultwarden/coder) に同じタグを持つ同型 CronJob をコピーして配置しているため、ops-health-reporter-image と同様に揃えて更新すること（T-0082）。T-0069 (run #48) で apps/vaultwarden/restic-backup-cronjob.yaml の sqlite-snapshot initContainer にも同じイメージを採用（apk での実行時パッケージ追加を避けるため。標準ライブラリの sqlite3 モジュールを使う）したため4箇所目として追加。check_version_sync.py の GROUPS にも同じファイルを追加済み。Phase 0b (state-out-of-git) で apps/autopilot-projects-backup/restic-backup-cronjob.yaml の export-projects initContainer にも同じイメージを採用（標準ライブラリだけで k8s API を叩くため）したため5箇所目として追加",
       "observability_impact": "壊れるとその namespace の PVC 実使用量が pvc-usage-report ConfigMap に書き戻されなくなり、ops-health-reporter が集約する pvc_usage が古いまま止まる。読み取り専用 CronJob であり、壊れても homelab 本体の到達性・稼働には影響しない"
     },
     {
@@ -492,6 +493,18 @@
       "policy": "auto",
       "note": "P-0270 で新設。他5ファイルと同じタグ (0.19.1) を使う設計。同一ファイル内に adguard-restic-backup と adguard-restic-retention の2箇所。check_version_sync.py の GROUPS に6ファイル目として登録済み（vaultwarden-restic-image の note 参照）。タグを上げるときは6ファイル全部を揃えること",
       "observability_impact": "adguard の restic バックアップ・retention CronJob が使用。壊れるとバックアップが取れなくなるが adguard 本体の可用性には影響しない"
+    },
+    {
+      "id": "autopilot-projects-restic-image",
+      "kind": "image",
+      "name": "restic/restic (backup CronJob)",
+      "current": "0.19.1",
+      "file": "apps/autopilot-projects-backup/restic-backup-cronjob.yaml",
+      "match": "restic/restic:",
+      "upstream": "github:restic/restic",
+      "policy": "auto",
+      "note": "Phase 0b (state-out-of-git) で新設。他5ファイルと同じタグ (0.19.1) を使う設計。同一ファイル内に restic-previous initContainer・autopilot-projects-restic-backup・autopilot-projects-restic-retention の3箇所。check_version_sync.py の GROUPS に7ファイル目として登録済み（vaultwarden-restic-image の note 参照）。タグを上げるときは7ファイル全部を揃えること",
+      "observability_impact": "Project CR (autopilot のプロジェクト記録) の restic バックアップ・retention CronJob が使用。Phase 4b で projects.json を止めた後は記録の唯一のオフサイト複製になるため、壊れたまま node01 を失うと全損する"
     },
     {
       "id": "nats",

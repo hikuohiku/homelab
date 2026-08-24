@@ -1,0 +1,10 @@
+# 書き出し Job の ServiceAccount。**このファイルに権限は無い**。
+# Project CR の get/list は autopilot namespace 側の RoleBinding `project-reader`
+# (ClusterRole `autopilot-project-reader` = get/list/watch のみ) がこの SA を
+# subject に取ることで渡る。権限の宣言を CR のある側に置いておくと、CR を読む者の
+# 一覧が 1 か所に集まる。
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: autopilot-projects-backup
+  namespace: autopilot-projects-backup

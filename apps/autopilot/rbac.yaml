@@ -284,3 +284,8 @@ subjects:
   - kind: ServiceAccount
     name: autopilot-runner
     namespace: autopilot
+  # CR を restic へ書き出す CronJob (apps/autopilot-projects-backup)。読むだけ。
+  # 別 namespace に居るのは、restic の credential を autopilot ns に置かないため
+  - kind: ServiceAccount
+    name: autopilot-projects-backup
+    namespace: autopilot-projects-backup

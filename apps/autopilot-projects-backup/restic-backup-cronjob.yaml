@@ -1,0 +1,275 @@
+# Project CR (autopilot.homelab.hikuohiku.dev/v1) を書き出して restic で Backblaze B2 へ
+# バックアップする (設計 docs/design/state-out-of-git Phase 0b)。
+#
+# なぜ要るか: k3s のデータストアは kine/sqlite (/var/lib/rancher/k3s/server/db/state.db) で
+# etcd ではないため `k3s etcd-snapshot` が使えず、既存の restic CronJob 6 本はどれも
+# アプリの PVC しか見ていない。Phase 4b で projects.json (git) を止めた瞬間、
+# プロジェクトの記録の唯一の実体がクラスタになる。**この CronJob が 4b の前提条件**。
+#
+# state.db を hostPath で丸ごと掬う案は採らない。state.db を読める Pod は実質すべての
+# Secret を読めるのと同じで、この 1 個のために作る攻撃面としては大きすぎる。守るべきは
+# プロジェクトの記録であってクラスタ全体ではないので、**CR だけ**を read-only の SA で
+# 読み出す。hostPath も特権も使わない。
+#
+# 3 段構成。fail-closed の判定を全部 python 側 (単体テスト済み) に置くための順番:
+#   1. restic-previous (init) — 前回のスナップショットから projects.json を書き戻す。
+#      無くても (初回・取得失敗) 続行する。ここでリポジトリの init と stale lock 外しも済ます
+#   2. export-projects (init) — CR を全件取って決定的な JSON を書く。0 件・前回比 10% 超の
+#      急減・floor 割れは書き出さずに落ちる (export_projects.py の check_export)
+#   3. restic-backup — 書けた 1 ファイルだけを backup する
+# previous.json は backup 対象に含めない (パスを明示しているので自然に外れる)。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: autopilot-projects-restic-backup
+  namespace: autopilot-projects-backup
+spec:
+  # 6 時間ごと (JST で評価される。node01 の time.timeZone)。他アプリの日次バックアップと
+  # 違って日次にしないのは、失うものが「最大 24 時間ぶんのプロジェクトの進行」だから。
+  # 書き出しは約 350 KB で、変わっていなければ restic には何も積まれない (決定的な出力)。
+  # 分は既存の backup 帯 (2:45 immich / 3:10 coder / 3:20 adguard / 3:30 workspace-home /
+  # 3:40 vaultwarden / 3:55 syncthing) と重ならない位置に置く
+  schedule: "35 */6 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          # export-projects が k8s API を叩くのでトークンを automount する。
+          # 同じ Pod の restic コンテナにも載るが、この SA が持つのは Project CR の
+          # get/list/watch だけなので実害が無い (apps/autopilot/rbac.yaml)
+          serviceAccountName: autopilot-projects-backup
+          restartPolicy: Never
+          initContainers:
+            - name: restic-previous
+              image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  restic snapshots >/dev/null 2>&1 || restic init
+                  restic unlock
+                  # 前回の書き出しを取り出す。急減の判定材料であって、取れないこと自体は
+                  # 失敗ではない (初回はまだ何も無い)。取れなければ python 側が floor で判定する
+                  if restic dump latest /export/projects.json > /export/previous.json.part 2>/dev/null; then
+                    mv /export/previous.json.part /export/previous.json
+                  else
+                    rm -f /export/previous.json.part
+                    echo "no previous snapshot (first run or dump failed); falling back to the count floor"
+                  fi
+              env:
+                - name: RESTIC_B2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: autopilot-projects-restic-backup-credentials
+                      key: RESTIC_B2_BUCKET
+                # bucket 名の後ろの "autopilot-projects" がリポジトリパスの区切り。
+                # 既存は vaultwarden / immich / coder-postgres / coder-workspace-homes /
+                # syncthing / adguard
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):autopilot-projects"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: autopilot-projects-restic-backup-credentials
+                      key: RESTIC_PASSWORD
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: autopilot-projects-restic-backup-credentials
+                      key: B2_ACCOUNT_ID
+                - name: B2_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: autopilot-projects-restic-backup-credentials
+                      key: B2_ACCOUNT_KEY
+              # PVC を読まないので DAC_READ_SEARCH は要らない (既存の backup CronJob が
+              # 足しているのは PVC の所有権を跨ぐため)。root のままにしてあるのは
+              # restic イメージの cache/HOME の前提に手を入れないため — この CronJob は
+              # マージ前にクラスタで試せないので、既存 6 本と同じ動き方から外れない
+              securityContext:
+                runAsUser: 0
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+              volumeMounts:
+                - name: export
+                  mountPath: /export
+            - name: export-projects
+              image: python:3.14-alpine
+              terminationMessagePolicy: FallbackToLogsOnError
+              command: ["python", "/scripts/export_projects.py"]
+              env:
+                - name: PROJECT_NAMESPACE
+                  value: autopilot
+                - name: OUT_PATH
+                  value: /export/projects.json
+                - name: PREVIOUS_PATH
+                  value: /export/previous.json
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              securityContext:
+                runAsNonRoot: true
+                runAsUser: 65534
+                runAsGroup: 65534
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop: ["ALL"]
+                seccompProfile:
+                  type: RuntimeDefault
+              # 標準ライブラリだけで 350 KB の JSON を組む処理。ops-health-reporter の
+              # 同型 CronJob と同じ資源クラスなので同じ値を使う
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+                limits:
+                  cpu: 200m
+                  memory: 256Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: export
+                  mountPath: /export
+          containers:
+            - name: restic-backup
+              image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  restic backup /export/projects.json
+              # credential は backup 専用の append-only 鍵（deleteFiles を持たない B2
+              # application key）。削除権限つきの autopilot-projects-restic-credentials は
+              # 下の retention CronJob（forget --prune）だけが使う。詳細は docs/backup.md
+              env:
+                - name: RESTIC_B2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: autopilot-projects-restic-backup-credentials
+                      key: RESTIC_B2_BUCKET
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):autopilot-projects"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: autopilot-projects-restic-backup-credentials
+                      key: RESTIC_PASSWORD
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: autopilot-projects-restic-backup-credentials
+                      key: B2_ACCOUNT_ID
+                - name: B2_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: autopilot-projects-restic-backup-credentials
+                      key: B2_ACCOUNT_KEY
+              securityContext:
+                runAsUser: 0
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m
+              volumeMounts:
+                - name: export
+                  mountPath: /export
+                  readOnly: true
+          volumes:
+            - name: script
+              configMap:
+                name: autopilot-projects-backup-script
+            # 書き出しはこの Job の中だけで生き死にする。PVC を持たないのは、
+            # 残す価値のあるものは B2 の側にあるから
+            - name: export
+              emptyDir: {}
+---
+# 週次で古い世代を刈る (restic forget --prune)。保持方針は既存 6 本と同じ
+# (--keep-daily 7 --keep-weekly 4 --keep-monthly 6)。backup が 6 時間ごとなので
+# 1 日 4 本のスナップショットが積まれるが、keep-daily はその日の最後の 1 本だけを残す。
+# 既存の retention 帯 (日曜 3:45 immich / 4:00 vaultwarden / 4:10 coder /
+# 4:30 workspace-home / 4:50 syncthing / 5:10 adguard) と重ならない 5:20 に置く。
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: autopilot-projects-restic-retention
+  namespace: autopilot-projects-backup
+spec:
+  schedule: "20 5 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      activeDeadlineSeconds: 1800
+      template:
+        spec:
+          # 削除権限つきの鍵を持つ Pod に k8s API のトークンまで載せない
+          automountServiceAccountToken: false
+          restartPolicy: Never
+          containers:
+            - name: restic-forget
+              image: restic/restic:0.19.1
+              terminationMessagePolicy: FallbackToLogsOnError
+              command:
+                - sh
+                - -c
+                - |
+                  set -eu
+                  restic snapshots >/dev/null 2>&1 || { echo "repository not initialized yet, skipping"; exit 0; }
+                  restic forget --keep-daily 7 --keep-weekly 4 --keep-monthly 6 --prune
+              env:
+                - name: RESTIC_B2_BUCKET
+                  valueFrom:
+                    secretKeyRef:
+                      name: autopilot-projects-restic-credentials
+                      key: RESTIC_B2_BUCKET
+                - name: RESTIC_REPOSITORY
+                  value: "b2:$(RESTIC_B2_BUCKET):autopilot-projects"
+                - name: RESTIC_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: autopilot-projects-restic-credentials
+                      key: RESTIC_PASSWORD
+                - name: B2_ACCOUNT_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: autopilot-projects-restic-credentials
+                      key: B2_ACCOUNT_ID
+                - name: B2_ACCOUNT_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: autopilot-projects-restic-credentials
+                      key: B2_ACCOUNT_KEY
+              securityContext:
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 128Mi
+                limits:
+                  cpu: 500m

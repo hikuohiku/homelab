@@ -237,6 +237,114 @@ vaultwarden 方式（online backup API を叩く initContainer）は**採らな�
 > インデックスが再構築されることは**まだ実機で試していない**（T-0140 未着手で同期フォルダが
 > 空のため、再スキャンすべき実データが無い）。実データ移行後に確認すべき事項。
 
+## Project CR の restic バックアップ (state-out-of-git Phase 0b, 2026-08-24)
+
+`apps/autopilot-projects-backup/` に実装した。**アプリの PVC ではなく k8s の CR を
+バックアップする、この repo で最初のもの**。
+
+- **なぜ要るか**: k3s のデータストアは kine/sqlite（`/var/lib/rancher/k3s/server/db/state.db`）で
+  etcd ではないため `k3s etcd-snapshot` が使えず、既存の restic CronJob 6 本はどれも
+  アプリの PVC しか見ていない。設計 [`docs/design/state-out-of-git/architecture.md`](design/state-out-of-git/architecture.md)
+  の Phase 4b で `ops-state:projects.json` を止めると、**プロジェクトの記録の唯一の実体が
+  クラスタになる**。これが無いまま 4b に進むと node01 の消失が記録の全損になる。
+  **この CronJob が 4b の前提条件。**
+- **k3s のデータストアは丸ごと掬わない**。`state.db` を hostPath で読める Pod は実質
+  すべての Secret を読めるのと同じで、この 1 個のために作る攻撃面としては大きすぎる。
+  守るべきはプロジェクトの記録であってクラスタ全体ではないので、**Project CR だけ**を
+  read-only の ServiceAccount（`autopilot-project-reader` = get/list/watch のみ）で読む。
+  hostPath も特権も使わない
+- **autopilot namespace の外に置く**。restic は B2 の credential を要り、retention 側の鍵は
+  **削除権限を持つ**。autopilot namespace には `autopilot-writer` capability を宣言した
+  プロジェクト Job が Pod を自由に作れる経路があり、そこに削除鍵を置くと全アプリの
+  バックアップに手が届く。`ops/rules.json` の `allowed_autopilot_doppler_keys` が
+  「autopilot Pod は restic を直接触らない」と宣言している壁を崩さずに済ませるため、
+  namespace を 1 つ立てて壁の外に置いた（allowlist は触っていない）
+- **Doppler への新規登録は不要**。既存キー（`RESTIC_PASSWORD` / `RESTIC_B2_BUCKET` /
+  `B2_ACCOUNT_ID_APPEND_ONLY` / `B2_ACCOUNT_KEY_APPEND_ONLY` / 削除鍵）をそのまま参照する
+- **スケジュール**: backup 6 時間ごと（00:35 / 06:35 / 12:35 / 18:35 JST）、
+  retention 毎週日曜 05:20 JST。日次にしないのは、失うものが「最大 24 時間ぶんの
+  プロジェクトの進行」だから。書き出しは約 350 KB で、変わっていない回は restic に
+  何も積まれない（下記のとおり出力が決定的）
+- **リポジトリパス**: `b2:$(RESTIC_B2_BUCKET):autopilot-projects`
+- **保持世代**: 既存 6 本と同じ `--keep-daily 7 --keep-weekly 4 --keep-monthly 6`。
+  1 日 4 本積まれるが `--keep-daily` はその日の最後の 1 本だけを残す
+
+### 書き出しの形
+
+`kubectl apply -f` でそのまま戻せる **v1 List**（`projects.json` の形ではない）。
+4b 以降の正は CR であって `projects.json` ではなく、復元とは「CR を作り直すこと」だから。
+CR の `spec` は `projects.json` の 1 エントリをキー名そのまま載せてあるので
+（`apps/autopilot/crd-project.yaml`）、旧形式が要るときは `jq '[.items[].spec]'` で落とせる
+— CR 形式のほうが情報が広い。
+
+`metadata` は **name / namespace / labels / annotations だけ**残す。
+`resourceVersion` / `uid` / `creationTimestamp` / `generation` / `managedFields` と `status` は
+落とす。どれもクラスタが付けるもので、残すと apply が衝突で落ちるうえ、毎ビート値が変わる
+ので中身が同じでも差分が出る。
+
+出力は CR の中身だけの関数で、時刻もホスト名も混ぜない（items は name 順、
+`json.dumps(sort_keys=True, indent=2)`）。同じ CR 集合なら**同じバイト列**になり、
+restic の重複排除が効く。この契約は `ops/tests/test_export_projects.py` が固定している。
+
+### fail-closed（空や急減を「正しい最新」として上書きしない）
+
+CRD の同期失敗や RBAC の事故で 0 件になったものを最新として書くと、記録が静かに消える。
+書き出しの前に判定し、駄目なら**書かずに Job を落とす**（`export_projects.py: check_export`）。
+
+| 条件 | 判定 |
+|---|---|
+| 0 件 | 常に失敗 |
+| 前回比 10% を超える減少 | 失敗。終端 CR を消さない設計（live set は `lifecycle` ラベルで切る）では件数は減らないはずなので、取得の失敗を疑う。10% の余地は「id を間違えて作った CR を数個消す」運用のため |
+| 前回が不明（初回・前回スナップショットの取得失敗）で 100 件未満 | 失敗。2026-08-24 実測 112 件に対する floor。**割ってはいけない線**であって目標ではないので、件数が増えても上げ直さなくてよい |
+
+前回の件数は、backup の直前に `restic dump latest /export/projects.json` で前回スナップショットを
+書き戻して数える（initContainer `restic-previous`）。取れないこと自体は失敗ではなく、
+そのときだけ floor で判定する。
+
+### 復元手順
+
+前提: Doppler CLI（`homelab/prd`）と restic と kubectl。**復元は append-only 鍵で足りる**
+（読み取りは `readFiles`。削除鍵を持ち出す必要は無い）。
+
+```sh
+# 1. スナップショットを一覧する
+doppler run --project homelab --config prd -- sh -c '
+  export RESTIC_REPOSITORY="b2:$RESTIC_B2_BUCKET:autopilot-projects"
+  export B2_ACCOUNT_ID="$B2_ACCOUNT_ID_APPEND_ONLY"
+  export B2_ACCOUNT_KEY="$B2_ACCOUNT_KEY_APPEND_ONLY"
+  restic snapshots
+'
+
+# 2. 最新（または `restic dump <snapshot-id>` で任意の世代）を手元に落とす
+doppler run --project homelab --config prd -- sh -c '
+  export RESTIC_REPOSITORY="b2:$RESTIC_B2_BUCKET:autopilot-projects"
+  export B2_ACCOUNT_ID="$B2_ACCOUNT_ID_APPEND_ONLY"
+  export B2_ACCOUNT_KEY="$B2_ACCOUNT_KEY_APPEND_ONLY"
+  restic dump latest /export/projects.json
+' > projects.json
+
+# 3. 中身を確かめる（件数と、live set が入っているか）
+python3 -c 'import json; d=json.load(open("projects.json")); print(len(d["items"]))'
+jq -r '.items[] | select(.metadata.labels.lifecycle == "live") | .metadata.name' projects.json
+
+# 4. CRD が無ければ先に入れる（クラスタごと作り直した場合。通常は ArgoCD が持っている）
+kubectl apply -f apps/autopilot/crd-project.yaml
+
+# 5. heart を止めてから戻す。動いたまま apply すると、heart の持っている古い/新しい状態と
+#    復元した内容が競り、どちらが勝ったか分からなくなる
+kubectl -n autopilot scale deployment/autopilot-heart --replicas=0
+kubectl apply -f projects.json          # 名前が一致する CR は上書きされる
+kubectl -n autopilot get projects -l lifecycle=live
+kubectl -n autopilot scale deployment/autopilot-heart --replicas=1
+
+# 旧 projects.json 形式（ops-state 互換）が要るとき
+jq '[.items[].spec]' projects.json > projects-legacy.json
+```
+
+> **未実施**: 実データでの復元試験（T-0071 相当）はまだ行っていない。「バックアップがある」と
+> 「戻せる」は別なので、初回実行の成功を確認したあと、使い捨ての namespace へ手順 1〜4 を
+> 通すところまでやること。
+
 ## 復元試験（T-0071）
 
 人間の新方針（issue #56, 2026-08-05 04:40:59「試したことのないバックアップは、バックアップでは
