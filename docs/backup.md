@@ -412,6 +412,70 @@ vaultwarden にもそのまま当てはまった。同じ `local-path` PVC + res
 
 検証専用の `vaultwarden-restore-verify` PVC/Job は確認が取れたため削除した。
 
+### vaultwarden 復元手順（実測、P-9025、2026-08-24）
+
+T-0071 の vaultwarden 復元試験は「復元できた」だけで**ログイン画面が立ち上がることは未確認**だった。
+P-9025 で、復元した実データで vaultwarden サーバを scratch 起動し、**ログイン画面 (web vault) が
+HTTP 200 で返る**ところまで初めて実測した。「バックアップから金庫を開けて戻した」初の実績。
+
+#### 使い方（`ops/vaultwarden_restore.py`）
+
+`ops/vaultwarden_restore.py` が 1 本で「snapshot の直近性確認 → restic restore → /data レイアウト
+組み立て → PRAGMA integrity_check + 行数照合 → sha256 照合 → restore-summary.json 書き出し」まで行う
+（標準ライブラリのみ。`restic` バイナリは env `RESTIC_BINARY` で渡す）。**本番 PVC
+`vaultwarden-data` には触れない**。復元先は使い捨ての scratch PVC のみ。
+
+実行は vaultwarden namespace の使い捨て Job で行う（P-9025 の実測で使用した形。manifest は
+Git には commit せず `kubectl apply` で投入し、終わったら削除。`apps/` は変更しない）。
+
+```yaml
+# initContainer で restic バイナリを emptyDir へコピー (restic/restic:0.19.1 → /tools/restic)
+# main container: python:3.14-alpine, command: python /scripts/vaultwarden_restore.py
+# env: vaultwarden-restic-backup-credentials の secretKeyRef (RESTIC_B2_BUCKET / RESTIC_PASSWORD /
+#      B2_ACCOUNT_ID / B2_ACCOUNT_KEY) + RESTIC_REPOSITORY="b2:$(RESTIC_B2_BUCKET):vaultwarden"
+#      + SCRATCH_DIR=/scratch + RESTIC_BINARY=/tools/restic
+# securityContext: runAsUser: 0 / allowPrivilegeEscalation: false /
+#   capabilities.drop: ["ALL"], add: ["CHOWN", "FOWNER", "DAC_OVERRIDE"]   # restore の 3 capability
+# volumes: scratch PVC (vaultwarden-restore-scratch) → /scratch, script ConfigMap → /scripts
+```
+
+- **credential は append-only 鍵 (`vaultwarden-restic-backup-credentials`) のみ**。復元は
+  `readFiles` で完結するので削除権限つき鍵 (`vaultwarden-restic-credentials`) は持ち出さない
+  （P-0341 の結論どおり。P-9025 でもこれで成功した）。
+- **snapshot の直近性 (DoD 1)**: スクリプトが最新 snapshot の age を検査し、24h を超えていれば
+  「backup CronJob を 1 回起動して snapshot 実在を先に確定せよ」と非 0 で終了する (fail-closed)。
+
+#### 実測結果（2026-08-24）
+
+| 項目 | 結果 |
+|---|---|
+| 使用 snapshot | `c51d21fa`（2026-08-24 18:40:16Z = 当日 03:40 JST の日次 backup。4h34m 前） |
+| restore 結果 | 成功（`integrity_check` = `ok`） |
+| 所要時間 | **12 秒**（転送量 1,832,910 bytes、12 files/dirs） |
+| 行数 | **863**（うち `users` = 1 人間アカウント） |
+| checksum 照合 | **一致**（復元 db.sqlite3 と `restic dump latest /staging/db.sqlite3` の sha256 が一致） |
+| 復元先 | `vaultwarden-restore-scratch` PVC（**scratch。本番 PVC には不触**） |
+| 起動確認 | `vaultwarden/server:1.37.2-alpine` を復元データ (/data) で scratch 起動。`GET /` が **HTTP 200**（`<title>Vaultwarden Web</title>`・`layout_frontend` = 未認証 web vault = ログイン画面）。`/alive` 200、`/api/accounts/profile` 401（保護 API が稼働） |
+| 結果ファイル | `ops/projects/logs/P-9025/restore-summary.json` |
+
+**復元後の /data の中身**: `attachments/`（原本 mtime 保持）・`rsa_key.pem`（JWT 署名鍵）・
+`sends/`・`tmp/`・`db.sqlite3`（1,343,488 bytes、backup 時刻の mtime）。stale な
+`db.sqlite3-wal/-shm` は **持ち込まれない**（backup 側で除外済み。起動時に新規作成される）。
+
+**所有権の注意**: snapshot 内の `db.sqlite3` は staging 一貫コピーを root の initContainer が
+作ったため **root:root 0644 で復元される**。それでもサーバ (uid 1000) は動く — `/data` ディレクトリ
+自体を 1000:1000 に chown してあるため SQLite の WAL/-shm を置け、DB を開けるから
+（SQLite は WAL モードで -shm/-wal が書ければ本体の 0644 でも読める）。**本番 PVC へリストアして
+切り替える運用では、`db.sqlite3` を 1000:1000 に chown してから起動すること**（起動時に
+migration が走るため、サーバと同じバージョンで戻す）。
+
+**教訓（次に復元する人へ）**: T-0071 / P-0047 と同じく `CHOWN` / `FOWNER` / `DAC_OVERRIDE` の
+3 capability が要る（backup 側の `DAC_READ_SEARCH` では足りない）。restore 前に scratch を
+`rm -rf` で掃除してから実行する。
+
+検証用リソース（scratch PVC・Job・ConfigMap・scratch サーバ Pod・probe Pod）は確認が取れたため
+すべて削除した（docs/backup.md の運用どおり）。
+
 ### coder-postgres（完了、2026-08-06）
 
 immich/vaultwarden とは異なり、PVC ではなく単一ファイルの `pg_dump -Fc` ダンプを使い回さない
