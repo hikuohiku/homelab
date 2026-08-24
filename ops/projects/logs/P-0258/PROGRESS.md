@@ -2218,9 +2218,36 @@ reporter ブランチは不変 (ec5443b69、ls-remote 実測) のため verify 3
 
 新たな発見は無し (PR #581 の branch 削除は上記のとおり実質ノイズ)。
 
+## セッション 76 (2026-08-24)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 17 から不変。pull ref 一致を確認
+(local HEAD = origin/project/p-0258 = c556f9e05 = session 75 commit、ahead/behind 無し)。
+
+PR #581 は不変: ls-remote で refs/pull/581/head = 00de3c47b、GitHub API 実測で
+state=open, merged=false, closed_at=null (session 74/75 実測と同一 hash)。着地はまだ。
+reporter ブランチも不変 (ec5443b69、ls-remote 実測) のため verify 3 は参考確認のみ —
+`recovery_probe: None` で **red 継続**。
+
+ops-state は beat 218〜222 (2b2f7e334..ad69b0195) に進んだが diff --stat 実測は
+heartbeat.json/metrics.jsonl のみで **projects.json への diff は 0 行**。P-0258 エントリ
+への接触無し (decide commit も無し)。p-0243 も動かず (stalled 化後の静止)。spec・runner
+非接触 (main 不変につき)。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 74 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 74 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | reporter ブランチ不変につき参考確認のみ — recovery_probe: None で red 継続 |
+
+発見 (軽微): session 75 が作った tracking ref `origin/pr-581-head` は
+`git fetch origin --prune` のたびに消えることを本セッションで実測
+(`[deleted] -> origin/pr-581-head`)。refs/pull 由来の ref は prune 対象になるため
+tracking ref を再作成しなくてよい — PR head の確認は ls-remote 直参照が最安で安定。
+
 ## 次のセッションへの一言
 
-セッション 13〜75 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+セッション 13〜76 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
 `git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
 spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
 (一時ファイルは必ず `mktemp`)。
@@ -2232,9 +2259,10 @@ spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで
 (session 30/41/51/62/72 の前例) — ただし P-0278/P-0279 は recovery_probe を足さないので
 red 継続の見込み。reporter ブランチの routine データ beat だけなら従来どおり参考確認で可。
 
-PR #581 の head を見るときは **origin の実ブランチ `pr-581` は session 75 時点で消滅済み**
-なので `git fetch origin refs/pull/581/head:refs/remotes/origin/pr-581-head` (session 75 が
-作成した tracking ref。更新はこれで上書き可) か ls-remote 直参照を使うこと。
+PR #581 の head 確認は `git ls-remote origin refs/pull/581/head` か GitHub API
+(`curl -s https://api.github.com/repos/hikuohiku/homelab/pulls/581`) で行うこと。
+session 75 形式の tracking ref 作成は**不要** — `--prune` 付き fetch で消えることを
+session 76 で実測済み (`[deleted] -> origin/pr-581-head`)。
 GitHub API の PR 状態確認は gh 無しでも
 `curl -s https://api.github.com/repos/hikuohiku/homelab/pulls/581` で可 (session 75 実測)。
 ops-state beat の `projects.json` は毎 beat の全プロジェクト状態ダンプなので、
