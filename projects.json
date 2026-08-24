@@ -6893,13 +6893,62 @@
       },
       "adopt_gate_attempts": 3,
       "stalled_reason": "adopt_gate_unmeasurable"
+    },
+    {
+      "id": "P-0332",
+      "title": "揺れは計器を据えてから撃つ — node01 再起動ドリルを「dry-run 測定器 + 承認付き発火」として完成させ、実回復時間を初めて測る",
+      "state": "proposed",
+      "branch": "project/p-0332",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "test -f ops/drills/node_reboot_drill.py",
+        "python3 ops/drills/node_reboot_drill.py --selftest",
+        "bash -c 'python3 ops/drills/node_reboot_drill.py --fire >/tmp/nrd.out 2>&1; test $? -ne 0 && grep -q acknowledge /tmp/nrd.out'",
+        "python3 ops/drills/node_reboot_drill.py --check | python3 -c \"import json,sys; d=json.load(sys.stdin); assert d['mode']=='dry-run'; assert 'measurements' in d\"",
+        "test -s docs/node01-reboot-drill.md"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-0332",
+        "title": "揺れは計器を据えてから撃つ — node01 再起動ドリルを「dry-run 測定器 + 承認付き発火」として完成させ、実回復時間を初めて測る",
+        "why": "VISION の第一原理は「ループが止まらないこと」だが、その器が乗る node01 は一度も再起動されたことがない。2026-08-24T10:49Z に argocd 全コンポーネントが一斉再起動し restarts 21 が積もる事象を実測しており、ノードの揺れは現実に起きる。単一ノード k3s では drain すると測定器ごと死ぬ特殊事情があるため、P-0314/P-0323 は 2 回枠競合で見送られた。判決の improve_hint「--fire は承認なし絶対不発・dry-run 出力への直接 assert」に適合済みの 8 点案で、空きスロット回の最優先採択圏と明言されている。",
+        "cell": [
+          "k8s",
+          "experiment"
+        ],
+        "dod": "(1) ops/drills/node_reboot_drill.py が 3 モードを持つ: --selftest (クラスタ非依存のロジック試験) / --check (dry-run: 測定計画を構造化 JSON で出力し、ノードに一切触れない) / --fire (再起動計画を実行。--acknowledge <理由を書いたファイル> を必須とし、無ければ非 0 で拒否)。(2) --fire の測定計画は「事前スナップショット (全 namespace の pods / PVC / health latest.json の控え) → 再起動 → 復帰までの実測秒数・各 Deployment の Ready 到達順・heartbeat 再開」を含む。node01 を drain すると測定器自身が死ぬため、再起動そのものは人間の手動実行を想定し、測定計画を人間が 1 コマンドで実行できる形で残す (器は計測と証跡を担う)。(3) 結果 JSON (ops/drills/results/node-reboot-*.json) に実測復帰時間と「この間に取りこぼされるもの (通知・spawn の遅延)」を記録する。(4) docs/node01-reboot-drill.md に手順・前提ゲート・復旧の確認順を書く。(5) 実行が人間待ちの場合は準備完了を announce し、実行証跡が残るまで delivered にしない。",
+        "verify": [
+          "test -f ops/drills/node_reboot_drill.py",
+          "python3 ops/drills/node_reboot_drill.py --selftest",
+          "bash -c 'python3 ops/drills/node_reboot_drill.py --fire >/tmp/nrd.out 2>&1; test $? -ne 0 && grep -q acknowledge /tmp/nrd.out'",
+          "python3 ops/drills/node_reboot_drill.py --check | python3 -c \"import json,sys; d=json.load(sys.stdin); assert d['mode']=='dry-run'; assert 'measurements' in d\"",
+          "test -s docs/node01-reboot-drill.md"
+        ],
+        "irreversible": false,
+        "capabilities": [
+          "kubectl-write"
+        ],
+        "touches_apps": false,
+        "confidence": "confident",
+        "adopted": true,
+        "proposed_at": "2026-08-24T21:04:22Z"
+      },
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T20:42:08Z",
-  "last_activity_at": "2026-08-24T20:59:06Z",
+  "last_activity_at": "2026-08-24T21:04:40Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false,
-  "curriculum_registered_pr": 609
+  "curriculum_registered_pr": 616
 }
