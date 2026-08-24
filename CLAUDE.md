@@ -13,7 +13,7 @@ Terraform で VM プロビジョニング、NixOS でOS構成、Kubernetes (Argo
 - **Networking**: Tailscale
 - **Secrets**: SOPS, External Secrets Operator
 - **Auth**: Dex (Google OAuth)
-- **Apps**: ArgoCD, agent-rbac, Dex, External Secrets Operator, Tailscale Operator, Immich, Vaultwarden, Coder, ops-health-reporter, autopilot, ops-dashboard, syncthing, telegram-adapter
+- **Apps**: ArgoCD, agent-rbac, Dex, External Secrets Operator, Tailscale Operator, Immich, Vaultwarden, Coder, ops-health-reporter, autopilot, ops-dashboard, syncthing, telegram-adapter, AdGuard Home
 
 ## Directory Structure
 
@@ -35,6 +35,7 @@ apps/                — Kubernetes manifests (ArgoCD applications)
   ops-dashboard/       — 人間向けダッシュボード Mission Control（Next.js。transcript ライブ閲覧・プロジェクトボード・書き置き。app/ が実体、autopilot ns で稼働）
   syncthing/           — Syncthing（P2P ファイル同期）
   telegram-adapter/    — Telegram 受信アダプタ（Go。allowlist の private DM を ops-feedback へ流すだけ。OpenClaw の置き換え）
+  adguard/             — AdGuard Home（tailnet 全端末向け DNS 広告除去。53/tcp+udp と管理 UI を tailnet 公開）
 .sops.yaml            — SOPS 設定（暗号鍵の対象範囲）
 nix/images/proxmox-cloud/secrets.yaml — SOPS 暗号化ファイル（単一ファイル、トップレベルの secrets/ ディレクトリは存在しない）
 ```

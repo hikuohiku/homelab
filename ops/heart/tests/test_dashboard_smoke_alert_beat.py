@@ -31,6 +31,7 @@ from pathlib import Path
 from unittest import mock
 
 from ops.heart import facts, gitutil
+from ops.heart import heart as heart_module
 from ops.heart.heart import Heart
 from ops.heart.statefiles import StateFiles
 
@@ -38,6 +39,17 @@ REPO = Path(__file__).resolve().parents[3]
 # 同日内の連続ビートを見るため時刻は固定 (日付が変わると抑制は解けるのが正)
 NOW = datetime(2026, 8, 23, 9, 0, 0, tzinfo=timezone.utc)
 TODAY = "2026-08-23"
+
+
+class _FixedDatetime(datetime):
+    """beat() 冒頭の datetime.now(timezone.utc) を NOW に固定する。
+
+    heart.py は `from datetime import datetime` なので、モジュール属性
+    ops.heart.heart.datetime をこのサブクラスに差し替えれば効く。"""
+
+    @classmethod
+    def now(cls, tz=None):
+        return NOW if tz is None else NOW.astimezone(tz)
 
 
 def health_doc(status, reason="r", failed_checks=None):
@@ -82,6 +94,8 @@ class DashboardSmokeAlertBeatTest(unittest.TestCase):
         shadow でも adopt gate が clone を走らせるため。
         """
         return [
+            # beat() 内の datetime.now(timezone.utc) を NOW に固定 (実行日に依存させない)
+            mock.patch.object(heart_module, "datetime", _FixedDatetime),
             mock.patch.object(gitutil, "sync_main", lambda *a, **k: None),
             mock.patch.object(gitutil, "sync_state_branch", lambda *a, **k: None),
             mock.patch.object(gitutil, "commit_and_push_state", lambda *a, **k: None),
