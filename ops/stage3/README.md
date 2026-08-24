@@ -74,16 +74,20 @@ verdict は `blocked` / `ready_for_announce_draft` の 2 値しかない。「�
 
 ### 5. `loop-continuity-guarded` — ループ連続性 (現在: pass=true)
 
-- **閾値**: heart の livenessProbe (内側) と GitHub Actions watchdog (外側) の二重構え +
-  閾値の単一情報源 (rules.json)
+- **閾値**: heart の livenessProbe (内側) と、ループの外に居る別プロセス (常駐コア) の
+  二重構え + 閾値の単一情報源 (rules.json)
 - **なぜ**: VISION の賭けは「時間さえかければ届く」であり、止まったループはゼロを生む。
   死んだと言う口ごと死ぬ (旧・細切れループは止まったまま死んで誰も気づかなかった) を避ける
-  ため、クラスタ内 (livenessProbe, P-0065) とクラスタ外 (watchdog, 別障害ドメイン) の両方から
-  沈黙を検知する必要がある。30 分毎の cron は stale_seconds=7200 (2h) に対し最大 30 分の
-  検知遅れに収まるという算術
-- **現在値**: 二重構え済み。livenessProbe (period 30s / failure 3)、watchdog cron `*/30`、
-  fail-closed 判定 (`check_heartbeat_fresh.py`)、閾値は `rules.json` の
-  `heartbeat.stale_seconds=7200`
+  ため、ループ自身以外の目が要る。見るのは**ビートの鮮度**で、プロセスの生死ではない —
+  P-0027 の事故は「プロセスは生きているのにループが回っていない」だった
+- **現在値**: 二重構え済み。livenessProbe (period 30s / failure 3)、コアの driver が
+  60 秒毎に heart の Lease の `renewTime` と健全性レポートの `generated_at` を
+  fail-closed で判定 (`apps/autopilot-core/app/silence.go`)、閾値は `rules.json` の
+  `heartbeat.stale_seconds=7200` / `health.stale_seconds=21600`
+- **GitHub Actions の watchdog を畳んだ理由** (state-out-of-git Phase 7): 別障害ドメインに
+  居る利点はあったが、機械が git を定期的に叩く経路を 1 本も残さないという原則を優先した。
+  node01 ごと死ねばコアも死ぬ — そのときは Telegram が応答しなくなり、所有者が日常的に
+  使っている経路の上で沈黙が可視になる
 
 ### 6. `veto-machine-enforced` — veto の機械的実装 (現在: pass=true)
 
@@ -94,7 +98,7 @@ verdict は `blocked` / `ready_for_announce_draft` の 2 値しかない。「�
   (fail-closed)。irreversible プロジェクトが常に窓を待つ宣言も、開放後の不可逆操作への
   最後の歯止めになる
 - **現在値**: 宣言・実装済み。`window_hours=24` + stop_keywords 7 種、triage.classify による
-  機械分類、watchdog 本文の不変条件まで test で固定済み
+  機械分類。test で固定済み
 
 ## 台帳の直し方
 

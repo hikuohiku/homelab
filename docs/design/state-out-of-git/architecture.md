@@ -164,8 +164,8 @@ GitHub Actions で走る番人が 2 つある — `.github/workflows/watchdog.ym
 
 撤去対象: `.github/workflows/watchdog.yml`、`ops/check_heartbeat_fresh.py`、
 `ops/check_health_freshness.py`、`ops/tests/test_health_freshness.py`。
-**これらはまだ `main` にある** — 全ジョブが `if: false` で止まっているだけ。ファイルの
-撤去は #636 (Phase 7c) にあるが、#635 の上に積んであるので main には未着。
+**撤去済み** (Phase 7c、#636 → #635 に同梱)。撤去の前に全ジョブが `if: false` で
+止まっており、沈黙の検知が本番で一周した (下記 7a の実測) ことを確かめてある。
 
 ### 実施 (Phase 7a, #632 / #642) — 実際の障害で検知した
 
@@ -369,8 +369,8 @@ restic の credential を autopilot namespace に置かないため、専用 nam
 | — | Lease の `renewTime` を MicroTime 形式に直す (毎ビート 500 で生存が見えていなかった) | #649 | 完了 |
 | 4.5 | 手動採択の入口を admission gate へ | — | **未実装** (旧入口は 4b-2a で閉塞済み。上記) |
 | 6b | 書き置きの `ops-feedback` 経路を落とす | #628 | 完了 (実機の疎通は未確認。下記) |
-| 7b | `ops-feedback` に触る口を全部閉じる (telegram-adapter / コア) | #635 | **保留** (下記) |
-| 7c | 外部 watchdog の撤去 (`watchdog.yml` は 4b-2b で `if: false` 済み) | #636 | #635 の上に積んである。**main には未着** |
+| 7b | `ops-feedback` に触る口を全部閉じる (telegram-adapter / コア) | #635 | 完了 (実機の疎通は未確認。下記) |
+| 7c | 外部 watchdog の撤去 (`watchdog.yml` は 4b-2b で `if: false` 済み) | #636 | 完了 (#635 に同梱) |
 | 7d | 4 本のブランチを削除 | — | 未着。所有者の判断 |
 
 Phase 4 が本丸で、それ以外は本丸を軽くするための地ならし。実際、Phase 1・3・5 が
