@@ -5710,11 +5710,55 @@
       "job": "runner-p-0272-a1",
       "drift_count": 0,
       "stalled_reason": "budget_exhausted"
+    },
+    {
+      "id": "P-0278",
+      "title": "application-controller の 512Mi の壁を、30 日分の実測ピークから引き直して今日で終わらせる",
+      "state": "proposed",
+      "branch": "project/p-0278",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "python3 ops/tools/argocd_controller_peaks.py --check && test -s ops/projects/logs/P-0278/controller_memory_peaks.json",
+        "python3 -c \"import json,sys; ev=json.load(open('ops/projects/logs/P-0278/controller_memory_peaks.json')); sys.exit(0 if ev.get('max_working_set_bytes') and ev.get('source')=='ops-health-report/history' else 1)\"",
+        "python3 ops/check_argocd_controller_capacity.py",
+        "git fetch origin ops-health-report --depth=1 && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys,datetime; d=json.load(sys.stdin); bad=[t for p in d.get('pod_issues',[]) if 'application-controller' in p.get('name','') for t in p.get('terminated',[]) if t.get('reason')=='OOMKilled' and t.get('finished_at','') > sys.argv[1]]; sys.exit(1 if bad else 0)\" $(cat ops/projects/logs/P-0278/applied_at)"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 2000000
+      },
+      "created": "2026-08-24",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0279",
+      "title": "健康レポートが自分への入力を 2 箇所で読み失敗している — heart の心拍 (HTTP 400) と画面スモーク (404) を今日の実測で復活させる",
+      "state": "proposed",
+      "branch": "project/p-0279",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "grep -q 'container=heart' apps/ops-health-reporter/report.py",
+        "git fetch origin ops-health-report --depth=1 && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); hb=d['autopilot']['heartbeat']; assert not hb.get('error'), hb; assert hb.get('beat') or hb.get('last_end'), hb\"",
+        "git fetch origin ops-health-report --depth=1 && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); s=d.get('dashboard_smoke',{}); assert s.get('status') not in ('no_data',None), s\"",
+        "grep -q 'container=' ops/memory/substrate.md"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0,
+        "soft_cap": 1500000
+      },
+      "created": "2026-08-24",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-23T23:50:20Z",
-  "last_activity_at": "2026-08-24T06:59:53Z",
+  "last_curriculum_at": "2026-08-24T07:00:05Z",
+  "last_activity_at": "2026-08-24T07:00:05Z",
   "last_critic_at": "2026-08-23T07:23:44Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
