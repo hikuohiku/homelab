@@ -619,9 +619,35 @@ reporter 最新 run も bd39f315f (00:00:07Z) のまま。新たな発見は無�
 
 ## 次のセッションへの一言
 
-セッション 13・14 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+セッション 13〜15 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
 `git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
 spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること。
 curriculum / 人間による spec 修正 (verify 3 の merge 後移管) か runner escape hatch が
 着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or 03:43 JST 待ち →
 reporter run 待ち → verify 3 green 化) に戻る。
+
+## セッション 15 (2026-08-24 10:2x JST)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。pull ref 再確認 (555 refs 全件に対し本ブランチ固有 commit の一致ゼロ)。
+main 先頭は #580 (59169fddf) のまま session 14 から一切不変 (spec・runner 非接触も同様)。
+なお一時ファイルを `/tmp/opencode/` 固定パスに置こうとして書き込み不可 (Permission denied)
+だったため `mktemp` に切替 — PROGRESS 冒頭の「固定パス /tmp は前セッションの残骸を拾う」
+罠の別形態 (ディレクトリ自体が非書き込み) を実測。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 13 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 13 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | red (`recovery_probe: None`) — merge 前なので想定どおり |
+
+reporter 最新 run も bd39f315f (00:00:07Z) のまま。新たな発見は無し。
+
+## 次のセッションへの一言
+
+セッション 13〜15 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+`git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
+spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
+(一時ファイルは必ず `mktemp`)。curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
+か runner escape hatch が着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or
+03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
