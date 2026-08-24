@@ -15,8 +15,9 @@ COPY . .
 RUN npm run build
 
 FROM node:22-alpine@sha256:c610fcdfb1d5b4740dd70c284ed3cb16bb857e0f7166196e36a5501df7a3aa32 AS runner
-RUN apk add --no-cache git \
- && addgroup -g 10001 dashboard \
+# git は入れない (設計 state-out-of-git 4b-2b)。読み先は Kubernetes API と
+# heart の /healthz と PVC だけで、このイメージから git を打つ経路は無い
+RUN addgroup -g 10001 dashboard \
  && adduser -D -u 10001 -G dashboard -h /home/dashboard dashboard
 WORKDIR /app
 ENV NODE_ENV=production \
