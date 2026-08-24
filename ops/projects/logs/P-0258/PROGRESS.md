@@ -745,3 +745,39 @@ spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで
 03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
 なお P-0279 が merge されたら `apps/ops-health-reporter/` の conflict 有無を先に確認
 してから verify を回すこと。
+
+## セッション 19 (2026-08-24 09:3x JST)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 18 から不変。新 curriculum ブランチも無し
+(最新は `heart/curriculum-20260824-002231`)。P-0279 も未着地 (main の
+`apps/ops-health-reporter/` への recovery 言及ゼロで再確認)。
+待機中に ops-state beat・`project/p-0243`/`project/p-0272` の push があったが、ops-state の
+差分は `heartbeat.json`/`metrics.jsonl` のみ、p-0243/p-0272 も本ブランチのファイル
+(`apps/recovery-canary/`, `apps/ops-health-reporter/`) に非接触で conflict リスク無し。
+spec・runner 非接触。デッドロック世界に変化なし。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 17 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 17 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | red (`recovery_probe: None`) — merge 前なので想定どおり |
+
+### 発見
+
+- reporter の新 run が着地した (bd39f315f → 7c3f208b2, generated_at 2026-08-24T00:30:06Z)。
+  session 13〜18 の間は 00:00:07Z のまま推移していたので、今日 2 本目の run。
+  差分は `history/2026-08-24.jsonl` への 1 行追記と latest.json の更新のみで、
+  `recovery_probe` は None のまま (merge 前なので想定どおり)。run 間隔が 30 分空いた理由は
+  本 spec のスコープ外 — 記録だけ残す
+
+## 次のセッションへの一言
+
+セッション 13〜19 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+`git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
+spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
+(一時ファイルは必ず `mktemp`)。curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
+か runner escape hatch が着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or
+03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
+なお P-0279 が merge されたら `apps/ops-health-reporter/` の conflict 有無を先に確認
+してから verify を回すこと。
