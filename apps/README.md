@@ -68,6 +68,7 @@ kubectl --context=tailscale-operator-context get application -n argocd
 ```
 NAME                 SYNC STATUS   HEALTH STATUS
 apps                 Synced        Healthy
+adguard              Synced        Healthy
 agent-rbac           Synced        Healthy
 argocd               Synced        Healthy
 autopilot            Synced        Healthy
@@ -133,7 +134,8 @@ apps/
 ├── autopilot/
 ├── ops-dashboard/
 ├── syncthing/
-└── telegram-adapter/
+├── telegram-adapter/
+└── adguard/
 ```
 
 各アプリは以下の構造:

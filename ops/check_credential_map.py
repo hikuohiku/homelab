@@ -116,6 +116,8 @@ DECLARED_DOPPLER_KEYS = frozenset(
 # (namespace, name) の組に拡張すること)
 DECLARED_SECRET_TARGETS = frozenset(
     {
+        "adguard-restic-backup-credentials",
+        "adguard-restic-credentials",
         "argocd-dex-client-secret",
         "autopilot-credentials",
         "coder-db-url",

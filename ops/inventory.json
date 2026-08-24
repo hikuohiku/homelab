@@ -483,6 +483,29 @@
       "note": "T-0138 で新設。タグに v プレフィックスは無い（Docker Hub 実測、2026-08-06）。2.x 系は v1 系から DB を LevelDB→SQLite に変更しているが新規インストールはマイグレーション対象外（GitHub Releases v2.0.0 実測）"
     },
     {
+      "id": "adguard",
+      "kind": "image",
+      "name": "adguard/adguardhome",
+      "current": "v0.107.79",
+      "file": "apps/adguard/deployment.yaml",
+      "match": "adguard/adguardhome:",
+      "upstream": "github:AdguardTeam/AdGuardHome",
+      "policy": "auto",
+      "note": "P-0270 で新設 (tailnet 全端末向け DNS 広告除去)。タグは v 付き形式のみ存在（Docker Hub 実測、2026-08-23）。Docker Hub には v0.108.0-b.* の beta が並ぶが上流の真実は GitHub Releases latest（prerelease 除く）なので watcher の github: scheme と一致する。同一ファイル内に同タグが 2 箇所（seed-config initContainer と本体）あるため更新時は必ず揃えること。0.107→0.108 系への minor 更新は config schema migration を伴う可能性があるのでリリースノートを確認すること"
+    },
+    {
+      "id": "adguard-restic-image",
+      "kind": "image",
+      "name": "restic/restic (backup CronJob)",
+      "current": "0.19.1",
+      "file": "apps/adguard/restic-backup-cronjob.yaml",
+      "match": "restic/restic:",
+      "upstream": "github:restic/restic",
+      "policy": "auto",
+      "note": "P-0270 で新設。他5ファイルと同じタグ (0.19.1) を使う設計。同一ファイル内に adguard-restic-backup と adguard-restic-retention の2箇所。check_version_sync.py の GROUPS に6ファイル目として登録済み（vaultwarden-restic-image の note 参照）。タグを上げるときは6ファイル全部を揃えること",
+      "observability_impact": "adguard の restic バックアップ・retention CronJob が使用。壊れるとバックアップが取れなくなるが adguard 本体の可用性には影響しない"
+    },
+    {
       "id": "nats",
       "kind": "image",
       "name": "nats (JetStream。cluster 内のイベント経路)",
