@@ -1,7 +1,15 @@
 # 常駐コアの設定。initContainer が /work へコピーし、opencode はそこを cwd にする。
 #
-# 秘密はここに書かない。MCP の子プロセスは opencode の環境変数を継承するため
-# (2026-08-23 実測)、TELEGRAM_BOT_TOKEN 等は Deployment の env から届く。
+# MCP は remote (HTTP) で、実体は同じ Pod の別コンテナ (deployment.yaml の
+# telegram-adapter / core-driver-mcp)。秘密はそちらの env にだけあり、opencode の
+# プロセスには存在しない。
+#
+# ここに秘密を書かないのはもちろん、headers にも置かないこと。opencode の
+# GET /config は {env:...} 展開**後**の値をそのまま返すので、コアから丸見えになる。
+# 同一 Pod の loopback はネットワーク名前空間が境界なので、そもそも認証が要らない。
+#
+# url のポートは deployment.yaml の --listen と、driver の CORE_MCP_TARGETS に
+# 揃えること。キー名 (telegram / homelab) は CORE_MCP_TARGETS の name と一致が必須
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -13,14 +21,16 @@ data:
       "$schema": "https://opencode.ai/config.json",
       "mcp": {
         "telegram": {
-          "type": "local",
-          "command": ["/mcp/telegram-adapter", "mcp"],
-          "enabled": true
+          "type": "remote",
+          "url": "http://127.0.0.1:4097/mcp",
+          "enabled": true,
+          "oauth": false
         },
         "homelab": {
-          "type": "local",
-          "command": ["/mcp/core-driver", "mcp"],
-          "enabled": true
+          "type": "remote",
+          "url": "http://127.0.0.1:4098/mcp",
+          "enabled": true,
+          "oauth": false
         }
       },
       "permission": {

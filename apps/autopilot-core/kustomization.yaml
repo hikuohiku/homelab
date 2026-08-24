@@ -4,6 +4,7 @@ kind: Kustomization
 # autopilot-core — 常駐する opencode セッション (コア本体) と driver。
 # namespace は既存の autopilot を使うため namespace.yaml は無い
 resources:
+  - serviceaccount.yaml
   - pvc.yaml
   - config.yaml
   - external-secret.yaml

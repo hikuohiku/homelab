@@ -267,10 +267,10 @@ GROUPS = [
         ],
     },
     {
-        # core イメージは同一ファイル内の 3 箇所 (init 2 つと driver) に出る。
-        # 1 箇所だけ pin し忘れると「MCP バイナリは新しいのに driver は古い」等の
-        # 食い違いが起きるので、_all でファイル内の一致を検査する
-        "name": "autopilot-core image digest (init 2 つと driver の 3 箇所)",
+        # core イメージは同一ファイル内の複数箇所 (init 1 + MCP サイドカー 2 + driver) に出る。
+        # 1 箇所だけ pin し忘れると「MCP サイドカーは新しいのに driver は古い」等の
+        # 食い違いが起きるので、_all でファイル内の一致を検査する (箇所数には依存しない)
+        "name": "autopilot-core image digest (init / MCP サイドカー / driver)",
         "targets": [
             ("apps/autopilot-core/deployment.yaml", lambda: extract_image_tag_all(
                 "apps/autopilot-core/deployment.yaml", "ghcr.io/hikuohiku/homelab-autopilot-core@"

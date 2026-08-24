@@ -30,6 +30,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -175,7 +176,10 @@ func clip(s string) string {
 
 type mcpServer struct {
 	client *client
-	out    *json.Encoder
+	// out は応答の書き出し先。stdio では stdout、HTTP では 1 リクエストごとの
+	// バッファへ差し替える (mcp_http.go の handleBuffered)。mu はその差し替えの排他
+	out *json.Encoder
+	mu  sync.Mutex
 	// dispatch は command を heart へ渡す経路。既定は NATS への JetStream publish で、
 	// テストでは差し替える。nil のときだけ遅延で接続する (バス未設定でも
 	// 読み取りツールは使えるようにするため)
@@ -335,7 +339,9 @@ func (s *mcpServer) serve(ctx context.Context, in io.Reader) error {
 	return scanner.Err()
 }
 
-func runMCP() {
+// runMCP は MCP サーバを 1 つ起動する。listen が空なら stdio、
+// そうでなければ HTTP streamable でその addr を待ち受ける。
+func runMCP(listen string) {
 	log.SetFlags(0)
 	log.SetPrefix("[core-driver/mcp] ")
 	// stdout は JSON-RPC 専用。ログは必ず stderr へ
@@ -350,6 +356,13 @@ func runMCP() {
 
 	server := &mcpServer{client: c, out: json.NewEncoder(os.Stdout)}
 	defer func() { server.pub.close() }()
+	if listen != "" {
+		log.SetFlags(log.LstdFlags | log.LUTC)
+		if err := serveHTTPMCP(server, listen); err != nil {
+			log.Fatalf("%v", err)
+		}
+		return
+	}
 	if err := server.serve(context.Background(), os.Stdin); err != nil {
 		log.Fatalf("stdin の読み取りに失敗: %v", err)
 	}

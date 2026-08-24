@@ -417,7 +417,11 @@ func truncate(s string, n int) string {
 // 一箇所に保つため (受信と送信で判定がずれると事故になる)。
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
-		runMCP()
+		listen, err := parseMCPListen(os.Args[2:])
+		if err != nil {
+			log.Fatalf("起動できません: %v", err)
+		}
+		runMCP(listen)
 		return
 	}
 	runAdapter()

@@ -70,6 +70,15 @@ func envOr(key, fallback string) string {
 	return fallback
 }
 
+// envOrInt は秒数のような小さい正の整数を読む。壊れた値は既定に落とす
+// (起動を止めるほどのことではない)。
+func envOrInt(key string, fallback int) int {
+	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key))); err == nil && n > 0 && n <= 3600 {
+		return n
+	}
+	return fallback
+}
+
 func loadConfig() (*config, error) {
 	c := &config{
 		opencodeURL: strings.TrimSuffix(envOr("OPENCODE_URL", "http://127.0.0.1:4096"), "/"),
@@ -431,7 +440,11 @@ func (c *client) waitForOpencode(ctx context.Context) {
 // 同じバイナリに同居させるのは、GitHub の読み方と設定の解釈を一箇所に保つため。
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
-		runMCP()
+		listen, err := parseMCPListen(os.Args[2:])
+		if err != nil {
+			log.Fatalf("起動できません: %v", err)
+		}
+		runMCP(listen)
 		return
 	}
 	runDriver()
@@ -454,6 +467,15 @@ func runDriver() {
 	ctx := context.Background()
 	c.waitForOpencode(ctx)
 
+	// MCP サイドカーの見張り。opencode は remote MCP を自動再接続しないので、
+	// サイドカーが入れ替わったら driver が繋ぎ直す (mcp_reconnect.go)
+	watcher, err := newMCPWatcher(c)
+	if err != nil {
+		log.Fatalf("起動できません: %v", err)
+	}
+	watcher.sync(ctx)
+	lastMCPCheck := time.Now()
+
 	// バスからの入力。設定が無ければ nil で、その場合は GitHub 側だけを読む。
 	//
 	// 繋がらないときに落とさないのは、この driver が所有者の「止めて」を運ぶ唯一の
@@ -475,6 +497,13 @@ func runDriver() {
 	sessionID := ""
 	var lastHealthCheck time.Time
 	for {
+		// コアのツールが黙って壊れていないかを先に見る。ここが死んでいると
+		// 書き置きに返事はできても homelab を見られない
+		if time.Since(lastMCPCheck) >= mcpCheckInterval() {
+			watcher.sync(ctx)
+			lastMCPCheck = time.Now()
+		}
+
 		if sessionID == "" {
 			id, err := c.ensureSession(ctx)
 			if err != nil {
