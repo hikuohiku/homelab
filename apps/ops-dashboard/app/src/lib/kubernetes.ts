@@ -35,6 +35,42 @@ export interface KubeSnapshot {
 
 type JsonObject = Record<string, any>;
 
+// reporter (apps/ops-health-reporter/report.py) が書く latest.json の
+// node_saturation キーから、CPU 飽和前兆 (P-9037) の warnings 文面を作る (純関数)。
+// status=warn のときだけ文字列を返し、ok・キー無し・観測失敗 (error) は undefined。
+// 実測値 (requests_m/allocatable_m・load_1m/vcpus) を載せて数字で見せる。
+export function saturationWarning(reportDoc: JsonObject | undefined): string | undefined {
+  const sat = reportDoc?.node_saturation;
+  if (!sat || typeof sat !== "object" || sat.status !== "warn") return undefined;
+  const reasons = Array.isArray(sat.reasons) ? sat.reasons : [];
+  const parts: string[] = [];
+  if (reasons.includes("requests_ratio")) {
+    parts.push(`CPU requests ${sat.requests_m ?? "?"}m/${sat.allocatable_m ?? "?"}m`);
+  }
+  if (reasons.includes("load")) {
+    parts.push(`load ${sat.load_1m ?? "?"} > vCPU ${sat.vcpus ?? "?"}`);
+  }
+  const detail = parts.length ? `: ${parts.join(" / ")}` : "";
+  return `CPU 飽和前兆 (${sat.node ?? "node01"})${detail}`;
+}
+
+// latest.json (autopilot/ops-health-report ConfigMap の data キー) を doc に解釈。
+// 読めない・壊れていれば undefined (飽和前兆の表示は best-effort — 巻き添えで
+// クラスタ観測全体を止めない)
+export function parseReportDoc(configmap: JsonObject | null): JsonObject | undefined {
+  if (!configmap || typeof configmap.data !== "object" || configmap.data === null) {
+    return undefined;
+  }
+  const raw = configmap.data["latest.json"];
+  if (typeof raw !== "string") return undefined;
+  try {
+    const doc = JSON.parse(raw);
+    return doc && typeof doc === "object" ? doc : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function kubeGet(pathname: string): Promise<JsonObject> {
   const explicitUrl = process.env.KUBERNETES_API_URL;
   const host = process.env.KUBERNETES_SERVICE_HOST;
@@ -143,13 +179,19 @@ export function buildKubeSnapshot(jobDoc: JsonObject, podDoc: JsonObject, heartD
 
 export async function getKubeSnapshot(): Promise<KubeSnapshot> {
   try {
-    const [jobs, pods, heart, residents] = await Promise.all([
+    const [jobs, pods, heart, residents, healthCm] = await Promise.all([
       kubeGet(`/apis/batch/v1/namespaces/${NAMESPACE}/jobs?limit=200`),
       kubeGet(`/api/v1/namespaces/${NAMESPACE}/pods?limit=200`),
       kubeGet(`/apis/apps/v1/namespaces/${NAMESPACE}/deployments/autopilot-heart`),
       kubeGet(`/apis/apps/v1/namespaces/${NAMESPACE}/deployments?labelSelector=${encodeURIComponent("heart/resident=true")}`),
+      // CPU 飽和前兆 (P-9037)。ConfigMap が無い・RBAC 未適用でもクラスタ観測を
+      // 止めない (best-effort の warnings 表示)
+      kubeGet(`/api/v1/namespaces/${NAMESPACE}/configmaps/ops-health-report`).catch(() => null),
     ]);
-    return buildKubeSnapshot(jobs, pods, heart, residents);
+    const snapshot = buildKubeSnapshot(jobs, pods, heart, residents);
+    const saturation = saturationWarning(parseReportDoc(healthCm));
+    if (saturation) snapshot.warning = saturation;
+    return snapshot;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { jobs: [], residents: [], heartReady: false, warning: message };

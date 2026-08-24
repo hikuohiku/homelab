@@ -24,6 +24,10 @@ import urllib.request
 # cluster 外 (CI・検査スクリプト) が importlib でロードしたときの解決用フォールバック
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 import download_budget
+# CPU 飽和前兆の判定 (P-9037)。canonical は ops/tools/node_saturation.py で、
+# configMapGenerator がこのディレクトリに置いた同一内容のコピーを import する
+# (drift は ops/check_node_saturation_script_sync.py が CI で検出)
+import node_saturation
 
 SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
 K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
@@ -205,6 +209,44 @@ def collect_node_metrics():
             }
         )
     return out
+
+
+def collect_node_saturation():
+    """node01 の CPU 飽和前兆を実測する (P-9037)。
+
+    2026-08-24 18:18 JST、runner×2 + curriculum + heart の requests 合計
+    3761m/4000m でホスト load 25 になり kube-apiserver も sshd も応答不能になった。
+    「もうすぐ沈む」を告げる計器として、requests/allocatable とホスト load を
+    実測し閾値超過で status=warn を返す (判定は node_saturation.judge の純関数)。
+
+    requests は全 namespace の pod spec、allocatable は node status から取り、
+    metrics.k8s.io は要らない。load は pod 内から読める /proc/loadavg を使う
+    (loadavg は PID namespace で仮想化されない — substrate.md 実測記録参照。
+    kubelet stats/summary には host load が無いため、取得源は /proc に倒す)。
+    単一ノード前提 (substrate.md の実測どおり)。読み手 (heart) は status=warn を
+    briefing / incident へ流す (P-0128 の budget 警告と同じ 2 段階)。
+    """
+    pods = k8s_get("/api/v1/pods")
+    nodes = k8s_get("/api/v1/nodes")
+    items = nodes.get("items", [])
+    if not items:
+        raise RuntimeError("node が見つからない")
+    # 単一ノード前提。node01 があればそれを、無ければ最初の 1 台を使う
+    node = next(
+        (n for n in items if n.get("metadata", {}).get("name") == "node01"),
+        items[0],
+    )
+    name = node.get("metadata", {}).get("name")
+    requests_m = node_saturation.sum_cpu_requests(pods)
+    alloc_m = node_saturation.allocatable_cpu_millicores(node)
+    load = node_saturation.read_loadavg()
+    report = node_saturation.judge(requests_m, alloc_m, load, node_saturation.vcpus(node))
+    report["node"] = name
+    report["load_source"] = "proc_loadavg" if load is not None else None
+    report["checked_at"] = datetime.datetime.now(
+        datetime.timezone.utc
+    ).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return report
 
 
 PVC_USAGE_NAMESPACES = ["immich", "vaultwarden", "coder"]
@@ -734,6 +776,7 @@ def main():
         "nodes": collect(collect_nodes),
         "pod_metrics": collect(collect_pod_metrics),
         "node_metrics": collect(collect_node_metrics),
+        "node_saturation": collect(collect_node_saturation),
         "pvc_usage": collect(collect_pvc_usage),
         "download_budget": collect(collect_download_budget),
         "externalsecrets": collect(collect_externalsecrets),
@@ -780,6 +823,13 @@ def main():
              "成功日は記録のみで通知予算を消費しない。readiness probe は HTTP 200 しか見ないため、"
              "この検査だけが「実際に描画したときだけ見える破綻」を拾う。スクリーンショット実体は保存せず "
              "記録しない。"
+             " node_saturation キーは CPU 飽和前兆の常設計器（P-9037）。全 namespace の pod の "
+             "spec.containers[].resources.requests.cpu 合計と node01 の status.allocatable.cpu から "
+             "requests 比率を、pod 内から読める /proc/loadavg からホスト load を実測し、"
+             "allocatable の 90% 超 または load > vCPU 数で status=warn（読み手の heart が "
+             "briefing / incident へ流す）。loadavg は PID namespace で仮想化されないため node01 上の "
+             "pod から host 全体の load が読める（2026-08-24 実測）。kubelet stats/summary には host "
+             "load が無い（P-9029 審査指摘）ため取得源は /proc に倒している。"
         ),
     }
 

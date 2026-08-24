@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildKubeSnapshot, parseResidents } from "../src/lib/kubernetes";
+import { buildKubeSnapshot, parseReportDoc, parseResidents, saturationWarning } from "../src/lib/kubernetes";
 
 // heart/resident: "true" の Deployment = 常駐エージェント (住人)。
 // fixture はクラスタの実応答と同じ形の JSON をインラインで持つ (unit test は API を呼ばない)
@@ -86,4 +86,44 @@ test("buildKubeSnapshot は Job 表示と heartReady を保ったまま resident
   assert.equal(snapshot.jobs[0].projectId, "P-0001");
   assert.equal(snapshot.heartReady, true);
   assert.deepEqual(snapshot.residents.map((r) => r.id), ["autopilot-core", "autopilot-heart"]);
+});
+
+// P-9037: reporter の latest.json node_saturation キーからの warnings 抽出 (純関数)
+const SATURATION_REPORT = {
+  node_saturation: {
+    status: "warn",
+    reasons: ["requests_ratio", "load"],
+    requests_m: 3761,
+    allocatable_m: 4000,
+    requests_ratio: 0.9403,
+    load_1m: 25.0,
+    vcpus: 4,
+    node: "node01",
+    load_source: "proc_loadavg",
+  },
+};
+
+test("saturationWarning は 08-24 実測値 (warn) を数値入り文面にする", () => {
+  const warning = saturationWarning(SATURATION_REPORT);
+  assert.ok(warning);
+  assert.match(warning, /CPU 飽和前兆 \(node01\)/);
+  assert.match(warning, /3761m\/4000m/);
+  assert.match(warning, /25 > vCPU 4/);
+});
+
+test("saturationWarning は ok / キー無し / 観測失敗を出さない", () => {
+  assert.equal(saturationWarning(undefined), undefined);
+  assert.equal(saturationWarning({}), undefined);
+  assert.equal(saturationWarning({ node_saturation: { status: "ok", reasons: [] } }), undefined);
+  assert.equal(saturationWarning({ node_saturation: { error: "FileNotFoundError" } }), undefined);
+});
+
+test("parseReportDoc は latest.json を解釈し、壊れた入力は undefined", () => {
+  assert.deepEqual(
+    parseReportDoc({ data: { "latest.json": JSON.stringify(SATURATION_REPORT) } }),
+    SATURATION_REPORT,
+  );
+  assert.equal(parseReportDoc(null), undefined);
+  assert.equal(parseReportDoc({}), undefined);
+  assert.equal(parseReportDoc({ data: { "latest.json": "not json" } }), undefined);
 });
