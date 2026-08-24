@@ -124,11 +124,19 @@ spec:
             - name: HEART_DATA_DIR
               value: /data
           resources:
-            # requests のみ。memory limits は実測が無いうちは付けない (CHARTER §4)
+            # memory limits は実測が無いうちは付けない (CHARTER §4)。
+            # CPU の limits は付ける（throttle なので超過しても回復する）。
+            # 2026-08-24 の node01 全停止時、このコンテナは 834m を使っていた
+            # （4 コアのうち Job 3 本で 2927m、heart で 834m、計 3761m）。
+            # limit 1 コアは実測ピークのすぐ上で、平常時は当たらない。
+            # requests は据え置き（heart は常時ほぼアイドルで、834m はビート内の
+            # git 操作と Job 観測が重なった瞬間値。ここを上げると常時予約が増えるだけ）
             requests:
               cpu: 50m
               memory: 256Mi
               ephemeral-storage: 1Gi
+            limits:
+              cpu: "1"
           volumeMounts:
             - name: config
               mountPath: /config

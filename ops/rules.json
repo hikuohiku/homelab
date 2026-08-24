@@ -17,7 +17,8 @@
     "_comment": "Discord への即時送信は 1 日この件数まで。超過分は digest に畳む。即時送信してよい型は予告 (announce)・納品 (deliver)・question・障害 (incident) のみ。**これは人間の注意力の予算であって金銭ではない** (金額のサーキットブレーカーは 2026-08-24 に廃止した)"
   },
   "runner": {
-    "max_concurrent": 6,
+    "max_concurrent": 2,
+    "_max_concurrent_comment": "同時走行の runner 数。2026-08-24 に 6→2。理由は方針でなく**ノードの物理的な容量**: node01 は 4 コアしかない。同日 18:18 JST、runner×2 (1012m + 959m) + curriculum (956m) + heart (834m) = 3761m/4000m でホスト load 25、kube-apiserver も sshd も応答しなくなった。spawn.py の Job は 1 本 = requests/limits ともに 1 コアになったので、収まる本数はノード容量から逆算される: 4000m - (autopilot 常駐の requests 約 350m: heart 50m + bus-sidecar 10m + core 130m + dashboard 100m + nats 50m + telegram-adapter 10m) - (他 namespace + k3s 自身で約 1350m) ≒ 2300m → 1 コアの Job は 2 本。curriculum / critic / chore はこの上限とは別枠で走りうるが、requests が実測どおりになった以上、容量を超えた分はスケジューラが Pending にする (ノードが落ちる代わりに順番待ちになる)。2026-08-22 に人間の指示『がっつり並列』で 4→6 に上げた経緯があるが、その並列度は 4 コアには乗らなかった。**並列度を戻したいなら node01 の vCPU を増やすこと**。ここの数字はノードの容量に従属するので、vCPU を変えたら上の逆算をやり直す",
     "session_max_seconds": 259200,
     "inactivity_nudge_seconds": 1800,
     "inactivity_kill_seconds": 3600,
