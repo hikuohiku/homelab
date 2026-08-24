@@ -7176,7 +7176,44 @@
         "adopted": true,
         "proposed_at": "2026-08-24T22:34:44Z"
       },
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-24T22:35:40Z",
+        "verify": [
+          {
+            "cmd": "test -f ops/security/nats_durability_audit.py && python3 ops/security/nats_durability_audit.py --selftest",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "test -s docs/security/nats-durability.md && grep -qE 'stream|retention' docs/security/nats-durability.md && grep -q 'veto' docs/security/nats-durability.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "! grep -qE 'TELEGRAM_BOT_TOKEN|AUTOPILOT_GITHUB_TOKEN|DISCORD_WEBHOOK' docs/security/nats-durability.md",
+            "ok": true,
+            "rc": 0,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: docs/security/nats-durability.md: No such file or directory\n"
+          }
+        ],
+        "verdict": "some_pass",
+        "passed": [
+          "! grep -qE 'TELEGRAM_BOT_TOKEN|AUTOPILOT_GITHUB_TOKEN|DISCORD_WEBHOOK' docs/security/nats-durability.md"
+        ],
+        "broken": []
+      }
     }
   ],
   "chores": [],
