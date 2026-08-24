@@ -55,9 +55,13 @@ server:
 
 controller:
   resources:
+    # memory limits は付けない。2026-08-24 12:23 UTC、node01 復旧後の一斉 sync で
+    # 512Mi の壁に当たって OOMKilled (exitCode 137) を 5 回繰り返し、
+    # autopilot / immich の sync が完了せず heart が起動できなかった。
+    # OOMKill は回復しないので、実測の裏付けなしに memory limits を置かない
+    # (CHARTER §4)。CPU limits は throttle で回復するため据え置く
     limits:
       cpu: 500m
-      memory: 512Mi
     requests:
       cpu: 250m
       memory: 256Mi
