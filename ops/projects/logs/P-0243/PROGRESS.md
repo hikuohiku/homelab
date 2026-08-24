@@ -1049,3 +1049,51 @@
 - 「PR 差分 N ファイル」の比較は数え方に注意: コード側だけなら 12、
   P-0243 ログ込みなら 14 (セッションごとに PROGRESS 追記で自然に増えるのは後者だけ)
 - 生死が気になったら archive.jsonl ではなく ops-state:projects.json の `state` を見る
+
+## セッション 26 (2026-08-24) — 短絡チェックのみ (main 不動・census 未着・ops-state 動くが P-0243 active 不変), コード変更ゼロ
+
+### やったこと
+
+- **fetch 先行 → main 新着 = 0** (#580 のまま)。merge 作業なし。
+  census も未着 (`git ls-tree -r origin/main | grep -c egress` = 0)
+- fetch 後に ops-state が動いた (daa92da4c → 35851b841) ため ops-state:projects.json を確認:
+  P-0243 `state=active`・spawn_count=1・drift_count=0・adopt_gate_attempts=1 の不変。
+  欄の変化は無し (変化したら何か起きている合図、は継続)
+- spec verify 一式を再走: V1 green / V3 green / V2 red — V2 は既知 fail-fast rc=2、
+  stderr は wrapper 実測と同一メッセージ (`/tmp/opencode` 書き込みプローブで中断、
+  クラスタ接触前なので副作用ゼロ)
+- PR 差分不変を確認: merge-base (59169fddf) 起点でコード側 12 ファイル +
+  P-0243 ログ 2 ファイル = 14 ファイル。spawn.py emptyDir mount (/tmp/opencode, 64Mi)
+  無傷を実読確認 (mountPath / sizeLimit 行とも元位置のまま)
+- demo.json 完全性チェック全パス (トップレベル bool 7 個形式 + pods.*.probe 対照)。
+  7 bool の内訳確認済み: labeled_blocked / unlabeled_allowed / dns_ok_labeled /
+  dns_ok_control / cleaned_up / all_passed / probes_conclusive
+
+### 発見 (仕様外)
+
+- 今セッションで新しい発見は無し
+
+### 検証 (全部自分で実走済み)
+
+- fetch + main 追い越し判定 (新着 0) / census 未着確認 /
+  ops-state:projects.json P-0243 state=active 確認 /
+  spec verify V1 green / V3 green / V2 既知 fail-fast rc=2 (wrapper 実測と同一メッセージ) /
+  PR 差分 14 ファイル (コード 12 + ログ 2) 不変確認 /
+  spawn.py emptyDir mount 実読確認 / demo.json 完全性チェック (トップレベル 7 bool 形式)
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4〜25 から不変**: V2 は本 PR の merge+sync 後の新 runner Pod で
+  自動 green 化する (spawn.py の emptyDir mount 済み)。Pod 内での再走・権限 hack は不要
+  (sudo 不在まで実証済み)。やることは「PR merge を待つ」だけ。main 新着なければ短絡でよい
+- census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+  到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+- main 追い越しの手順はセッション 17 の「罠注意」参照 (merge-base diff で中身確認)
+- 「PR 差分 N ファイル」の比較は数え方に注意: コード側だけなら 12、
+  P-0243 ログ込みなら 14 (セッションごとに PROGRESS 追記で自然に増えるのは後者だけ)
+- 生死が気になったら archive.jsonl ではなく ops-state:projects.json の `state` を見る
+- **V2 を実走する前の一手順 (セッション 26 追加)**: 自前で `/tmp/opencode` の書き込み
+  可否だけ先にプローブすること。もし環境側が変わって書けるようになっていた場合、
+  V2 の実走はそのまま in-cluster ドリル (一時 NP + Pod 2 本の作成) まで進む。
+  短絡セッションで副作用を起こす意図はないので、「fail-fast になる予測 → 実行」の順。
