@@ -133,6 +133,51 @@
    の有効/無効も確認すること
 4. 実機で checkpoint 再開が v3.1.0 で正しく動くか (issue #29487 / PR #29516 の修正) を確認する
 
+### 2026-08-24 (worker #4) — verify 項目 3 を green にした (docs/immich-checksum.md)
+
+**やったこと**:
+- `docs/immich-checksum.md` を新規作成。verify 項目 3 (`test -f docs/immich-checksum.md`)
+  を green にした (下記「受入検証」)。
+- PROJECT.md の「API 形・挙動は実測でしか書かない (P-0035 の流儀)」に従い、本文は
+  「**上流ソースで確定**」(worker #1/#2 が実読した immich v3.1.0 相当の enum.ts /
+  integrity-admin.controller.ts / config.ts) と「**実機確認待ち**」(timeLimit 実値・
+  checkpoint 再開の実機挙動・内蔵 cron の有効/無効・実機レスポンス) を**表と節で
+  明示的に区別**して書いた。実機で確かめるまで「配置済みの未検証装置」である旨を明記。
+- 内容: API 形一覧表 (トリガー/完了検知/結果/認証/途中停止/再開点)、完了検知の実装
+  (checksum_runner.py の active>0 観測 + completed baseline + 一定時間空キュー)、
+  summary の意味 (現時点の検出済み腐り・未走査分は含まれない)、checkpoint 再開と
+  v3.0.1 バグ (issue #29487 / PR #29516)、スケジュール根拠 (日曜 05:30 JST =
+  immich 内蔵 cron / restic から離す)、産出側・集約側の実装、閾値 (DoD 3 未設定 →
+  unconfigured)、report.json 契約、実機での確認手順 (kubectl create job から
+  ConfigMap 確認まで)。
+
+**分かったこと**:
+- 受入検証は 4 項目とも green になった (v1: CronJob + kustomization、v2: selftest 8
+  fixture、v3: docs、v4: report.py checksum 集約)。ローカル unittest は 579 件全部 green。
+  **verify はこれで全部揃ったので、wrapper の再実測が通ればレビューに進む** —
+  ただし DoD 5 (実機 1 回実行と時間実測) と DoD 1 の実機確定はまだで、それらは
+  docs の「実機確認待ち」節と下の「次への一言」3 に残っている。verify は DoD の下限
+  (PROJECT.md の注記どおり)。
+- docs の書き方の参考に `docs/immich-postgres-upgrade.md` (実測 vs 推測の明示) と
+  `docs/node01-storage.md` を読んだ。docs は他プロジェクトの記録と混在する
+  `docs/` 直下に平置き (専用サブディレクトリを作るパターンは現存しない)。
+
+**受入検証**: 項目 3 を自分で実測 → green
+(`test -f docs/immich-checksum.md` → rc=0)。4 項目全体の再実行もすべて green。
+
+**次への一言**:
+1. **DoD 3 (未着手)**: rules.json に `checksum.mismatch_threshold` を追加し、CronJob の
+   `MISMATCH_THRESHOLD` env を設定する。現状は未設定で report の status が unconfigured
+   を正直に返す (worker #2 が CronJob を unconfigured 前提で実装済み。docs にも「閾値
+   (DoD 3 — 未設定)」節で明記)。これは verify 項目に無いが DoD 本文 (3) に含まれる
+2. **DoD 5 / 実機**: Doppler の `IMMICH_API_KEY` 登録 (人間) → CronJob を走らせ、対象
+   アセット数・所要時間 (`job.run_elapsed_s`)・結果を PROGRESS に残す。system config の
+   timeLimit と内蔵 cron の有効/無効も確認すること。手順は docs/immich-checksum.md の
+   「実機で確認すること」に全部書いた
+3. 実機で checkpoint 再開が v3.1.0 で正しく動くか (issue #29487 / PR #29516 の修正) を
+   確認する。summary レスポンスが docs の形と食い違ったら
+   ops/tools/immich_checksum_check.py の fixture を実測値で更新する
+
 ## 発見
 
 - (2026-08-24, worker #3) `test_health_report_path.py` は reader ClusterRole
