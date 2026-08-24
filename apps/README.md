@@ -135,7 +135,8 @@ apps/
 ├── ops-dashboard/
 ├── syncthing/
 ├── telegram-adapter/
-└── adguard/
+├── adguard/
+└── autopilot-projects-backup/
 ```
 
 各アプリは以下の構造:

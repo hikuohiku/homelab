@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - rbac.yaml
+  - restic-external-secret.yaml
+  - restic-backup-cronjob.yaml
+
+configMapGenerator:
+  - name: autopilot-projects-backup-script
+    namespace: autopilot-projects-backup
+    files:
+      - export_projects.py
+
+generatorOptions:
+  # 名前にハッシュを付けない（apps/autopilot・apps/ops-health-reporter と同じ）。
+  # 付けるとスクリプトを直すたびに ConfigMap 名が変わり、CI の manifest-diff が
+  # 「オブジェクトが消えた」と判定して毎回 allow-delete の明記を要求する
+  # （ops/check_manifest_deletions.py）。CronJob は毎回 Pod を作り直すので、
+  # 名前が固定でも次回起動から新しいスクリプトが読まれる
+  disableNameSuffixHash: true

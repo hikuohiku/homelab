@@ -120,6 +120,8 @@ DECLARED_SECRET_TARGETS = frozenset(
         "adguard-restic-credentials",
         "argocd-dex-client-secret",
         "autopilot-credentials",
+        "autopilot-projects-restic-backup-credentials",
+        "autopilot-projects-restic-credentials",
         "coder-db-url",
         "coder-postgres-credentials",
         "coder-restic-backup-credentials",

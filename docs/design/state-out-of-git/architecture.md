@@ -219,6 +219,27 @@ git への日次エクスポートで緩和する案は、原則 3 (機械は gi
 **未確認**: `ops-dashboard` ブランチが遺物かどうか (2026-08-22 で更新停止)。
 Phase 0 で書き手を特定する。
 
+### 耐久性 — Phase 0 の実測結果と Phase 0b (2026-08-24)
+
+実測: k3s のデータストアは **kine/sqlite** (`/var/lib/rancher/k3s/server/db/state.db`)。
+etcd ではないので `k3s etcd-snapshot` は使えない。既存の restic CronJob 6 本はどれも
+アプリの PVC が対象で、**データストアは 1 本も掬っていない**。
+
+**データストアを丸ごと掬う案は採らない。** `state.db` を hostPath で読める Pod は実質
+すべての Secret を読めるのと同じで、この 1 個のために作る攻撃面としては大きすぎる。
+守るべきはプロジェクトの記録であって、クラスタ全体ではない。
+
+Phase 0b として **`Project` CR だけを書き出す CronJob** を置いた
+(`apps/autopilot-projects-backup/`)。read-only の SA で CR を全件取り、
+`kubectl apply -f` で戻せる v1 List を決定的に書き出して restic で B2 へ送る。
+0 件・前回比の急減では書かずに落ちる (fail-closed)。実装・保持方針・**復元手順**は
+[`docs/backup.md`](../../backup.md) の「Project CR の restic バックアップ」。
+
+restic の credential を autopilot namespace に置かないため、専用 namespace に立てた
+(削除権限つきの B2 鍵に `autopilot-writer` の Job が手を伸ばせる構図を作らない。
+`ops/rules.json` の `allowed_autopilot_doppler_keys` の宣言と同じ壁)。
+
+
 ## 段階
 
 依存の少ない順。各段は単独で戻せる。
@@ -226,6 +247,7 @@ Phase 0 で書き手を特定する。
 | # | やること | 効果 |
 |---|---|---|
 | 0 | k3s の状態ストアとバックアップを実測し、掬えていなければ直す。`ops/state.json` / `ops/backlog.json` / `ops-dashboard` ブランチが死に経路かを確認 | **Phase 4 の前提条件** |
+| 0b | `Project` CR を restic へ書き出す CronJob (`apps/autopilot-projects-backup/`) | 記録がクラスタの外に出る。**4b の前提条件** |
 | 1 | `metrics.jsonl` を git から外す（PVC の rolling window へ） | 履歴の増加が止まる。**一番安く一番効く** |
 | 2 | `state` をラベルに出し、live set を selector で切る (終端は消さない) | 作業集合が 108 → 5 件規模 |
 | 3 | 作業キュー jsonl 群を PVC へ | ビートの push が小さくなる |
