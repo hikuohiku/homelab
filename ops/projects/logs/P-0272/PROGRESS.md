@@ -187,3 +187,44 @@ parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に�
 green と出力 JSON を貼るだけ (掃除不要)。まだ root 所有なら冒頭の「wrapper への依頼」節を
 参照させて再度記録すること。worker 側に打てる手はゼロのまま (verify の assert が固定パスを直接読むため
 書き先を変える抜け道も無い)。parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
+
+### 2026-08-24 セッション 6 — 環境は依然未修正 (5 セッション連続)。全 verify を再実測し、wrapper 依頼を 5 度目の提示
+
+> **wrapper への依頼 (未処理。これが唯一のブロッカー)**:
+> `python3 ops/tools/human_tasks.py --out /tmp/opencode/human-tasks.json` は `/tmp/opencode` が
+> `root:root drwxr-xr-x` のため uid 10001(autopilot) には書けず、**OS 的に絶対に green にならない**
+> (sudo 無し)。コードは完成済みで mktemp 書き先の同一検証は green 実測 (下記)。
+> どれか一つで即解消する: **(a)** runner が root で `chown autopilot:autopilot /tmp/opencode`
+> (ディレクトリ内は空なので掃除不要)、**(b)** 受入コマンドのみ root 実行、
+> **(c)** 以降の spec の受入で `/tmp/opencode` 直書きの固定パスを避ける。
+
+**状況**: レビュー指摘なし、failing は verify 1 のみ。引き継ぎどおり最初に `ls -ld /tmp/opencode` を確認 →
+**依然 `root:root drwxr-xr-x`、mtime 08-22 07:41 不変、中身は空**。セッション 2 以来の依頼は 5 度目も未処理。
+seeds.md の『人間の鍵作業』節も再読して drift 無しを確認 (bullet T 項目 4 件 + 番号付き行混在 +
+item 18 取り消し線という既知構造のまま。パース対象に変化なし)。
+
+**本セッションの実測 (証跡。すべて過去セッションと同一結果 = 再現性 6 回目)**:
+
+- verify 1 (spec 通り): 同一トレースの PermissionError、rc=1。ディレクトリ内が空のままなので
+  chown されれば即 green、掃除不要
+- verify 1 のロジック部 (mktemp 書き先 + 同一 assert 文): **green**。出力 JSON:
+  T-0107/T-0140/T-0141/T-0148 の 4 件、全キー揃い、age_days=18 (created 2026-08-06 join 済み)、
+  古い順 (T-0107 先頭)
+- verify 2: 自前実測 rc=0 green / verify 3: unittest 10 tests OK
+- TS ミラー (`npm test`): pass 10 fail 0。node_modules は今回は残存しており npm ci 不要だった
+  (消失 2 回・残存 1 回の観測。existence check → あれば skip の運用で確定)
+
+**やったこと**: 上記の再実測とこの記録のみ。コード変更ゼロ。ブランチ差分の範囲も再確認
+(dashboard app 配下 + ops/tools/human_tasks.py + ops/tests + 帳簿のみ。deployment.yaml 未触碰、DoD (4) 準拠継続)
+
+**分かったこと / 罠**: 新規なし。既知の 2 点 (固定パス問題、node_modules の有無が揺れる) のみ。
+
+**発見 (spec 外)**: 新規なし。固定パス問題による worker 実質停止が 5 セッション連続。
+このペースではコードの鮮度以上に「main が先に進んで rebase 負債が増える」方がリスクになり始める
+(現時点で conflict は無いが、dashboard 関連の別 PR が入ると変わる)。
+
+**次のセッションへ一言**: まず `ls -ld /tmp/opencode`。書けるなら verify 1 を spec 通りに実行して
+green と出力 JSON を貼るだけ (掃除不要)。まだ root 所有なら冒頭の「wrapper への依頼」節を参照させて
+記録すること。加えて `git fetch origin main` 後に merge-base..HEAD の差分範囲と seeds.md の節を
+確認すること (main 側で dashboard や seeds に変更が入っていたらその旨を最優先で記録)。
+parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
