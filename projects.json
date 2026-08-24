@@ -7267,7 +7267,53 @@
         "adopted": true,
         "proposed_at": "2026-08-24T22:48:07Z"
       },
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-24T22:48:09Z",
+        "verify": [
+          {
+            "cmd": "test -x ops/drills/k3s_datastore_restore_drill.sh",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -c \"import json,glob,time,sys; f=sorted(glob.glob('ops/drills/results/k3s-datastore-restore-*.json'))[-1]; d=json.load(open(f)); assert d.get('sqlite_integrity_ok') is True and d.get('ca_restored') is True and d.get('token_restored') is True and d.get('cleanup_done') is True and time.time()-d.get('finished_at',0)<30*86400, d\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,glob,time,sys; f=sorted(glob.glob('ops/drills/results/k3s-datastore-restore-*.json'))[-1]; d=json.load(open(f)); assert d.get('sqlite_integrity_ok') is True and d.get('ca_restored') is True and d.get('token_restored') is True and d.get('cleanup_done') is True and time.time()-d.get('finished_at',0)<30*86400, d\n                                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^\nIndexError: list index out of range\n"
+          },
+          {
+            "cmd": "! grep -qE 'restic +(forget|prune|unlock)' ops/drills/k3s_datastore_restore_drill.sh",
+            "ok": true,
+            "rc": 0,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: ops/drills/k3s_datastore_restore_drill.sh: No such file or directory\n"
+          },
+          {
+            "cmd": "grep -q 'k3s 状態ストア' docs/backup.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "some_pass",
+        "passed": [
+          "! grep -qE 'restic +(forget|prune|unlock)' ops/drills/k3s_datastore_restore_drill.sh"
+        ],
+        "broken": []
+      }
     }
   ],
   "chores": [],
