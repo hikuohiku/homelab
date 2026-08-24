@@ -1,0 +1,620 @@
+<title>コアを脳にする</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Old+Mincho:wght@400;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+
+<style>
+  :root {
+    --ground: #F1F4F3;
+    --surface: #FBFCFC;
+    --surface-2: #E8EDEC;
+    --ink: #131A1C;
+    --ink-soft: #46565A;
+    --ink-faint: #7C8C8F;
+    --rule: #D2DAD9;
+    --rule-strong: #B6C2C1;
+    /* 判断＝暖色、強制＝寒色。色相が「誰の持ち物か」を表す */
+    --judge: #A2661B;
+    --judge-bg: #F5E9D8;
+    --enforce: #10645F;
+    --enforce-bg: #DCEBE9;
+    --risk: #9C3B27;
+    --risk-bg: #F6E2DD;
+    --shadow: 0 1px 2px rgba(19, 26, 28, .05), 0 8px 24px -16px rgba(19, 26, 28, .28);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground: #0E1416;
+      --surface: #161E20;
+      --surface-2: #1E282A;
+      --ink: #E6EDEC;
+      --ink-soft: #A6B6B6;
+      --ink-faint: #74868A;
+      --rule: #2A3639;
+      --rule-strong: #3C4A4D;
+      --judge: #DEA85C;
+      --judge-bg: #2E2416;
+      --enforce: #5FB9B2;
+      --enforce-bg: #102B2A;
+      --risk: #E08E79;
+      --risk-bg: #2E1A16;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground: #0E1416;
+    --surface: #161E20;
+    --surface-2: #1E282A;
+    --ink: #E6EDEC;
+    --ink-soft: #A6B6B6;
+    --ink-faint: #74868A;
+    --rule: #2A3639;
+    --rule-strong: #3C4A4D;
+    --judge: #DEA85C;
+    --judge-bg: #2E2416;
+    --enforce: #5FB9B2;
+    --enforce-bg: #102B2A;
+    --risk: #E08E79;
+    --risk-bg: #2E1A16;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 8px 24px -16px rgba(0, 0, 0, .8);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", system-ui, sans-serif;
+    font-size: 16px;
+    line-height: 1.85;
+    margin: 0;
+    padding: 0 24px 120px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 860px; margin: 0 auto; }
+  .measure { max-width: 42em; }
+
+  /* ---- ヘッダ ---- */
+  .masthead {
+    padding: 72px 0 40px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 48px;
+  }
+  .eyebrow {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    margin: 0 0 20px;
+  }
+  h1 {
+    font-family: "Zen Old Mincho", "Hiragino Mincho ProN", serif;
+    font-weight: 700;
+    font-size: clamp(38px, 6vw, 60px);
+    line-height: 1.22;
+    letter-spacing: .01em;
+    text-wrap: balance;
+    margin: 0 0 24px;
+  }
+  .thesis {
+    font-size: clamp(17px, 2.2vw, 20px);
+    line-height: 1.8;
+    color: var(--ink-soft);
+    margin: 0;
+    max-width: 34em;
+  }
+  .thesis strong { color: var(--ink); font-weight: 700; }
+
+  /* ---- 見出し ---- */
+  h2 {
+    font-family: "Zen Old Mincho", "Hiragino Mincho ProN", serif;
+    font-weight: 700;
+    font-size: 27px;
+    line-height: 1.4;
+    letter-spacing: .01em;
+    text-wrap: balance;
+    margin: 0 0 6px;
+  }
+  .sec { margin: 0 0 72px; }
+  .sec-note {
+    color: var(--ink-faint);
+    font-size: 14px;
+    margin: 0 0 28px;
+  }
+  h3 {
+    font-family: "Zen Kaku Gothic New", sans-serif;
+    font-weight: 700;
+    font-size: 17px;
+    margin: 0 0 8px;
+    line-height: 1.6;
+  }
+  p { margin: 0 0 18px; }
+  p:last-child { margin-bottom: 0; }
+  code {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: .88em;
+    background: var(--surface-2);
+    padding: .1em .38em;
+    border-radius: 3px;
+  }
+
+  /* ---- 計測の帯 ---- */
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 34px;
+  }
+  .stat { background: var(--surface); padding: 20px 22px; }
+  .stat-num {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 30px;
+    font-weight: 500;
+    line-height: 1.1;
+    display: block;
+    margin-bottom: 8px;
+  }
+  .stat-num.slow { color: var(--risk); }
+  .stat-num.fast { color: var(--enforce); }
+  .stat-label { font-size: 13px; color: var(--ink-soft); line-height: 1.6; display: block; }
+
+  /* ---- 図 ---- */
+  figure { margin: 0 0 20px; }
+  .figbox {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    padding: 24px 20px 18px;
+    overflow-x: auto;
+    box-shadow: var(--shadow);
+  }
+  .figbox svg { display: block; min-width: 720px; width: 100%; height: auto; color: var(--ink-soft); }
+  figcaption {
+    font-size: 13.5px;
+    color: var(--ink-faint);
+    line-height: 1.7;
+    margin-top: 14px;
+    max-width: 44em;
+  }
+
+  /* ---- 表 ---- */
+  .tablewrap { overflow-x: auto; border: 1px solid var(--rule); border-radius: 4px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: 14.5px; min-width: 560px; }
+  th, td { text-align: left; padding: 13px 18px; border-bottom: 1px solid var(--rule); vertical-align: top; line-height: 1.65; }
+  thead th {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    font-weight: 500;
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  td.who { white-space: nowrap; font-weight: 500; }
+
+  .tag {
+    display: inline-block;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11px;
+    letter-spacing: .04em;
+    padding: 2px 8px;
+    border-radius: 999px;
+    white-space: nowrap;
+    line-height: 1.7;
+  }
+  .tag.keep { background: var(--enforce-bg); color: var(--enforce); }
+  .tag.move { background: var(--judge-bg); color: var(--judge); }
+  .tag.grow { background: var(--risk-bg); color: var(--risk); }
+
+  /* ---- 判断カード ---- */
+  .cards { display: grid; gap: 18px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-left: 3px solid var(--enforce);
+    border-radius: 4px;
+    padding: 22px 24px;
+  }
+  .card.judge-side { border-left-color: var(--judge); }
+  .card.risk-side { border-left-color: var(--risk); }
+  .card p { font-size: 15px; color: var(--ink-soft); }
+  .card p strong { color: var(--ink); }
+  .card-kicker {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 11.5px;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ink-faint);
+    display: block;
+    margin-bottom: 10px;
+  }
+
+  /* ---- 段階 ---- */
+  .phases { display: grid; gap: 0; border: 1px solid var(--rule); border-radius: 4px; overflow: hidden; background: var(--surface); }
+  .phase { display: grid; grid-template-columns: 56px 1fr; gap: 18px; padding: 18px 22px; border-bottom: 1px solid var(--rule); }
+  .phase:last-child { border-bottom: none; }
+  .phase-key {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 22px;
+    font-weight: 500;
+    color: var(--enforce);
+    line-height: 1.3;
+  }
+  .phase h3 { margin-bottom: 4px; }
+  .phase p { font-size: 14px; color: var(--ink-soft); margin: 0; }
+
+  /* ---- 一覧 ---- */
+  ul.plain { list-style: none; padding: 0; margin: 0; display: grid; gap: 12px; }
+  ul.plain li {
+    padding-left: 22px;
+    position: relative;
+    font-size: 15px;
+    color: var(--ink-soft);
+    line-height: 1.75;
+  }
+  ul.plain li::before {
+    content: "";
+    position: absolute;
+    left: 2px;
+    top: .72em;
+    width: 7px;
+    height: 1px;
+    background: var(--rule-strong);
+  }
+  ul.plain li strong { color: var(--ink); font-weight: 500; }
+
+  /* ---- 決定記録 ---- */
+  .decisions { display: grid; gap: 0; border-top: 1px solid var(--rule); }
+  .dec { display: grid; grid-template-columns: 64px 1fr; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--rule); }
+  .dec-id {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--judge);
+    padding-top: 2px;
+  }
+  .dec-body { font-size: 14.5px; color: var(--ink-soft); line-height: 1.75; }
+  .dec-body strong { color: var(--ink); font-weight: 700; }
+
+  footer {
+    margin-top: 80px;
+    padding-top: 24px;
+    border-top: 1px solid var(--rule);
+    font-size: 13px;
+    color: var(--ink-faint);
+    line-height: 1.8;
+  }
+
+  @media (max-width: 600px) {
+    body { padding: 0 18px 80px; }
+    .masthead { padding-top: 48px; }
+    .phase { grid-template-columns: 40px 1fr; gap: 12px; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <p class="eyebrow">homelab autopilot / 設計 rev3 · 2026-08-24</p>
+    <h1>コアを脳にする</h1>
+    <p class="thesis"><strong>判断はコアの常駐セッションに集め、強制は heart のコードに残す。</strong>立案を Job からサブエージェントへ移し、着手までの待ちをビート周期ではなく同期呼び出しにする。</p>
+  </header>
+
+  <section class="sec">
+    <h2>いま何が遅いか</h2>
+    <p class="sec-note">2026-08-24、実際の Telegram 依頼 1 件を追った実測</p>
+
+    <div class="stats">
+      <div class="stat"><span class="stat-num fast">2秒</span><span class="stat-label">耳に届くまで<br>（Telegram → コア）</span></div>
+      <div class="stat"><span class="stat-num slow">1〜2時間</span><span class="stat-label">着手まで、最短<br>通常は翌日</span></div>
+      <div class="stat"><span class="stat-num slow">53 / 91</span><span class="stat-label">stalled のプロジェクト<br>うち 15 件は予算切れ</span></div>
+      <div class="stat"><span class="stat-num">20</span><span class="stat-label">引っ越し先を決める<br>heart の不変条件</span></div>
+    </div>
+
+    <p class="measure">支配項は LLM の思考時間ではない。<strong>Job 起動・PR・CI・merge・ビート周期という、人間を待たせる必要のない待ち</strong>が積み上がっている。立案 Job の中央値 29.8 分のうち、思考以外が半分以上を占める。</p>
+  </section>
+
+  <section class="sec">
+    <h2>同じ依頼が通る、2 つの経路</h2>
+    <p class="sec-note">下が現行、上が目標</p>
+
+    <figure>
+      <div class="figbox">
+        <svg viewBox="0 0 1000 566" role="img" aria-label="上段は目標経路。依頼はコアに 2 秒で届き、コアが dispatch_task を同期で呼び、heart の admission gate が判定して runner Job を作る。下段は現行経路で、依頼からコア、heart のキュー、立案 Job、PR と CI と merge を経て runner に至り、各区間に 74 秒・42 分待ち・29.8 分・0 から 24 時間の待ちが挟まる。">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="currentColor"></path>
+            </marker>
+            <marker id="ar-en" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="var(--enforce)"></path>
+            </marker>
+            <marker id="ar-faint" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M0,1 L9,5 L0,9 z" fill="var(--ink-faint)"></path>
+            </marker>
+          </defs>
+
+          <!-- ===== 上段: 目標 ===== -->
+          <text x="0" y="24" font-size="12" font-family="IBM Plex Mono, monospace" letter-spacing="1.4" fill="var(--enforce)">目標</text>
+          <line x1="42" y1="20" x2="1000" y2="20" stroke="var(--rule)" stroke-width="1"></line>
+
+          <!-- 依頼 -->
+          <rect x="2" y="96" width="128" height="62" rx="4" fill="var(--surface-2)" stroke="var(--rule-strong)"></rect>
+          <text x="66" y="122" font-size="13" text-anchor="middle" fill="var(--ink)">所有者の依頼</text>
+          <text x="66" y="141" font-size="11" text-anchor="middle" fill="var(--ink-faint)">Telegram</text>
+
+          <!-- core -->
+          <rect x="212" y="58" width="322" height="138" rx="5" fill="var(--judge-bg)" stroke="var(--judge)" stroke-width="1.5"></rect>
+          <text x="228" y="82" font-size="13" font-weight="700" fill="var(--judge)">core — 常駐セッション</text>
+          <text x="228" y="103" font-size="11" fill="var(--ink-soft)">目：repo・MCP・web ／ 声：telegram_reply</text>
+          <rect x="228" y="118" width="138" height="34" rx="3" fill="var(--surface)" stroke="var(--judge)" stroke-dasharray="0"></rect>
+          <text x="297" y="140" font-size="11.5" text-anchor="middle" fill="var(--ink)">subagent: planner</text>
+          <rect x="380" y="118" width="138" height="34" rx="3" fill="var(--surface)" stroke="var(--judge)"></rect>
+          <text x="449" y="140" font-size="11.5" text-anchor="middle" fill="var(--ink)">subagent: judge</text>
+          <text x="228" y="176" font-size="11" fill="var(--ink-faint)">立案と採否はここで完結（文脈は各々白紙）</text>
+
+          <!-- heart -->
+          <rect x="616" y="70" width="196" height="114" rx="5" fill="var(--enforce-bg)" stroke="var(--enforce)" stroke-width="1.5"></rect>
+          <text x="714" y="95" font-size="13" font-weight="700" text-anchor="middle" fill="var(--enforce)">heart</text>
+          <rect x="634" y="107" width="160" height="36" rx="3" fill="var(--surface)" stroke="var(--enforce)" stroke-width="1.5"></rect>
+          <text x="714" y="130" font-size="12" font-weight="700" text-anchor="middle" fill="var(--enforce)">admission gate</text>
+          <text x="714" y="163" font-size="10.5" text-anchor="middle" fill="var(--ink-soft)">停止・breaker・並列上限</text>
+          <text x="714" y="177" font-size="10.5" text-anchor="middle" fill="var(--ink-soft)">を純関数で判定</text>
+
+          <!-- runner -->
+          <rect x="878" y="96" width="120" height="62" rx="4" fill="var(--surface-2)" stroke="var(--rule-strong)"></rect>
+          <text x="938" y="122" font-size="13" text-anchor="middle" fill="var(--ink)">runner Job</text>
+          <text x="938" y="141" font-size="11" text-anchor="middle" fill="var(--ink-faint)">実装の手</text>
+
+          <!-- arrows 上段 -->
+          <line x1="132" y1="127" x2="206" y2="127" stroke="var(--enforce)" stroke-width="1.6" marker-end="url(#ar-en)"></line>
+          <text x="169" y="118" font-size="11" text-anchor="middle" fill="var(--enforce)">2秒</text>
+
+          <line x1="536" y1="127" x2="610" y2="127" stroke="var(--enforce)" stroke-width="1.6" marker-end="url(#ar-en)"></line>
+          <text x="573" y="112" font-size="11" text-anchor="middle" fill="var(--enforce)">dispatch_task</text>
+          <text x="573" y="146" font-size="10.5" text-anchor="middle" fill="var(--ink-faint)">同期・ミリ秒</text>
+
+          <line x1="814" y1="127" x2="872" y2="127" stroke="var(--enforce)" stroke-width="1.6" marker-end="url(#ar-en)"></line>
+          <text x="843" y="118" font-size="11" text-anchor="middle" fill="var(--enforce)">Job 作成</text>
+
+          <!-- 返信 -->
+          <path d="M212 178 C 180 210, 100 206, 66 172" fill="none" stroke="var(--judge)" stroke-width="1.3" marker-end="url(#ar)" color="var(--judge)"></path>
+          <text x="140" y="220" font-size="11" text-anchor="middle" fill="var(--judge)">その場で返事</text>
+
+          <!-- ===== 下段: 現行 ===== -->
+          <text x="0" y="300" font-size="12" font-family="IBM Plex Mono, monospace" letter-spacing="1.4" fill="var(--ink-faint)">現行</text>
+          <line x1="42" y1="296" x2="1000" y2="296" stroke="var(--rule)" stroke-width="1"></line>
+
+          <g fill="var(--surface)" stroke="var(--rule-strong)" stroke-dasharray="4 3">
+            <rect x="2" y="372" width="130" height="58" rx="4"></rect>
+            <rect x="176" y="372" width="130" height="58" rx="4"></rect>
+            <rect x="350" y="372" width="130" height="58" rx="4"></rect>
+            <rect x="524" y="372" width="130" height="58" rx="4"></rect>
+            <rect x="698" y="372" width="130" height="58" rx="4"></rect>
+            <rect x="872" y="372" width="126" height="58" rx="4"></rect>
+          </g>
+          <g font-size="12.5" text-anchor="middle" fill="var(--ink-soft)">
+            <text x="67" y="398">所有者の依頼</text>
+            <text x="241" y="398">core</text>
+            <text x="415" y="398">heart のキュー</text>
+            <text x="589" y="398">立案 Job</text>
+            <text x="763" y="398">PR → CI → merge</text>
+            <text x="935" y="398">runner Job</text>
+          </g>
+          <g font-size="10.5" text-anchor="middle" fill="var(--ink-faint)">
+            <text x="67" y="416">Telegram</text>
+            <text x="241" y="416">起票するだけ</text>
+            <text x="415" y="416">pending</text>
+            <text x="589" y="416">発散 + 採否</text>
+            <text x="763" y="416">採択 spec を main へ</text>
+            <text x="935" y="416">実装の手</text>
+          </g>
+
+          <g stroke="var(--ink-faint)" stroke-width="1.3">
+            <line x1="134" y1="401" x2="170" y2="401" marker-end="url(#ar-faint)"></line>
+            <line x1="308" y1="401" x2="344" y2="401" marker-end="url(#ar-faint)"></line>
+            <line x1="482" y1="401" x2="518" y2="401" marker-end="url(#ar-faint)"></line>
+            <line x1="656" y1="401" x2="692" y2="401" marker-end="url(#ar-faint)"></line>
+            <line x1="830" y1="401" x2="866" y2="401" marker-end="url(#ar-faint)"></line>
+          </g>
+
+          <g font-size="11.5" text-anchor="middle" font-family="IBM Plex Mono, monospace" fill="var(--risk)">
+            <text x="152" y="359">2秒</text>
+            <text x="326" y="359">74秒</text>
+            <text x="500" y="359">42分待ち</text>
+            <text x="674" y="359">29.8分</text>
+            <text x="848" y="359">＋0〜24時間</text>
+          </g>
+          <g font-size="10" text-anchor="middle" fill="var(--ink-faint)">
+            <text x="500" y="345">パイプライン満杯</text>
+            <text x="674" y="345">中央値</text>
+            <text x="848" y="345">veto 窓</text>
+          </g>
+
+          <text x="0" y="480" font-size="11.5" fill="var(--risk)">消えるのは赤字の 4 区間。思考時間ではなく、Job 起動・PR・CI・ビート周期の待ち。</text>
+          <text x="0" y="502" font-size="11.5" fill="var(--enforce)">残るのは admission gate ＝ 判定は同じ純関数のまま、呼ばれ方だけが「次のビート」から「いますぐ」に変わる。</text>
+          <text x="0" y="524" font-size="11.5" fill="var(--ink-faint)">runner Job は動かさない。中央値 21 分・最長 8 時間の作業を常駐セッションに載せない。</text>
+        </svg>
+      </div>
+      <figcaption>2 つの経路の違いは「誰が考えるか」ではなく「どこで待つか」。立案の中身は同じ 2 段（発散 → 採否）のまま、Job とサブエージェントを入れ替えている。</figcaption>
+    </figure>
+  </section>
+
+  <section class="sec">
+    <h2>3 つの判断</h2>
+    <p class="sec-note">迷いどころと、どちらに倒したか</p>
+
+    <div class="cards">
+      <div class="card">
+        <span class="card-kicker">01 — dispatch</span>
+        <h3>「直接」は、直接 Job を作ることではない</h3>
+        <p>コアが k8s Job を自分で作れば、heart が持つ不変条件——すべて実際に起きた事故の対策——を LLM の判断に置き換えることになる。一方で不満は<strong>構成ではなく待ち時間</strong>だった。</p>
+        <p>そこで <strong>heart に同期の admission gate を足し、コアは MCP ツール <code>dispatch_task</code> で叩く</strong>。判定は既存の純関数をそのまま呼ぶので 253 件のテストが効き続け、判定と Job 作成はミリ秒で終わる。人間の待ち時間からビート周期が消え、失うものは無い。</p>
+      </div>
+
+      <div class="card judge-side">
+        <span class="card-kicker">02 — 立案</span>
+        <h3>サブエージェント 2 段のまま移す</h3>
+        <p>opencode 1.18.21 で実測できたこと——サブエージェントは<strong>親と別セッションで文脈は白紙</strong>、<strong>親 <code>bash: deny</code> と子 <code>bash: allow</code> は両立する</strong>、そして driver から <code>subtask</code> パートを送れば<strong>親 LLM の判断を介さず立案役を起動できる</strong>。</p>
+        <p>つまり「いつ考えるか」は引き続きコードが決められる。judge が別文脈で採点する独立性もそのまま。消えるのは Job 起動と clone のオーバーヘッド、そして発散結果を emptyDir に置いたまま judge の死が道連れにする失敗様式。</p>
+      </div>
+
+      <div class="card risk-side">
+        <span class="card-kicker">03 — 権限</span>
+        <h3>bash を開ける前に、秘密をコアの環境から出す</h3>
+        <p>いまのコアは Telegram・GitHub・NATS の資格情報を環境変数に持つ。<strong>bash を開けた瞬間、<code>env</code> 一発で読める</strong>。コアは Telegram・GitHub・web という信頼できない入力を読むので、秘密と外部送信経路が同じプロセスに揃う。</p>
+        <p>だから順序を決める：MCP を子プロセスから<strong>別コンテナ</strong>へ移し、専用 ServiceAccount を与え、<code>automountServiceAccountToken: false</code> を明示する。そこまで済むまで bash は開けない。</p>
+        <p><strong>「read-only の bash なら安全」は成り立たない</strong>——<code>cat /proc/self/environ</code> は読み取りである。守れるのはコマンドの制限ではなく、<strong>そのプロセスに秘密が無いこと</strong>だけ。だから分離が先で、目を渡すのは後（D37）。</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>コアに何を持たせるか</h2>
+    <p class="sec-note">「何でも見えて操作できる」を 3 段に分ける</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>段</th><th>内容</th><th>判断</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="who">見る</td>
+            <td>repo の作業コピー、read-only bash、MCP（k8s・ArgoCD・ログ）、webfetch</td>
+            <td><span class="tag move">全部渡す</span></td>
+          </tr>
+          <tr>
+            <td class="who">作る</td>
+            <td>ブランチ・commit・PR、<code>dispatch_task</code></td>
+            <td><span class="tag move">渡す</span>　main 直 push は不可のまま</td>
+          </tr>
+          <tr>
+            <td class="who">適用する</td>
+            <td><code>kubectl apply</code> 等のクラスタ変更、PR の merge</td>
+            <td><span class="tag grow">渡さない</span></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p class="measure" style="margin-top:22px">適用を渡さない理由は不信ではない。<strong>merge の条件（CI green ∧ reviewer pass）は機械のゲートであり、LLM の自己申告より強い</strong>から。クラスタ変更を Git 経由に縛るのは CHARTER §5 の根幹で、緩めるなら別の意思決定が要る。</p>
+  </section>
+
+  <section class="sec">
+    <h2>不変条件の引っ越し先</h2>
+    <p class="sec-note">heart が持つ歯止めを、この構成のどこが持つか</p>
+
+    <div class="tablewrap">
+      <table>
+        <thead>
+          <tr><th>不変条件</th><th>これからの持ち主</th><th></th></tr>
+        </thead>
+        <tbody>
+          <tr><td>採択ゲート（着手前に verify 全 fail）</td><td>admission gate（非同期・結果はバス）</td><td><span class="tag move">移す</span></td></tr>
+          <tr><td>並列上限 6</td><td>admission gate（同期で拒否）</td><td><span class="tag move">移す</span></td></tr>
+          <tr><td>二重 spawn 防止</td><td>admission gate（決定論的 Job 名 + 409 冪等）</td><td><span class="tag move">移す</span></td></tr>
+          <tr><td>breaker 100 USD／日</td><td><strong>廃止</strong>。定額移行で名目コストが意味を失った（D36）</td><td><span class="tag grow">やめる</span></td></tr>
+          <tr><td>トークンの soft cap</td><td><strong>廃止</strong>。無限ループは回数と無活動で止める（D36）</td><td><span class="tag grow">やめる</span></td></tr>
+          <tr><td>通知の日次上限 6 件</td><td>heart。これは金銭ではなく<strong>人間の注意力</strong>の予算</td><td><span class="tag keep">据え置き</span></td></tr>
+          <tr><td>「止めて」の永続化</td><td>heart。admission gate も同じフラグを見る</td><td><span class="tag keep">据え置き</span></td></tr>
+          <tr><td>veto 窓（不可逆は常に 24h）</td><td>heart。人間の依頼は窓 0 を明文化する</td><td><span class="tag keep">据え置き</span></td></tr>
+          <tr><td>権限の宣言連鎖（spec → 予告 → Job）</td><td>heart。<code>dispatch_task</code> も同じ経路を通す</td><td><span class="tag keep">据え置き</span></td></tr>
+          <tr><td>ops-state の単一書き手</td><td>heart</td><td><span class="tag keep">据え置き</span></td></tr>
+          <tr><td>コアが死んでも自走する</td><td>heart。立案 Job の経路を冷スペアとして残す</td><td><span class="tag keep">据え置き</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>段階</h2>
+    <p class="sec-note">前の段が終わるまで次を開けない、という順序そのものが設計の一部</p>
+
+    <div class="phases">
+      <div class="phase">
+        <span class="phase-key">A</span>
+        <div>
+          <h3>秘密を分離する</h3>
+          <p>MCP を別コンテナへ、専用 SA、automount 停止。<em>完了条件：</em>コアの環境変数に長期の秘密が無い。</p>
+        </div>
+      </div>
+      <div class="phase">
+        <span class="phase-key">B</span>
+        <div>
+          <h3>目を渡す</h3>
+          <p>repo の作業コピー、bash、k8s・ArgoCD の read MCP。<em>完了条件：</em>コアが自分で調べて答える。</p>
+        </div>
+      </div>
+      <div class="phase">
+        <span class="phase-key">C</span>
+        <div>
+          <h3>立案を shadow で並走させる</h3>
+          <p>planner と judge のサブエージェントを走らせ、Job 版と採択結果を突き合わせる。<em>完了条件：</em>差分を検分し終える。</p>
+        </div>
+      </div>
+      <div class="phase">
+        <span class="phase-key">D</span>
+        <div>
+          <h3>gate を開ける</h3>
+          <p>heart に admission gate、<code>dispatch_task</code> を active に。<em>完了条件：</em>依頼から着手までが分オーダー。</p>
+        </div>
+      </div>
+      <div class="phase">
+        <span class="phase-key">E</span>
+        <div>
+          <h3>PR を人間の待ち時間から外す</h3>
+          <p>dispatch の正を ops-state へ移し、立案 Job を冷スペアに降格。<em>完了条件：</em>着手が CI を待たない。</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <h2>まだ確かめていないこと</h2>
+    <p class="sec-note">ここを曖昧にしたまま実装に入ると設計を誤る</p>
+    <ul class="plain">
+      <li><s>opencode が remote／HTTP の MCP を受けられるか。</s>　<strong>実測で確定（2026-08-24）</strong>——1.18.21 は <code>type: "remote"</code> を受け、localhost の別コンテナに繋がる。MCP が死んでも core は生き、そのツールだけが消える。ただし<strong>接続状態は自動更新されず自動再接続も無い</strong>ので、サイドカー再起動後に <code>POST /mcp/&lt;name&gt;/connect</code> を叩く仕掛けが要る。</li>
+      <li><strong>コンテキスト上限に達したときの実挙動</strong>と <code>compaction.auto</code> の既定値。常駐セッションの寿命がここで決まる。</li>
+      <li><strong>子セッションのトークンは親に合算されない。</strong>D36 で強制はしなくなったので、表示のためだけに <code>GET /session/{parent}/children</code> を足す価値があるかを決める。</li>
+      <li><strong><code>subagent_depth</code> の既定は 1。</strong>孫を呼ばせるなら明示設定が要る。</li>
+      <li><strong>permission のマッチ無しは <code>ask</code> に落ちる。</strong>headless では応答できる者が居ない。使うツールを全列挙して書き切る——CHARTER §5.1 が「<code>ask</code> を新設しない」を定めた事故と同型。</li>
+      <li><strong>常駐セッションが誤った思い込みを抱えたまま長期化するリスク。</strong>日次で切り直し、状態は記憶ではなくツールで読み直す運用を併せて決める。</li>
+    </ul>
+  </section>
+
+  <section class="sec">
+    <h2>決定記録</h2>
+    <p class="sec-note">rev3。既存の D1〜D27 のうち 2 つを差し替える</p>
+
+    <div class="decisions">
+      <div class="dec"><span class="dec-id">D28</span><span class="dec-body"><strong>D2 を差し替える。</strong>「選定はコア、起草は Job」→ 起草もコアのサブエージェント。Job は実装にだけ残す。起草の待ち時間が Job 起動・PR・CI に支配されており、思考時間ではないため。</span></div>
+      <div class="dec"><span class="dec-id">D29</span><span class="dec-body"><strong>D7 を差し替える。</strong>「コアは K8s write を持たない」→ コアは dispatch を同期で要求できる。ただし Job を作るのは heart のままで、k8s の write 権限は渡さない。強制点を増やさない。</span></div>
+      <div class="dec"><span class="dec-id">D30</span><span class="dec-body"><strong>D3 は維持。</strong>コアは git に書かない。ブランチと PR は作れるが、ops-state への commit は heart 単独。</span></div>
+      <div class="dec"><span class="dec-id">D31</span><span class="dec-body"><strong>実装は Job のまま。</strong>runner をサブエージェント化しない。中央値 21 分・最長 8 時間の作業を常駐セッションに載せると、Pod の生存と作業の生存が結合する。</span></div>
+      <div class="dec"><span class="dec-id">D32</span><span class="dec-body"><strong>dispatch の正は ops-state。</strong>採択 spec の読み先を main の archive.jsonl から ops-state の projects.json へ移す。改竄耐性はむしろ上がる——main は CI を通る PR なら誰でも書けるが、ops-state は heart しか書けない。</span></div>
+      <div class="dec"><span class="dec-id">D33</span><span class="dec-body"><strong>bash の前に秘密を出す。</strong>MCP を別コンテナに移し、専用 SA を与え、automount を止めるまで bash を開けない。</span></div>
+      <div class="dec"><span class="dec-id">D34</span><span class="dec-body"><strong><code>ask</code> 禁止。</strong>サブエージェントの permission は使用ツールを全列挙する。</span></div>
+      <div class="dec"><span class="dec-id">D35</span><span class="dec-body"><strong>冷スペアを残す。</strong>立案 Job の経路は消さない。コアが応答しないときは heart が従来どおり Job で立案する。</span></div>
+      <div class="dec"><span class="dec-id">D38</span><span class="dec-body"><strong>分離が縮めるのは境界であって、消すのではない。</strong>秘密をサイドカーへ移すと core の環境変数からトークンは消えるが、<strong>bash を持つ core は <code>127.0.0.1</code> のサイドカーへ直接 JSON-RPC を投げ、公開されたツールを呼べる</strong>。境界は「生のトークンで API を叩き放題」から「サイドカーが公開したツールの範囲内」へ<strong>縮む</strong>だけ。次の論点はサイドカー側のツール設計——宛先の固定、レート制限、スコープの最小化。<br>系として、<strong>MCP の <code>headers</code> に秘密を置かない</strong>：<code>GET /config</code> は展開後の値をそのまま返すので bash からは丸見え。同一 Pod の localhost はネットワーク名前空間が境界なので、そもそもトークンが要らない。</span></div>
+      <div class="dec"><span class="dec-id">D37</span><span class="dec-body"><strong>秘密の分離を「目を渡す」より先にする（自己訂正）。</strong>当初は Phase A で read-only bash を含む目を渡し、Phase B で秘密を分離する順にしていたが誤り。<strong>read-only の bash でも <code>cat /proc/self/environ</code> で環境変数は読める</strong>——コマンドを制限しても秘密は守れない。守れるのは「そのプロセスに秘密が無いこと」だけなので、分離を先に置く。</span></div>
+      <div class="dec"><span class="dec-id">D36</span><span class="dec-body"><strong>予算方式を廃止する。</strong>opencode Go の定額へ完全移行したので、金額とトークンで仕事を止めるのをやめる。<strong>計測は残し、強制をやめる</strong>——breaker・soft cap・<code>budget_exhausted</code> を落とし、通知の日次上限（人間の注意力の予算）と <code>max_sessions_per_project</code>（無限ループの最後の歯止め）は残す。<br>帰結として、上限待ちが異常ではなく<strong>通常の運転状態</strong>になる。<code>QUOTA_WAIT_MAX_ROUNDS = 6</code> はビート周期に依存して意味を持たないので、連続 24 時間の壁時計に置き換える。これをやらないと廃止そのものが大量 stall を生む。</span></div>
+    </div>
+  </section>
+
+  <footer>
+    実測の出典：ops-state の <code>audit.jsonl</code>（立案 44 サンプル・runner 110 サンプル）、<code>projects.json</code>、2026-08-24 の Telegram 依頼 1 件の追跡、opencode 1.18.21 のローカル実測と OpenAPI。<br>
+    本文は <code>docs/design/core-as-brain/architecture.md</code>。前提となる bus・adapter の設計は <code>docs/design/event-driven-core/architecture.md</code>。
+  </footer>
+
+</div>
