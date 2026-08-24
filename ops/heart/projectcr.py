@@ -158,10 +158,14 @@ def plan_rejected(records, existing, namespace, live_ids, limit=REJECTED_BATCH_L
 
     既にある CR は中身を比べない — 棄却案は二度と変わらないので、毎ビート
     250 件分の spec を突き合わせる意味が無い (名前の有無だけを見る)。
+
+    **新しい id から入れる**。収束には 1 時間ほどかかるので、その間に立案役が
+    読めるのが「直近に何がなぜ落ちたか」になるようにする (古い案から埋めると
+    一番効く信号が最後に届く)。
     """
     have = {(item.get("metadata") or {}).get("name") for item in existing}
     out = []
-    for pid, rec in sorted(latest_records(records).items()):
+    for pid, rec in sorted(latest_records(records).items(), reverse=True):
         if rec.get("adopted") or pid in live_ids:
             continue
         if cr_name(pid) in have:

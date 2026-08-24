@@ -519,9 +519,14 @@ class PlanRejected(unittest.TestCase):
         return [c["metadata"]["name"] for c in crs]
 
     def test_only_rejected_ids_are_written(self):
-        # P-0001 は採択、P-0028 は最後の行が採択なので出てこない
+        # P-0001 は採択、P-0028 は最後の行が採択なので出てこない。
+        # 並びは新しい id から (収束の途中で直近の死因が先に届くように)
         crs = projectcr.plan_rejected(self.records(), [], NS, set())
-        self.assertEqual(self.names(crs), ["p-0003", "p-0099", "p-0100"])
+        self.assertEqual(self.names(crs), ["p-0100", "p-0099", "p-0003"])
+
+    def test_newest_ids_are_taken_first(self):
+        crs = projectcr.plan_rejected(self.records(), [], NS, set(), limit=1)
+        self.assertEqual(self.names(crs), ["p-0100"])
 
     def test_live_ids_are_never_overwritten(self):
         """projects.json に居る id は絶対に触らない。走行中の状態が消える。"""
