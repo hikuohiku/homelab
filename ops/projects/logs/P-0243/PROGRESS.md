@@ -2306,7 +2306,78 @@ error 文字列の具体値は契約外。チェック自体は契約どおり�
   - **小罠 2**: スナップショットの取得元は ops-state ブランチ**ルートの
     `projects.json`**。`ops/state.json` には `projects` キーが無いので
     そちらから読むと KeyError。パスを取り違えないこと
-- **V2 を実走する前の一手順 (セッション 26 追加・27〜44 で運用実績あり)**: 自前で
+- **V2 を実走する前の一手順 (セッション 26 追加・27〜45 で運用実績あり)**: 自前で
+  `/tmp/opencode` の書き込み可否だけ先にプローブすること。もし環境側が変わって
+  書けるようになっていた場合、V2 の実走はそのまま in-cluster ドリル
+  (一時 NP + Pod 2 本の作成) まで進む。短絡セッションで副作用を起こす意図は
+  ないので、「fail-fast になる予測 → 実行」の順
+  - プローブの精度メモ (セッション 35): `/tmp` 自体は world-writable で素の
+    `mktemp` は成功する。判定対象は `/tmp/opencode` への書き込みに絞ること
+    (`mktemp -p /tmp/opencode ...`)。素の mktemp の成功をもって「V2 が通る」と
+    誤判定しない
+- **demo.json 完全性チェックの正契約**: トップレベル bool 7 個は
+  labeled_blocked / unlabeled_allowed / dns_ok_labeled / dns_ok_control /
+  cleaned_up / all_passed / probes_conclusive。pods.*.probe に `outcome` キーは
+  **無い** (実キーは dns_ok / https_ok / status / error)。対照は
+  labeled=dns_ok true × https_ok false (status=None)、control=dns_ok true ×
+  https_ok true (status=200)。**error 文字列の具体値は契約外**
+  (セッション 40 発見参照。labeled の現行値は
+  `https: URLError: <urlopen error [Errno 101] Network unreachable>`)
+
+## セッション 45 (2026-08-24) — 短絡チェックのみ (main 不動・census 未着・ops-state 動くが P-0243 active 不変), コード変更ゼロ
+
+### やったこと
+
+- **fetch 先行 → main 新着 = 0** (merge-base = origin/main =
+  59169fddf)。merge 作業なし。census も未着
+  (`git ls-tree -r origin/main | grep -c egress` = 0)
+- ops-state:projects.json をスナップショット方式で確認:
+  P-0243 `state=active`・spawn_count=1・drift_count=0・adopt_gate_attempts=1
+  の不変。ops-state ブランチ自体は進んでいた (caa249195→9c0edee11,
+  "heart: beat 139") が P-0243 エントリは不変。schema は list のまま
+- **プローブ先行手順を実行**: `/tmp/opencode` へ `mktemp -p` プローブ →
+  NOT writable (rc=1、root 所有のまま) を先に確認してから V2 実走。
+  予測どおり fail-fast rc=2、stderr は wrapper 実測と同一メッセージ
+  (probe 一時名のみ random で毎回変わる。クラスタ接触前なので副作用ゼロ)
+- spec verify 一式を再走: V1 green / V3 green / V2 red (既知 fail-fast rc=2)
+- PR 差分不変を確認: merge-base (59169fddf) 起点で 14 ファイル (コード側 12 +
+  P-0243 ログ 2)
+- demo.json 完全性チェック全パス。**error 文字列固定 assert は挟まなかった**
+  (セッション 40 の発見どおり契約範囲のみ検査)
+
+### 発見 (仕様外)
+
+なし。
+
+### 検証 (全部自分で実走済み)
+
+- fetch + main 追い越し判定 / census 未着確認 / ops-state スナップショット方式で
+  P-0243 state=active 確認 / `/tmp/opencode` 書き込みプローブ先行 (NOT writable
+  確認後に V2 実走) / spec verify V1 green / V3 green / V2 既知 fail-fast rc=2 /
+  PR 差分 14 ファイル不変確認 / demo.json 完全性チェック (契約範囲のみで全パス)
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4〜44 から不変**: V2 は本 PR の merge+sync 後の新 runner Pod で
+  自動 green 化する (spawn.py の emptyDir mount 済み)。やることは「PR merge を待つ」だけ。
+  main 新着なければ短絡でよい
+- census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+  到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+- main 追い越しの手順はセッション 17 の「罠注意」参照 (merge-base diff で中身確認)
+- 「PR 差分 N ファイル」の比較は数え方に注意: コード側だけなら 12、
+  P-0243 ログ込みなら 14 (セッションごとの PROGRESS 追記で増えるのは後者だけ)
+- 生死が気になったら ops-state:**projects.json** の `state` を見る。読みは**スナップショット方式**
+  (ローカルファイルに書き出してからパース)。トップレベルは dict、`projects` は list
+  (id 付き dict)。両 schema に耐える読み方:
+  `pr=d["projects"]; p=pr["P-0243"] if isinstance(pr,dict) else next(x for x in pr if x.get("id")=="P-0243")`
+  - **小罠 1**: スナップショット保存の `mktemp` テンプレートは X を**末尾**に置くこと
+    (`mktemp /tmp/opsstate-XXXXXX`)。拡張子を後ろに付けると GNU mktemp は
+    "Invalid argument" で落ちる (セッション 32 実測)
+  - **小罠 2**: スナップショットの取得元は ops-state ブランチ**ルートの
+    `projects.json`**。`ops/state.json` には `projects` キーが無いので
+    そちらから読むと KeyError。パスを取り違えないこと
+- **V2 を実走する前の一手順 (セッション 26 追加・27〜45 で運用実績あり)**: 自前で
   `/tmp/opencode` の書き込み可否だけ先にプローブすること。もし環境側が変わって
   書けるようになっていた場合、V2 の実走はそのまま in-cluster ドリル
   (一時 NP + Pod 2 本の作成) まで進む。短絡セッションで副作用を起こす意図は
