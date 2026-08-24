@@ -153,9 +153,8 @@ func toolDefs() []toolDef {
 		{
 			Name: "dispatch_task",
 			Description: "いま着手してほしい仕事を heart に**同期で**要求する。数秒で可否が返る。" +
-				"受理されれば heart が採択ゲート (新品 clone での受入検証の実測) を回し、" +
-				"通れば実装役をそのまま起動する。断られたら理由が返るので、" +
-				"そのまま所有者に伝えること。" +
+				"受理されれば heart が実装役をそのまま起動する。" +
+				"断られたら理由が返るので、そのまま所有者に伝えること。" +
 				"起動するのは heart であり、あなたが実装するのではない。" +
 				"同じ内容を何度要求しても 1 件として扱われる。" +
 				"実行役の種類・思考エンジン・優先度・権限は選べない (heart の判断領域)。" +
@@ -172,15 +171,8 @@ func toolDefs() []toolDef {
 						"description": "何をどうしたいか、なぜ要るか、どこを見れば分かるか。" +
 							"実装役が読む唯一の仕様なので、所有者の言葉と観測した事実を残すこと。",
 					},
-					"verify": map[string]any{
-						"type":  "array",
-						"items": map[string]any{"type": "string"},
-						"description": "受入検証。bash で実行できる形で、**いまは全部 fail し、" +
-							"完成したら pass する**こと。heart が着手前に新品 clone で実測し、" +
-							"1 本でも既に通っていたら差し戻す。書けないなら依頼が未成熟。",
-					},
 				},
-				"required": []string{"title", "body", "verify"},
+				"required": []string{"title", "body"},
 			},
 		},
 	}

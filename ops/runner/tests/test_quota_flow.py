@@ -342,6 +342,55 @@ class TestReviewerQuota(QuotaFlowTest):
         self.assertEqual(doc["verdict"], "pass")
 
 
+class TestSpecWithoutVerify(QuotaFlowTest):
+    """受入検証を持たない spec (dispatch 由来。2026-08-24 の所有者判断)。
+
+    verify を書くのも LLM なので迂回でき、機械の判定として意味を成さない、
+    という理由で dispatch 経路から外した。runner はこの形の spec でも
+    止まらずに走り切り、作業を終えた時点で PR を出す。
+    """
+
+    def runner(self, outcomes, **kw):
+        r = FakeRunner(self.tmp, outcomes=outcomes, verify_seq=[[]], **kw)
+        r.spec = {"verify": [], "title": "所有者の依頼"}
+        return r
+
+    def test_empty_verify_does_not_trip_the_start_gate(self):
+        """開始前の all-fail ゲートは素通り。測る基準が無いのは spec の不良ではない。"""
+        r = self.runner([("completed", None), ("completed", None)])
+        rc = r.mode_worker()
+        self.assertEqual(rc, 0)
+        self.assertNotEqual(r.result_doc()["state"], "spec_error")
+
+    def test_one_finished_session_ships_a_pr(self):
+        """完成の合図はセッションの正常終了。PR まで出してレビューへ渡す。"""
+        r = self.runner([("completed", None), ("completed", None)])
+        self.assertEqual(r.mode_worker(), 0)
+        doc = r.result_doc()
+        self.assertEqual(doc["state"], "ready_for_review")
+        self.assertEqual(doc["pr"], 99)
+        # initializer + worker を 1 回ずつ。何もせずに完成を宣言していない
+        self.assertEqual(r.tags, ["s0-init", "s1"])
+
+    def test_a_dead_session_does_not_ship(self):
+        """セッションが死んだ回を「作業を終えた」と読み替えない。"""
+        r = self.runner([("completed", None)] + [("error", "auth")] * 3)
+        self.assertEqual(r.mode_worker(), 1)
+        self.assertEqual(r.result_doc()["state"], "error")
+
+    def test_review_is_not_force_failed_without_verify(self):
+        """verify が無い spec に「wrapper 実測が green でない」を課さない
+        (課すと reviewer が何と言おうと必ず fail になる)。"""
+        r = self.runner([("completed", None)])
+        r.mode = "review"
+        (r.project_dir / "review.json").write_text(
+            json.dumps({"verdict": "pass", "findings": []})
+        )
+        self.assertEqual(r.mode_review(), 0)
+        doc = json.loads((r.project_dir / "review.json").read_text())
+        self.assertEqual(doc["verdict"], "pass")
+
+
 class TestShouldWithholdReview(unittest.TestCase):
     def test_table(self):
         cases = [

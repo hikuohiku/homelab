@@ -25,7 +25,7 @@ heart (Deployment, ここ)            runner Job (ops/runner/runner.py)
 ```
 core (MCP) --HTTP--> gate スレッド --判定--> reconcile.admit() (純関数)
                           |
-                          +--非同期--> 採択ゲート実測 (最大 300s) --> Job 作成
+                          +--非同期--> Job 作成
                                               |
                                               v
                                    /data/dispatch/inbox/<id>.json
@@ -44,6 +44,33 @@ core (MCP) --HTTP--> gate スレッド --判定--> reconcile.admit() (純関数)
   触ることになり、人間レビュー必須になる)
 - **止め方**: `HEART_GATE_LISTEN` を空にすると gate を起こさない。コアの
   `dispatch_task` は isError になり、`request_task` (バス経由の起票) に戻る
+
+### dispatch 経路で失われる保証 (2026-08-24, 所有者の決定)
+
+`dispatch_task` から受入検証 (`verify`) と採択ゲートを外した。理由は所有者の言葉で
+**「verify の仕組み自体不要。これ自体 LLM が作るものでいくらでも迂回できる。
+core が軽く確認して終わりでいい」**。以前は着手の前に新品 clone で verify を実測し、
+1 本でも通っていれば差し戻していたが、その verify を書くのも LLM なので、
+機械の判定として意味を成していなかった。実際、所有者の依頼 2 件 (P-9000 / P-9001) は
+verify を測る前段で落ちて `gate_error` で終端に落ち、人手なしには生き返らなかった。
+
+**この経路で機械が判定しなくなったこと**:
+
+- 頼んだ変更が実際に行われたかどうか。**誰も機械的には確かめない**
+- 開始前に「もう出来ている」仕様で走り出していないかどうか
+
+**残る機械のゲート**:
+
+- CI (壊れていないこと) — auto-merge の条件は変わらない
+- soak (マージ後に健全性が悪化していないこと)
+- PR が在ること — runner が PR 無しで `ready_for_review` を報告したら
+  `no_pr_reported` で止める。PR は機械が確認できる事実なので緩めていない
+
+**完成の判断は誰がするか**: 独立した reviewer Job と、コアの確認。
+runner は「セッションが 1 度正常に終わった」時点で PR を出す。
+
+curriculum 由来の spec (`P-0NNN`) に対する採択ゲートは**そのまま残っている**。
+そちらは verify を持つので測れる。
 
 ## dispatch の正は ops-state の projects.json (設計 rev3 Phase E / D32)
 

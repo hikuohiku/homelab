@@ -261,6 +261,33 @@ class TestAdoptGate(unittest.TestCase):
         self.assertEqual(d["projects"][0]["state"], "active")
         self.assertIn("announce", kinds(actions))
 
+    # --- dispatch 由来 (P-9NNN) はゲートを通さない (2026-08-24 の所有者判断) ---
+    def test_dispatch_project_without_verify_skips_the_gate(self):
+        """所有者の依頼は測らずに進める。verify を書くのも LLM なので、
+        機械の判定として意味を成さないという判断。"""
+        p = project(id="P-9000", branch="project/p-9000",
+                    dispatch_id="d-abc", requested_by="core", verify=[])
+        d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
+        self.assertNotIn("run_adopt_gate", kinds(actions))
+        # 窓ゼロ連鎖でそのまま着手まで進む
+        self.assertEqual(d["projects"][0]["state"], "active")
+        self.assertIn("spawn_runner", kinds(actions))
+        self.assertNotIn("adopt_gate_attempts", d["projects"][0])
+
+    def test_curriculum_project_still_goes_through_the_gate(self):
+        """回帰: curriculum 由来 (verify を持つ) は今までどおり測る。"""
+        p = project(verify=["test -f x"])
+        d, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
+        self.assertEqual(d["projects"][0]["state"], "proposed")
+        self.assertIn("run_adopt_gate", kinds(actions))
+
+    def test_dispatch_project_with_verify_still_goes_through_the_gate(self):
+        """dispatch でも verify を持つ古いレコードは測る (後方互換)。"""
+        p = project(id="P-9000", branch="project/p-9000",
+                    dispatch_id="d-abc", verify=["test -f x"])
+        _, actions = reconcile.decide(doc(p), facts(), RULES, NOW)
+        self.assertIn("run_adopt_gate", kinds(actions))
+
     def test_bounced_spec_frees_the_curriculum(self):
         """差し戻しは終端 (stalled) なので、同じビートで次の立案に進める。"""
         p = project(adopt_gate=gate({"cmd": "test -d .", "ok": True, "rc": 0}))
@@ -632,6 +659,17 @@ class TestReviewFlow(unittest.TestCase):
         p = project(state="active", job="j")
         d, actions = reconcile.decide(
             doc(p), facts(results={"P-0001": {"state": "ready_for_review"}}), RULES, NOW
+        )
+        self.assertEqual(d["projects"][0]["state"], "stalled")
+        self.assertEqual(d["projects"][0]["stalled_reason"], "no_pr_reported")
+
+    def test_ready_for_review_without_pr_stalls_even_without_verify(self):
+        """回帰: verify を外した dispatch 経路でも PR は緩めない。
+        PR は機械が確認できる事実なので、無ければ止めて人間に見せる。"""
+        p = project(id="P-9000", branch="project/p-9000", state="active", job="j",
+                    dispatch_id="d-abc", verify=[])
+        d, _ = reconcile.decide(
+            doc(p), facts(results={"P-9000": {"state": "ready_for_review"}}), RULES, NOW
         )
         self.assertEqual(d["projects"][0]["state"], "stalled")
         self.assertEqual(d["projects"][0]["stalled_reason"], "no_pr_reported")
@@ -1444,7 +1482,6 @@ class AdmissionGateDecision(unittest.TestCase):
         base = {
             "title": "ops-dashboard の 500 を直す",
             "body": "snapshot API が 500 を返している。原因を特定して直す",
-            "verify": ["test -f ops/dashboard-fix.md"],
         }
         base.update(kw)
         return base
@@ -1553,10 +1590,16 @@ class AdmissionGateDecision(unittest.TestCase):
 
     # --- 要求そのものの不備 ---
     def test_empty_fields_are_denied_with_a_human_reason(self):
-        for kw in ({"title": ""}, {"body": ""}, {"verify": []}):
+        for kw in ({"title": ""}, {"body": ""}):
             got = self.admit(self.request(**kw))
             self.assertEqual(got["reason"], "invalid")
             self.assertTrue(got["message"])
+
+    def test_verify_is_not_required_and_does_not_change_the_id(self):
+        """受入検証は取らない (2026-08-24 の所有者判断)。付いて来ても無視する。"""
+        got = self.admit(self.request(verify=["test -f x"]))
+        self.assertEqual(got["status"], reconcile.ADMIT_ACCEPTED)
+        self.assertEqual(got["dispatch_id"], self.admit()["dispatch_id"])
 
     def test_oversized_fields_are_denied(self):
         got = self.admit(self.request(body="あ" * 5000))
