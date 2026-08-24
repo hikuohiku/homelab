@@ -1774,9 +1774,38 @@ P-0258 への言及自体がゼロ (p-0243 の動きも今回無し)。spec・ru
 新たな発見は無い。(環境メモ: `/tmp/opencode` 直下が Permission denied で書き込めないことを
 本セッションで実測 — 「一時ファイルは mktemp」の罠メモが正しいことの再確認)
 
+## セッション 62 (2026-08-24、UTC 開始 = JST)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 17 から不変。新 curriculum ブランチも
+無し (`heart/curriculum-20260824-002231` のみ、ls-remote = 00de3c47b で不変)。
+P-0279 も未着地 (`git grep -il recovery origin/main -- apps/ops-health-reporter/` が
+rc=1 ゼロ件)。pull ref 一致を確認 (local HEAD = origin/project/p-0258 = a28f3be8b =
+session 61 commit、status で ahead/behind 無し)。PR も無し — `git ls-remote 'refs/pull/*/head'`
+で自ブランチ HEAD (a28f3be8b) との一致数を実測し **0** を確認。
+**reporter ブランチが動いた** (420cf7ffa→73f243224) ので verify 3 を正式再実測した。
+初手の `git fetch origin --prune` では reporter ref が更新されず ls-remote との食い違いが
+出たため、session 41 の発見どおり明示 fetch
+(`git fetch origin refs/heads/ops-health-report:refs/remotes/origin/ops-health-report`)
+をしてから回した。移動の中身は diff --stat 実測で routine beat 通りの data 更新のみ
+(`history/2026-08-24.jsonl` +1 行と `latest.json` のみ、コード変更無し) で、
+正式再実行の結果も **red 継続** (recovery_probe: None)。
+待機中の動きは ops-state beat (2ef0f39ed..3517f4ebc) の heartbeat.json/metrics.jsonl のみを
+diff --stat で実測し projects.json を含まないため P-0258 への言及自体がゼロ
+(p-0243 も ff09c571a..aa6986ade で動いたが自己ログ PROGRESS.md +60 行のみで非関連)。
+spec・runner 非接触。デッドロック世界に変化なし。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 60 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 60 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | **正式再実行 red** — reporter ブランチ移動に伴う再実測。recovery_probe: None 不変 |
+
+新たな発見は無い。
+
 ## 次のセッションへの一言
 
-セッション 13〜61 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+セッション 13〜62 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
 `git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
 spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
 (一時ファイルは必ず `mktemp`)。reporter ブランチが動いたら verify 3 も再実測する
