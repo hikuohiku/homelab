@@ -6223,11 +6223,54 @@
       "job": "runner-p-0297-a1",
       "drift_count": 0,
       "stalled_reason": "error"
+    },
+    {
+      "id": "P-0302",
+      "title": "提供者の揺れをプロジェクトの死に換算しない — network_error 死に実署名フィクスチャ・checkpoint・上限付き自動 respawn を与える",
+      "state": "proposed",
+      "branch": "project/p-0302",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "test $(ls ops/tests/fixtures/provider_stderr/*.jsonl 2>/dev/null | wc -l) -ge 3",
+        "python3 -m pytest ops/tests/test_provider_classification.py -q",
+        "python3 ops/runner/runner.py --classify ops/tests/fixtures/provider_stderr --json | python3 -c 'import json,sys; d=json.load(sys.stdin); assert d.get(\"provider_unavailable\",0)>=3 and d.get(\"error\",0)==0, d'",
+        "python3 -m pytest ops/tests/test_provider_respawn.py -q",
+        "grep -q 'checkpoint' ops/prompts/worker.md && grep -q 'checkpoint' ops/prompts/curriculum-generate.md"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0304",
+      "title": "AdGuard が自分の設定を書き戻して堕ちる夜を、立ち上がりの門で止める — YAML 構文検証ゲートと last-known-good ローテーション (PVC 手術はしない)",
+      "state": "proposed",
+      "branch": "project/p-0304",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": true,
+      "verify": [
+        "python3 -m pytest ops/tests/test_adguard_config_guard.py -q",
+        "bash ops/adguard/config_guard.sh --selftest",
+        "grep -q 'config-guard' apps/adguard/deployment.yaml",
+        "test -f docs/adguard-config-guard.md && grep -q 'last-known-good' docs/adguard-config-guard.md"
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
-  "last_curriculum_at": "2026-08-24T08:29:11Z",
-  "last_activity_at": "2026-08-24T09:05:51Z",
+  "last_curriculum_at": "2026-08-24T09:07:03Z",
+  "last_activity_at": "2026-08-24T09:07:03Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
