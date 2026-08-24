@@ -1,18 +1,22 @@
 """curriculum Job の「黙って死ぬ」経路への構造的な歯止めを固定する (P-0227)。
 
-2026-08-23 の health 実測で curriculum Job の Pod 3 本が Failed。検死
-(ops/projects/logs/P-0227/failures.md) で断定した死因は **auth** — opencode zen
-が瞬間的に 401 を返す窓でエンジンセッションが死に、runner の mode_curriculum
+2026-08-23 の health 実測で curriculum Job の Pod 3 本が Failed。プロバイダとの
+接続がストリーム途中で切れてエンジンセッションが死に、runner の mode_curriculum
 には再試行が無いので 1 回の死が Job 全体 (backoffLimit: 0) の Failed になって
 いた。judge フェーズの死は生成済み proposals.json (20〜30 万トークン) を
 道連れにしていた。
 
+検死 (ops/projects/logs/P-0227/failures.md) は死因を **auth** と断定していたが、
+これは分類の穴による誤りだった。P-0278 で "Provider finish_reason: network_error"
+を network 群に足し、**network** と読めるようにした (下の
+TestMeasuredDeathClassifiedAsNetwork)。一時的故障であることに変わりはなく、
+歯止め (有界リトライ) の要否も変わらない。
+
 このテストは 2 つを固定する:
 
   1. **死因分類の対応表** (DoD 2)。実測の type=error イベント (raw transcript
-     より引用。文言は捏造しない) が classify_session_failure 単体では unknown
-     に落ち、直後の API プローブ 401 によって auth に寄せられること —
-     これが failures.md の `root_cause: auth` の根拠チェーン全体。
+     より引用。文言は捏造しない) が classify_session_failure 単体で network に
+     確定し、死因プローブの 401 に乗っ取られないこと。
      6 種のうち usage_limit / auth / network は分類器とプローブ写像、
      timeout は outcome=session_timeout、セッション上限は state=session_limit と
      別層で表現される (PROJECT.md 前提)。unknown は最後の砦として残る
@@ -63,25 +67,31 @@ def fake_prober(status, kind):
     return probe
 
 
-class TestMeasuredDeathClassifiedAsAuth(unittest.TestCase):
-    """実測の死が auth に断定できること (failures.md の根拠チェーン)。"""
+class TestMeasuredDeathClassifiedAsNetwork(unittest.TestCase):
+    """実測の死が network と読めること。
 
-    def test_engine_message_alone_is_unknown(self):
-        # エンジンの言葉 ("finish_reason: network_error") は FAILURE_PATTERNS の
-        # どれにも一致しない。network と誤って寄せないこと (知らない文字列は
-        # 捏造せず unknown に落とすのが表の規律)
-        self.assertEqual(classify_session_failure(MEASURED_STDERR_TAIL), "unknown")
+    P-0227 当時、エンジンの言葉 ("Provider finish_reason: network_error") は
+    FAILURE_PATTERNS のどれにも一致せず unknown に落ちていた。そこで走る
+    死因プローブが偶発的に返した 401 に死因を乗っ取られ、5 件すべてが auth と
+    記録され failures.md の結論も auth になっていた — 鍵は有効だったのに。
+    P-0278 で network 群に文言を足し、エンジンの言葉だけで確定するようにした。
+    """
 
-    def test_probe_401_promotes_unknown_to_auth(self):
+    def test_engine_message_alone_is_network(self):
+        self.assertEqual(classify_session_failure(MEASURED_STDERR_TAIL), "network")
+
+    def test_no_probe_runs_so_401_cannot_hijack_the_verdict(self):
+        # 分類が確定した回はプローブを打たない = 401 に乗っ取られる余地が無い
+        prober = fake_prober(401, "auth")
         info = build_failure_info(
             MEASURED_STDERR_TAIL,
             model="opencode-go/ox-alpha-free",
             outcome="error",
-            prober=fake_prober(401, "auth"),
+            prober=prober,
         )
-        self.assertEqual(info["failure_kind"], "auth")
-        self.assertEqual(info["probe_status"], "auth")
-        self.assertEqual(info["probe_http_status"], 401)
+        self.assertEqual(info["failure_kind"], "network")
+        self.assertEqual(prober.calls, [])
+        self.assertNotIn("probe_status", info)
 
     def test_measured_event_json_reaches_classifier_via_consume_path(self):
         # 生イベント行から Session.run() と同じ構成で blob を作っても
@@ -94,12 +104,24 @@ class TestMeasuredDeathClassifiedAsAuth(unittest.TestCase):
 
         consume_stream_event(ev, {"tokens": 0, "cost": 0.0}, errors)
         blob = "\n" + "\n".join(errors)
-        self.assertEqual(classify_session_failure(blob), "unknown")
+        self.assertEqual(classify_session_failure(blob), "network")
         self.assertIn("provider finish_reason: network_error", blob.lower())
 
 
 class TestFailureKindMapping(unittest.TestCase):
     """6 種 (usage_limit / auth / network / budget / timeout / unknown) の対応。"""
+
+    def test_probe_still_promotes_a_genuinely_unknown_death(self):
+        # 分類できない文言はプローブに委ねる経路が残っていること (P-0141)
+        info = build_failure_info(
+            "Unexpected server error. Check server logs for details.",
+            model="opencode-go/ox-alpha-free",
+            outcome="error",
+            prober=fake_prober(401, "auth"),
+        )
+        self.assertEqual(info["failure_kind"], "auth")
+        self.assertEqual(info["probe_status"], "auth")
+        self.assertEqual(info["probe_http_status"], 401)
 
     def test_probe_status_mapping_401_and_429(self):
         self.assertEqual(probe_failure_kind(401), "auth")

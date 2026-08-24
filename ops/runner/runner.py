@@ -45,11 +45,14 @@ QUOTA_WAIT_MARGIN_SECONDS = 30
 STDERR_TAIL_CHARS = 2000
 STDERR_KEEP_LINES = 400
 
-# curriculum の 1 フェーズで見逃す連続異常終了の上限 (P-0227)。worker の
-# 「3 回連続 error で諦める」(mode_worker) と同じ数。opencode は自前のリトライ
+# 1 つのセッション枠で見逃す連続異常終了の上限。worker ループの
+# 「3 回連続 error で諦める」(mode_worker) と同じ数で、curriculum の 1 フェーズ
+# (P-0227) と initializer (P-0278) もこれを共有する。opencode は自前のリトライ
 # (~6 回・指数退避, 2026-08-23 transcript 実測) を使い切った上で死ぬので、
 # その後の即時再試行は「器レベルの一時的故障」への最後の歯止めになる
-CURRICULUM_MAX_CONSECUTIVE_ERRORS = 3
+SESSION_MAX_CONSECUTIVE_ERRORS = 3
+# P-0227 から使われている別名。curriculum 側の呼び名を壊さない
+CURRICULUM_MAX_CONSECUTIVE_ERRORS = SESSION_MAX_CONSECUTIVE_ERRORS
 
 # 判定順が意味を持つ (429 系は文言が重なるので上限に寄せる):
 # usage_limit > auth > network > unknown
@@ -96,6 +99,12 @@ FAILURE_PATTERNS = (
         # "Cannot connect to API: Unable to connect. ..." — 接続拒否と DNS 失敗の
         # 2 条件で同一文言を実測 (P-0101)
         r"cannot connect to api",
+        # "Provider finish_reason: network_error" — プロバイダとの接続が
+        # ストリーム途中で切れた回。実測原本は
+        # ops/projects/logs/P-0227/raw-result-20260823T171940Z.json ほか計 5 件。
+        # 表に無かった間この文言は unknown に落ち、直後のプローブが偶発的に返した
+        # 401 に死因を乗っ取られて auth と記録されていた (鍵は有効だった)
+        r"network_error",
     )),
 )
 
@@ -318,12 +327,38 @@ def should_withhold_review(failure_kind, review_exists):
     return failure_kind == "usage_limit" and not review_exists
 
 
+def session_retry_action(outcome, failure_kind, consecutive_errors,
+                         max_consecutive=SESSION_MAX_CONSECUTIVE_ERRORS):
+    """1 セッション終了直後の次の一手 (純関数)。curriculum と initializer の共有。
+
+    戻り値は 'done' | 'retry' | 'quota_wait' | 'give_up' の 4 値。
+
+    - completed → done
+    - usage_limit → quota_wait。上限は器の外側の事実であって停滞ではない
+      (P-0026)。何回来ても連続エラーには数えない
+    - それ以外の非 completed (auth / network / unknown / session_timeout /
+      inactive_killed) → max_consecutive 回目の失敗で give_up、それまでは retry
+
+    P-0278: この判断は元々 curriculum 経路にしか無く、worker の initializer は
+    同じ死因で 1 回目に即 error を書いていた。同じ鍵・同じモデルの隣接実行が
+    成功している一時的な失敗 (2026-08-24 実測) で、プロジェクトが作業 1 行も
+    無いまま stalled になっていた。判断をここに集約して両者で共有する。
+    """
+    if outcome == "completed":
+        return "done"
+    if failure_kind == "usage_limit":
+        return "quota_wait"
+    if consecutive_errors + 1 >= max_consecutive:
+        return "give_up"
+    return "retry"
+
+
 def curriculum_next_action(outcome, artifact_exists, failure_kind, consecutive_errors):
     """curriculum の 1 フェーズ (generate/judge) 終了直後の次の一手 (純関数, P-0227)。
 
     戻り値は 'done' | 'retry' | 'quota_wait' | 'give_up' の 4 値。
-    実測の死因 (ops/projects/logs/P-0227/failures.md, 2026-08-23) はプロバイダ側の
-    瞬間的な拒否窓 (probe HTTP 401) で、同じ鍵の隣接実行は成功している — それなのに
+    実測の死因 (ops/projects/logs/P-0227/failures.md, 2026-08-23) はプロバイダとの
+    接続がストリーム途中で切れた回で、隣接実行は成功している — それなのに
     runner は 1 回死んだだけで Job 全体 (backoffLimit: 0) を落とし、judge フェーズの
     死は生成済み proposals.json を道連れにしていた。発火条件をこの純関数に集約し、
     ops/tests/test_curriculum_resilience.py で固定する。
@@ -341,13 +376,12 @@ def curriculum_next_action(outcome, artifact_exists, failure_kind, consecutive_e
       inactive_killed) → consecutive_errors + 1 回目の失敗が上限に達するまで
       retry。未知の死因でも「有界な再試行」は安全 (最悪でも 3 セッション分)
     """
-    if outcome == "completed":
-        return "done" if artifact_exists else "give_up"
-    if failure_kind == "usage_limit":
-        return "quota_wait"
-    if consecutive_errors + 1 >= CURRICULUM_MAX_CONSECUTIVE_ERRORS:
+    if outcome == "completed" and not artifact_exists:
         return "give_up"
-    return "retry"
+    return session_retry_action(
+        outcome, failure_kind, consecutive_errors,
+        CURRICULUM_MAX_CONSECUTIVE_ERRORS,
+    )
 
 
 def mask_secrets(text, env=None):
@@ -875,6 +909,7 @@ class Runner:
                     verify=verify,
                 )
                 return 1
+            consecutive_init_error = 0
             while True:
                 if self.budget.session_limit_reached():
                     # max_sessions_per_project は無限ループの最後の歯止め
@@ -884,9 +919,15 @@ class Runner:
                 outcome = self.run_session(
                     self.prompt_text("initializer"), "s0-init"
                 )
-                if outcome == "completed":
+                kind = (self.last_session or {}).get("failure_kind")
+                action = session_retry_action(
+                    outcome, kind, consecutive_init_error
+                )
+                if action == "done":
                     break
-                if self.hit_usage_limit():
+                # 沈黙は禁物 — heartbeat ログが唯一の外からの観測経路
+                log(f"initializer: outcome={outcome} kind={kind} -> {action}")
+                if action == "quota_wait":
                     # **新規プロジェクトの最初のセッションこそ最も上限に当たりやすい。**
                     # ここを stalled + incident のままにすると、本プロジェクトが消しに
                     # 来た症状 (上限を実装詰まりと読み違える) が initializer にだけ
@@ -897,15 +938,18 @@ class Runner:
                     if rc is not None:
                         return rc
                     continue
-                self.write_result(
-                    "error",
-                    error=(
-                        f"initializer: {outcome} "
-                        f"(failure_kind={self.failure_fields()['failure_kind']})"
-                    ),
-                    **self.failure_fields(),
-                )
-                return 1
+                if action == "give_up":
+                    self.write_result(
+                        "error",
+                        error=(
+                            f"initializer: {outcome} が "
+                            f"{consecutive_init_error + 1} 回連続 "
+                            f"(failure_kind={self.failure_fields()['failure_kind']})"
+                        ),
+                        **self.failure_fields(),
+                    )
+                    return 1
+                consecutive_init_error += 1
             self.push_if_committed()
 
         consecutive_inactive = 0
