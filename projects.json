@@ -5731,7 +5731,51 @@
         "soft_cap": 2000000
       },
       "created": "2026-08-24",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-24T07:00:05Z",
+        "verify": [
+          {
+            "cmd": "python3 ops/tools/argocd_controller_peaks.py --check && test -s ops/projects/logs/P-0278/controller_memory_peaks.json",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-delkzwhg/repo/ops/tools/argocd_controller_peaks.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "python3 -c \"import json,sys; ev=json.load(open('ops/projects/logs/P-0278/controller_memory_peaks.json')); sys.exit(0 if ev.get('max_working_set_bytes') and ev.get('source')=='ops-health-report/history' else 1)\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,sys; ev=json.load(open('ops/projects/logs/P-0278/controller_memory_peaks.json')); sys.exit(0 if ev.get('max_working_set_bytes') and ev.get('source')=='ops-health-report/history' else 1)\n                                  ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'ops/projects/logs/P-0278/controller_memory_peaks.json'\n"
+          },
+          {
+            "cmd": "python3 ops/check_argocd_controller_capacity.py",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-delkzwhg/repo/ops/check_argocd_controller_capacity.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "git fetch origin ops-health-report --depth=1 && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys,datetime; d=json.load(sys.stdin); bad=[t for p in d.get('pod_issues',[]) if 'application-controller' in p.get('name','') for t in p.get('terminated',[]) if t.get('reason')=='OOMKilled' and t.get('finished_at','') > sys.argv[1]]; sys.exit(1 if bad else 0)\" $(cat ops/projects/logs/P-0278/applied_at)",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "From https://github.com/hikuohiku/homelab\n * branch                ops-health-report -> FETCH_HEAD\ncat: can't open 'ops/projects/logs/P-0278/applied_at': No such file or directory\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,sys,datetime; d=json.load(sys.stdin); bad=[t for p in d.get('pod_issues',[]) if 'application-controller' in p.get('name','') for t in p.get('terminated',[]) if t.get('reason')=='OOMKilled' and t.get('finished_at','') > sys.argv[1]]; sys.exit(1 if bad else 0)\n                                                                                                                                                                                                                                           ~~~~~~~~^^^\nIndexError: list index out of range\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     },
     {
       "id": "P-0279",
@@ -5753,7 +5797,53 @@
         "soft_cap": 1500000
       },
       "created": "2026-08-24",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-24T07:00:05Z",
+        "verify": [
+          {
+            "cmd": "grep -q 'container=heart' apps/ops-health-reporter/report.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "git fetch origin ops-health-report --depth=1 && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); hb=d['autopilot']['heartbeat']; assert not hb.get('error'), hb; assert hb.get('beat') or hb.get('last_end'), hb\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "From https://github.com/hikuohiku/homelab\n * branch                ops-health-report -> FETCH_HEAD\nTraceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,sys; d=json.load(sys.stdin); hb=d['autopilot']['heartbeat']; assert not hb.get('error'), hb; assert hb.get('beat') or hb.get('last_end'), hb\n                                                                                    ^^^^^^^^^^^^^^^^^^^\nAssertionError: {'error': 'HTTPError: HTTP Error 400: Bad Request'}\n"
+          },
+          {
+            "cmd": "git fetch origin ops-health-report --depth=1 && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); s=d.get('dashboard_smoke',{}); assert s.get('status') not in ('no_data',None), s\"",
+            "ok": true,
+            "rc": 0,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "From https://github.com/hikuohiku/homelab\n * branch                ops-health-report -> FETCH_HEAD\n"
+          },
+          {
+            "cmd": "grep -q 'container=' ops/memory/substrate.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "some_pass",
+        "passed": [
+          "git fetch origin ops-health-report --depth=1 && git show origin/ops-health-report:ops/health/latest.json | python3 -c \"import json,sys; d=json.load(sys.stdin); s=d.get('dashboard_smoke',{}); assert s.get('status') not in ('no_data',None), s\""
+        ],
+        "broken": []
+      }
     }
   ],
   "chores": [],
