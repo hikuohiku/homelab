@@ -2146,20 +2146,62 @@ node_metrics/nodes/notes/pod_issues/pod_metrics/pvc_usage/pvcs、recovery_probe 
 
 新たな発見は無い。
 
+## セッション 74 (2026-08-24)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 17 から不変。pull ref 一致を確認
+(local HEAD = origin/project/p-0258 = 520fa822d = session 73 commit、ahead/behind 無し)。
+
+**新たな動き: curriculum が PR 化した** — `refs/pull/581/head` = 00de3c47b
+(「curriculum: 6 案 (採択 2)」単 commit、main 先端ベース) が session 73 時点には無かった
+PR として立っている。中身を実測: 採択は **P-0278** (application-controller OOM 修繕、
+apps/argocd/values.yaml 更新) と **P-0279** (reporter 入力修復、report.py への
+container=heart 明示 + dashboard_smoke no_data 切り分け) の 2 案。adguard 削除と
+P-0270 archive も同梱。**P-0258 spec への言及・verify 3 の移管は含まれない**
+(diff 全量 grep 実測、recovery/canary 言及は自ブランチ由来の既存案内のみ)。
+未 merge につき世界はまだ変わらない。
+
+先回りの conflict 実測: `git merge-tree --write-tree` (pr-581 × HEAD) は **rc=0 で
+conflict 無し**。P-0279 が `apps/ops-health-reporter/report.py` を触るが自ブランチの
+report.py 変更とは競合しない。なお P-0279 自体は recovery_probe を追加**しない**
+(heartbeat/dashboard_smoke 修復が主眼) ので、着地しても verify 3 は red の見込み —
+ただし reporter ブランチにコード diff が初めて載るので、その時は diff --stat 確認の上
+verify 3 を正式再実測すること。
+
+reporter ブランチは不変 (ec5443b69、ls-remote 実測) のため verify 3 は参考確認のみ —
+`recovery_probe: None` で **red 継続**。top-level keys 実測も session 52〜73 と同一
+(applications/autopilot/dashboard_smoke/download_budget/externalsecrets/generated_at/
+node_metrics/nodes/notes/pod_issues/pod_metrics/pvc_usage/pvcs、recovery_probe 無し)。
+待機中の動きは ops-state beat 209〜211 (4d3cff84b..edb5d0ddf) の heartbeat.json/
+metrics.jsonl のみで projects.json への diff は 0 行 (実測)。p-0243 も
+995732e62..aa4bc483a まで動いたが自己ログ PROGRESS.md +149 行のみで非関連。
+spec・runner 非接触。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 72 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 72 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | reporter ブランチ不変につき参考確認のみ — recovery_probe: None で red 継続 |
+
+新たな発見: PR #581 (curriculum 採択 P-0278/P-0279) の出現。デッドロック解消の
+直接要因 (spec 修正・escape hatch) はまだ含まないが、**main が次に動くのはおそらく
+これ** — 着地検知を最優先で見ること。
+
 ## 次のセッションへの一言
 
-セッション 13〜73 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+セッション 13〜74 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
 `git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
 spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
-(一時ファイルは必ず `mktemp`)。reporter ブランチが動いたら verify 3 も再実測する
-(session 30/41/51/62/72 の前例。食い違いがあれば明示 fetch してから — session 41 の発見参照)。
-reporter ブランチの動きは現状 routine データ beat なので、**diff --stat に ops/health 以外
-(= report.py / rbac.yaml 等のコード) が載った時だけ**中身を見ればよい。
-ops-state beat の `projects.json` に P-0258 への言及があってもそれは毎 beat の全プロジェクト
-状態ダンプなので、**自プロジェクトの status 文字列が変わった時だけ**注意深く見ればよい
-(session 42 で確認済み)。
+(一時ファイルは必ず `mktemp`)。
+**main が 59169fddf から動いていたら = PR #581 (curriculum) が着地した可能性が最も高い**
+ので、(a) 何が merge されたか origin/main の log --oneline -3 で確認、(b)
+`apps/ops-health-reporter/` の conflict 再確認 (session 74 に merge-tree rc=0 の前例あり。
+ただし以後に main 側が進んでいればやり直し)、(c) reporter ブランチの diff --stat に
+コード (report.py / rbac.yaml) が載っていれば明示 fetch の上 verify 3 を正式再実測
+(session 30/41/51/62/72 の前例) — ただし P-0278/P-0279 は recovery_probe を足さないので
+red 継続の見込み。reporter ブランチの routine データ beat だけなら従来どおり参考確認で可。
+ops-state beat の `projects.json` は毎 beat の全プロジェクト状態ダンプなので、
+**自プロジェクトの status 文字列が変わった時だけ**注意深く見ればよい (session 42 確認済み)。
 curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
 か runner escape hatch が着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or
 03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
-なお P-0279 が merge されたら `apps/ops-health-reporter/` の conflict 有無を先に確認
-してから verify を回すこと。
