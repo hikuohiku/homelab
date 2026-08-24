@@ -19,8 +19,9 @@ metadata:
 #   3. 同じ判断を ops-health-reporter (apps/ops-health-reporter/rbac.yaml) で既にしている。
 #      読む対象が同じなので、ルールもそちらに揃える
 #
-# なお autopilot の一次情報源は ops-health-reporter が書き戻す ops-health-report ブランチ
-# （CHARTER §2）で、この API 直読みはその補助。ブランチが古いときの原因切り分けに使う。
+# なお autopilot の一次情報源は ops-health-reporter が書き戻す ConfigMap
+# autopilot/ops-health-report（CHARTER §2）で、この API 直読みはその補助。
+# レポートが古いときの原因切り分けに使う。
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -178,4 +179,41 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: autopilot-writer
+    namespace: autopilot
+---
+# 健全性レポートの読み手 (heart / 常駐コア)。ops-health-reporter (CronJob) が
+# 30 分ごとに書く ConfigMap 1 個の get だけ。設計 state-out-of-git Phase 5 で
+# GitHub の ops-health-report ブランチ経由をやめ、クラスタ内で完結させた。
+#
+# ClusterRole `autopilot-reader` に configmaps を足さないのは、この namespace に
+# heart へ流れ込む ConfigMap (autopilot-config = プロンプト類) があり、
+# 全 namespace の ConfigMap 読み取りは必要な範囲より広いため。
+# **コアには書き込み動詞を一切渡さない** (設計 D29)。
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ops-health-report-reader
+  namespace: autopilot
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["ops-health-report"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ops-health-report-reader
+  namespace: autopilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: ops-health-report-reader
+subjects:
+  - kind: ServiceAccount
+    name: autopilot-heart
+    namespace: autopilot
+  # 常駐コア (apps/autopilot-core)。homelab_health と健全性の見張りが読む
+  - kind: ServiceAccount
+    name: autopilot-core
     namespace: autopilot

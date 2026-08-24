@@ -152,20 +152,18 @@ func TestStatusReportsBadStatusAsIsError(t *testing.T) {
 	}
 }
 
-func TestHealthReadsReportBranch(t *testing.T) {
+func TestHealthReadsReportConfigMap(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.Contains(r.URL.RawQuery, "ref=ops-health-report") {
-			t.Errorf("health レポートのブランチを見るべき: %q", r.URL.RawQuery)
-		}
-		if r.Header.Get("Accept") != "application/vnd.github.raw" {
-			t.Errorf("raw で取るべき: %q", r.Header.Get("Accept"))
+		if r.URL.Path != "/api/v1/namespaces/autopilot/configmaps/ops-health-report" {
+			t.Errorf("reporter が書く ConfigMap を見るべき: %q", r.URL.Path)
 		}
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"generated_at":"2026-08-23T12:00:00Z","applications":[]}`))
+		_, _ = w.Write([]byte(`{"data":{"latest.json":"{\"generated_at\":\"2026-08-23T12:00:00Z\",\"applications\":[]}"}}`))
 	}))
 	defer server.Close()
 
-	s, out := newMCP(t, &config{githubAPI: server.URL, githubToken: "t", repo: "o/r"})
+	s, out := newMCP(t, &config{})
+	s.kube = newKubeAgainst(server.URL)
 	in := `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"homelab_health"}}`
 	if err := s.serve(context.Background(), strings.NewReader(in)); err != nil {
 		t.Fatal(err)
@@ -177,6 +175,25 @@ func TestHealthReadsReportBranch(t *testing.T) {
 	}
 	if !strings.Contains(res.Content[0].Text, "generated_at") {
 		t.Fatalf("レポートをそのまま返すべき: %q", res.Content[0].Text)
+	}
+}
+
+// レポートが読めないことを「異常なし」に化けさせない。
+func TestHealthReportsMissingKeyAsIsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{}}`))
+	}))
+	defer server.Close()
+
+	s, out := newMCP(t, &config{})
+	s.kube = newKubeAgainst(server.URL)
+	in := `{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"homelab_health"}}`
+	if err := s.serve(context.Background(), strings.NewReader(in)); err != nil {
+		t.Fatal(err)
+	}
+	if !resultOf(t, firstResponse(t, out.String())).IsError {
+		t.Fatal("latest.json が無ければ isError で返すべき")
 	}
 }
 

@@ -464,7 +464,7 @@ class Heart:
 
         # --- 観測。失敗した項目は None (「無い」と区別する。decide が保守的に扱う) ---
         unhealthy_apps, health_fresh, health_doc = facts.load_health(
-            self.repo_dir, self.cfg.health_branch
+            self.k8s_client(), self.cfg.namespace, self.cfg.health_configmap
         )
         # B2 download cap の帳簿の警報すべき状態 (P-0128)。warn/exceed のときだけ
         # 中身があり、それ以外は None (budget_alert_due が繰り返しを落とす)

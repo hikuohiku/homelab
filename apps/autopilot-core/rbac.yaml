@@ -24,3 +24,7 @@ subjects:
   - kind: ServiceAccount
     name: autopilot-core
     namespace: autopilot
+# 健全性レポート (ConfigMap autopilot/ops-health-report) の読み取りは
+# Role `ops-health-report-reader` (apps/autopilot/rbac.yaml) が持ち、
+# その RoleBinding が autopilot-core を subject に含めている。get だけで、
+# コアは ConfigMap を書けない (設計 D29)。ここに重複して書かない。

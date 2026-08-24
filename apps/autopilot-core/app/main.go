@@ -13,7 +13,7 @@
 //	      → コアが telegram_reply MCP ツールで人間へ直接返す
 //
 //	(2) 健全性の変化 (人間に言われずに動く経路)
-//	    ops-health-report の latest.json → 不調なアプリの顔ぶれが変わったら起こす
+//	    健全性レポート (ConfigMap) → 不調なアプリの顔ぶれが変わったら起こす
 //
 // イベントを渡すほかに、コアが自分で調べるための材料も用意する:
 //
@@ -48,6 +48,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -207,10 +208,25 @@ func buildPrompt(n note) string {
 type client struct {
 	cfg  *config
 	http *http.Client
+	// kube は健全性レポート (ConfigMap) を読むための口。最初に使うときだけ作り、
+	// 作れなかった理由は覚えておく (mcpServer.kubeAPI と同型)
+	kube    *kubeClient
+	kubeErr error
+	kubeMu  sync.Mutex
 }
 
 func newClient(cfg *config) *client {
 	return &client{cfg: cfg, http: &http.Client{Timeout: 60 * time.Second}}
+}
+
+func (c *client) kubeAPI() (*kubeClient, error) {
+	c.kubeMu.Lock()
+	defer c.kubeMu.Unlock()
+	if c.kube != nil || c.kubeErr != nil {
+		return c.kube, c.kubeErr
+	}
+	c.kube, c.kubeErr = newKubeClient()
+	return c.kube, c.kubeErr
 }
 
 func (c *client) opencode(ctx context.Context, method, path string, payload any) (int, []byte, error) {
@@ -707,7 +723,7 @@ func orDash(s string) string {
 // --- 健全性の見張り ---
 //
 // コアが人間に言われなくても異常に気づくための経路。VISION の「指示を待たない」の
-// 最小実装で、v0 では ops-health-report ブランチの latest.json を見て
+// 最小実装で、v0 では ops-health-reporter が書く ConfigMap の latest.json を見て
 // 「不健全なアプリの顔ぶれが変わったとき」だけコアを起こす。
 //
 // 遅延の上限は report を書く CronJob の周期 (30 分) で決まる。ここを詰めるには
@@ -774,18 +790,18 @@ func orNone(xs []string) string {
 // watchHealth は健全性の変化を見て、変わっていればコアを起こす。
 // 起こしたときだけ true を返す。
 func (c *client) watchHealth(ctx context.Context, sessionID, cursorPath string) bool {
-	branch := envOr("CORE_HEALTH_BRANCH", "ops-health-report")
-	path := envOr("CORE_HEALTH_PATH", "ops/health/latest.json")
-	status, raw, err := c.github(ctx,
-		fmt.Sprintf("/repos/%s/contents/%s?ref=%s", c.cfg.repo, path, branch),
-		"application/vnd.github.raw")
-	if err != nil || status != http.StatusOK {
+	k, err := c.kubeAPI()
+	if err != nil {
 		// 読めないことは異常の不在を意味しない。黙って次の周回に回す
 		// (ここで騒ぐと、レポート未生成の間ずっと鳴り続ける)
 		return false
 	}
+	raw, err := k.healthReport(ctx)
+	if err != nil {
+		return false
+	}
 	var doc healthDoc
-	if err := json.Unmarshal(raw, &doc); err != nil {
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
 		log.Printf("health レポートが壊れている (無視): %v", err)
 		return false
 	}

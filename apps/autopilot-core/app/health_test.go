@@ -6,12 +6,23 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+// configMapWith は reporter が書く ConfigMap の応答を組み立てる
+// (data.latest.json にレポートの JSON 文字列が入る形)。
+func configMapWith(report string) []byte {
+	body, err := json.Marshal(map[string]any{"data": map[string]string{"latest.json": report}})
+	if err != nil {
+		panic(err)
+	}
+	return body
+}
 
 func docWith(apps ...[3]string) healthDoc {
 	var d healthDoc
@@ -91,14 +102,15 @@ func TestWatchHealthFirstRunRecordsWithoutWaking(t *testing.T) {
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	defer oc.Close()
-	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(`{"generated_at":"t","applications":[{"name":"immich","sync":"Synced","health":"Degraded"}]}`))
+		_, _ = w.Write(configMapWith(`{"generated_at":"t","applications":[{"name":"immich","sync":"Synced","health":"Degraded"}]}`))
 	}))
-	defer gh.Close()
+	defer api.Close()
 
 	dir := t.TempDir()
-	c := newClient(&config{opencodeURL: oc.URL, githubAPI: gh.URL, githubToken: "t", repo: "o/r"})
+	c := newClient(&config{opencodeURL: oc.URL})
+	c.kube = newKubeAgainst(api.URL)
 	cursor := filepath.Join(dir, "health-cursor.json")
 
 	if c.watchHealth(context.Background(), "ses_1", cursor) {
@@ -125,18 +137,19 @@ func TestWatchHealthWakesOnChange(t *testing.T) {
 	defer oc.Close()
 
 	degraded := true
-	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		if degraded {
-			_, _ = w.Write([]byte(`{"generated_at":"t","applications":[{"name":"immich","sync":"Synced","health":"Degraded"}]}`))
+			_, _ = w.Write(configMapWith(`{"generated_at":"t","applications":[{"name":"immich","sync":"Synced","health":"Degraded"}]}`))
 			return
 		}
-		_, _ = w.Write([]byte(`{"generated_at":"t","applications":[{"name":"immich","sync":"Synced","health":"Healthy"}]}`))
+		_, _ = w.Write(configMapWith(`{"generated_at":"t","applications":[{"name":"immich","sync":"Synced","health":"Healthy"}]}`))
 	}))
-	defer gh.Close()
+	defer api.Close()
 
 	dir := t.TempDir()
-	c := newClient(&config{opencodeURL: oc.URL, githubAPI: gh.URL, githubToken: "t", repo: "o/r"})
+	c := newClient(&config{opencodeURL: oc.URL})
+	c.kube = newKubeAgainst(api.URL)
 	cursor := filepath.Join(dir, "health-cursor.json")
 
 	c.watchHealth(context.Background(), "ses_1", cursor) // 初回: 記録のみ
@@ -156,13 +169,39 @@ func TestWatchHealthStaysQuietWhenReportUnreadable(t *testing.T) {
 		t.Error("prompt を投げてはいけない")
 	}))
 	defer oc.Close()
-	gh := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
-	defer gh.Close()
+	defer api.Close()
 
-	c := newClient(&config{opencodeURL: oc.URL, githubAPI: gh.URL, githubToken: "t", repo: "o/r"})
+	c := newClient(&config{opencodeURL: oc.URL})
+	c.kube = newKubeAgainst(api.URL)
 	if c.watchHealth(context.Background(), "ses_1", filepath.Join(t.TempDir(), "h.json")) {
 		t.Fatal("読めないときは起こさない")
+	}
+}
+
+// reporter (apps/ops-health-reporter/report.py) が書く場所と、コアが読む場所が
+// 同じであることを固定する。ここがずれると「いつまでも変化に気づかない」形で壊れる。
+func TestWatchHealthReadsReporterConfigMap(t *testing.T) {
+	oc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer oc.Close()
+
+	var seen string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seen = r.URL.Path
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(configMapWith(`{"generated_at":"t","applications":[]}`))
+	}))
+	defer api.Close()
+
+	c := newClient(&config{opencodeURL: oc.URL})
+	c.kube = newKubeAgainst(api.URL)
+	c.watchHealth(context.Background(), "ses_1", filepath.Join(t.TempDir(), "h.json"))
+
+	if seen != "/api/v1/namespaces/autopilot/configmaps/ops-health-report" {
+		t.Fatalf("reporter の書き先と揃っていない: %q", seen)
 	}
 }

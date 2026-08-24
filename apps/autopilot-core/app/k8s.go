@@ -128,6 +128,38 @@ func (k *kubeClient) stamp() string {
 	return now().UTC().Format(time.RFC3339)
 }
 
+// --- 健全性レポート (ops-health-reporter が書く ConfigMap) ---
+
+// healthReportTarget は健全性レポートの置き場所を返す。
+// ops-health-reporter (apps/ops-health-reporter/report.py) の書き先と揃えること。
+func healthReportTarget() (namespace, name, key string) {
+	return envOr("CORE_HEALTH_NAMESPACE", "autopilot"),
+		envOr("CORE_HEALTH_CONFIGMAP", "ops-health-report"),
+		envOr("CORE_HEALTH_KEY", "latest.json")
+}
+
+// healthReport は ConfigMap に置かれた健全性レポートの生 JSON を返す。
+//
+// 以前は GitHub の ops-health-report ブランチを読んでいた。書き手 (CronJob) も
+// 読み手 (コア / heart) も同じクラスタに居るので往復をやめた
+// (設計 docs/design/state-out-of-git Phase 5)。**読むだけ**で、コアに ConfigMap の
+// 書き込み権限は無い (設計 D29)。
+func (k *kubeClient) healthReport(ctx context.Context) (string, error) {
+	namespace, name, key := healthReportTarget()
+	var cm struct {
+		Data map[string]string `json:"data"`
+	}
+	if err := k.get(ctx, "/api/v1/namespaces/"+namespace+"/configmaps/"+name, &cm); err != nil {
+		return "", err
+	}
+	raw, ok := cm.Data[key]
+	if !ok {
+		return "", fmt.Errorf("ConfigMap %s/%s に %s が無い (reporter がまだ書いていない?)",
+			namespace, name, key)
+	}
+	return raw, nil
+}
+
 // --- ArgoCD Application ---
 
 type appList struct {
