@@ -104,8 +104,10 @@ button:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px soli
 .agent-card:hover { border-color: var(--accent); }
 .agent-card.is-active { border-color: var(--accent); background: var(--accent-soft); }
 .agent-card__top { display: flex; justify-content: space-between; align-items: center; }
+.agent-card__labels { display: flex; align-items: center; gap: 6px; }
 .role { font-size: 11px; font-weight: 700; color: var(--blue); }
 .role--worker { color: var(--accent); }.role--reviewer { color: var(--warn); }.role--critic { color: var(--danger); }
+.resident-badge { font-size: 9px; font-weight: 700; color: var(--accent); border: 1px solid var(--accent); border-radius: 4px; padding: 1px 5px; }
 .live-dot { color: var(--muted); font-size: 10px; display: flex; align-items: center; gap: 5px; }
 .live-dot i { width: 6px; height: 6px; background: var(--accent); border-radius: 50%; }
 .agent-card > strong { display: block; margin-top: 9px; font-size: 17px; font-weight: 800; }

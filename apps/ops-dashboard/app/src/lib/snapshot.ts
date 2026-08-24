@@ -1,7 +1,7 @@
 import { getKubeSnapshot } from "./kubernetes";
 import { getOpsState } from "./ops-state";
 import { latestAction } from "./transcript";
-import type { AttentionItem, Project, Snapshot } from "./types";
+import type { AgentSnapshot, AttentionItem, Project, Snapshot } from "./types";
 
 const QUESTION_REASONS = new Set(["budget_exhausted", "quota_wait_exhausted", "merge_timeout", "pr_closed"]);
 const FLOW_ORDER = ["proposed", "announced", "active", "in_review", "merging", "soaking", "delivered", "stalled", "vetoed"];
@@ -44,7 +44,7 @@ export function buildAttention(projects: Project[], now = new Date()): Attention
 export async function getSnapshot(): Promise<Snapshot> {
   const [state, kube] = await Promise.all([getOpsState(), getKubeSnapshot()]);
   const projectsById = new Map(state.projects.map((project) => [project.id.toUpperCase(), project]));
-  const agents = await Promise.all(kube.jobs.map(async (job) => {
+  const jobAgents = await Promise.all(kube.jobs.map(async (job) => {
     const action = await latestAction(job.role, job.projectId);
     return {
       ...job,
@@ -53,6 +53,20 @@ export async function getSnapshot(): Promise<Snapshot> {
       transcriptAvailable: action.available,
     };
   }));
+  // 常駐組 (heart/resident Deployment) は projectId / transcript を持たない。
+  // 「応答可能か」= Ready 数を recentAction の位置に出す
+  const residentAgents: AgentSnapshot[] = kube.residents.map((r) => ({
+    id: r.id,
+    role: r.role,
+    projectId: r.id.toUpperCase(),
+    projectTitle: "常駐エージェント",
+    startedAt: r.startedAt,
+    podPhase: r.podPhase,
+    recentAction: `Ready ${r.readyReplicas}/${r.replicas}`,
+    transcriptAvailable: false,
+    resident: true,
+  }));
+  const agents = [...jobAgents, ...residentAgents];
   const heartbeatAt = state.heartbeat.at ? Date.parse(state.heartbeat.at) : 0;
   const breaker = state.metrics.breaker ?? {};
   const warnings = [state.warning, kube.warning].filter((value): value is string => Boolean(value));

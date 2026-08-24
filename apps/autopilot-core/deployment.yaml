@@ -10,6 +10,9 @@ metadata:
   namespace: autopilot
   labels:
     app: autopilot-core
+    # Mission Control (ops-dashboard) の「常駐」列挙用。
+    # 次の住人を増やすときもこの label を metadata.labels に付けるだけでよい
+    heart/resident: "true"
 spec:
   replicas: 1
   # セッション storage を単一 PVC に持つので、rolling 中の二重起動を避ける

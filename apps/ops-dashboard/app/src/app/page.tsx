@@ -21,7 +21,8 @@ const STATE_LABEL: Record<string, string> = {
 };
 const ROLE_LABEL: Record<AgentRole, string> = {
   worker: "WORKER", reviewer: "REVIEWER", curriculum: "CURRICULUM",
-  critic: "CRITIC", consolidation: "CONSOLIDATION", chore: "CHORE", unknown: "AGENT",
+  critic: "CRITIC", consolidation: "CONSOLIDATION", chore: "CHORE",
+  core: "CORE", heart: "HEART", unknown: "AGENT",
 };
 const LIVE_STATES = ["proposed", "announced", "active", "in_review", "merging", "soaking"];
 
@@ -69,13 +70,17 @@ function AgentCard({ agent, active, now, onSelect }: {
   return (
     <button className={`agent-card ${active ? "is-active" : ""}`} onClick={onSelect} aria-pressed={active}>
       <span className="agent-card__top">
-        <span className={`role role--${agent.role}`}>{ROLE_LABEL[agent.role]}</span>
+        <span className="agent-card__labels">
+          <span className={`role role--${agent.role}`}>{ROLE_LABEL[agent.role]}</span>
+          {agent.resident && <span className="resident-badge">常駐</span>}
+        </span>
         <span className="live-dot"><i />{agent.podPhase === "Running" ? "LIVE" : agent.podPhase}</span>
       </span>
       <strong>{agent.projectId}</strong>
       <span className="agent-card__title">{agent.projectTitle ?? "システム運用"}</span>
       <span className="agent-card__action">› {agent.recentAction}</span>
-      <span className="agent-card__time">T+ {elapsed(agent.startedAt, now)}</span>
+      {/* 常駐は長時間稼働が普通なので経過時間でなく開始時刻を出す */}
+      <span className="agent-card__time">{agent.resident ? `開始 ${formatDate(agent.startedAt)}` : `T+ ${elapsed(agent.startedAt, now)}`}</span>
     </button>
   );
 }
