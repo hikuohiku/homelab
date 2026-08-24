@@ -127,7 +127,7 @@ class BudgetAlertBeatTest(unittest.TestCase):
         ]
 
     def _latest_metric(self):
-        return StateFiles(self.h.state_dir).read_jsonl("metrics.jsonl")[-1]
+        return self.h.metrics_store.read_jsonl("metrics.jsonl")[-1]
 
     def test_warn_persists_cursor_and_fires_once_per_day_then_exceed_refires(self):
         self._beat(([], True, health_doc("warn")))

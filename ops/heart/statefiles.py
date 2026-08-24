@@ -160,7 +160,14 @@ class StateFiles:
                 f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
     # --- heartbeat ---
-    def write_heartbeat(self, beat, now=None):
-        self._save_json(
-            "heartbeat.json", {"beat": beat, "at": now_iso(now), "writer": "heart"}
-        )
+    def write_heartbeat(self, beat, now=None, usage=None):
+        """生存と、当日の使用量。
+
+        usage を載せるのはダッシュボードのため。metrics.jsonl が git から
+        出た (設計 state-out-of-git Phase 1) 後、ダッシュボードが要る指標は
+        これだけなので、既に毎ビート書いている heartbeat に相乗りさせる。
+        """
+        doc = {"beat": beat, "at": now_iso(now), "writer": "heart"}
+        if usage is not None:
+            doc["usage"] = usage
+        self._save_json("heartbeat.json", doc)

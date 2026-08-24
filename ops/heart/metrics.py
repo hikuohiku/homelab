@@ -103,6 +103,50 @@ def scan_transcript_costs(transcripts_dir, day):
     return total, tokens, sessions, empty
 
 
+# metrics.jsonl を PVC に置いてから残す時間 (設計 state-out-of-git Phase 1)。
+# summarize_beats の既定窓は 24h。critic が窓をまたいで走ることがあるので倍取る。
+METRICS_KEEP_HOURS = 48
+
+
+def beat_record(at, beat, doc, **fields):
+    """1 ビート分の指標レコードを組む (純関数)。
+
+    **終端プロジェクトを載せない。** summarize_beats は終端を state_seconds から
+    明示的に除外していて、必要なのは terminal_now (最後のビートでの件数) だけ。
+    それでも毎ビート全 108 件を書いていたので、1 行が 8 KB になり
+    metrics.jsonl は 8.9 MB まで育っていた (2026-08-25 実測)。95% は二度と
+    変わらない終端の繰り返しだった。
+
+    非終端だけを載せ、終端は件数に畳む。1 行 8 KB → 300 B 程度になる。
+    """
+    projects = {}
+    terminal_counts = {}
+    for pr in doc.get("projects", []):
+        state = pr.get("state")
+        if state in TERMINAL_STATES:
+            terminal_counts[state] = terminal_counts.get(state, 0) + 1
+        else:
+            projects[pr["id"]] = state
+    return {
+        "at": now_iso(at),
+        "beat": beat,
+        "projects": projects,
+        "terminal_counts": terminal_counts,
+        **fields,
+    }
+
+
+def prune_beats(records, now, keep_hours=METRICS_KEEP_HOURS):
+    """保持窓より古いレコードを落とす (純関数)。at が読めない行は捨てる。"""
+    start = now - timedelta(hours=keep_hours)
+    kept = []
+    for rec in records:
+        at = _beat_at(rec)
+        if at is not None and at >= start:
+            kept.append(rec)
+    return kept
+
+
 def _beat_at(rec):
     try:
         return parse_iso(rec["at"])
@@ -221,16 +265,26 @@ def summarize_beats(records, now, window_hours=24, max_gap_seconds=MAX_BEAT_GAP_
                 pid: {k: int(v) for k, v in sorted(per.items(), key=lambda kv: -kv[1])}
                 for pid, per in project_seconds.items()
             },
-            "terminal_now": {
-                s: sum(1 for st in last_states.values() if st == s)
-                for s in TERMINAL_STATES
-            },
+            "terminal_now": _terminal_now(beats[-1][1]),
             "actions": dict(
                 sorted(action_counts.items(), key=lambda kv: (-kv[1], kv[0]))
             ),
         }
     )
     return summary
+
+
+def _terminal_now(rec):
+    """最後のビートの終端件数。新しい行は terminal_counts を持つ。
+
+    古い行 (2026-08-25 以前) は projects に終端も含めて持っているので、
+    そちらから数える。保持窓の入れ替わり中に両方が混ざるため両対応が要る。
+    """
+    counts = rec.get("terminal_counts")
+    if isinstance(counts, dict):
+        return {s: int(counts.get(s, 0)) for s in TERMINAL_STATES}
+    states = rec.get("projects") or {}
+    return {s: sum(1 for st in states.values() if st == s) for s in TERMINAL_STATES}
 
 
 def summarize_stalled(projects_doc):
