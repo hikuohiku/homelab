@@ -832,3 +832,47 @@
   test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
 - main 追い越しの手順はセッション 17 の「罠注意」参照 (merge-base diff で中身確認)
 - 生死が気になったら archive.jsonl ではなく ops-state:projects.json の `state` を見る
+
+## セッション 21 (2026-08-24) — 短絡チェックのみ (main 不動・census 未着・P-0243 active 不変), コード変更ゼロ
+
+### やったこと
+
+- **fetch 先行 (セッション 18 の教訓どおり) → main 新着 = 0** (#580 のまま)。
+  merge 作業なし。census も未着 (`git ls-tree -r origin/main | grep -c egress` = 0)
+- fetch 後に ops-state が動いていた (a018aa81c → 0758f96ab) ため
+  ops-state:projects.json を確認: P-0243 `state=active`・spawn_count=1・
+  drift_count=0 の不変。adopt_gate_attempts=1 のまま (欄が将来更新されたら
+  何か起きている合図、は継続)
+- spec verify 一式を再走:
+  - V1 green / V3 green / V2 red — V2 は既知 fail-fast rc=2 で stderr も wrapper
+    実測と同一メッセージ (`/tmp/opencode` 書き込みプローブで中断、クラスタ接触前
+    なので副作用ゼロ)
+  - PR 差分 14 ファイル不変・spawn.py emptyDir mount (/tmp/opencode, 64Mi) 無傷を
+    実読確認
+- demo.json 完全性チェック全パス (**セッション 20 修正版の「トップレベル bool 7 個」
+  形式で実行** — `all_passed/cleaned_up/dns_ok_control/dns_ok_labeled/labeled_blocked/
+  probes_conclusive/unlabeled_allowed` + `pods.labeled.probe.https_ok is False` +
+  `pods.control.probe.https_ok is True`)
+
+### 発見 (仕様外)
+
+- 今セッションで新しい発見は無し
+
+### 検証 (全部自分で実走済み)
+
+- fetch + main 追い越し判定 (新着 0) / census 未着確認 /
+  ops-state:projects.json P-0243 state=active 確認 /
+  spec verify V1 green / V3 green / V2 既知 fail-fast rc=2 /
+  PR 差分 14 ファイル不変確認 / spawn.py emptyDir mount 実読確認 /
+  demo.json 完全性チェック (トップレベル 7 bool 形式)
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4〜20 から不変**: V2 は本 PR の merge+sync 後の新 runner Pod で
+  自動 green 化する (spawn.py の emptyDir mount 済み)。Pod 内での再走・権限 hack は不要
+  (sudo 不在まで実証済み)。やることは「PR merge を待つ」だけ。main 新着なければ短絡でよい
+- census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+  到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+  test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+- main 追い越しの手順はセッション 17 の「罠注意」参照 (merge-base diff で中身確認)
+- 生死が気になったら archive.jsonl ではなく ops-state:projects.json の `state` を見る
