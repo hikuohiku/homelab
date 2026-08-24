@@ -1305,13 +1305,41 @@ refspec は標準 (`+refs/heads/*`) なので設定の罠ではなく push と�
 (報告用 CronJob が分単位で push するため、ls-remote と fetch の間で差が出うる)。
 **今後、ls-remote と tracking ref が食い違ったら明示 fetch で追い付いてから判断すること。**
 
+## セッション 42 (2026-08-24、UTC 01:36 開始 = JST 10:36)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 17 から不変。新 curriculum ブランチも
+無し (`heart/curriculum-20260824-002231` のみ、ls-remote = 00de3c47b で不変)。
+P-0279 も未着地 (`git grep -il recovery origin/main -- apps/ops-health-reporter/` が
+rc=1 ゼロ件)。pull ref 一致を確認 (local HEAD = origin/p-0258 = ls-remote = 2c6695e3f =
+session 41 commit)。reporter ブランチも 72b921e43 のまま不変 (ls-remote で実測) のため
+verify 3 は未再実行 (session 41 の red 実測が最新のまま)。待機中の動きは ops-state beat
+(4b71ddf87..a8d8be2c3、beats 120〜126) と p-0243 (097420c90..52653b809) の自己ログ追記
+(+71 行) のみ。beat の `projects.json` 差分には P-0258 への言及が 7 件あったが中身は
+毎 beat の全プロジェクト状態ダンプで、P-0258 は全 beat で "active" のまま変化無し
+(実測: diff 内の全言及を確認)。beat 中の唯一の状態変化は **P-0272 が active→stalled 化**
+(beat 123、予算 soft cap 使い切りで人間へ質問送信 — sent.jsonl/audit.jsonl で実測)
+であり本 spec とは無関係。spec・runner 非接触。デッドロック世界に変化なし。
+最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 40 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 40 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | 未再実行 — reporter ブランチ不変のため (red 固定) |
+
+新たな発見は無い。
+
 ## 次のセッションへの一言
 
-セッション 13〜41 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+セッション 13〜42 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
 `git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
 spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
 (一時ファイルは必ず `mktemp`)。reporter ブランチが動いたら verify 3 も再実測する
 (session 30/41 の前例。食い違いがあれば明示 fetch してから — session 41 の発見参照)。
+ops-state beat の `projects.json` に P-0258 への言及があってもそれは毎 beat の全プロジェクト
+状態ダンプなので、**自プロジェクトの status 文字列が変わった時だけ**注意深く見ればよい
+(session 42 で確認済み)。
 curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
 か runner escape hatch が着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or
 03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
