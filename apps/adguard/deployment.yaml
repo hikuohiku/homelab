@@ -1,0 +1,109 @@
+# AdGuard Home (tailnet 全端末向け DNS 広告除去)。手本は apps/syncthing/ 一式
+# (T-0138 新設 + P-0047 backup 型)。
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: adguard
+  namespace: adguard
+  labels:
+    app: adguard
+spec:
+  replicas: 1
+  # 内部 DB (querylog / stats は PVC 上の SQLite 系ファイル) を単一 PVC に持つため、
+  # rolling 中の二重起動を避けて Recreate (syncthing と同型)
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: adguard
+  template:
+    metadata:
+      labels:
+        app: adguard
+    spec:
+      automountServiceAccountToken: false
+      initContainers:
+        - name: seed-config
+          # 本体と同じイメージ (busybox を新規に inventory へ足さないため。タグは必ず
+          # 本体と揃えること — inventory の adguard エントリがこの前提で書かれている)
+          image: adguard/adguardhome:v0.107.79
+          terminationMessagePolicy: FallbackToLogsOnError
+          # PVC に設定が無い初回だけ種を植える。2 回目以降は何もしない (UI からの
+          # 変更が入った設定を上書きしない)
+          command:
+            - sh
+            - -c
+            - test -f /conf/AdGuardHome.yaml || cp /seed/AdGuardHome.yaml /conf/AdGuardHome.yaml
+          volumeMounts:
+            - name: data
+              mountPath: /conf
+              subPath: conf
+            - name: seed
+              mountPath: /seed
+      containers:
+        - name: adguardhome
+          # 公式イメージをバージョン pin。2026-08-23 時点の最新安定版 v0.107.79
+          # (GitHub Releases latest 実測、2026-08-18 リリース。Docker Hub の
+          # v0.108.0-b.* は beta なので追わない)。タグ形式は v 付き
+          image: adguard/adguardhome:v0.107.79
+          terminationMessagePolicy: FallbackToLogsOnError
+          # entrypoint の既定引数を明示する (--no-check-update は重要: コンテナ内で
+          # 自己更新されると image pin と version-watcher の網が両方無意味になる)。
+          # 公式イメージの ENTRYPOINT/CMD 実測 (2026-08-23)
+          args:
+            - -c
+            - /opt/adguardhome/conf/AdGuardHome.yaml
+            - -w
+            - /opt/adguardhome/work
+            - --no-check-update
+          ports:
+            - name: dns-tcp
+              containerPort: 53
+              protocol: TCP
+            - name: dns-udp
+              containerPort: 53
+              protocol: UDP
+            - name: http
+              containerPort: 3000
+          volumeMounts:
+            # conf (設定本体・UI が書き戻す) と work (querylog/stats/filter キャッシュ) を
+            # 同じ PVC の別サブパスに分ける。ConfigMap を直接 conf へ mount すると
+            # read-only になり UI からの設定保存が壊れるため、種のコピー方式にした
+            - name: data
+              mountPath: /opt/adguardhome/conf
+              subPath: conf
+            - name: data
+              mountPath: /opt/adguardhome/work
+              subPath: work
+          # GET / は初期セットアップ前後のどちらでも最終的に 200 を返す
+          # (セットアップ前: install ウィザードへの redirect → 200 /
+          #  セットアップ後: login ページへの redirect → 200)。kubelet の httpGet は
+          # redirect を追うので、セットアップの進行状態に依らず probe が通る
+          readinessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            # memory の limits は入れない (substrate 規則。syncthing/vaultwarden と同型。
+            # 実測が無いうちに超過 = 即 OOMKill の limits を付ける方が危険)。
+            # CPU limits は throttle で回復するため設定する
+            limits:
+              cpu: 500m
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: adguard-data
+        - name: seed
+          configMap:
+            name: adguard-seed-config

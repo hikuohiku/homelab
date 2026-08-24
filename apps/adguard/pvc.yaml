@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: adguard-data
+  namespace: adguard
+  annotations:
+    # データ消失防止: ArgoCD prune / app 削除時も PVC を残す (syncthing-data と同型)。
+    # ここには人間が管理 UI で育てた設定 (フィルタ選択・ユーザー・上流 DNS) が沈む。
+    # PROJECT.md のロールバック節の「prune で PVC も消える」はこの annotation が回避する
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      # local-path は実ディスクを予約しない (docs/node01-storage.md)。AdGuard Home の
+      # 実データはクエリログ + 統計 DB + ダウンロード済みフィルタだけで、tailnet 1 家庭の
+      # 現実的な増加量は MB/日程度。5Gi で余裕を持つ (足りなくなったらオンライン拡張)
+      storage: 5Gi

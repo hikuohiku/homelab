@@ -1,0 +1,43 @@
+# 初回起動の 1 回だけ initContainer が PVC (conf/ サブパス) へコピーする「種」の設定。
+# コピー後はこの ConfigMap は参照されなくなり、設定の本体は PVC 上の
+# AdGuardHome.yaml (管理 UI からの変更を AGH が随時書き戻す) に移る。
+# ここを編集しても稼働中の設定は変わらない — 変えたいときは管理 UI か PVC 上の
+# ファイルを直接編集すること。
+#
+# なぜ種を植えるか:
+#   1. ポートを固定するため。種が無いと初回ウィザード完了後に UI が
+#      0.0.0.0:80 (ウィザードの既定値) へ移り、Service も probe も 3000 を
+#      見ているため UI に二度と届かなくなる。address: 0.0.0.0:3000 を先に
+#      固定しておけばウィザード前後でポートが動かない
+#   2. フィルタを同梱して「入れたのに何もブロックされない」状態を避けるため。
+#     AdGuard DNS filter (filter_1) は AGH 新規セットアップが既定で足すものと同じ
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: adguard-seed-config
+  namespace: adguard
+  labels:
+    app: adguard
+data:
+  AdGuardHome.yaml: |
+    http:
+      address: 0.0.0.0:3000
+    dns:
+      bind_hosts:
+        - 0.0.0.0
+      port: 53
+      # 上流は Quad9 (DoH)。malware domain も一緒に塞ぐ選択。人間が UI から変えてよい
+      upstream_dns:
+        - https://dns10.quad9.net/dns-query
+      bootstrap_dns:
+        - 9.9.9.9
+        - 149.112.112.112
+    filters:
+      - enabled: true
+        url: https://adguardteam.github.io/HostlistsRegistry/assets/filter_1.txt
+        name: AdGuard DNS filter
+        id: 1
+    # users はわざと書かない。管理者ユーザーは人間が初回ウィザード (:3000) で
+    # 作る — パスワードの選択は人間の仕事であり、自動化が勝手に決めない。
+    # users 空の間は GET / がインストール画面へ redirect されるが、probe の
+    # httpGet は redirect 先の 200 を追うので Health は崩れない
