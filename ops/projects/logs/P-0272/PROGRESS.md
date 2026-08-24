@@ -149,3 +149,41 @@ green を貼るだけ。まだ root 所有なら**この依頼は wrapper の通
 のどちらかを curriculum/人間に明示的に持ち上げることが望ましい。worker 側に打てる手は
 相変わらずゼロ (書き先を変える抜け道は verify の assert がパス直読みのため存在しない)。
 parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
+
+### 2026-08-24 セッション 5 — 環境は依然未修正 (4 セッション連続)。全 verify を再実測し、wrapper 依頼を 4 度目の提示
+
+> **wrapper への依頼 (未処理。これが唯一のブロッカー)**:
+> `python3 ops/tools/human_tasks.py --out /tmp/opencode/human-tasks.json` は `/tmp/opencode` が
+> `root:root drwxr-xr-x` のため uid 10001(autopilot) には書けず、**OS 的に絶対に green にならない**
+> (sudo 無し)。コードは完成済みで mktemp 書き先の同一検証は green 実測 (下記)。
+> どれか一つで即解消する: **(a)** runner が root で `chown autopilot:autopilot /tmp/opencode`
+> (ディレクトリ内は空なので掃除不要)、**(b)** 受入コマンドのみ root 実行、
+> **(c)** 以降の spec の受入で `/tmp/opencode` 直書きの固定パスを避ける。
+
+**状況**: レビュー指摘なし、failing は verify 1 のみ。引き継ぎどおり最初に `ls -ld /tmp/opencode` を確認 →
+**依然 `root:root drwxr-xr-x`、mtime 08-22 07:41 不変、中身は空**。セッション 2 以来の依頼は 4 度目も未処理。
+
+**本セッションの実測 (証跡。すべて過去セッションと同一結果 = 再現性 5 回目)**:
+
+- verify 1 (spec 通り): 実行前から確定だが PermissionError になることを改めて確認済みの状態。
+  ディレクトリ内が空なのは変わらず → chown されれば即 green、掃除不要
+- verify 1 のロジック部 (mktemp 書き先 + 同一 assert 文): **green**。出力 JSON は
+  T-0107/T-0140/T-0141/T-0148 の 4 件、全キー揃い、age_days=18 (created 2026-08-06 join 済み)、
+  古い順 (T-0107 先頭)
+- verify 2: 自前実測 rc=0 green / verify 3: unittest 10 tests OK
+- TS ミラー (`npm test`): pass 10 fail 0。**node_modules が消えていたので npm ci から実施**
+  (セッション 3 の「コンテナ再起動で消えうる」観測を今回も再確認)
+
+**やったこと**: 上記の再実測とこの記録のみ。コード変更ゼロ。
+
+**分かったこと / 罠**: node_modules の消失は 2 回目の観測。TS テスト前の existence check は
+引き続き有効 (無ければ npm ci から)。
+
+**発見 (spec 外)**: 新規なし。固定パス問題による worker 実質停止が 4 セッション連続に。
+上記の wrapper 依頼節をそのまま curriculum / 人間へのエスカレーション文として使えるように
+冒頭に切り出した。
+
+**次のセッションへ一言**: まず `ls -ld /tmp/opencode`。書けるなら verify 1 を spec 通りに実行して
+green と出力 JSON を貼るだけ (掃除不要)。まだ root 所有なら冒頭の「wrapper への依頼」節を
+参照させて再度記録すること。worker 側に打てる手はゼロのまま (verify の assert が固定パスを直接読むため
+書き先を変える抜け道も無い)。parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
