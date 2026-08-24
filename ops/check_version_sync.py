@@ -10,6 +10,7 @@ issue #56 2026-08-04 19:53:35 の指摘: pyyaml に依存すると autopilot の
 新しく二重管理の pin が見つかったら GROUPS にエントリを追加する（ops/CHARTER.md T-0002）。
 ops/inventory.json で "mirrors" を持つ target は、ここにも対応するエントリを持つこと（T-0051）。
 """
+import json
 import re
 import sys
 from pathlib import Path
@@ -196,12 +197,39 @@ def extract_json_role_model(path: str, role: str) -> str:
 
 
 def extract_env_value(path: str, name: str) -> str:
-    """k8s manifest の `- name: <NAME>` の直後にある `value:` を拾う。"""
+    """k8s manifest の `- name: <NAME>` の直後にある `value:` を拾う。
+
+    value がダブルクォートで囲まれているときは剥がして返す — JSON から拾った数値
+    (文字列化) と文字列として突き合わせるため (例: rules.json の数値 1 と env の
+    "1")。CORE_MODEL のような未クォート値はそのまま通る。
+    """
     text = read(path)
     m = re.search(rf"- name: {re.escape(name)}\s*\n\s*value:\s*(\S+)", text)
     if not m:
         raise ValueError(f"{path}: env {name} の value: が見つからない")
-    return m.group(1)
+    value = m.group(1)
+    if len(value) >= 2 and value[0] == value[-1] == '"':
+        return value[1:-1]
+    return value
+
+
+def extract_json_nested_value(path: str, *keys: str) -> str:
+    """JSON (rules.json / models.json) のネストした値を文字列として拾う。
+
+    JSON の数値は int として読んでから str() する — 比較対象 (manifest の env value)
+    も文字列なので、両者を同じ土俵で突き合わせるための正規化 (extract_env_value と
+    この関数はどちらも文字列を返す)。bool を 0/1 と取り違えないよう bool は弾く
+    (bool は int の派生のため、isinstance(node, int) だけでは通ってしまう)。
+    """
+    data = json.loads(read(path))
+    node = data
+    for k in keys:
+        if not isinstance(node, dict) or k not in node:
+            raise ValueError(f"{path}: {'/'.join(keys)} が見つからない")
+        node = node[k]
+    if isinstance(node, bool) or not isinstance(node, int):
+        raise ValueError(f"{path}: {'/'.join(keys)} が非 bool の数値でない: {node!r}")
+    return str(node)
 
 
 # 各エントリの "targets" は 2 件以上の (path, 抽出関数) のリスト。全 target のバージョンが
@@ -354,6 +382,20 @@ GROUPS = [
             )),
             ("apps/coder/restic-backup-cronjob.yaml", lambda: extract_image_tag(
                 "apps/coder/restic-backup-cronjob.yaml", "image: postgres:"
+            )),
+        ],
+    },
+    {
+        # immich のアセット整合性検証の不一致閾値 (P-0361)。rules.json が単一情報源で、
+        # CronJob は実行時に env で渡す (rules.json を読まない)。手で揃える運用は必ず
+        # 腐るので機械で縛る (常駐コアのモデル CORE_MODEL と同じ考え方)
+        "name": "immich checksum 不一致閾値 (rules.json checksum.mismatch_threshold と CronJob の MISMATCH_THRESHOLD)",
+        "targets": [
+            ("ops/rules.json", lambda: extract_json_nested_value(
+                "ops/rules.json", "checksum", "mismatch_threshold"
+            )),
+            ("apps/immich/checksum-cronjob.yaml", lambda: extract_env_value(
+                "apps/immich/checksum-cronjob.yaml", "MISMATCH_THRESHOLD"
             )),
         ],
     },

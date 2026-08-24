@@ -351,6 +351,7 @@ def check_heart_config() -> None:
             ("notify", "daily_budget"),
             ("runner", "max_sessions_per_project"),
             ("review", "max_cycles"),
+            ("checksum", "mismatch_threshold"),
         ):
             if not isinstance(rules.get(section, {}).get(key), (int, float)):
                 err(f"rules.json: {section}.{key} が数値でない")

@@ -1,0 +1,666 @@
+# immich のアセット整合性検証 (P-0361) の産出側。
+#
+# immich v3.0.0 導入の integrity checksum ジョブを週次で API トリガーし、対象アセットの
+# チェックサム再検証を走らせて、GET /api/admin/integrity/summary の ChecksumFail 件数を
+# 専用 ConfigMap `immich-checksum-report` の report.json へ書き戻す。集約側は
+# ops-health-reporter の collect_checksum() が読み、latest.json の checksum 節に載せる
+# (P-0361 の「産出 CronJob → 専用 ConfigMap → reporter が集約」パターン)。
+#
+# API 形 (immich v3.1.0 上流ソースを実読して確定。実機確定は docs/immich-checksum.md):
+#   - トリガー: POST /api/jobs {"name": "integrity-checksum-mismatch"} (admin, 204)。
+#     ManualJobName.IntegrityChecksumFiles (server/src/enum.ts)
+#   - 完了検知: GET /api/queues/integrityCheck → statistics.active==0 (queue concurrency 1)
+#   - 結果: GET /api/admin/integrity/summary → {checksum_mismatch, missing_file, untracked_file}
+#   - 認証: x-api-key ヘッダ (admin API キー。immich-api-key-external-secret.yaml)
+#   - ジョブは integrityChecks.checksumFiles.timeLimit (既定 1h) / percentageLimit で途中停止し、
+#     system_metadata の integrity-checksum-checkpoint に再開点を残す。週次トリガーは
+#     checkpoint から再開し、複数週で全アセットを覆う設計 (v3.0.1 の checkpoint 再開バグ
+#     issue #29487 / PR #29516 は v3.1.0 で修正済み。実機で挙動確認すること)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: immich-checksum
+  namespace: immich
+---
+# 自 namespace の ConfigMap への get/create/update のみ (pvc-usage-reporter と同じ最小形)。
+# 出力先 ConfigMap immich-checksum-report は宣言しない (ArgoCD 管理外。selfHeal との
+# 綱引きを避ける)。create は RBAC で名前を絞れないため対象名を含めない
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: immich-checksum
+  namespace: immich
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "create", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: immich-checksum
+  namespace: immich
+subjects:
+  - kind: ServiceAccount
+    name: immich-checksum
+    namespace: immich
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: immich-checksum
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: immich-checksum-script
+  namespace: immich
+data:
+  immich_checksum_check.py: |
+    #!/usr/bin/env python3
+    """immich アセット整合性検証の解釈ロジック (P-0361)。
+
+    immich は「写真の実データを持つ唯一のサービス」で、ホスト側のファイルが黙って壊れる
+    (bit rot・誤書き込み) と人間の唯一の原本が静かに死ぬ。immich v3.0.0 導入の整合性検証
+    (`integrity-checksum-mismatch` ジョブ) はこの腐りを checksum 再計算で検出し、
+    `integrity_report` テーブルに ChecksumFail を書き込む。このモジュールはその結果の
+    解釈・不一致判定だけを担う純関数群で、クラスタやネットワークに触れない。
+
+    - 産出側 (apps/immich/checksum-cronjob.yaml): immich API でジョブをトリガーして
+      完了を待ち、`GET /api/admin/integrity/summary` の checksum_mismatch 件数を
+      このモジュールの解釈関数で判定し、専用 ConfigMap `immich-checksum-report` の
+      report.json へ書く (稼働 CronJob は別途。本ファイルは判断ロジックの正)。
+    - 集約側 (apps/ops-health-reporter/report.py): その ConfigMap を読んで latest.json の
+      `checksum` 節へ畳む (rbac.yaml の resourceNames に追記)。
+
+    API 形は immich 上流のソース (v3.1.0 相当。server/src/controllers/
+    integrity-admin.controller.ts と server/src/enum.ts の ManualJobName / IntegrityReport)
+    に基づく。**クラスタ内の実機での確定 (実際のレスポンス・所要時間・checkpoint 再開の
+    挙動) は docs/immich-checksum.md と PROGRESS.md に残す** — このファイルの定数と実機が
+    食い違ったら、実測値を根拠に fixture ごと修正すること。
+
+    使い方:
+
+        python3 ops/tools/immich_checksum_check.py --selftest   # 同梱 fixture で自己検証
+        python3 ops/tools/immich_checksum_check.py --summary summary.json --threshold 1
+            # 実機の GET /api/admin/integrity/summary のレスポンスを解釈して report を表示
+    """
+
+    from __future__ import annotations
+
+    import argparse
+    import datetime
+    import json
+    import sys
+
+    # immich の integrity 関連 API の識別子 (v3.1.0 相当、上流ソースから)。
+    # ChecksumFail の report type は enum IntegrityReport.ChecksumFail = 'checksum_mismatch'。
+    # 手動ジョブ名は enum ManualJobName.IntegrityChecksumFiles = 'integrity-checksum-mismatch'。
+    # `POST /api/jobs` body {"name": <JOB_NAME>} でトリガー (admin 要、204)。結果は
+    # `GET /api/admin/integrity/summary` が {checksum_mismatch, missing_file, untracked_file}
+    # の件数で返す。実機確定は docs/immich-checksum.md に残す
+    REPORT_TYPE = "checksum_mismatch"
+    JOB_NAME = "integrity-checksum-mismatch"
+    SUMMARY_KEYS = ("checksum_mismatch", "missing_file", "untracked_file")
+
+    # 産出側が書く ConfigMap とキー (report.py / rbac.yaml と合わせる)
+    CONFIGMAP_NAME = "immich-checksum-report"
+    REPORT_KEY = "report.json"
+
+    # rules.json の checksum.mismatch_threshold (DoD (3)) が唯一の宣言元。ここに既定値を
+    # 持たない — 黙って 0 を決め打ちすると閾値が 2 か所になる (download_budget の
+    # DEFAULT_DAILY_CAP_BYTES と同じ思想)。CronJob / CLI は明示的に渡す
+    DEFAULT_MISMATCH_THRESHOLD = None
+
+
+    def parse_summary(raw):
+        """`GET /api/admin/integrity/summary` のレスポンスを正規化する。
+
+        immich v3 の形: {"checksum_mismatch": N, "missing_file": N, "untracked_file": N}
+        の非負 int 3 つ。形が違う・int でない・負値は ValueError — 黙って 0 扱いにすると
+        「検出ゼロ」と「装置が壊れた」が区別できなくなる (dashboard_smoke の ok 判定と
+        同じ思想。壊れた記録を読み手に error として見せる)。
+        """
+        if not isinstance(raw, dict):
+            raise ValueError("integrity summary が dict でない")
+        for key in SUMMARY_KEYS:
+            value = raw.get(key)
+            if isinstance(value, bool) or not isinstance(value, int):
+                raise ValueError(
+                    "integrity summary の {} が非負 int でない: {!r}".format(key, value)
+                )
+            if value < 0:
+                raise ValueError("integrity summary の {} が負値: {!r}".format(key, value))
+        return {key: raw[key] for key in SUMMARY_KEYS}
+
+
+    def normalize_threshold(value):
+        """閾値の検査。非負 int のみ受け付け、None (未設定) はそのまま通す。
+
+        bool は int の派生なので明示的に弾く。負値・文字列・float は不正として None
+        (download_budget.coerce_bytes と同じ思想。黙って 0 扱いにしない)。
+        """
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, int):
+            return None
+        if value < 0:
+            return None
+        return value
+
+
+    def judge_mismatch(mismatch_count, threshold=DEFAULT_MISMATCH_THRESHOLD):
+        """ChecksumFail 件数と閾値から status / reason を返す (DoD (3) の判定)。
+
+        threshold は rules.json の checksum.mismatch_threshold が唯一の宣言元で、
+        CronJob が env で渡す。None (未設定) は unconfigured — 0 を決め打ちしない
+        (バックアップ側の P-0187 とは違い、この装置は「0 でなければ嘘」ではなく
+        「閾値の宣言が無ければ検出数を正直に見せる」側に倒す)。
+        """
+        if threshold is None:
+            return {
+                "status": "unconfigured",
+                "reason": "不一致の閾値が未設定 (rules.json の checksum.mismatch_threshold を設定すること)",
+            }
+        if mismatch_count >= threshold:
+            return {
+                "status": "fail",
+                "reason": "checksum_mismatch が {} 件 (閾値 {} 以上) — 原本の腐りを検出".format(
+                    mismatch_count, threshold
+                ),
+            }
+        return {
+            "status": "ok",
+            "reason": "checksum_mismatch が {} 件 (閾値 {} 未満)".format(
+                mismatch_count, threshold
+            ),
+        }
+
+
+    def build_report(summary, generated_at, threshold=DEFAULT_MISMATCH_THRESHOLD, job=None):
+        """解釈結果を report.json の形へ。産出側 (CronJob) と集約側 (report.py) の契約。
+
+        summary は `GET /api/admin/integrity/summary` のレスポンス dict。
+        generated_at は report 生成時刻の "YYYY-MM-DDTHH:MM:SSZ" 文字列。
+        job は任意の実行メタ ({name, triggered_at, ...}) で、あるときだけ載せる。
+        """
+        parsed = parse_summary(summary)
+        judged = judge_mismatch(parsed["checksum_mismatch"], threshold)
+        report = {
+            "generated_at": generated_at,
+            "namespace": "immich",
+            "status": judged["status"],
+            "reason": judged["reason"],
+            "ok": judged["status"] == "ok",
+            "checksum_mismatch": parsed["checksum_mismatch"],
+            "missing_file": parsed["missing_file"],
+            "untracked_file": parsed["untracked_file"],
+        }
+        if job:
+            report["job"] = job
+        return report
+
+
+    # --selftest 用の同梱 fixture。実機のレスポンス形が確定したら、実測値を根拠に更新する
+    # (PROJECT.md「実機のレスポンス形が確定したら fixture を実測値で更新する」)。
+    FIXTURES = [
+        {
+            "name": "ok_zero_mismatch",
+            "summary": {"checksum_mismatch": 0, "missing_file": 1, "untracked_file": 2},
+            "threshold": 1,
+            "expect_status": "ok",
+            "expect_mismatch": 0,
+        },
+        {
+            "name": "fail_mismatch",
+            "summary": {"checksum_mismatch": 3, "missing_file": 0, "untracked_file": 0},
+            "threshold": 1,
+            "expect_status": "fail",
+            "expect_mismatch": 3,
+        },
+        {
+            "name": "threshold_zero_means_any_mismatch",
+            "summary": {"checksum_mismatch": 1, "missing_file": 0, "untracked_file": 0},
+            "threshold": 0,
+            "expect_status": "fail",
+            "expect_mismatch": 1,
+        },
+        {
+            "name": "unconfigured_without_threshold",
+            "summary": {"checksum_mismatch": 0, "missing_file": 0, "untracked_file": 0},
+            "threshold": None,
+            "expect_status": "unconfigured",
+            "expect_mismatch": 0,
+        },
+        {
+            "name": "malformed_missing_key",
+            "summary": {"checksum_mismatch": 0, "missing_file": 0},
+            "threshold": 1,
+            "expect_error": True,
+        },
+        {
+            "name": "malformed_negative_count",
+            "summary": {"checksum_mismatch": -1, "missing_file": 0, "untracked_file": 0},
+            "threshold": 1,
+            "expect_error": True,
+        },
+        {
+            "name": "malformed_bool_count",
+            "summary": {"checksum_mismatch": True, "missing_file": 0, "untracked_file": 0},
+            "threshold": 1,
+            "expect_error": True,
+        },
+        {
+            "name": "malformed_non_dict",
+            "summary": ["checksum_mismatch", 0],
+            "threshold": 1,
+            "expect_error": True,
+        },
+    ]
+
+
+    def run_selftest():
+        """同梱 fixture を純関数に通し、期待値を断言する。失敗は列挙して 0/1 を返す。"""
+        failures = []
+        for fixture in FIXTURES:
+            name = fixture["name"]
+            try:
+                parsed = parse_summary(fixture["summary"])
+                judged = judge_mismatch(parsed["checksum_mismatch"], fixture["threshold"])
+                mismatch = parsed["checksum_mismatch"]
+                if fixture.get("expect_error"):
+                    failures.append("{}: 例外が出るはずが成功した".format(name))
+                    continue
+                if judged["status"] != fixture["expect_status"]:
+                    failures.append(
+                        "{}: status {} != 期待 {}".format(
+                            name, judged["status"], fixture["expect_status"]
+                        )
+                    )
+                if mismatch != fixture["expect_mismatch"]:
+                    failures.append(
+                        "{}: checksum_mismatch {} != 期待 {}".format(
+                            name, mismatch, fixture["expect_mismatch"]
+                        )
+                    )
+            except ValueError as e:
+                if not fixture.get("expect_error"):
+                    failures.append("{}: 予期しない例外: {}".format(name, e))
+
+        if failures:
+            for message in failures:
+                print("FAIL {}".format(message), file=sys.stderr)
+            print("selftest: {} 件失敗".format(len(failures)), file=sys.stderr)
+            return 1
+        print("selftest: 全 {} fixture 合格".format(len(FIXTURES)))
+        return 0
+
+
+    def main(argv=None):
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument(
+            "--selftest", action="store_true", help="同梱 fixture で自己検証する"
+        )
+        parser.add_argument(
+            "--summary", metavar="PATH", help="integrity summary の JSON ファイルを解釈する"
+        )
+        parser.add_argument(
+            "--threshold", type=int, default=DEFAULT_MISMATCH_THRESHOLD,
+            help="不一致とみなす checksum_mismatch 件数 (既定: rules.json 宣言待ち = 未設定)",
+        )
+        args = parser.parse_args(argv)
+
+        if args.selftest:
+            return run_selftest()
+
+        if args.summary:
+            with open(args.summary, encoding="utf-8") as f:
+                raw = json.load(f)
+            report = build_report(
+                raw,
+                datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                normalize_threshold(args.threshold),
+            )
+            print(json.dumps(report, ensure_ascii=False, indent=2))
+            return 0
+
+        parser.print_help()
+        return 2
+
+
+    if __name__ == "__main__":
+        sys.exit(main())
+  checksum_runner.py: |
+    """immich アセット整合性検証の産出側 (P-0361)。
+
+    週次の CronJob が immich の整合性検証ジョブ (integrity-checksum-mismatch) を API で
+    トリガーし、完了を待って GET /api/admin/integrity/summary の ChecksumFail 件数を
+    専用 ConfigMap `immich-checksum-report` の report.json へ書き戻す。集約側は
+    ops-health-reporter の collect_checksum() が読み、latest.json の checksum 節に載せる
+    (P-0361 の「産出 CronJob → 専用 ConfigMap → reporter が集約」パターン)。
+
+    判断ロジック (parse_summary / judge_mismatch / build_report) は同ディレクトリの
+    immich_checksum_check.py (ops/tools/immich_checksum_check.py の正確な複製。
+    ops/check_immich_checksum_script_sync.py が drift を検出する) を import する。
+    標準ライブラリのみで動く。
+    """
+
+    import datetime
+    import json
+    import os
+    import ssl
+    import sys
+    import time
+    import urllib.error
+    import urllib.request
+
+    import immich_checksum_check as icc
+
+    SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
+    K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
+    K8S_PORT = os.environ.get("KUBERNETES_SERVICE_PORT", "443")
+    K8S_BASE = "https://{}:{}".format(K8S_HOST, K8S_PORT)
+
+    with open(os.path.join(SA_DIR, "namespace")) as f:
+        NAMESPACE = f.read().strip()
+    with open(os.path.join(SA_DIR, "token")) as f:
+        SA_TOKEN = f.read().strip()
+    SSL_CTX = ssl.create_default_context(cafile=os.path.join(SA_DIR, "ca.crt"))
+
+    IMMICH_API_KEY = os.environ.get("IMMICH_API_KEY") or ""
+    # immich-server は同一 namespace の Service (apps/immich/ingress.yaml 参照、port 2283)
+    IMMICH_BASE = os.environ.get("IMMICH_BASE", "http://immich-server:2283")
+    # checksum ジョブが走る queue (v3.1.0 上流 enum.ts の QueueName.IntegrityCheck)。
+    # config.ts 既定でこの queue の concurrency は 1 (ジョブは 1 本ずつ実行される)
+    QUEUE_NAME = "integrityCheck"
+
+    POLL_INTERVAL_S = 30
+    # 1 run の上限は immich の integrityChecks.checksumFiles.timeLimit (既定 1h。admin が
+    # system config で変更可能)。timeLimit がこの値より大きいと poll が timeout になるので、
+    # 実機で timeLimit を確認して大きければここも合わせる (docs/immich-checksum.md 参照)
+    RUN_TIMEOUT_S = 7200
+
+
+    def now_iso():
+        return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+    def k8s_request(method, path, body=None):
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(
+            K8S_BASE + path,
+            data=data,
+            method=method,
+            headers={
+                "Authorization": "Bearer " + SA_TOKEN,
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, context=SSL_CTX, timeout=15) as resp:
+                raw = resp.read()
+                return resp.status, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            return e.code, (json.loads(raw) if raw else None)
+
+
+    def immich_request(method, path, body=None):
+        """immich の管理 API を叩く。認証は x-api-key (admin API キー)。
+
+        v3.1.0 上流の auth.service.ts がヘッダ ImmichHeader.ApiKey = 'x-api-key' で受ける
+        (enum.ts 19-20 行)。API キーは immich の管理 UI で admin が発行し、Doppler の
+        IMMICH_API_KEY に登録する (apps/immich/immich-api-key-external-secret.yaml)。
+        """
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(
+            IMMICH_BASE + path,
+            data=data,
+            method=method,
+            headers={
+                "x-api-key": IMMICH_API_KEY,
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                raw = resp.read()
+                return resp.status, (json.loads(raw) if raw else None)
+        except urllib.error.HTTPError as e:
+            raw = e.read()
+            return e.code, (json.loads(raw) if raw else None)
+
+
+    def put_configmap(name, data):
+        path = "/api/v1/namespaces/{}/configmaps/{}".format(NAMESPACE, name)
+        status, existing = k8s_request("GET", path)
+        body = {
+            "apiVersion": "v1",
+            "kind": "ConfigMap",
+            "metadata": {"name": name, "namespace": NAMESPACE},
+            "data": data,
+        }
+        if status == 200:
+            body["metadata"]["resourceVersion"] = existing["metadata"]["resourceVersion"]
+            status, resp = k8s_request("PUT", path, body)
+        else:
+            status, resp = k8s_request(
+                "POST", "/api/v1/namespaces/{}/configmaps".format(NAMESPACE), body
+            )
+        if status not in (200, 201):
+            raise RuntimeError("configmap 書き込みに失敗: {} {}".format(status, resp))
+
+
+    def read_queue_completed():
+        """トリガー前の IntegrityCheck queue の完了カウンタを読む (preflight 兼基準)。
+
+        401 等が出たらここで落ちる — API キーが通っていない状態で以降に進まない
+        (queue が読めないのに summary だけ読めることはないはずだが、先に落として
+        原因を error report で目立たせる)。
+        """
+        status, queue = immich_request("GET", "/api/queues/{}".format(QUEUE_NAME))
+        if status != 200 or not isinstance(queue, dict):
+            raise RuntimeError("queue の取得に失敗: {} {}".format(status, queue))
+        completed = (queue.get("statistics") or {}).get("completed", 0)
+        return completed if isinstance(completed, int) else 0
+
+
+    def trigger_checksum_job():
+        """POST /api/jobs {"name": "integrity-checksum-mismatch"} で手動ジョブを起動する。
+
+        ManualJobName.IntegrityChecksumFiles = 'integrity-checksum-mismatch' (enum.ts 424 行)。
+        204 No Content が成功。
+        """
+        status, resp = immich_request("POST", "/api/jobs", {"name": icc.JOB_NAME})
+        if status != 204:
+            raise RuntimeError(
+                "checksum ジョブのトリガーに失敗: POST /api/jobs -> {} {}".format(status, resp)
+            )
+
+
+    def wait_for_checksum_run(baseline, timeout_s=None, interval_s=None):
+        if timeout_s is None:
+            timeout_s = RUN_TIMEOUT_S
+        if interval_s is None:
+            interval_s = POLL_INTERVAL_S
+
+        """GET /api/queues/integrityCheck をポーリングし、ジョブの完了を待つ。
+
+        checksum ジョブは IntegrityCheck queue (concurrency 1) で走り、完了時に
+        statistics.active が 0 に戻る。POST が 204 を返した直後はまだキューに載って
+        いないことがある (一瞬 active=0 に見える) ため、一度 active>0 を観測してから
+        active==0 かつ waiting==0 になったら完了とみなす。
+
+        小規模ライブラリでポーリング間に完了してしまう場合 (active を一度も観測できない)
+        を扱うため、完了カウンタ (baseline からの増加) か、キューが空のまま一定時間
+        (interval x 3) 経過したら「これ以上待っても変わらない」として返す。キューが
+        空のまま進まない状態は、読んだ summary が「現時点の検出済み腐り」として
+        正しい値であることと両立する (PROGRESS 参照)。
+        """
+        observed_active = False
+        started = time.monotonic()
+        while True:
+            status, queue = immich_request("GET", "/api/queues/{}".format(QUEUE_NAME))
+            if status != 200 or not isinstance(queue, dict):
+                raise RuntimeError("queue の取得に失敗: {} {}".format(status, queue))
+            stats = queue.get("statistics") or {}
+            active = stats.get("active", 0)
+            waiting = stats.get("waiting", 0)
+            completed = stats.get("completed", 0)
+            if isinstance(active, int) and active > 0:
+                observed_active = True
+            elapsed = time.monotonic() - started
+            if active == 0 and waiting == 0 and (
+                observed_active or completed > baseline or elapsed > interval_s * 3
+            ):
+                return
+            if elapsed > timeout_s:
+                raise RuntimeError(
+                    "checksum ジョブが {} 秒以内に完了しなかった (active={} waiting={})".format(
+                        timeout_s, active, waiting
+                    )
+                )
+            time.sleep(interval_s)
+
+
+    def read_summary():
+        """GET /api/admin/integrity/summary → {checksum_mismatch, missing_file, untracked_file}。
+
+        IntegrityReportSummaryResponseDto (v3.1.0、3 項目とも非負 int)。件数は「現時点で
+        ChecksumFail と記録されているアセット数」で、ジョブは再検証で合格したファイルの
+        report を削除するため、これは「検出済みの腐り」の現在値 (未走査のアセットは含まれない)。
+        """
+        status, summary = immich_request("GET", "/api/admin/integrity/summary")
+        if status != 200:
+            raise RuntimeError("integrity summary の取得に失敗: {} {}".format(status, summary))
+        return summary
+
+
+    def error_report(reason):
+        """測定自体が失敗したときの代役レコード (dashboard-smoke の rc=2 と同じ思想)。
+
+        産出側が走ったのに書けなかった事実を error として残し、黙って空にしない。
+        集約側は status=error をそのまま latest.json の checksum 節へ載せる。
+        """
+        return {
+            "generated_at": now_iso(),
+            "namespace": NAMESPACE,
+            "status": "error",
+            "reason": reason,
+            "ok": False,
+        }
+
+
+    def main():
+        triggered_at = now_iso()
+        started = time.monotonic()
+        try:
+            # 閾値は rules.json の checksum.mismatch_threshold が唯一の宣言元 (DoD 3)。
+            # 未設定の間は None を渡し、build_report が status=unconfigured を正直に出す
+            # (immich_checksum_check.DEFAULT_MISMATCH_THRESHOLD = None)
+            threshold_raw = os.environ.get("MISMATCH_THRESHOLD")
+            threshold = None
+            if threshold_raw:
+                threshold = icc.normalize_threshold(int(threshold_raw))
+
+            baseline = read_queue_completed()
+            trigger_checksum_job()
+            wait_for_checksum_run(baseline)
+            run_elapsed_s = int(time.monotonic() - started)
+            summary = read_summary()
+            report = icc.build_report(
+                summary,
+                now_iso(),
+                threshold=threshold,
+                job={
+                    "name": icc.JOB_NAME,
+                    "triggered_at": triggered_at,
+                    "run_elapsed_s": run_elapsed_s,
+                },
+            )
+        except Exception as e:  # noqa: BLE001 — 失敗も代役レコードで残す
+            report = error_report("{}: {}".format(type(e).__name__, e))
+            try:
+                put_configmap(icc.CONFIGMAP_NAME, {icc.REPORT_KEY: json.dumps(report, ensure_ascii=False)})
+            except Exception as w:  # noqa: BLE001 — RBAC 破損などはログで落ちるしかない
+                print("代役レコードの書き込みにも失敗: {}: {}".format(type(w).__name__, w), file=sys.stderr)
+            print(report["reason"], file=sys.stderr)
+            return 1
+
+        put_configmap(icc.CONFIGMAP_NAME, {icc.REPORT_KEY: json.dumps(report, ensure_ascii=False)})
+        print("immich-checksum-report ConfigMap を更新しました ({})".format(report["generated_at"]))
+        return 0
+
+
+    if __name__ == "__main__":
+        sys.exit(main())
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: immich-checksum
+  namespace: immich
+spec:
+  # 週次 (JST。node01 は spec.timeZone 未指定で JST 評価、ops/memory/substrate.md)。
+  # 日曜 05:30 JST = 土曜 20:30 UTC。immich 内蔵の日次 integrity cron (03:00 UTC、
+  # restic-backup-cronjob.yaml の 02:00 UTC と同じ TZ 前提) や restic backup (02:45 UTC) /
+  # retention (03:45 UTC) と重ならない時間帯を選んだ
+  schedule: "30 5 * * 0"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      # RUN_TIMEOUT_S (7200s) + 起動・スクリプト実行のマージン
+      activeDeadlineSeconds: 7800
+      template:
+        spec:
+          serviceAccountName: immich-checksum
+          restartPolicy: Never
+          containers:
+            - name: checksum
+              image: python:3.14-alpine
+              terminationMessagePolicy: FallbackToLogsOnError
+              command: ["python", "/scripts/checksum_runner.py"]
+              env:
+                - name: IMMICH_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: immich-api-key
+                      key: IMMICH_API_KEY
+                - name: IMMICH_BASE
+                  value: "http://immich-server:2283"
+                # 不一致とみなす閾値は rules.json の checksum.mismatch_threshold が
+                # 唯一の宣言元 (DoD 3)。ops/check_version_sync.py の GROUPS がこの値と
+                # rules.json の同期を機械的に検査する。env を外すと report の status が
+                # unconfigured を正直に返す (immich_checksum_check.DEFAULT_MISMATCH_THRESHOLD = None)
+                - name: MISMATCH_THRESHOLD
+                  value: "1"
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+              # PVC にも他 namespace にも触れない。immich API と自 namespace の ConfigMap
+              # だけが通信先で、特権は不要 (download-ledger と同じ最小形)
+              securityContext:
+                runAsUser: 65534
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop: ["ALL"]
+              # 縛る変更 (CHARTER §4) — limits は実機 1 回実行 (DoD 5) の実測値が出るまで付けない。
+              # 類推値 (download-ledger 等) で埋めない。memory limits は OOMKill が回復しない
+              # (substrate 規則)。CPU limits は throttle で回復するが、実測まで同様に外す
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 32Mi
+              volumeMounts:
+                - name: script
+                  mountPath: /scripts
+                  readOnly: true
+                - name: tmp
+                  mountPath: /tmp
+          volumes:
+            - name: script
+              configMap:
+                name: immich-checksum-script
+            - name: tmp
+              emptyDir: {}

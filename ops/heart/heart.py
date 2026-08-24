@@ -528,6 +528,9 @@ class Heart:
         # Mission Control 描画スモークの警報すべき状態 (P-0193)。fail/stale のとき
         # だけ中身があり、ok/no_data は None (成功は通知予算を消費しない)
         smoke = facts.dashboard_smoke_alert(health_doc)
+        # immich アセット整合性検証の警報すべき状態 (P-0361)。fail/error のときだけ
+        # 中身があり、ok/unconfigured/no_data は None (成功は通知予算を消費しない)
+        checksum = facts.checksum_alert(health_doc)
         try:
             jobs = facts.collect_jobs(self.k8s_client(), self.cfg.namespace)
         except Exception as e:
@@ -661,6 +664,20 @@ class Heart:
                 f"Mission Control の描画断言が {smoke['status']} です: {smoke['reason']}"
             )
             smoke_queued = True
+        # immich アセット整合性検証の警報 (P-0361)。流儀は上の budget / smoke 警報と
+        # 同じ: briefing-queue.jsonl への追記と incident 通知。同じ status の同一日内の
+        # 再通知は cursors の前回記録で落とす (budget_alert_due は status/date の一般判定)
+        checksum_incident_text = None
+        checksum_queued = False
+        if facts.budget_alert_due(checksum, cursors.get("checksum_alert"), today):
+            cursors["checksum_alert"] = {
+                "status": checksum["status"],
+                "date": today,
+            }
+            checksum_incident_text = (
+                f"immich アセット整合性検証が {checksum['status']} です: {checksum['reason']}"
+            )
+            checksum_queued = True
 
         # --- 一段目: 状態遷移を副作用より先に永続化する (レビュー指摘 [8])。
         # ここで落ちても副作用は未実行なので、次のビートが同じ判断をやり直すだけ。
@@ -691,6 +708,16 @@ class Heart:
                 },
             )
             log(f"dashboard_smoke alert: {smoke['status']} — queued to briefing")
+        if checksum_queued:
+            self.work.append_jsonl(
+                "briefing-queue.jsonl",
+                {
+                    "at": now_iso(now),
+                    "source": f"checksum ({checksum['status']})",
+                    "body": checksum["reason"],
+                },
+            )
+            log(f"checksum alert: {checksum['status']} — queued to briefing")
         # タスク依頼の受領 (P-0091)。id 重複は merge_new が落とすので、
         # カーソル巻き戻り等で同じ note を再取り込みしても積み直さない
         queue = self.work.read_jsonl(tasks.QUEUE_FILE)
@@ -714,6 +741,11 @@ class Heart:
                 log(f"[shadow] notify[incident] {smoke_incident_text[:80]}")
             else:
                 notifier.send("incident", smoke_incident_text, now)
+        if checksum_incident_text:
+            if self.cfg.shadow:
+                log(f"[shadow] notify[incident] {checksum_incident_text[:80]}")
+            else:
+                notifier.send("incident", checksum_incident_text, now)
 
         record = metrics.beat_record(
             now,
@@ -726,6 +758,7 @@ class Heart:
             usage=usage_info,
             budget_status=budget["status"] if budget else None,
             dashboard_smoke_status=smoke["status"] if smoke else None,
+            checksum_status=checksum["status"] if checksum else None,
             vetoes=vetoes,
             stop_all=stop_all,
             actions=[a["type"] for a in actions],
