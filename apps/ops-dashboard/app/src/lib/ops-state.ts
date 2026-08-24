@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { mkdir, readFile } from "node:fs/promises";
 import { promisify } from "node:util";
+import { kubeGet } from "./kubernetes";
 import type { Project } from "./types";
 
 const exec = promisify(execFile);
@@ -8,18 +9,29 @@ const REPOSITORY = process.env.HOMELAB_REPOSITORY ?? "https://github.com/hikuohi
 const CACHE_DIR = process.env.OPS_STATE_CACHE_DIR ?? "/tmp/mission-control-state";
 const LOCAL_DIR = process.env.OPS_STATE_DIR;
 const REFRESH_MS = Number(process.env.OPS_STATE_REFRESH_MS ?? 20_000);
+const NAMESPACE = process.env.AUTOPILOT_NAMESPACE ?? "autopilot";
+
+// Project CR (設計 state-out-of-git 4b-2a)。プロジェクトの読み先はここに移った。
+// **棄却案 (state: rejected) はサーバ側で外す** — 250 件を超える終端の山で、
+// ボードに出す意味が無いうえ全件を引けばレスポンスが桁で重くなる。
+// 設計の「live set は問い合わせ側の selector で切る」がここに効いている。
+const PROJECTS_PATH =
+  `/apis/autopilot.homelab.hikuohiku.dev/v1/namespaces/${NAMESPACE}/projects` +
+  `?labelSelector=${encodeURIComponent("state!=rejected")}&limit=500`;
 
 interface DailyUsage {
   cost_usd?: number; tokens?: number; sessions?: number; empty_sessions?: number;
 }
 
-interface OpsState {
-  projects: Project[];
-  // usage は当日の消費量の計測。2026-08-25 以前は metrics.jsonl の最終行から
-  // 読んでいたが、そのために 8.9 MB のファイルを 20 秒ごとに fetch していた。
-  // 指標は git から出た (設計 state-out-of-git Phase 1) ので heartbeat に相乗り
+// 心拍と「止めて」は **まだ ops-state ブランチ**。heartbeat の移設 (Lease 化) は
+// 設計の Phase 7 で、この段では触っていない
+interface HeartState {
   heartbeat: { beat?: number; at?: string; usage?: DailyUsage };
   stopEngaged: boolean;
+}
+
+interface OpsState extends HeartState {
+  projects: Project[];
   warning?: string;
 }
 
@@ -30,22 +42,34 @@ function parseJson<T>(text: string, fallback: T): T {
   try { return JSON.parse(text) as T; } catch { return fallback; }
 }
 
-function mergeArchive(projects: Project[], archiveText: string): Project[] {
-  const specs = new Map<string, Record<string, unknown>>();
-  for (const line of archiveText.split("\n")) {
-    try {
-      const value = JSON.parse(line) as Record<string, unknown>;
-      if (typeof value.id === "string") specs.set(value.id, value);
-    } catch { /* append-only logs may have an incomplete final line */ }
-  }
-  return projects.map((project) => {
-    const spec = specs.get(project.id);
-    return {
+// CR の spec が projects.json の 1 エントリそのもの。その中の spec 子は
+// **立案時の spec** で別物なので、題名などの穴埋め以外には使わない
+interface ProjectCr {
+  spec?: Project & { spec?: { title?: string; irreversible?: boolean } };
+}
+
+export function projectsFromCrs(doc: { items?: ProjectCr[] }): Project[] {
+  const projects: Project[] = [];
+  for (const item of doc.items ?? []) {
+    if (!item.spec || typeof item.spec.id !== "string" || !item.spec.id) continue;
+    if (item.spec.state === "rejected") continue; // selector を通さない経路でも混ぜない
+    // proposal (= 入れ子の spec) は表示の穴埋めにだけ使い、ボードには載せない
+    const { spec: proposal, ...project } = item.spec;
+    projects.push({
       ...project,
-      title: project.title || String(spec?.title ?? project.id),
-      irreversible: project.irreversible ?? Boolean(spec?.irreversible),
-    };
-  });
+      title: project.title || proposal?.title || project.id,
+      irreversible: project.irreversible ?? Boolean(proposal?.irreversible),
+    });
+  }
+  return projects.sort((a, b) => a.id.localeCompare(b.id));
+}
+
+async function loadProjects(): Promise<Project[]> {
+  if (LOCAL_DIR) {
+    const text = await readFile(`${LOCAL_DIR}/projects.json`, "utf8");
+    return parseJson<{ projects?: Project[] }>(text, {}).projects ?? [];
+  }
+  return projectsFromCrs(await kubeGet(PROJECTS_PATH));
 }
 
 async function git(args: string[]): Promise<string> {
@@ -68,52 +92,72 @@ async function ensureRepository(): Promise<void> {
   }
 }
 
-async function loadFromGit(): Promise<OpsState> {
+async function loadHeart(): Promise<HeartState> {
+  if (LOCAL_DIR) {
+    const [projectsText, heartbeatText] = await Promise.all([
+      readFile(`${LOCAL_DIR}/projects.json`, "utf8"),
+      readFile(`${LOCAL_DIR}/heartbeat.json`, "utf8"),
+    ]);
+    return {
+      heartbeat: parseJson(heartbeatText, {}),
+      stopEngaged: Boolean(parseJson<{ stop_engaged?: boolean }>(projectsText, {}).stop_engaged),
+    };
+  }
   await ensureRepository();
+  // main はもう引かない: archive.jsonl による題名補完が CR の spec.spec に移った
   await git([
     "fetch", "--quiet", "--no-tags", "--depth=1", "origin",
     "+refs/heads/ops-state:refs/remotes/origin/ops-state",
-    "+refs/heads/main:refs/remotes/origin/main",
   ]);
-  const [projectsText, heartbeatText, archiveText] = await Promise.all([
+  const [projectsText, heartbeatText] = await Promise.all([
     git(["show", "origin/ops-state:projects.json"]),
     git(["show", "origin/ops-state:heartbeat.json"]),
-    git(["show", "origin/main:ops/projects/archive.jsonl"]),
   ]);
-  const projectDoc = parseJson<{ projects?: Project[]; stop_engaged?: boolean }>(projectsText, {});
   return {
-    projects: mergeArchive(projectDoc.projects ?? [], archiveText),
     heartbeat: parseJson(heartbeatText, {}),
-    stopEngaged: Boolean(projectDoc.stop_engaged),
+    stopEngaged: Boolean(parseJson<{ stop_engaged?: boolean }>(projectsText, {}).stop_engaged),
   };
 }
 
-async function loadFromDirectory(directory: string): Promise<OpsState> {
-  const [projectsText, heartbeatText, archiveText] = await Promise.all([
-    readFile(`${directory}/projects.json`, "utf8"),
-    readFile(`${directory}/heartbeat.json`, "utf8"),
-    readFile(`${directory}/archive.jsonl`, "utf8").catch(() => ""),
-  ]);
-  const projectDoc = parseJson<{ projects?: Project[]; stop_engaged?: boolean }>(projectsText, {});
-  return {
-    projects: mergeArchive(projectDoc.projects ?? [], archiveText),
-    heartbeat: parseJson(heartbeatText, {}),
-    stopEngaged: Boolean(projectDoc.stop_engaged),
-  };
-}
-
+// 読み先が 2 つ (CR と ops-state) になったので、片方の失敗でもう片方まで
+// 巻き添えにしない。**黙って空を返さない** — プロジェクト 0 件は「全部終わった」に
+// 見えるので、直近の写しがあれば警告つきで出し、無ければ取得失敗だと言い切る
 async function refresh(): Promise<OpsState> {
   try {
-    const value = LOCAL_DIR ? await loadFromDirectory(LOCAL_DIR) : await loadFromGit();
-    cached = { loadedAt: Date.now(), value };
-    return value;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    if (cached) return { ...cached.value, warning: `ops-state 更新失敗: ${message}` };
-    return { projects: [], heartbeat: {}, stopEngaged: false, warning: `ops-state 取得失敗: ${message}` };
+    return await refreshOnce();
   } finally {
     refreshInFlight = undefined;
   }
+}
+
+async function refreshOnce(): Promise<OpsState> {
+  const previous = cached?.value;
+  const warnings: string[] = [];
+  let projects = previous?.projects ?? [];
+  try {
+    projects = await loadProjects();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    warnings.push(
+      `プロジェクト (Project CR) 取得失敗: ${message}` +
+      (previous ? "（直近の写しを表示中）" : "（表示できるものが無い）"),
+    );
+  }
+  let heart: HeartState = { heartbeat: previous?.heartbeat ?? {}, stopEngaged: previous?.stopEngaged ?? false };
+  try {
+    heart = await loadHeart();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    warnings.push(`ops-state 更新失敗: ${message}`);
+  }
+  const value: OpsState = {
+    projects,
+    ...heart,
+    warning: warnings.length ? warnings.join(" / ") : undefined,
+  };
+  // 警告つきでも cached は更新する (取れた側は新しいので)
+  cached = { loadedAt: Date.now(), value };
+  return value;
 }
 
 export async function getOpsState(): Promise<OpsState> {
@@ -121,4 +165,3 @@ export async function getOpsState(): Promise<OpsState> {
   refreshInFlight ??= refresh();
   return refreshInFlight;
 }
-

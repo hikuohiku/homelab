@@ -306,10 +306,13 @@ def _archive_backfill(doc, facts, limit=ARCHIVE_BACKFILL_LIMIT):
     dispatch の正が ops-state に移った結果、採択は台帳への追記を待たずに
     動き出す (D32)。台帳が欠落しないよう、次の curriculum Job にまとめて
     渡して同じ PR で追記させる。即時 dispatch の P-9NNN もここで拾われる。
+
+    見るのは facts["archived_ids"] (= 台帳に載っている採択 id) で、
+    adopted_specs ではない。4b-2a で adopted_specs の読み先が Project CR に
+    移り、**CR は doc の写しなので「まだ台帳に無い」を判定できなくなった**
+    (全件が「載っている」に見えて backfill が永久に空になる)。
     """
-    in_archive = {
-        s.get("id") for s in (facts.get("adopted_specs") or []) if isinstance(s, dict)
-    }
+    in_archive = set(facts.get("archived_ids") or [])
     out = []
     for p in doc["projects"]:
         spec = p.get("spec")
@@ -380,11 +383,14 @@ def decide(doc, facts, rules, now):
         1 for p in doc["projects"] if p["state"] in ("active", "in_review", "merging")
     )
 
-    # --- 台帳 (main の archive.jsonl) に載った採択 spec も登録する ---
-    # 着手の正は ops-state の projects.json に移った (設計 rev3 D32) が、この経路は
-    # 残す。人間が archive.jsonl に adopted 行を足す手動採択の入口がここだからで、
-    # 「main に載れば動き出す」という意味論は**手動採択については変えていない**。
-    # 変わったのは curriculum の採択で、そちらは PR の merge を待たずに
+    # --- Project CR に載っている採択 spec も登録する ---
+    # 読み先は main の archive.jsonl から CR に移った (設計 state-out-of-git 4b-2a)。
+    # CR は doc の写しなので、通常のビートでこの節が何かを登録することはない。
+    # 効くのは **doc 側が欠けたとき** — restic からの復元直後や projects.json が
+    # 部分的に壊れたビートで、CR に残っている採択がここから doc に戻る。
+    # 手動採択の入口 (人間が archive.jsonl に adopted 行を足す) はこの切り替えで
+    # 塞がった。admission gate への移設は設計の Phase 4.5 で、まだやっていない。
+    # 変わっていないのは curriculum の採択で、そちらは PR の merge を待たずに
     # result.json 経由で登録される (下の curriculum 節)。
     # 終端 (delivered/stalled/vetoed) のエントリも projects に残るため、済んだ spec が
     # ここで蘇ることはない。projects.json の終端エントリを将来間引くときは、

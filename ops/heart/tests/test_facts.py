@@ -297,13 +297,8 @@ class TestCollectCurriculum(unittest.TestCase):
             json.dumps(doc, ensure_ascii=False)
         )
 
-    def archive(self, *records):
-        (self.repo / "ops" / "projects" / "archive.jsonl").write_text(
-            "".join(json.dumps(r, ensure_ascii=False) + "\n" for r in records)
-        )
-
-    def collect(self, gh):
-        return facts.collect_curriculum(self.data, self.repo, gh)
+    def collect(self, gh, adopted_specs=None):
+        return facts.collect_curriculum(self.data, adopted_specs or {}, gh)
 
     def test_specs_come_from_the_result_before_the_pr_is_merged(self):
         self.result(adopted_specs=[self.SPEC])
@@ -317,9 +312,15 @@ class TestCollectCurriculum(unittest.TestCase):
         self.assertTrue(out["pr_unknown"])
         self.assertEqual(out["adopted_specs"], [self.SPEC])
 
-    def test_old_result_without_specs_still_reads_the_ledger(self):
-        """後方互換: D32 より前の curriculum Job が書いた result.json。"""
+    def test_old_result_without_specs_reads_the_specs_it_is_given(self):
+        """後方互換: D32 より前の curriculum Job が書いた result.json。
+
+        読み先は台帳から Project CR へ移った (4b-2a) が、「merge されてから
+        spec を引く」という意味論は変わっていない。
+        """
         self.result()
-        self.archive({**self.SPEC, "adopted": True})
-        out = self.collect(FakeCurriculumGh(merged=True))
+        out = self.collect(
+            FakeCurriculumGh(merged=True),
+            adopted_specs={"P-0009": {**self.SPEC, "adopted": True}},
+        )
         self.assertEqual([s["id"] for s in out["adopted_specs"]], ["P-0009"])

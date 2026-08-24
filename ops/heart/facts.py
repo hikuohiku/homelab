@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import dispatch, gitutil, tasks, triage
+from . import dispatch, gitutil, projectcr, tasks, triage
 from .statefiles import parse_iso
 
 
@@ -509,13 +509,37 @@ def load_archive_records(repo_dir):
     return records
 
 
-def load_adopted_specs(repo_dir):
-    """main の archive.jsonl から採択済み spec を {id: spec} で返す (同 id は最後の行が有効)。"""
+def load_archived_ids(repo_dir):
+    """main の archive.jsonl に **採択行として載っている** id の集合。
+
+    残る用途は 1 つだけ: 台帳にまだ無い採択 spec を次の curriculum の PR に
+    まとめて載せる backfill (reconcile._archive_backfill)。台帳の書き込みは
+    4b-2a ではまだ続いているので、その欠落検知は git 側を見る必要がある。
+    採否の判断そのものは CR (load_adopted_specs) に移った。
+    """
     return {
-        rec["id"]: rec
+        rec["id"]
         for rec in load_archive_records(repo_dir)
         if rec.get("adopted") and rec.get("id")
     }
+
+
+def load_adopted_specs(k8s, namespace):
+    """採択済み案の立案時 spec を {id: spec} で返す (設計 state-out-of-git 4b-2a)。
+
+    読み先は main の archive.jsonl から **Project CR** に移った。棄却案は
+    NOT_REJECTED_SELECTOR でサーバ側から落とす — 終端の 250 件超をここに混ぜると、
+    reconcile が毎ビートその山を舐めることになる。
+
+    CR が読めないときは例外がそのまま上がる。呼び出し側 (heart.beat) が
+    「観測できなかった」として空で進める — ここで空を返すと、読めないことと
+    「1 件も無い」ことが facts の上で区別できなくなる。
+    """
+    items = k8s.list_custom(
+        projectcr.API_VERSION, namespace, projectcr.PLURAL,
+        label_selector=projectcr.NOT_REJECTED_SELECTOR,
+    )
+    return projectcr.adopted_specs_from_items(items)
 
 
 def collect_critic(data_dir):
@@ -539,7 +563,7 @@ def collect_critic(data_dir):
     return {"state": result.get("state"), "error": result.get("error")}
 
 
-def collect_curriculum(data_dir, repo_dir, gh):
+def collect_curriculum(data_dir, adopted_specs, gh):
     """curriculum Job の結果 (/data/projects/system/result.json) と、その採択 PR の
     状態・採択 spec を観測する。無ければ None。"""
     path = data_dir / "projects" / "system" / "result.json"
@@ -583,8 +607,9 @@ def collect_curriculum(data_dir, repo_dir, gh):
             return out
     if out["pr_merged"] and not out["adopted_specs"]:
         # 後方互換: adopted_specs を持たない古い result.json (D32 より前の
-        # curriculum Job が書いたもの) は、従来どおり merge 後の台帳から読む
+        # curriculum Job が書いたもの)。読み先は台帳から CR へ移った (4b-2a) が、
+        # 「merge されてから spec を引く」という意味論は変えていない
         adopted_ids = result.get("adopted") or []
-        specs = load_adopted_specs(repo_dir)
+        specs = adopted_specs or {}
         out["adopted_specs"] = [specs[i] for i in adopted_ids if i in specs]
     return out

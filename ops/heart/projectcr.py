@@ -3,7 +3,9 @@
 ここは純関数だけ。k8s を叩くのは呼び出し側 (heart.beat) で、CRD は
 apps/autopilot/crd-project.yaml。
 
-今の段階では **正は projects.json のまま**で、CR は写し。読み手の切り替えは 4b。
+4b-2a で **読み手は全員 CR を読む**ようになった (下段の「読み出し」)。書き込みは
+projects.json / archive.jsonl にも残っているので、git 側は正しい写しのまま。
+書き込みを止めるのが 4b-2b。
 """
 
 GROUP = "autopilot.homelab.hikuohiku.dev"
@@ -174,3 +176,76 @@ def plan_rejected(records, existing, namespace, live_ids, limit=REJECTED_BATCH_L
         if len(out) >= limit:
             break
     return out
+
+
+# --- 読み出し (設計 state-out-of-git 4b-2a「読み手を CR へ」) ---
+
+# 読み手が使う selector。**問い合わせ側で切る**のが設計の前提で、
+# 終端 250 件超を毎回引いて手元で捨てる読み手を作らない。
+LIVE_SELECTOR = f"lifecycle={LIVE}"
+# 棄却案だけを外す。ダッシュボードや reconcile が見たいのは「一度は動いた案」で、
+# それには終端の delivered / stalled / vetoed も含まれる
+NOT_REJECTED_SELECTOR = "state!=rejected"
+
+
+def projects_from_items(items):
+    """CR の一覧を projects.json の projects 配列と同じ形に戻す (純関数)。
+
+    CR の `spec` が projects.json の 1 エントリそのもの (to_cr と対称)。
+    その中の `spec` 子は立案時の spec で **別物**なので取り違えないこと。
+    id を持たない CR は落とす — 突き合わせの鍵が無いものは読み手の役に立たない。
+    """
+    out = [
+        item["spec"]
+        for item in items
+        if isinstance(item.get("spec"), dict) and item["spec"].get("id")
+    ]
+    out.sort(key=lambda p: p["id"])
+    return out
+
+
+def adopted_specs_from_items(items):
+    """採択済み案の **立案時 spec** を {id: spec} で返す (純関数)。
+
+    台帳 (archive.jsonl) の `adopted` 行と同じものが CR の `spec.spec` に載る
+    (reconcile._register_spec が dict(spec) を丸ごと置いている)。
+    棄却案は除く — 呼び出し側は NOT_REJECTED_SELECTOR で引く前提だが、
+    selector を通さない経路から渡っても混ざらないようにここでも落とす。
+    """
+    out = {}
+    for project in projects_from_items(items):
+        if project.get("state") == "rejected":
+            continue
+        spec = project.get("spec")
+        if isinstance(spec, dict) and spec.get("id"):
+            out[spec["id"]] = spec
+    return out
+
+
+def proposal_digest(items):
+    """立案役が読む「過去に何が出て、なぜ落ちたか」を新しい順で返す (純関数)。
+
+    **棄却案を含む唯一の読み出し**。reject_reason / improve_hint は判定の教師信号が
+    生成に戻る唯一の経路 (ops/runner/runner.py build_archive_records) なので、
+    ここを痩せさせると同型再提案が常態化する。
+
+    why / dod / verify は載せない — 立案が要るのは「既出か」と「死因」だけで、
+    全文を載せると 400 件で数 MB になる (コアの homelab_proposals と同じ判断)。
+    """
+    rows = []
+    for project in projects_from_items(items):
+        spec = project.get("spec") if isinstance(project.get("spec"), dict) else {}
+        rows.append({
+            "id": project["id"],
+            "title": project.get("title") or spec.get("title", ""),
+            "cell": spec.get("cell") or [],
+            # adopted は棄却案の spec にしか無い。state から決めるのが確実
+            "adopted": project.get("state") != "rejected",
+            "state": project.get("state", ""),
+            "proposed_at": spec.get("proposed_at", ""),
+            "proposed_by": spec.get("proposed_by", ""),
+            "reject_reason": spec.get("reject_reason", ""),
+            "improve_hint": spec.get("improve_hint", ""),
+        })
+    rows.sort(key=lambda r: r["id"], reverse=True)
+    return rows

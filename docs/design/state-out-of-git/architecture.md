@@ -185,6 +185,29 @@ planner / judge は `bash: deny` のサブエージェントで、いまはリ�
 id / title / cell / 採否 / reject_reason / improve_hint に絞って返す。
 **これは Phase 4 の必須部品**で、無いまま archive.jsonl を消すと立案の質が落ちる。
 
+### 進捗 — 4b-2a (2026-08-24): 読み手を CR へ
+
+**読み手だけ**を Project CR に切り替えた。書き込みは `projects.json` /
+`archive.jsonl` にも残っているので、git 側は正しい写しのまま戻せる。
+書き込みを止めるのは次の段 (4b-2b)。
+
+| 読み手 | 今 |
+|---|---|
+| `facts.load_adopted_specs()` | CR (`state!=rejected`) |
+| `reconcile` の採択登録 | 同上。CR は doc の写しなので通常は no-op で、効くのは復元後の埋め直し |
+| `runner.load_spec()` | Job の env `HEART_SPEC_JSON` だけ。worker はトークン automount 無しで CR を読めず、そこを開けるのは決定 #5 の境界を崩す |
+| dashboard | CR (`state!=rejected`)。`heartbeat` と `stop_engaged` はまだ ops-state (Phase 7) |
+| コアの shadow | 非終端の CR (`lifecycle=live`) + heart の `/healthz` (`stop_engaged` / `last_curriculum_at` は CR に載らない doc 全体の値) |
+| curriculum Job | heart が spawn 時に CR から `/data/curriculum/proposals.jsonl` へ書き出す (`PROPOSALS_HISTORY`)。**棄却案を読む唯一の読み手** |
+
+**CR が読めないときの挙動**: 採択登録は空で進む (ビートは止めない。次のビートが
+やり直す)。curriculum は **spawn しない** — 死因を知らない立案は同型再提案を採択まで
+通すので、走らせない方が安い。ダッシュボードは直近の写しを警告つきで出す
+(黙って 0 件を出さない)。
+
+**手動採択の入口は塞がった**。`archive.jsonl` に `adopted` 行を足しても動き出さない。
+admission gate への移設は下記 Phase 4.5 のまま。
+
 ### 手動採択の入口を admission gate へ
 
 `reconcile.py` は「人間が `archive.jsonl` に `adopted` 行を足したら動き出す」という

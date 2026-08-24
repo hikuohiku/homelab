@@ -38,7 +38,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-from ops.heart.gh import Gh, GhError  # noqa: E402
+from ops.heart.gh import Gh  # noqa: E402
 
 # --- セッションの死因 (P-0026) ---
 # 待機の既定値はここ (モジュール定数) に置く。ops/rules.json は人間レビュー必須パスの
@@ -47,9 +47,6 @@ DEFAULT_QUOTA_WAIT_SECONDS = 900
 MIN_QUOTA_WAIT_SECONDS = 60
 QUOTA_WAIT_MARGIN_SECONDS = 30
 STDERR_TAIL_CHARS = 2000
-
-# dispatch の正が載るブランチ (設計 rev3 D32)。書き手は heart だけ
-OPS_STATE_BRANCH = "ops-state"
 
 STDERR_KEEP_LINES = 400
 
@@ -693,81 +690,24 @@ class Runner:
         path.write_text(json.dumps(cfg))
 
     def load_spec(self):
-        """自分の採択 spec を読む。読み先は 3 つで、この順に見る (設計 rev3 D32)。
+        """自分の採択 spec を読む。読み先は **heart が Job の env に載せた spec** だけ。
 
-        (1) **ops-state ブランチの projects.json** — dispatch の正。書き手は
-            heart だけ (単一書き手・直 push) なので、runner のブランチからは
-            改竄できない。ここが正になったことで、採択から着手までの経路から
-            main への PR と CI と merge が消えた
-        (2) main の ops/projects/archive.jsonl — 台帳。ops-state に spec を
-            持たない過去のプロジェクト (この変更より前に登録されたもの) が
-            ここから読める (後方互換)。読むのは clone 直後 = origin/main の
-            内容で、プロジェクトブランチの中身ではない
-        (3) heart が Job の env に載せた spec (HEART_SPEC_JSON) — 即時 dispatch
-            は Job 作成が ops-state への commit より **先** なので、走り出しの
-            瞬間だけ (1) にまだ載っていない。env は Job の spec で固定され、
-            runner のブランチからは書き換えられないので性質は変わらない
+        以前は ops-state の projects.json → main の archive.jsonl → env の 3 段
+        だったが、状態が git から Project CR へ出た (設計 state-out-of-git 4b-2a)
+        ので前の 2 つは畳んだ。**CR を読みに行く形は採らなかった**:
 
-        どれもプロジェクトブランチ上のファイルを読まない。ブランチに偽の
-        archive.jsonl / projects.json を置いても spec は変わらない。
+        - worker Job は `autopilot-runner` SA で走り、`automountServiceAccountToken`
+          は false (ops/heart/spawn.py)。トークンが無いのは事故ではなく決定 #5 の
+          境界そのもので、spec を読むためだけにそこを開けるのは割に合わない
+        - env は heart が Job の spec に固定するので、runner のブランチからは
+          書き換えられない。**改竄できないという性質は git 経由と同じ**
+        - 即時 dispatch は Job 作成が状態の書き込みより先なので、そもそも env が
+          唯一確実な経路だった (D32 で既にそう書いてある)
+
+        env が無ければ {} を返す。呼び出し側は spec_error で止まる (静かに
+        空の spec で実装を始めない)。
         """
-        return (
-            self.spec_from_ops_state()
-            or self.spec_from_archive()
-            or self.spec_from_env()
-        )
-
-    def spec_from_ops_state(self):
-        """ops-state の projects.json から自分の spec を読む。無ければ {}。
-
-        GitHub API で 1 ファイルだけ読む (clone / fetch しない)。ops-state は
-        ビートごとに commit される長い履歴を持ち、Job 起動のたびに引くと
-        node の負荷が増えるため。読めないビート (API 障害) は {} を返し、
-        台帳と env の読み先へ落ちる。
-        """
-        try:
-            raw = self.gh.file_at_ref("projects.json", OPS_STATE_BRANCH)
-        except (GhError, OSError) as e:
-            log(f"ops-state の projects.json を読めない: {e}")
-            return {}
-        if not raw:
-            return {}
-        try:
-            doc = json.loads(raw)
-        except ValueError:
-            return {}
-        for p in doc.get("projects", []):
-            if p.get("id") != self.project_id:
-                continue
-            spec = p.get("spec")
-            # id の食い違う spec は受け取らない (spec_from_env と同じ理由)
-            if isinstance(spec, dict) and spec.get("id") == self.project_id:
-                return spec
-            return {}
-        return {}
-
-    def spec_from_archive(self):
-        """main の ops/projects/archive.jsonl (台帳) から読む。無ければ {}。
-
-        作業ツリーのファイルではなく **origin/main に固定された内容**を読む
-        (prompt_text(from_main=True) と同じ理由)。プロジェクトブランチに偽の
-        archive.jsonl を置いても spec は変わらない。
-        """
-        p = sh(
-            ["git", "show", "origin/main:ops/projects/archive.jsonl"],
-            cwd=self.repo_dir, check=False,
-        )
-        if p.returncode != 0:
-            return {}
-        spec = {}
-        for line in p.stdout.splitlines():
-            try:
-                rec = json.loads(line)
-            except ValueError:
-                continue
-            if rec.get("id") == self.project_id and rec.get("adopted"):
-                spec = rec  # 後の行 (最新) を優先
-        return spec
+        return self.spec_from_env()
 
     def spec_from_env(self):
         """heart が Job の env に載せた spec (即時 dispatch 用)。無ければ {}。
@@ -959,7 +899,7 @@ class Runner:
         body = (
             f"heart-and-projects の runner が作成。\n\n"
             f"- project: {self.project_id}\n"
-            f"- spec: ops/projects/archive.jsonl の {self.project_id}\n"
+            f"- spec: Project CR {self.project_id.lower()} (autopilot ns)\n"
             + (
                 "- 検証: wrapper が verify 全項目 green を実測済み。"
                 "独立レビュー (reviewer Job) が再実測してから merge される\n"
@@ -977,7 +917,7 @@ class Runner:
     def mode_worker(self):
         if not self.branch or not self.spec:
             self.write_result("spec_error",
-                              error="PROJECT_BRANCH または archive.jsonl の spec が無い")
+                              error="PROJECT_BRANCH または HEART_SPEC_JSON が無い")
             return 1
         self.checkout_branch()
 
@@ -1239,7 +1179,12 @@ class Runner:
                  "ADOPT_LIMIT": os.environ.get("ADOPT_LIMIT", "2"),
                  # 人間の未処理タスク依頼 (JSON 配列。heart が spawn 時に注入、
                  # P-0091)。無ければ空配列で置換が常に成立する
-                 "TASK_REQUESTS": os.environ.get("TASK_REQUESTS", "[]")}
+                 "TASK_REQUESTS": os.environ.get("TASK_REQUESTS", "[]"),
+                 # 過去案の台帳。heart が Project CR から書き出した PVC 上の
+                 # jsonl (設計 state-out-of-git 4b-2a)。Job にはクラスタ API の
+                 # トークンが無いので、読める形に落として渡してもらう
+                 "PROPOSALS_HISTORY": os.environ.get(
+                     "PROPOSALS_HISTORY", "/data/curriculum/proposals.jsonl")}
         outcome = self.run_curriculum_phase(
             "curriculum-generate", "cur-gen", extra, gen_out
         )

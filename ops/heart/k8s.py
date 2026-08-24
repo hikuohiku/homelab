@@ -7,6 +7,7 @@ apps/coder/workspace-home-backup-cronjob.yaml の spawn_backup_jobs.py と同型
 import json
 import ssl
 import urllib.error
+import urllib.parse
 import urllib.request
 
 SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
@@ -70,10 +71,16 @@ class K8s:
         return self.request("GET", path).get("items", [])
 
     # --- カスタムリソース (Project CR。設計 state-out-of-git Phase 4) ---
-    def list_custom(self, api_version, namespace, plural):
-        return self.request(
-            "GET", f"/apis/{api_version}/namespaces/{namespace}/{plural}"
-        ).get("items", [])
+    def list_custom(self, api_version, namespace, plural, label_selector=None):
+        """label_selector は **サーバ側**で絞るために渡す。
+
+        終端の棄却案は 250 件を超えており、読み手が毎回全件を引いて手元で
+        捨てるのは設計の「live set は selector で切る」の反対。
+        """
+        path = f"/apis/{api_version}/namespaces/{namespace}/{plural}"
+        if label_selector:
+            path += f"?labelSelector={urllib.parse.quote(label_selector)}"
+        return self.request("GET", path).get("items", [])
 
     def apply_custom(self, api_version, namespace, plural, name, body):
         """server-side apply。存在しなければ作り、あれば heart の持ち分を上書きする。

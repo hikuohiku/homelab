@@ -148,6 +148,10 @@ class AdmissionGate:
             self.snapshot = {
                 "at": now_iso(now),
                 "stop_engaged": bool(doc.get("stop_engaged")),
+                # doc の全体にかかる値で、Project CR には載らない (CR は 1 件 1
+                # プロジェクト)。読み手 (コアの shadow) が git を読まずに済むよう
+                # /healthz に出す — 設計 state-out-of-git 4b-2a
+                "last_curriculum_at": doc.get("last_curriculum_at") or "",
                 "shadow": bool(shadow),
                 "running": running,
                 "max_concurrent": rules["runner"]["max_concurrent"],
@@ -215,6 +219,11 @@ class AdmissionGate:
             "ok": snapshot is not None,
             "snapshot_age_seconds": age,
             "inflight": inflight,
+            # doc 全体にかかる状態。プロジェクト 1 件ずつの Project CR には
+            # 載らないので、CR を読む側 (コア) がここから引く。写しが無い
+            # (起動直後) ときは既定値で、ok=False が「まだ判断材料が無い」を示す
+            "stop_engaged": bool(snapshot and snapshot.get("stop_engaged")),
+            "last_curriculum_at": (snapshot or {}).get("last_curriculum_at", ""),
         }
 
     # --- Job 作成 (非同期) ---

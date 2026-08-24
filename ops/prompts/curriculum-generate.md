@@ -14,7 +14,12 @@ curriculum 第 1 段: 発散生成。判定 (採択) は別セッション (curr
    (feedback note の `kind: task-request`。空なら飛ばす)。
    **VISION 差分より優先する原料。**
 2. `ops/VISION.md` — 何を目指しているか。**候補は VISION との差分から生まれる**
-3. `ops/projects/archive.jsonl` — 過去の全案 (採択・棄却・失敗を含む)。
+3. **`{{PROPOSALS_HISTORY}}`** — 過去の全案 (採択・棄却・失敗を含む) の要点。
+   1 行 1 案の JSONL で、heart が Project CR から書き出したもの。新しい順。
+   キーは `id` / `title` / `cell` / `adopted` / `state` / `proposed_at` /
+   `proposed_by` / `reject_reason` / `improve_hint`。
+   **過去案の情報源はこのファイルだけ。`ops/projects/archive.jsonl` は読まないこと**
+   (立案の正は Project CR に移った。台帳は追記が遅れる写しでしかない)。
    **既出と同型の案を出さない。** 失敗した案は「なぜ失敗したか」を乗り越える形なら再提案してよい。
    棄却案には判定役が刻んだ `reject_reason` (死因) と `improve_hint` (改善の方向) がある。
    **前回の reject_reason/improve_hint を参照し、それに応答する義務がある:**
@@ -51,7 +56,7 @@ heart から渡される。空 (`[]`) ならこの節は飛ばしてよい。
 - 1 依頼 1 案が基本。依頼を分解したくなったら主案だけに request_id を付け、
   副案は通常の案として出す
 - 採択されずに残った依頼は次回も渡ってくる。前回棄却された同型案をそのまま出し直さず、
-  archive.jsonl の棄却理由を踏まえて良くしてから出すか、今回は外す
+  `{{PROPOSALS_HISTORY}}` の棄却理由を踏まえて良くしてから出すか、今回は外す
 
 ## 案の出し方
 
@@ -66,7 +71,7 @@ heart から渡される。空 (`[]`) ならこの節は飛ばしてよい。
 ## 各案のスキーマ (JSON)
 
 ```json
-{"id": "P-NNNN (ops/projects/archive.jsonl の最大 id + 連番)",
+{"id": "P-NNNN ({{PROPOSALS_HISTORY}} の最大 id + 連番)",
  "title": "1 行",
  "why": "VISION / 現状のどの差分から来たか",
  "cell": ["領域", "種類"],
