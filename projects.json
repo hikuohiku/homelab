@@ -6996,7 +6996,7 @@
     {
       "id": "P-0353",
       "title": "veto 済みプロジェクトの幽霊が健康を濁す — prune:true が何故この ExternalSecret を消さないのかを解剖し、secret_synced_errors=0 を実測する",
-      "state": "proposed",
+      "state": "stalled",
       "branch": "project/p-0353",
       "irreversible": false,
       "capabilities": [
@@ -7039,12 +7039,13 @@
         "adopted": true,
         "proposed_at": "2026-08-24T21:47:22Z"
       },
-      "adopt_gate_attempts": 3
+      "adopt_gate_attempts": 3,
+      "stalled_reason": "adopt_gate_unmeasurable"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T21:51:33Z",
-  "last_activity_at": "2026-08-24T21:54:42Z",
+  "last_activity_at": "2026-08-24T21:56:52Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false,
