@@ -1,6 +1,19 @@
-# 状態を git から出す — 設計書
+# 状態を git から出す — 設計書 / 実施記録
 
-作成: 2026-08-25 / 対象: autopilot のライフサイクル
+作成: 2026-08-25 / 最終更新: 2026-08-25 / 対象: autopilot のライフサイクル
+
+## この文書の読み方
+
+**この文書は `main` にあり、autopilot が読んで自分で実装 PR を出す。** だから
+「これからやること」と「もう済んだこと」を混ぜない。
+
+- 済んだ段は「段階」の表で **完了 + PR 番号**として畳む。残したままにすると
+  同じ段をもう一度実装してくる (#645 が実際にそうなった)。
+- 採らなかった案は「棄却案」に**理由ごと**書く。設計の途中に残った書きぶりを
+  そのまま実装してきたことがある (#622 — 既に棄却していた k3s データストアの
+  hostPath バックアップ)。
+- 「何が起きているか」以降は**移行前の実測**で、当時の記録として残してある。
+  現況は「段階」の表と各段の「進捗」節を見る。
 
 ## 一言で
 
@@ -151,6 +164,35 @@ GitHub Actions で走る番人が 2 つある — `.github/workflows/watchdog.ym
 
 撤去対象: `.github/workflows/watchdog.yml`、`ops/check_heartbeat_fresh.py`、
 `ops/check_health_freshness.py`、`ops/tests/test_health_freshness.py`。
+**これらはまだ `main` にある** — 全ジョブが `if: false` で止まっているだけ。ファイルの
+撤去は #636 (Phase 7c) にあるが、#635 の上に積んであるので main には未着。
+
+### 実施 (Phase 7a, #632 / #642) — 実際の障害で検知した
+
+コアの `silence.go` が見張る。設計と違えた点が 1 つ — 見るのは Lease だけではなく
+**2 つ**にした。
+
+1. heart の Lease の `renewTime` (ビートが最後まで通ったときだけ進む)
+2. 健全性レポート ConfigMap の `generated_at` (reporter が実際に書いたときだけ進む)
+
+(2) は Phase 5 で読み先が枝から ConfigMap へ移ったあと、旧 `check_health_freshness.py`
+の役が宙に浮いていた穴。閾値は `ops/rules.json` の `health.stale_seconds` /
+`heartbeat.stale_seconds`。どちらも「仕事の成果が更新された時刻」で、返事ができることでは
+進まない — P-0027 の事故は「プロセスは生きているのにループが回っていない」形だったので、
+`/healthz` が 200 を返すことを見る実装ではその事故を再現する。読めない・壊れている・
+時刻が無いは沈黙とみなす (fail-closed)。
+
+**仕込んだ試験ではなく、実際の障害で動いた。** heart が Lease を RFC3339 で書いていて
+API が毎ビート 500 を返し、生存が一度も見えていなかった (#649 で MicroTime に修正)。
+その間コアは沈黙として検知し、修正後に回復も検知している (本番ログ):
+
+```
+23:05:39 沈黙をコアへ渡した (沈黙の顔ぶれが変わった): (なし) → heart
+23:36:32 沈黙をコアへ渡した (沈黙が解消した): heart → (なし)
+```
+
+**未確認**: 検知から先、**Telegram に実際に届いたかは見ていない**。検知とコアへの
+受け渡しまでが確かめられた範囲。
 
 ## 台帳を畳む — `archive.jsonl` を git から消す
 
@@ -254,9 +296,15 @@ CR を読めなかったビートも「揃っている」に倒さない (fail-c
 代償: **GitHub しか手が届かない状況での手動採択ができなくなる。** ただしその状況では
 クラスタが死んでいて Job も走らないので、採択できても何も起きない。実質の損失は無い。
 
-## 未解決 — 移行の前に必ず決める
+**現況 (2026-08-25): 未実装。ただし旧入口は 4b-2a で既に塞がっている。**
+`facts.load_adopted_specs()` の読み先が `archive.jsonl` から CR に移った時点で、
+`adopted` 行を足しても何も起きなくなった。いま人間が手で採択する手段は
+**Telegram → コア → admission gate だけ**。残っているのは `reconcile.py` の意味論を
+gate に一本化して経路に名前を持たせる整理で、塞ぐという目的自体は果たされている。
 
-**耐久性。ここが今回いちばん重い。**
+## 耐久性 — 移行の前に決めたこと
+
+**耐久性。ここが今回いちばん重い。** (決着済み。結論は下の Phase 0 / 0b)
 
 いま git は「オフサイトの複製」を無料で提供している。`ops-state` と
 `archive.jsonl` の両方を畳むと、**プロジェクトの全記録の唯一の実体がクラスタに
@@ -274,8 +322,9 @@ CR を読めなかったビートも「揃っている」に倒さない (fail-c
 git への日次エクスポートで緩和する案は、原則 3 (機械は git を定期的に叩かない) と
 正面から衝突するので採らない。**バックアップはバックアップの仕組みで解く。**
 
-**未確認**: `ops-dashboard` ブランチが遺物かどうか (2026-08-22 で更新停止)。
-Phase 0 で書き手を特定する。
+`ops-dashboard` ブランチは**遺物**と確定した。書き手の `ops/dashboard/build.py` は
+Mission Control (`apps/ops-dashboard/`) の稼働後に退役していて、リポジトリに存在しない
+(`ops/CHARTER.md` §7.1 の手順だけが残骸として残っている)。
 
 ### 耐久性 — Phase 0 の実測結果と Phase 0b (2026-08-24)
 
@@ -300,23 +349,56 @@ restic の credential を autopilot namespace に置かないため、専用 nam
 
 ## 段階
 
-依存の少ない順。各段は単独で戻せる。
+設計時は 0〜7 の 8 段だったが、実装では**依存の切れ目で細かく割った** (1 段 1 PR、
+それぞれ単独で戻せる形を保つため)。Phase 2 は 4a に吸収され、Phase 4 は 4 つに割れた。
 
-| # | やること | 効果 |
-|---|---|---|
-| 0 | k3s の状態ストアとバックアップを実測し、掬えていなければ直す。`ops/state.json` / `ops/backlog.json` / `ops-dashboard` ブランチが死に経路かを確認 | **Phase 4 の前提条件** |
-| 0b | `Project` CR を restic へ書き出す CronJob (`apps/autopilot-projects-backup/`) | 記録がクラスタの外に出る。**4b の前提条件** |
-| 1 | `metrics.jsonl` を git から外す（PVC の rolling window へ） | 履歴の増加が止まる。**一番安く一番効く** |
-| 2 | `state` をラベルに出し、live set を selector で切る (終端は消さない) | 作業集合が 108 → 5 件規模 |
-| 3 | 作業キュー jsonl 群を PVC へ | ビートの push が小さくなる |
-| 4 | `Project` CRD 導入 (`rejected` 含む)。planner 用の MCP ツールを足す。heart が二重書き → 読み手 (dashboard / runner / core) を CR へ → `projects.json` と `archive.jsonl` を止める | 正がクラスタへ。MCP から見えるようになる |
-| 4.5 | 手動採択の入口を admission gate へ移す | git がライフサイクルの入力でなくなる |
-| 5 | `ops-health-report` を ConfigMap 化 | クラスタ内往復を切る |
-| 6 | `ops-feedback` を NATS へ寄せて撤去 | D16 を閉じる |
-| 7 | 沈黙の通知をコアへ移し、番人 2 つと watchdog.yml を撤去。`ops-state` / `ops-health-report` / `ops-dashboard` / `ops-feedback` を削除 | 機械の定期コミットが 0 になる |
+| 段 | やったこと | PR | 状態 |
+|---|---|---|---|
+| 0 | k3s のデータストアを実測 (kine/sqlite。restic 6 本はどれも掬っていない) | — | 完了 |
+| 0b | `Project` CR だけを restic で B2 へ (`apps/autopilot-projects-backup/`) | #624 | 完了 |
+| 1 | `metrics.jsonl` を git から外す (PVC の rolling window)。1 行 8 KB → 300 B | #610 | 完了 |
+| 3 | 作業キュー jsonl 8 ファイルを PVC へ | #613 | 完了 |
+| 5 | 健全性レポートを `ops-health-report` ブランチから ConfigMap へ | #617 / #619 | 完了 |
+| 4a | `Project` CRD を入れ、heart が CR にも書く (二重書き)。`lifecycle` ラベル = 旧 Phase 2 | #621 | 完了 |
+| — | (計画外) 機械が打つ clone を blobless に。65s/124MB → 2.1s/9.2MB | #626 | 完了 |
+| 4b-1 | `rejected` state。棄却案を CR に入れ、立案役が `homelab_proposals` MCP で読めるようにする | #629 / #631 | 完了 |
+| 6a | ダッシュボードの書き置きを NATS へも publish (両書き) | #627 / #633 | 完了 |
+| 4b-2a | 読み手 (facts / reconcile / dashboard / コア / curriculum) を全部 CR へ | #639 / #641 | 完了 |
+| 7a | 沈黙の検知をコアへ移す (Lease + 健全性 ConfigMap の鮮度 → Telegram) | #632 / #642 | 完了 |
+| 4b-2b | **git への書き込みを止めた。** `projects.json` を PVC へ、心拍を Lease へ | #647 / #648 | 完了 |
+| — | Lease の `renewTime` を MicroTime 形式に直す (毎ビート 500 で生存が見えていなかった) | #649 | 完了 |
+| 4.5 | 手動採択の入口を admission gate へ | — | **未実装** (旧入口は 4b-2a で閉塞済み。上記) |
+| 6b | 書き置きの `ops-feedback` 経路を落とす | #628 | **保留** (下記) |
+| 7b | `ops-feedback` に触る口を全部閉じる (telegram-adapter / コア) | #635 | **保留** (下記) |
+| 7c | 外部 watchdog の撤去 (`watchdog.yml` は 4b-2b で `if: false` 済み) | #636 | #635 の上に積んである。**main には未着** |
+| 7d | 4 本のブランチを削除 | — | 未着。所有者の判断 |
 
-Phase 4 が本丸で、それ以外は本丸を軽くするための地ならし。Phase 1〜3 だけでも
-git への churn はほぼ止まる。
+Phase 4 が本丸で、それ以外は本丸を軽くするための地ならし。実際、Phase 1・3・5 が
+入った時点で git への churn の大半は止まっていた。
+
+### 6b / 7b を保留している理由
+
+どちらも `ops-feedback` ブランチ経路の撤去で、実装は出来ている。止めているのは
+**新しい NATS 経路が実機で一度も通っていない**から。ダッシュボードは NATS へ遅延接続
+するので、書き置きを 1 件投げるまで接続の成否が分からない。所有者が居ない時間帯に
+本番へ検証用の note を注入するのは避けた。
+
+**確認手順**: ダッシュボードから書き置きを 1 件投げ、heart のログに `feedback received:`
+が出れば両方 merge できる。
+
+### やり残し
+
+- **4 本のブランチ (`ops-state` / `ops-feedback` / `ops-health-report` /
+  `ops-dashboard`) は消していない。** 書き込みを止めただけで、中身は戻せる状態に
+  残してある。削除は不可逆なので所有者の判断。
+- **`apps/version-watcher` がまだ `ops-health-report` ブランチに push している。**
+  機械が git に定期コミットを打つ経路として**最後に残っている 1 本**
+  (`watch.py` の `REPORT_BRANCH`)。しかも watcher は `ensure_branch` で枝を作り直すので、
+  ここを畳まずに枝を消すと翌晩に生え直る。**ブランチ削除の前提条件**。
+- **Phase 4.5 (手動採択の入口)** — 上記。
+- **未確認**: `ops/state.json` / `ops/backlog.json` を autopilot が今も main へ push
+  しているか (「何が起きているか §5」)。リポジトリ内で書いている口は見つからず、
+  `apps/autopilot/loop.sh` が `backlog.json` を読むだけ。実機で確かめていない。
 
 ## 棄却案
 
@@ -328,6 +410,13 @@ git への churn はほぼ止まる。
   git がライフサイクルの入力であり続ける。所有者判断で破棄 (2026-08-25)。
 - **`Project` の日次エクスポートを git へ積んで耐久性を担保する。** 原則 3 と正面から
   衝突する。バックアップはバックアップの仕組みで解く。
+- **k3s のデータストア (`state.db`) を丸ごと restic へ (PR #622、2026-08-24 に close)。**
+  実装自体は正確だった (SQLite Online Backup API で一貫スナップショット、hostPath は
+  readOnly の 2 本、`token` が無いと戻せないことも明記) が、**攻撃面**で採らない。
+  kine の中身は etcd の中身であり、`state.db` を読める Pod は全 Secret を読めるのと同じ。
+  守りたいのはプロジェクトの記録であってクラスタ全体ではない。範囲を絞った #624 が採択。
+  この案が生まれたのは Phase 0 の書きぶりが「k3s の状態ストアを掬う」と読めたためで、
+  そこは実測結果に差し替えてある (上記「耐久性」節)。
 
 - **JetStream KV に載せる。** 既に立っていて CAS も watch もある。だが heart は
   意図的に NATS を話さない（サイドカーがファイルに落とし heart はファイルとして読む）。
