@@ -5854,7 +5854,7 @@
     {
       "id": "P-0284",
       "title": "エージェントライブに Core を映す — 常駐組は Job でなく「住人」として登録し、次の住人からは label だけで増えるようにする",
-      "state": "proposed",
+      "state": "active",
       "branch": "project/p-0284",
       "irreversible": false,
       "capabilities": [],
@@ -5905,12 +5905,13 @@
         "verdict": "all_fail",
         "passed": [],
         "broken": []
-      }
+      },
+      "veto_deadline": "2026-08-24T07:55:13Z"
     },
     {
       "id": "P-0285",
       "title": "tailnet の DNS が今も落ちている — AdGuard Home の 84 回 CrashLoop を今日止め、壊れ方ごと直す",
-      "state": "proposed",
+      "state": "stalled",
       "branch": "project/p-0285",
       "irreversible": false,
       "capabilities": [
@@ -5978,12 +5979,13 @@
             "reason": "timeout"
           }
         ]
-      }
+      },
+      "stalled_reason": "adopt_gate_broken_command"
     },
     {
       "id": "P-0288",
       "title": "PBS が要らないことを証明する最初の一歩 — coder workspace home の restic バックアップを実際に戻し、dotfiles が生きて返ることを見る",
-      "state": "proposed",
+      "state": "stalled",
       "branch": "project/p-0288",
       "irreversible": false,
       "capabilities": [
@@ -6048,12 +6050,13 @@
           "if grep -qnE 'restic +(forget|prune|unlock)' ops/drills/coder_home_restore_drill.sh; then echo '削除系コマンドは禁止'; exit 1; fi"
         ],
         "broken": []
-      }
+      },
+      "stalled_reason": "adopt_gate_some_pass"
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T07:49:21Z",
-  "last_activity_at": "2026-08-24T07:49:21Z",
+  "last_activity_at": "2026-08-24T07:55:13Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false
