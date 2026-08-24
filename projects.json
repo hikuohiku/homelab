@@ -6795,13 +6795,97 @@
       "spawn_count": 1,
       "job_created_at": "2026-08-24T20:23:00Z",
       "drift_count": 0
+    },
+    {
+      "id": "P-0325",
+      "title": "来る見込みのない待機を UI から消す — transcript 空状態を transcriptAvailable に正直にする (人間依頼)",
+      "state": "proposed",
+      "branch": "project/p-0325",
+      "irreversible": false,
+      "capabilities": [],
+      "touches_apps": false,
+      "verify": [
+        "python3 -c \"import sys;s=open('apps/ops-dashboard/app/src/app/page.tsx').read();i=s.find('scope__empty');sys.exit(0 if i>=0 and 'transcriptAvailable' in s[i:i+2500] else 1)\"",
+        "python3 -c \"import sys;s=open('apps/ops-dashboard/app/src/app/page.tsx').read();i=s.find('信号を待っています');sys.exit(0 if i>0 and 'transcriptAvailable' in s[max(0,i-800):i] else 1)\""
+      ],
+      "confidence": "confident",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-0325",
+        "title": "来る見込みのない待機を UI から消す — transcript 空状態を transcriptAvailable に正直にする (人間依頼)",
+        "why": "人間のタスク依頼 (request_id 1d560f0d4a11f258, 2026-08-24T16:40Z 受付)。「transcriptAvailable を false にしたときのビューの表示に不整合がある。transcript 信号を待っています と表示されている」。実測: apps/ops-dashboard/app/src/app/page.tsx の scope__empty ブロック (~222-227 行) は agent が存在すれば役割に関係なく「transcript 信号を待っています / ファイルが作られると自動で表示します」を出す。一方 apps/ops-dashboard/app/src/lib/snapshot.ts:57-69 は常駐組の transcriptAvailable を false に固定しており「ファイルが作られる」ことは設計上ない — 来る見込みのないものを「待っている」と表示している。\n\n前歴との関係: 同型の P-0318 は内容ではなく枠競合で棄却され、hint は「P-0317 merge 後の世界に合わせた小修繕としての再提出を歓迎」だった。その後 P-9000/P-9001 (core-dispatch, 採択 18:43Z) が同一目的で走り出したが、どちらも request_id を持たないため heart はこの依頼を処理済みにできず、依頼が毎回渡ってくる破綻が実際に起きている。本件が request_id を運ぶことで輪が閉じる。\n\n設計は役割 (resident) 分岐ではなく transcriptAvailable 分岐にする: false なら「対象外」系の文言、true なら従来の待機文言。こうすると P-9000 が完了して常駐組に実ファイルが生えた世界でも表示は自動的に正しく、両案と衝突しない。P-9001 が先に納品した場合は本件は verify のみで即完納になる (それでも良い — 保険と依頼対応の二重の価値)。",
+        "cell": [
+          "observability",
+          "repair"
+        ],
+        "dod": "transcriptAvailable === false の agent を選ぶと「待っています」ではなく対象外であることが伝わる表示になり、true のときだけ待機文言が出る。verify 全項 pass。",
+        "verify": [
+          "python3 -c \"import sys;s=open('apps/ops-dashboard/app/src/app/page.tsx').read();i=s.find('scope__empty');sys.exit(0 if i>=0 and 'transcriptAvailable' in s[i:i+2500] else 1)\"",
+          "python3 -c \"import sys;s=open('apps/ops-dashboard/app/src/app/page.tsx').read();i=s.find('信号を待っています');sys.exit(0 if i>0 and 'transcriptAvailable' in s[max(0,i-800):i] else 1)\""
+        ],
+        "irreversible": false,
+        "capabilities": [],
+        "touches_apps": false,
+        "confidence": "confident",
+        "proposed_by": "human-request",
+        "request_id": "1d560f0d4a11f258",
+        "adopted": true,
+        "proposed_at": "2026-08-24T20:26:13Z"
+      },
+      "adopt_gate_attempts": 1
+    },
+    {
+      "id": "P-0328",
+      "title": "「止めて」は今日届くのか — 人間の拒否権の伝路 (Telegram→NATS→core / inbox 代替) を、本物の停止を出さずに初めて撃つ",
+      "state": "proposed",
+      "branch": "project/p-0328",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "test -f ops/bus-drill/report.json",
+        "python3 -c \"import json,sys;r=json.load(open('ops/bus-drill/report.json'));b=r.get('bus',{});i=r.get('inbox',{});sys.exit(0 if b.get('consumed') is not None and i.get('consumed') is not None and all(isinstance(x.get('latency_s'),(int,float)) for x in (b,i)) else 1)\""
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-0328",
+        "title": "「止めて」は今日届くのか — 人間の拒否権の伝路 (Telegram→NATS→core / inbox 代替) を、本物の停止を出さずに初めて撃つ",
+        "why": "VISION にとって人間の拒否権は唯一絶対のレバーだが、その伝路は 2026-08-23 の設計 D16 で Telegram→telegram-adapter→NATS JetStream→core/heart に作り変えられたばかりで、end-to-end で通った実績がない。inventory (nats エントリ) の observability_impact は自ら「壊れると緊急停止の到達性が落ちる」と認めており、実際 latest.json (2026-08-24T19:30Z 実測) で telegram-adapter は restarts 7・終了ログ「NATS に繋げません: nats: no servers available」を残した — 開通翌日の命綱が既に一度揺れている。GitHub inbox ポーリングという代替経路も存在するが、どちらが生きていてどちらが遅いかは誰も測っていない。\n\n本物の「止めて」は発報できないので、区別可能なテストトークンを実パイプラインに乗せ、各半分の所要秒を実測する。落ちている半分があればそれは incident (人間への緊急連絡経路の欠陥) として起票する。",
+        "cell": [
+          "security",
+          "experiment"
+        ],
+        "dod": "ops/bus-drill/report.json に bus (NATS publish→core consume) と inbox (synthetic note→adapter 取り込み) の双方の成否と所要秒が実測値で残る。落ちた半分があれば root_cause と incident 起票の有無も同じファイルに書かれる。",
+        "verify": [
+          "test -f ops/bus-drill/report.json",
+          "python3 -c \"import json,sys;r=json.load(open('ops/bus-drill/report.json'));b=r.get('bus',{});i=r.get('inbox',{});sys.exit(0 if b.get('consumed') is not None and i.get('consumed') is not None and all(isinstance(x.get('latency_s'),(int,float)) for x in (b,i)) else 1)\""
+        ],
+        "irreversible": false,
+        "capabilities": [
+          "kubectl-write"
+        ],
+        "touches_apps": false,
+        "confidence": "unsure",
+        "adopted": true,
+        "proposed_at": "2026-08-24T20:26:13Z"
+      },
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T19:58:03Z",
-  "last_activity_at": "2026-08-24T20:23:00Z",
+  "last_activity_at": "2026-08-24T20:26:23Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
-  "last_curriculum_dry": true,
+  "last_curriculum_dry": false,
   "stop_engaged": false,
-  "curriculum_registered_pr": 605
+  "curriculum_registered_pr": 609
 }
