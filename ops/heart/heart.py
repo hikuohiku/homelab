@@ -23,7 +23,18 @@ import time
 import traceback
 from datetime import datetime, timezone
 
-from . import adoptgate, config, facts, gitutil, metrics, reconcile, spawn, tasks
+from . import (
+    adoptgate,
+    config,
+    dispatch,
+    facts,
+    gate,
+    gitutil,
+    metrics,
+    reconcile,
+    spawn,
+    tasks,
+)
 from .gh import Gh, GhError
 from .notify import Notifier, veto_footer
 from .statefiles import StateFiles, now_iso
@@ -38,6 +49,21 @@ def _sigterm(_sig, _frame):
 
 def log(msg):
     print(f"[autopilot] {now_iso()} {msg}", flush=True)
+
+
+def spec_env(project):
+    """即時 dispatch されたプロジェクトの spec を Job に渡す env。
+
+    通常のプロジェクトの spec は main の archive.jsonl にあり、runner が
+    そこから読む (ブランチからは改竄できない)。コアが即時 dispatch したものは
+    main を経由しないので、heart が持っている spec を env で渡す。
+    経路は違うが**書き手が heart だけ**という性質は同じ。
+    通常のプロジェクトでは空 dict を返す = 従来と 1 bit も変わらない。
+    """
+    spec = (project or {}).get("spec")
+    if not spec:
+        return {}
+    return {"HEART_SPEC_JSON": json.dumps(spec, ensure_ascii=False)}
 
 
 def announce_text(project):
@@ -63,6 +89,9 @@ class Heart:
         self.gh = Gh(self.cfg.github_token, self.cfg.repo)
         self.k8s = None  # 遅延初期化 (単体テスト・クラスタ外実行のため)
         self.start_tree = None
+        # admission gate は run() で起こす (単体テストで Heart を作るだけのときは
+        # ポートを掴まない)。None のままでも heart は従来どおり回る
+        self.gate = None
 
     def k8s_client(self):
         if self.k8s is None:
@@ -79,7 +108,13 @@ class Heart:
             kind = a["type"]
             pid = a.get("project")
             p = by_id.get(pid)
-            audit = {"at": now_iso(now), "action": kind, "project": pid, "shadow": shadow}
+            # requested_by は「誰がこの action を要求したか」。既定は heart 自身の
+            # 判断で、コアが即時 dispatch で要求したものだけ core になる
+            # (設計 rev3「監査に dispatch 元を記録する」)
+            audit = {
+                "at": now_iso(now), "action": kind, "project": pid,
+                "requested_by": a.get("requested_by", "heart"), "shadow": shadow,
+            }
             try:
                 if kind == "announce":
                     if shadow:
@@ -113,7 +148,7 @@ class Heart:
                     if shadow:
                         log(f"[shadow] spawn runner for {pid}")
                     else:
-                        extra = {}
+                        extra = dict(spec_env(p))
                         if a.get("findings"):
                             extra["REVIEW_FINDINGS"] = "\n".join(
                                 str(f) for f in a["findings"]
@@ -129,6 +164,7 @@ class Heart:
                         spawn.create(
                             self.k8s_client(), self.cfg, "reviewer",
                             project=p, attempt=p.get("review_cycles", 0),
+                            extra_env=spec_env(p),
                         )
                 elif kind == "spawn_curriculum":
                     if shadow:
@@ -282,12 +318,32 @@ class Heart:
                         log(f"[shadow] consume {target}/{name}")
                     else:
                         self.consume_file(target, name, now)
+                elif kind == "consume_dispatch":
+                    # 即時 dispatch (設計 rev3 Phase D) の結末を消費する。
+                    # gate が書いた audit 行をここで audit.jsonl に移す —
+                    # ops-state への書き込みはビート側の単一書き手のまま
+                    for line in a.get("audit") or []:
+                        sf.append_jsonl("audit.jsonl", line)
+                    self.consume_dispatch(a.get("dispatch_id"), now)
+                    log(f"dispatch consumed: {a.get('dispatch_id')} -> {pid}")
                 elif kind == "record_drift":
                     audit["reason"] = a.get("reason")
             except Exception as e:
                 audit["error"] = str(e)[:300]
                 log(f"action {kind} for {pid} failed: {e}")
             sf.append_jsonl("audit.jsonl", audit)
+
+    def consume_dispatch(self, dispatch_id, now):
+        """消費済みの dispatch レコードを done/ へ移す (削除でなく退避 — 監査用)。"""
+        if not dispatch_id:
+            return
+        base = self.cfg.data_dir / dispatch.DISPATCH_DIR
+        src = base / dispatch.INBOX / f"{dispatch_id}.json"
+        if not src.exists():
+            return
+        dst = base / dispatch.DONE / f"{now_iso(now).replace(':', '')}-{dispatch_id}.json"
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        src.rename(dst)
 
     def consume_file(self, project_id, name, now):
         """消費済みの result/review を processed/ へ移す (削除でなく退避 — 監査用)。"""
@@ -424,6 +480,9 @@ class Heart:
         if commands:
             log(f"commands on bus: {len(commands)} "
                 f"(processed={len(processed_commands)})")
+        dispatches = facts.collect_dispatches(self.cfg.data_dir)
+        if dispatches:
+            log(f"dispatches to fold: {[d.get('project_id') for d in dispatches]}")
         curriculum = facts.collect_curriculum(
             self.cfg.data_dir, self.repo_dir, self.gh
         )
@@ -454,6 +513,9 @@ class Heart:
             "adopted_specs": adopted_specs,
             "commands": commands,
             "processed_commands": processed_commands,
+            # 即時 dispatch (設計 rev3 Phase D) の結末。gate スレッドが
+            # 採択ゲートと Job 作成まで済ませたレコードが inbox に落ちている
+            "dispatches": dispatches,
         }
         doc, actions = reconcile.decide(doc, f, self.cfg.rules, now)
 
@@ -569,6 +631,11 @@ class Heart:
         )
         sf.save_projects(doc)
         sf.write_heartbeat(i, now)
+        # admission gate に判定材料の写しを渡す (設計 rev3 Phase D)。
+        # この写しの鮮度そのものが安全装置で、ビートが詰まればゲートは自動的に
+        # 閉じる (reconcile.DISPATCH_SNAPSHOT_MAX_AGE_SECONDS)
+        if self.gate is not None:
+            self.gate.update(doc, self.cfg.rules, now, self.cfg.shadow)
         if not self.cfg.shadow:
             notifier.flush_outbox(now)
         removed = metrics.rotate_transcripts(self.transcripts, self.cfg.rules, now)
@@ -595,9 +662,33 @@ class Heart:
             os.chdir(self.repo_dir)
             os.execv(sys.executable, [sys.executable, "-m", "ops.heart.heart"])
 
+    def start_gate(self):
+        """admission gate (設計 rev3 Phase D) を起こす。
+
+        起きなくても heart は従来どおり回る — コアの request_task (バス経由の起票)
+        が冷スペアとして残っているので、ここで例外を出してビートを止めない。
+        """
+        listen = os.environ.get("HEART_GATE_LISTEN", gate.DEFAULT_LISTEN)
+        if not listen:
+            log("admission gate は無効 (HEART_GATE_LISTEN が空)")
+            return
+        try:
+            self.gate = gate.AdmissionGate(
+                cfg_provider=lambda: self.cfg,
+                k8s_provider=self.k8s_client,
+                data_dir=self.cfg.data_dir,
+                repo_url=self.repo_url,
+            )
+            self.gate.start(listen)
+            log(f"admission gate listening on {listen} (POST /dispatch)")
+        except Exception as e:
+            self.gate = None
+            log(f"admission gate を起こせなかった (heart は続行する): {e}")
+
     def run(self):
         signal.signal(signal.SIGTERM, _sigterm)
         signal.signal(signal.SIGINT, _sigterm)
+        self.start_gate()
         log(
             f"heart started (mode={self.cfg.mode} beat={self.cfg.beat_seconds}s "
             f"repo={self.repo_url})"

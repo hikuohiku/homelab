@@ -1,0 +1,54 @@
+# heart の admission gate (設計 rev3 Phase D) の到達経路。
+#
+# コアが `dispatch_task` で「いま着手してほしい」を同期で要求する口。
+# 判定も Job 作成も heart のままで、コアに k8s の write 権限は渡らない (D29)。
+# 実装は ops/heart/gate.py（POST /dispatch と GET /healthz の 2 つだけ）。
+#
+# **認証は持たない。** 持たせるとトークンが要り、それは ops/rules.json の
+# allowed_autopilot_doppler_keys に鍵を足すこと = 人間レビュー必須の変更になる。
+# 代わりに到達範囲を 2 段で絞る:
+#
+#   1. ClusterIP のみ。Ingress も Tailscale Ingress も付けない = cluster 外から
+#      到達できない
+#   2. NetworkPolicy で送信元を autopilot-core の Pod に限る
+#
+# 2 のポリシーは heart の Pod への **すべての** ingress を閉じる。閉じて困るものは
+# 今のところ無い（heart が開けている listen はこのゲートだけで、liveness は
+# exec probe、bus-sidecar は同一 Pod の localhost）。heart に新しい listen を
+# 足すときはここも一緒に広げること。
+apiVersion: v1
+kind: Service
+metadata:
+  name: autopilot-heart
+  namespace: autopilot
+  labels:
+    app: autopilot-heart
+spec:
+  type: ClusterIP
+  selector:
+    app: autopilot-heart
+  ports:
+    - name: gate
+      port: 8099
+      targetPort: gate
+      protocol: TCP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: autopilot-heart-gate
+  namespace: autopilot
+spec:
+  podSelector:
+    matchLabels:
+      app: autopilot-heart
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: autopilot-core
+      ports:
+        - port: gate
+          protocol: TCP

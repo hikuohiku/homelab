@@ -686,10 +686,17 @@ class Runner:
 
     def load_spec(self):
         """main の ops/projects/archive.jsonl から自分の採択 spec を読む。
-        (main に固定されたものが唯一の仕様 — runner ブランチからは改竄不能)"""
+        (main に固定されたものが唯一の仕様 — runner ブランチからは改竄不能)
+
+        コアが即時 dispatch したプロジェクト (P-9NNN、設計 rev3 Phase D) は
+        main の PR/CI/merge を経由しないので archive.jsonl に spec が無い。
+        その場合だけ heart が Job の env に載せた spec を読む。**env は Job の
+        spec で固定され、runner のブランチからは書き換えられない**ので、
+        改竄不能という性質は archive.jsonl 経由と変わらない。
+        """
         path = self.repo_dir / "ops" / "projects" / "archive.jsonl"
         if not path.exists():
-            return {}
+            return self.spec_from_env()
         spec = {}
         with open(path) as f:
             for line in f:
@@ -699,6 +706,23 @@ class Runner:
                     continue
                 if rec.get("id") == self.project_id and rec.get("adopted"):
                     spec = rec  # 後の行 (最新) を優先
+        return spec or self.spec_from_env()
+
+    def spec_from_env(self):
+        """heart が Job の env に載せた spec (即時 dispatch 用)。無ければ {}。
+
+        id が食い違うものは受け取らない — 取り違えた spec で実装する方が、
+        spec_error で止まるより高くつく。
+        """
+        raw = os.environ.get("HEART_SPEC_JSON", "").strip()
+        if not raw:
+            return {}
+        try:
+            spec = json.loads(raw)
+        except ValueError:
+            return {}
+        if not isinstance(spec, dict) or spec.get("id") != self.project_id:
+            return {}
         return spec
 
     def prompt_text(self, name, extra=None, from_main=False):

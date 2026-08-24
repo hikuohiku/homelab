@@ -15,6 +15,36 @@ heart (Deployment, ここ)            runner Job (ops/runner/runner.py)
   └── ops-state ブランチへ状態 push   curriculum Job (立案 2 段: 生成→判定)
 ```
 
+## admission gate (gate.py) — コアが着手を同期で要求する口
+
+設計 rev3 Phase D。常駐コアの `dispatch_task` が
+`POST http://autopilot-heart.autopilot.svc:8099/dispatch` を叩き、**数秒で
+受理か拒否 + 理由**を得る。ビート周期を人間の待ち時間から外すための経路で、
+コアに k8s の write 権限は渡さない (D29)。
+
+```
+core (MCP) --HTTP--> gate スレッド --判定--> reconcile.admit() (純関数)
+                          |
+                          +--非同期--> 採択ゲート実測 (最大 300s) --> Job 作成
+                                              |
+                                              v
+                                   /data/dispatch/inbox/<id>.json
+                                              |
+                                    次のビートが projects.json へ折り込む
+```
+
+- **判定は既存の不変条件だけ**: `stop_engaged` (他の何より先) / `max_concurrent` /
+  capability の宣言連鎖 (即時 dispatch は capability を名乗れない) / レート制限。
+  遷移表は `tests/test_reconcile.py` の `AdmissionGateDecision`
+- **冪等**: dispatch_id は内容のハッシュ。Job 名も決定論的で 409 は正常扱い
+- **単一書き手は変わらない**: gate スレッドは git を触らない。ops-state への
+  書き込み (projects.json / audit.jsonl) は必ずビート側が行う
+- **到達範囲**: ClusterIP のみ + NetworkPolicy で送信元は autopilot-core の Pod。
+  認証トークンは持たない (持てば `ops/rules.json` の Doppler 鍵 allowlist を
+  触ることになり、人間レビュー必須になる)
+- **止め方**: `HEART_GATE_LISTEN` を空にすると gate を起こさない。コアの
+  `dispatch_task` は isError になり、`request_task` (バス経由の起票) に戻る
+
 ## 原則 (実装の理由)
 
 - **判断は reconcile.py の純関数だけ**。heart.py は観測と実行。テストは遷移表

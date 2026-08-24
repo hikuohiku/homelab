@@ -6,6 +6,7 @@
 //	homelab_pods         — 全 namespace の Pod を live で
 //	homelab_events       — 直近の Warning 系 Event を live で
 //	request_task         — 実装依頼を heart のパイプラインに載せる (bus へ publish)
+//	dispatch_task        — いま着手してほしい仕事を heart に同期で要求する (admission gate)
 //
 // 読み取りはすべて引数を取らない。汎用の HTTP fetch や kubectl を与えるのではなく
 // 用途を固定した窓を開けるだけにしてあるのは、コアが到達できる先を設定ではなく
@@ -147,6 +148,39 @@ func toolDefs() []toolDef {
 					},
 				},
 				"required": []string{"title", "body"},
+			},
+		},
+		{
+			Name: "dispatch_task",
+			Description: "いま着手してほしい仕事を heart に**同期で**要求する。数秒で可否が返る。" +
+				"受理されれば heart が採択ゲート (新品 clone での受入検証の実測) を回し、" +
+				"通れば実装役をそのまま起動する。断られたら理由が返るので、" +
+				"そのまま所有者に伝えること。" +
+				"起動するのは heart であり、あなたが実装するのではない。" +
+				"同じ内容を何度要求しても 1 件として扱われる。" +
+				"実行役の種類・思考エンジン・優先度・権限は選べない (heart の判断領域)。" +
+				"急がない依頼は request_task の方が適切。",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"title": map[string]any{
+						"type":        "string",
+						"description": "何をするかを 1 行で。プロジェクト一覧に載る題名。",
+					},
+					"body": map[string]any{
+						"type": "string",
+						"description": "何をどうしたいか、なぜ要るか、どこを見れば分かるか。" +
+							"実装役が読む唯一の仕様なので、所有者の言葉と観測した事実を残すこと。",
+					},
+					"verify": map[string]any{
+						"type":  "array",
+						"items": map[string]any{"type": "string"},
+						"description": "受入検証。bash で実行できる形で、**いまは全部 fail し、" +
+							"完成したら pass する**こと。heart が着手前に新品 clone で実測し、" +
+							"1 本でも既に通っていたら差し戻す。書けないなら依頼が未成熟。",
+					},
+				},
+				"required": []string{"title", "body", "verify"},
 			},
 		},
 	}
@@ -325,6 +359,11 @@ func (s *mcpServer) callTool(ctx context.Context, name string, args json.RawMess
 			}
 		}
 		return toolResult{Content: []textContent{{Type: "text", Text: body}}}
+	case "dispatch_task":
+		// 拒否も到達不能も isError で返す。ここを握り潰すと、コアが着手して
+		// いないのに「着手しました」と人間に言う
+		text, ok := s.dispatchTask(ctx, args)
+		return toolResult{Content: []textContent{{Type: "text", Text: text}}, IsError: !ok}
 	default:
 		return toolResult{Content: []textContent{{Type: "text", Text: "未知のツール: " + name}}, IsError: true}
 	}

@@ -1418,3 +1418,231 @@ class TestCoreCommands(unittest.TestCase):
     def test_no_commands_is_a_quiet_beat(self):
         _, actions = reconcile.decide(doc(), facts(), RULES, NOW)
         self.assertEqual(self.ingests(actions), [])
+
+
+class AdmissionGateDecision(unittest.TestCase):
+    """即時 dispatch の admission gate (設計 rev3 Phase D) の判定表。
+
+    ここがコアに「いま着手してよいか」を数秒で答える純関数の仕様。
+    強制は heart に残す、という設計判断 1 の実体なので、拒否の条件は
+    すべてこの表に載せる。
+    """
+
+    def snapshot(self, **kw):
+        base = {
+            "at": reconcile.now_iso(NOW),
+            "stop_engaged": False,
+            "shadow": False,
+            "running": 0,
+            "max_concurrent": RULES["runner"]["max_concurrent"],
+            "dispatch_ids": {},
+        }
+        base.update(kw)
+        return base
+
+    def request(self, **kw):
+        base = {
+            "title": "ops-dashboard の 500 を直す",
+            "body": "snapshot API が 500 を返している。原因を特定して直す",
+            "verify": ["test -f ops/dashboard-fix.md"],
+        }
+        base.update(kw)
+        return base
+
+    def admit(self, request=None, snapshot="(default)", **kw):
+        return reconcile.admit(
+            request if request is not None else self.request(),
+            self.snapshot() if snapshot == "(default)" else snapshot,
+            RULES, NOW, **kw,
+        )
+
+    # --- 受理 ---
+    def test_healthy_request_is_accepted(self):
+        got = self.admit()
+        self.assertEqual(got["status"], reconcile.ADMIT_ACCEPTED)
+        self.assertTrue(got["dispatch_id"].startswith("d-"))
+
+    # --- 人間の停止意思 ---
+    def test_stop_engaged_denies_before_anything_else(self):
+        """「止めて」は他のどの判定よりも先。満席でも空でも同じ理由で断る。"""
+        for extra in ({}, {"running": 99}):
+            got = self.admit(snapshot=self.snapshot(stop_engaged=True, **extra))
+            self.assertEqual(got["status"], reconcile.ADMIT_DENIED)
+            self.assertEqual(got["reason"], "stop_engaged")
+            self.assertIn("再開", got["message"])
+
+    def test_stop_engaged_wins_over_invalid_request(self):
+        got = self.admit(self.request(title=""), self.snapshot(stop_engaged=True))
+        self.assertEqual(got["reason"], "stop_engaged")
+
+    # --- 並列上限 ---
+    def test_capacity_denies_at_max_concurrent(self):
+        limit = RULES["runner"]["max_concurrent"]
+        got = self.admit(snapshot=self.snapshot(running=limit))
+        self.assertEqual(got["status"], reconcile.ADMIT_DENIED)
+        self.assertEqual(got["reason"], "capacity")
+        self.assertIn(str(limit), got["message"])
+
+    def test_inflight_counts_toward_capacity(self):
+        """受理済みでまだビートに反映されていないぶんも走行数に数える。
+        数えないと 1 ビート (60s) の間に上限を超えて Job が作れてしまう。"""
+        limit = RULES["runner"]["max_concurrent"]
+        got = self.admit(
+            snapshot=self.snapshot(running=limit - 1), inflight={"d-other"},
+        )
+        self.assertEqual(got["reason"], "capacity")
+
+    # --- capability の宣言連鎖 ---
+    def test_capability_request_is_denied(self):
+        got = self.admit(self.request(capabilities=["kubectl-write"]))
+        self.assertEqual(got["status"], reconcile.ADMIT_DENIED)
+        self.assertEqual(got["reason"], "capability_not_declared")
+
+    # --- 冪等 ---
+    def test_same_request_is_a_duplicate_not_a_new_project(self):
+        first = self.admit()
+        got = self.admit(
+            snapshot=self.snapshot(dispatch_ids={first["dispatch_id"]: "P-9000"}),
+        )
+        self.assertEqual(got["status"], reconcile.ADMIT_DUPLICATE)
+        self.assertIn("P-9000", got["message"])
+
+    def test_same_request_in_flight_is_a_duplicate(self):
+        first = self.admit()
+        got = self.admit(inflight={first["dispatch_id"]})
+        self.assertEqual(got["status"], reconcile.ADMIT_DUPLICATE)
+
+    def test_dispatch_id_ignores_whitespace_but_not_content(self):
+        a = self.admit(self.request(title="  同じ  "))
+        b = self.admit(self.request(title="同じ"))
+        c = self.admit(self.request(title="ちがう"))
+        self.assertEqual(a["dispatch_id"], b["dispatch_id"])
+        self.assertNotEqual(a["dispatch_id"], c["dispatch_id"])
+
+    # --- レート制限 ---
+    def test_rate_limit_denies_a_burst(self):
+        recent = [
+            reconcile.now_iso(NOW - timedelta(minutes=1))
+            for _ in range(reconcile.DISPATCH_RATE_LIMIT)
+        ]
+        got = self.admit(recent=recent)
+        self.assertEqual(got["reason"], "rate_limited")
+
+    def test_rate_limit_forgets_outside_the_window(self):
+        old = reconcile.now_iso(
+            NOW - timedelta(minutes=reconcile.DISPATCH_RATE_WINDOW_MINUTES + 1)
+        )
+        got = self.admit(recent=[old] * (reconcile.DISPATCH_RATE_LIMIT * 2))
+        self.assertEqual(got["status"], reconcile.ADMIT_ACCEPTED)
+
+    # --- heart 側の状態が信用できないとき ---
+    def test_no_snapshot_denies(self):
+        got = self.admit(snapshot=None)
+        self.assertEqual(got["reason"], "heart_not_ready")
+
+    def test_stale_snapshot_denies(self):
+        stale = reconcile.now_iso(
+            NOW - timedelta(seconds=reconcile.DISPATCH_SNAPSHOT_MAX_AGE_SECONDS + 1)
+        )
+        got = self.admit(snapshot=self.snapshot(at=stale))
+        self.assertEqual(got["reason"], "state_stale")
+
+    def test_shadow_mode_denies(self):
+        got = self.admit(snapshot=self.snapshot(shadow=True))
+        self.assertEqual(got["reason"], "shadow_mode")
+
+    # --- 要求そのものの不備 ---
+    def test_empty_fields_are_denied_with_a_human_reason(self):
+        for kw in ({"title": ""}, {"body": ""}, {"verify": []}):
+            got = self.admit(self.request(**kw))
+            self.assertEqual(got["reason"], "invalid")
+            self.assertTrue(got["message"])
+
+    def test_oversized_fields_are_denied(self):
+        got = self.admit(self.request(body="あ" * 5000))
+        self.assertEqual(got["reason"], "invalid")
+
+
+class DispatchFolding(unittest.TestCase):
+    """gate が置いた dispatch の結末を projects.json に取り込む遷移。"""
+
+    def record(self, **kw):
+        base = {
+            "dispatch_id": "d-abc123",
+            "project_id": "P-9000",
+            "requested_by": "core",
+            "accepted_at": reconcile.now_iso(NOW),
+            "title": "ops-dashboard の 500 を直す",
+            "body": "直す",
+            "verify": ["test -f ops/dashboard-fix.md"],
+            "spec": {"id": "P-9000", "verify": ["test -f ops/dashboard-fix.md"]},
+            "status": "dispatched",
+            "job": "runner-p-9000-a1",
+        }
+        base.update(kw)
+        return base
+
+    def test_dispatched_record_becomes_an_active_project(self):
+        d, actions = reconcile.decide(doc(), facts(dispatches=[self.record()]), RULES, NOW)
+        self.assertEqual([p["id"] for p in d["projects"]], ["P-9000"])
+        p = d["projects"][0]
+        self.assertEqual(p["state"], "active")
+        self.assertEqual(p["job"], "runner-p-9000-a1")
+        self.assertEqual(p["capabilities"], [])
+        self.assertEqual(p["requested_by"], "core")
+        kinds = [a["type"] for a in actions]
+        self.assertIn("consume_dispatch", kinds)
+        # gate が既に Job を作っている。ここで二重に作らない
+        self.assertNotIn("spawn_runner", kinds)
+
+    def test_folding_is_idempotent(self):
+        d, _ = reconcile.decide(doc(), facts(dispatches=[self.record()]), RULES, NOW)
+        d, actions = reconcile.decide(d, facts(dispatches=[self.record()]), RULES, NOW)
+        self.assertEqual(len(d["projects"]), 1)
+        self.assertEqual(
+            len([a for a in actions if a["type"] == "consume_dispatch"]), 1
+        )
+
+    def test_dispatched_project_counts_toward_max_concurrent(self):
+        """折り込みは running を数える前。数えた後だと同じビートの spawn が
+        上限を 1 本ぶん超える。"""
+        limit = RULES["runner"]["max_concurrent"]
+        waiting = [
+            project(id=f"P-000{i}", state="announced",
+                    veto_deadline=reconcile.now_iso(NOW - timedelta(hours=1)))
+            for i in range(1, limit + 1)
+        ]
+        d, actions = reconcile.decide(
+            doc(*waiting), facts(dispatches=[self.record()]), RULES, NOW
+        )
+        spawned = [a for a in actions if a["type"] == "spawn_runner"]
+        self.assertEqual(len(spawned), limit - 1)
+
+    def test_gate_rejected_record_lands_as_stalled(self):
+        rec = self.record(status="gate_rejected", reason="adopt_gate_some_pass",
+                          job=None, detail="開始前に pass していた")
+        d, actions = reconcile.decide(doc(), facts(dispatches=[rec]), RULES, NOW)
+        p = d["projects"][0]
+        self.assertEqual(p["state"], "stalled")
+        self.assertEqual(p["stalled_reason"], "adopt_gate_some_pass")
+        notes = [a for a in actions if a["type"] == "notify"]
+        self.assertEqual(notes[0]["ntype"], "question")
+
+    def test_stop_engaged_kills_a_dispatched_job(self):
+        """ゲート通過後に「止めて」が来たら、折り込んだそのビートで殺す。"""
+        d, actions = reconcile.decide(
+            doc(stop_engaged=True), facts(dispatches=[self.record()]), RULES, NOW
+        )
+        kinds = [a["type"] for a in actions]
+        self.assertIn("kill_job", kinds)
+        self.assertEqual(d["projects"][0]["state"], "stalled")
+        self.assertEqual(d["projects"][0]["stalled_reason"], "human_stop")
+
+    def test_audit_records_who_asked(self):
+        _, actions = reconcile.decide(doc(), facts(dispatches=[self.record()]), RULES, NOW)
+        consume = [a for a in actions if a["type"] == "consume_dispatch"][0]
+        self.assertEqual(consume["requested_by"], "core")
+        self.assertTrue(
+            all(line["requested_by"] == "core" for line in consume["audit"])
+        )
+        self.assertIn("spawn_runner", [line["action"] for line in consume["audit"]])

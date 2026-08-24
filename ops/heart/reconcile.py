@@ -26,7 +26,7 @@ from datetime import timedelta
 
 # adoptgate は I/O も持つが、ここから呼ぶのは純関数 (classify/describe) だけ。
 # 実測 (clone と verify 実行) は heart.execute() の run_adopt_gate が行う
-from . import adoptgate, tasks
+from . import adoptgate, dispatch, tasks
 from .statefiles import TERMINAL_STATES, now_iso, parse_iso
 
 # 各待ち状態の見張り時限。恒久的に黙って待つ状態を作らない (レビュー指摘 [4][11])
@@ -47,6 +47,179 @@ QUOTA_WAIT_MAX_HOURS = 24
 # 自己観測 (critic) の間隔。指標 (状態別滞留・アイドル率) は日次の粒度で足り、
 # それより短くしても同じ 24h の窓を読み直すだけになる (P-0045)
 CRITIC_INTERVAL_HOURS = 24
+
+# --- 即時 dispatch の admission gate (設計 rev3 Phase D) ---
+#
+# コアが `dispatch_task` で「いま着手してほしい」と同期で要求する経路の判定。
+# **強制は heart に残す**という設計判断 1 の実体がここで、判定は既にある不変条件
+# (stop_engaged / max_concurrent / capability の宣言連鎖) をそのまま使う。
+# 閾値を rules.json でなくモジュール定数に置くのは adoptgate と同じ流儀
+# (rules.json は人間レビュー必須パスで、触ると auto-merge が止まる)。
+DISPATCH_RATE_LIMIT = 10  # この件数を
+DISPATCH_RATE_WINDOW_MINUTES = 60  # この窓で。コアの連打が Job を作り続けない歯止め
+# heart のビート結果 (走行数・stop_engaged) がこれより古ければ受け付けない。
+# 古い写しで判断すると、直前に来た「止めて」を見落として着手しうる。
+# 既定ビート 60s に対して十分な余裕を取りつつ、詰まった heart では必ず閉じる
+DISPATCH_SNAPSHOT_MAX_AGE_SECONDS = 600
+# gate が作った Job が k8s の観測に載るまでの猶予。短すぎると「消えた Job」と
+# 誤読して 2 本目を立てる。長すぎると本当に消えた Job の検知が遅れるだけ
+JOB_OBSERVATION_GRACE_SECONDS = 300
+
+ADMIT_ACCEPTED = "accepted"
+ADMIT_DUPLICATE = "duplicate"
+ADMIT_DENIED = "denied"
+
+
+def admit(request, snapshot, rules, now, *, inflight=(), recent=()):
+    """即時 dispatch 要求の可否を導く純関数。I/O を書かない。
+
+    引数:
+      request  {"title", "body", "verify", "capabilities"} — コアが投げた生の要求
+      snapshot heart が直近のビートで公開した状態の写し。None は「まだ写しが無い」
+               {"at", "stop_engaged", "running", "dispatch_ids"}
+      inflight 受理済みでまだ snapshot に反映されていない dispatch_id の集合。
+               走行数に足して数える (ビートを待たずに上限を超えないため)
+      recent   直近の受理時刻 (ISO) の並び。レート制限に使う
+
+    返り値: {"status", "reason", "message", "dispatch_id"}
+      status は accepted / duplicate / denied。duplicate は失敗ではない
+      (同じ要求の再送 = 冪等に 1 件へ畳んだ、という応答)。
+    """
+    title, body, verify = dispatch.normalize(request)
+    did = dispatch.dispatch_id(title, body, verify)
+
+    def out(status, reason, message):
+        return {
+            "status": status, "reason": reason, "message": message, "dispatch_id": did,
+        }
+
+    # 写しが無い = heart がまだ 1 ビートも回っていない。stop_engaged すら読めないので閉じる
+    if not snapshot:
+        return out(ADMIT_DENIED, "heart_not_ready",
+                   "heart がまだ状態を公開していません。少し待ってから頼み直してください")
+
+    # --- 人間の停止意思は他のどの判定よりも先 ---
+    if snapshot.get("stop_engaged"):
+        return out(ADMIT_DENIED, "stop_engaged",
+                   "人間が全停止を指示しています。「再開」と言われるまで新しい着手はしません")
+
+    # 写しが古いと、直前に来た停止を見落としうる。分からないときは着手しない
+    age = (now - parse_iso(snapshot["at"])).total_seconds()
+    if age > DISPATCH_SNAPSHOT_MAX_AGE_SECONDS:
+        return out(ADMIT_DENIED, "state_stale",
+                   f"heart の状態が {int(age)} 秒前のもので古すぎます "
+                   "(ビートが詰まっている可能性)。安全のため受け付けません")
+
+    if snapshot.get("shadow"):
+        return out(ADMIT_DENIED, "shadow_mode",
+                   "heart が shadow モードで動いていて、Job を作りません")
+
+    # --- 要求そのものの検査 ---
+    if not title:
+        return out(ADMIT_DENIED, "invalid", "title が空です。何をするのか 1 行で書いてください")
+    if not body:
+        return out(ADMIT_DENIED, "invalid", "body が空です。何をどうしたいかを書いてください")
+    if not verify:
+        return out(ADMIT_DENIED, "invalid",
+                   "verify が空です。受入検証が無い依頼は完成を宣言できる者が居ないので受け付けません")
+    if len(title) > dispatch.MAX_TITLE_CHARS:
+        return out(ADMIT_DENIED, "invalid", f"title が長すぎます ({len(title)} 文字)")
+    if len(body) > dispatch.MAX_BODY_CHARS:
+        return out(ADMIT_DENIED, "invalid", f"body が長すぎます ({len(body)} 文字)。要点に絞ってください")
+    if len(verify) > dispatch.MAX_VERIFY_COMMANDS:
+        return out(ADMIT_DENIED, "invalid",
+                   f"verify が多すぎます ({len(verify)} 本)")
+    if any(len(v) > dispatch.MAX_VERIFY_CHARS for v in verify):
+        return out(ADMIT_DENIED, "invalid", "verify の 1 本が長すぎます")
+
+    # --- capability の宣言連鎖 (決定 #5) ---
+    # spec が宣言し、予告に載ったものだけが write SA を得る。即時 dispatch は
+    # 予告を経ないので、**capability は一切名乗れない**。要求ごと弾く
+    if request.get("capabilities"):
+        return out(ADMIT_DENIED, "capability_not_declared",
+                   "即時 dispatch では capability (kubectl-write 等) を要求できません。"
+                   "spec と予告の宣言連鎖を通る通常の採択に回してください")
+
+    # --- 冪等: 同じ内容は何度投げても 1 件 ---
+    known = snapshot.get("dispatch_ids") or {}
+    if did in known:
+        return out(ADMIT_DUPLICATE, "already_dispatched",
+                   f"同じ要求は既に受理済みです ({known[did]})。二重には着手しません")
+    if did in set(inflight):
+        return out(ADMIT_DUPLICATE, "in_flight",
+                   "同じ要求を受理済みで、採択ゲートを実行中です")
+
+    # --- レート制限: コアが連打しても暴走しない ---
+    window = now - timedelta(minutes=DISPATCH_RATE_WINDOW_MINUTES)
+    fresh = [t for t in recent if parse_iso(t) > window]
+    if len(fresh) >= DISPATCH_RATE_LIMIT:
+        return out(ADMIT_DENIED, "rate_limited",
+                   f"直近 {DISPATCH_RATE_WINDOW_MINUTES} 分の即時 dispatch が上限 "
+                   f"{DISPATCH_RATE_LIMIT} 件に達しています")
+
+    # --- 並列上限: ノードの物理的な容量 (rules.json の max_concurrent) ---
+    limit = rules["runner"]["max_concurrent"]
+    running = int(snapshot.get("running", 0)) + len(
+        [d for d in set(inflight) if d not in known]
+    )
+    if running >= limit:
+        return out(ADMIT_DENIED, "capacity",
+                   f"同時走行の上限 {limit} 本に達しています ({running} 本走行中)。"
+                   "空くまで着手できません")
+
+    return out(ADMIT_ACCEPTED, "", "受理しました")
+
+
+def _too_fresh_to_be_missing(project, now):
+    """作られたばかりの Job を「消えた」と誤読しないための猶予。
+
+    job_created_at を持つのは gate が作った Job だけ (heart 自身の spawn は
+    execute() の中で作るので、次のビートの Job 収集より必ず先にある)。
+    """
+    created = project.get("job_created_at")
+    if not created:
+        return False
+    return (now - parse_iso(created)) < timedelta(seconds=JOB_OBSERVATION_GRACE_SECONDS)
+
+
+def _fold_dispatches(doc, facts, now):
+    """gate が inbox に置いた dispatch の結末を projects.json に取り込む。
+
+    Job は既に走っている (or 走らなかった) ので、ここは登録と記録だけをする。
+    同じ dispatch_id / project id は 2 度登録しない (再実行しても増えない)。
+    """
+    actions = []
+    known_ids = {p["id"] for p in doc["projects"]}
+    known_dispatch = {p.get("dispatch_id") for p in doc["projects"] if p.get("dispatch_id")}
+    for record in facts.get("dispatches") or []:
+        did = record.get("dispatch_id")
+        pid = record.get("project_id")
+        if not did or not pid:
+            continue
+        if did not in known_dispatch and pid not in known_ids:
+            project = dispatch.to_project(record, now)
+            doc["projects"].append(project)
+            known_ids.add(pid)
+            known_dispatch.add(did)
+            if project["state"] == "stalled":
+                actions.append(
+                    _action("notify", pid, ntype="question",
+                            text=f"{pid}: コアの即時 dispatch は着手しませんでした "
+                                 f"({project.get('stalled_reason')})。{record.get('detail', '')}".strip())
+                )
+            else:
+                actions.append(
+                    _action("notify", pid, ntype="announce",
+                            text=f"{pid}: {project['title']}\n"
+                                 f"コアの要求で即時に着手しました (job={project.get('job')})。\n"
+                                 f"検証: {'; '.join(project['verify'])}",
+                            requested_by="core")
+                )
+        actions.append(
+            _action("consume_dispatch", pid, dispatch_id=did,
+                    audit=dispatch.audit_lines(record, now), requested_by="core")
+        )
+    return actions
 
 
 
@@ -169,6 +342,13 @@ def decide(doc, facts, rules, now):
     prs = facts.get("open_prs", {})
     merged_prs = facts.get("merged_prs", {})
     unhealthy = facts.get("unhealthy_apps")  # None = 観測失敗
+
+    # --- 即時 dispatch (設計 rev3 Phase D) の結末を取り込む ---
+    # gate スレッドが admission を判定し、採択ゲートを実測し、Job まで作ってある。
+    # ここは ops-state への登録と記録だけ (書き手は heart のビートのまま)。
+    # **running を数える前に折り込む** — dispatched は active で入るので、
+    # 数えた後に足すとこのビートの spawn 判断が上限を 1 本ぶん超える
+    actions.extend(_fold_dispatches(doc, facts, now))
 
     running = sum(
         1 for p in doc["projects"] if p["state"] in ("active", "in_review", "merging")
@@ -461,6 +641,13 @@ def decide(doc, facts, rules, now):
                 # spawn が失敗した (execute が job 名を記録できなかった)。
                 # spawn は 409 冪等なので再発行してよい (レビュー指摘 [4])
                 actions.append(_action("spawn_runner", pid, respawn=True))
+            elif job is None and _too_fresh_to_be_missing(p, now):
+                # 作った直後の Job は、まだ観測に載っていないのが普通。
+                # gate (別スレッド) が Job を作るのはビートの外側なので、
+                # Job 収集 → gate の作成 → 折り込み、の順に起きたビートでは
+                # 「走っているはずの Job が居ない」が必ず 1 回成立する。
+                # ここで乖離と数えると attempt が進んで **2 本目の Job が立つ**
+                continue
             elif job is None:
                 # 信念と実測の乖離: 走っているはずの Job が居ない
                 p["drift_count"] = p.get("drift_count", 0) + 1
