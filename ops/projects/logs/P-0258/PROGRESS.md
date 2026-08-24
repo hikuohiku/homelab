@@ -1232,9 +1232,31 @@ session 37 commit)。待機中の動きは ops-state beat (e6f7c67c9..070da072b�
 
 新たな発見は無い。
 
+## セッション 39 (2026-08-24、UTC 01:25 開始 = JST 10:25)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 17 から不変。新 curriculum ブランチも
+無し (ls-remote で `heart/curriculum-20260824-002231` のまま確認、heart/* は 1 本のみ)。
+P-0279 も未着地 (`git grep -il recovery origin/main -- apps/ops-health-reporter/` が
+rc=1 ゼロ件)。pull ref 一致を確認 (local HEAD = origin/p-0258 = ls-remote = 8e9180859 =
+session 38 commit)。待機中の動きは ops-state beat (070da072b..b24b15159、差分は既知の
+`heartbeat.json`/`metrics.jsonl` のみを diff --stat で実測) と p-0243
+(da9cf2f79..1d240f599) の自己ログ追記 (+75 行) および p-0272 (2c38ad407..0e652e1ab) の
+自己ログ追記 (+45 行) のみ (いずれも diff --stat で自 PROGRESS.md のみを実測)。
+reporter ブランチも 08de63306 のまま不変 (ls-remote で実測)。本 spec への接触ゼロ、
+conflict リスク無し。spec・runner 非接触。デッドロック世界に変化なし。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 37 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 37 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | 未再実行 — merge 前なので red 固定のため |
+
+新たな発見は無い。
+
 ## 次のセッションへの一言
 
-セッション 13〜38 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+セッション 13〜39 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
 `git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
 spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
 (一時ファイルは必ず `mktemp`)。curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
