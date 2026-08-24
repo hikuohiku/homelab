@@ -3159,3 +3159,75 @@ error 文字列の具体値は契約外。チェック自体は契約どおり�
     dns_ok / https_ok / status / error (`outcome` は無い)。対照は
     labeled=dns_ok true × https_ok false (status=None)、control=dns_ok true ×
     https_ok true (status=200)。error 文字列の具体値は契約外
+
+## セッション 57 (2026-08-24) — 短絡チェックのみ (main 不動・census 未着・ops-state 動くが P-0243 active 不変), コード変更ゼロ
+
+### やったこと
+
+- **fetch 先行 → main 新着 = 0** (merge-base = origin/main =
+  59169fddf)。merge 作業なし。census も未着
+  (`git ls-tree -r origin/main | grep -c egress` = 0)。
+  fetch で `origin/ops-state` と `origin/project/p-0258` が動いたが、
+  本プロジェクト無関係につき触らない
+- ops-state:projects.json をスナップショット方式で確認:
+  P-0243 `state=active`・spawn_count=1・drift_count=0・adopt_gate_attempts=1
+  の不変。**ただし schema 変化を検出** (後述の発見参照。最初の 1 回は
+  旧 list 前提の読み方で落ちたのでやり直した)
+- **プローブ先行手順を実行**: `/tmp/opencode` へ `mktemp -p` プローブ →
+  NOT writable (rc=1) を先に確認してから V2 実走。
+  予測どおり fail-fast rc=2、stderr は wrapper 実測と同一メッセージ
+  (probe 一時名のみ random)。クラスタ接触前なので副作用ゼロ
+- spec verify 一式を再走: V1 green / V3 green / V2 red (既知 fail-fast rc=2)
+- 単体テストも再走: test_private_data_profile + test_stage3_readiness の
+  37 テスト全パス
+- PR 差分不変を確認: merge-base (59169fddf) 起点で 14 ファイル (コード側 12 +
+  P-0243 ログ 2)
+- demo.json 完全性チェック全パス (トップレベル bool 7 個 + `pods.*.probe`
+  配下キーでの対照チェック。error 文字列は契約外につき未検査)
+
+### 発見 (仕様外)
+
+- ops-state:projects.json の schema が変った: トップレベルが list → dict
+  (`version` / `projects` / `chores` / `last_*` / `stop_engaged`) になり、
+  プロジェクト一覧は `["projects"]` 配下へ移動していた。旧前提のコード
+  (`for x in d`) は `'str' object has no attribute 'get'` で落ちる。
+  P-0243 の state 値自体は不変につき本プロジェクトへの影響ゼロだが、
+  今後スナップショット読みをする手順は `["projects"]` 経由に直すこと
+
+### 検証 (全部自分で実走済み)
+
+- fetch + main 追い越し判定 / census 未着確認 / ops-state スナップショット方式で
+  P-0243 state=active 確認 (新 schema の `["projects"]` 経由) /
+  `/tmp/opencode` 書き込みプローブ先行 (NOT writable 確認後に V2 実走) /
+  spec verify V1 green / V3 green / V2 既知 fail-fast rc=2 /
+  単体テスト 37 本全パス / PR 差分 14 ファイル不変確認 /
+  demo.json 完全性チェック全パス
+
+### 次セッションへの引き継ぎ
+
+- **状況はセッション 4〜57 から不変**: V2 は本 PR の merge+sync 後の新 runner Pod で
+  自動 green 化する (spawn.py の emptyDir mount 済み)。やることは「PR merge を待つ」だけ。
+  main 新着なければ短絡でよい。セッション 57 の引き継ぎは全項目まだ有効なので併せて読むこと。
+  要点のみ再掲:
+  - census 到着チェックは `git ls-tree -r origin/main | grep -c egress` 一発。
+    到着したらセッション 3/4 記載の手順 (両 NP バイト一致更新 +
+    test_egress_allows_dns_and_nothing_else_yet の conscious 更新をセットで)
+  - main 追い越しの手順はセッション 17 の「罠注意」参照 (merge-base diff で中身確認)。
+    「PR 差分 N ファイル」はコード側だけなら 12、P-0243 ログ込みなら 14
+  - 生死は ops-state:**projects.json** の `state` を見る。読みは**スナップショット方式**
+    (mktemp の X は末尾 / 取得元は ops-state ルートの projects.json /
+    書き出しとパースを同じ分岐に入れて失敗を無音にしない /
+    **2026-08-24 以降はトップレベル dict の `["projects"]` 配下を見ること —
+    セッション 57 発見参照**)
+  - **PROGRESS.md への追記はファイル末尾への接尾で** (セッション 52 の実害教訓。
+    アンカーに既存行を使う場合は行全体単位で切る)
+  - **V2 実走前の一手順 (26〜57 で運用実績あり)**: `mktemp -p /tmp/opencode` で
+    書き込み可否を先にプローブ (`/tmp` 本体ではなく `/tmp/opencode` 対象)。
+    もし書けるようになっていたら V2 の実走はそのまま in-cluster ドリル
+    (一時 NP + Pod 2 本の作成) まで進む
+  - **demo.json 正契約**: トップレベル bool 7 個 (labeled_blocked /
+    unlabeled_allowed / dns_ok_labeled / dns_ok_control / cleaned_up /
+    all_passed / probes_conclusive)。pods.*.probe 配下の実キーは
+    dns_ok / https_ok / status / error (`outcome` は無い)。対照は
+    labeled=dns_ok true × https_ok false (status=None)、control=dns_ok true ×
+    https_ok true (status=200)。error 文字列の具体値は契約外
