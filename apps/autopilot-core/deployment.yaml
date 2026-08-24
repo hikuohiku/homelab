@@ -54,20 +54,15 @@ spec:
       initContainers:
         # 以下すべての core イメージ digest は必ず同じ値にする。
         # ops/check_version_sync.py の "autopilot-core image digest" が一致を検査する。
-        # c1e9de0076ec67089b20f6b0e0e242d7987225a6 (PR #574 = コアが request_task で dispatch) の
+        # ac9d7bc7adf19a089a760b468cca397a272992de (PR #617 = 健全性レポートを ConfigMap へ) の
         # OCI index digest を registry API の docker-content-digest で実測したもの
-        #
-        # **この digest は MCP サイドカーの `--listen` をまだ知らない。** イメージは
-        # main への push でしか焼かれないため、マージ → ビルド完了 → digest を実測して
-        # ここを pin し直す、の順で入れること。pin し直すまでサイドカーは起動できず、
-        # コアは生きているがツールを持たない状態になる (この注記も pin 時に消す)
         #
         # ConfigMap は read-only mount なので、opencode が書ける場所へ配置し直す
         # PVC 上の home/ と repo/ をここで作るのは、opencode コンテナがそれらを
         # subPath で mount するため。subPath のディレクトリが無いと kubelet が
         # root 所有で作ってしまい、10001 で走る driver が作業コピーを書けなくなる
         - name: bootstrap-workdir
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:f9afede153954fd94cfe2bd55907628ee1219120e72bf675b10b4d3f3d8e2d34
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:80fc3a3e2193c2b67c8c780b514c92fd5468ea0d40b5e14f851a2ebc18b03ce9
           command:
             - sh
             - -c
@@ -147,7 +142,7 @@ spec:
         # opencode.json の headers にトークンを置くのは**逆効果**で、GET /config が
         # {env:...} 展開後の値をそのまま返すためコアから丸見えになる。
         - name: telegram-adapter
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:f9afede153954fd94cfe2bd55907628ee1219120e72bf675b10b4d3f3d8e2d34
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:80fc3a3e2193c2b67c8c780b514c92fd5468ea0d40b5e14f851a2ebc18b03ce9
           terminationMessagePolicy: FallbackToLogsOnError
           command: ["/usr/local/bin/telegram-adapter", "mcp", "--listen", "127.0.0.1:4097"]
           env:
@@ -185,7 +180,7 @@ spec:
         # 権限は ClusterRole `autopilot-reader` の get/list と、健全性レポートの
         # ConfigMap 1 個の get だけで、Secret も書き込み動詞も含まれない (rbac.yaml)
         - name: core-driver-mcp
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:f9afede153954fd94cfe2bd55907628ee1219120e72bf675b10b4d3f3d8e2d34
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:80fc3a3e2193c2b67c8c780b514c92fd5468ea0d40b5e14f851a2ebc18b03ce9
           terminationMessagePolicy: FallbackToLogsOnError
           command: ["/usr/local/bin/core-driver", "mcp", "--listen", "127.0.0.1:4098"]
           volumeMounts:
@@ -229,7 +224,7 @@ spec:
 
         # --- イベントを渡す係 ---
         - name: driver
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:f9afede153954fd94cfe2bd55907628ee1219120e72bf675b10b4d3f3d8e2d34
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:80fc3a3e2193c2b67c8c780b514c92fd5468ea0d40b5e14f851a2ebc18b03ce9
           terminationMessagePolicy: FallbackToLogsOnError
           env:
             - name: AUTOPILOT_GITHUB_TOKEN
