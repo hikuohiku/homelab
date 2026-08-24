@@ -443,3 +443,34 @@ main も reporter run も不変なら、verify 1/2 の再実測と上表の更�
 merge された世界になったらセッション 3 記載の手順 (ArgoCD sync 確認 → 手動 Job or
 03:43 JST 待ち → reporter run 待ち) で初回計測を起こし、verify 3 を green にするのが
 最初で最後の残作業。
+
+## セッション 9 (2026-08-24 09:04 JST)
+
+**実装は無し。ブランチは未 merge。** main の先頭 (#579)、main との差分
+(`ops/heart/{gh,heart,reconcile}.py` / `ops/heart/tests/test_reconcile.py` /
+`archive.jsonl`、重複ゼロ) は不変。**reporter だけが動いた**: 新 run
+2026-08-24T00:00:07Z (= 09:00:07 JST)。23:30:05Z から約 30 分間隔で回っている通常運転で、
+`recovery_probe` キーは依然無し (merge 前なので想定どおり)。3 項目を再実測:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 8 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 8 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | red (`recovery_probe: None`) — merge 前なので想定どおり |
+
+### 発見 (仕様外・後で curriculum が拾う候補)
+
+- 「reporter run のタイムスタンプが動いたか」は待機判定のシグナルに使えない。
+  reporter は約 30 分間隔で通常運転しており、タイムスタンプは頻繁に動く。待機中に見るべきは
+  (a) `git branch -r --merged origin/main` に本ブランチが載ったか、(b) main の先頭が
+  動いたか、(c) latest.json に `recovery_probe` キーが出現したか、の 3 点だけ
+
+## 次のセッションへの一言
+
+セッション 4〜8 と同じ。**やることは「merge 待ち」以外にない。** 起動したら最初に
+`git branch -r --merged origin/main | grep p-0258` で merge 済みか確認。未 merge なら
+verify 1/2 の再実測と上表の更新だけでよい (reporter run のタイムスタンプは 30 分毎に
+勝手に動くので、それ自体は何のシグナルでもない — 上の発見節参照)。
+merge された世界になったらセッション 3 記載の手順 (ArgoCD sync 確認 → 手動 Job or
+03:43 JST 待ち → reporter run 待ち) で初回計測を起こし、verify 3 を green にするのが
+最初で最後の残作業。
