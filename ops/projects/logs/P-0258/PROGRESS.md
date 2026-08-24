@@ -387,3 +387,36 @@ HEAD...origin/main` の差分ファイル群 (`ops/heart/*` / `archive.jsonl`、
 `git diff --name-only HEAD...origin/main` で重複確認だけすること。merge された世界に
 なったらセッション 3 記載の手順 (ArgoCD sync 確認 → 手動 Job or 03:43 JST 待ち →
 reporter run 待ち) で初回計測を起こし、verify 3 を green にするのが最初で最後の残作業。
+
+## セッション 7 (2026-08-24 08:59 JST)
+
+**実装は無し (セッション 3〜6 の結論どおり)。ブランチはまだ merge されていない。**
+このコミットの変更はこの追記のみ。session 6 からさらに約 2 分後の起動。main の先頭
+(#579)、reporter の最新 run (2026-08-23T23:30:05Z)、`git diff --name-only
+HEAD...origin/main` の差分ファイル群 (`ops/heart/*` / `archive.jsonl`、重複ゼロ)、
+`git branch -r --merged origin/main` の結果 (未 merge) のすべてが session 6 時点から
+不変だった。3 項目を再実測した:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 6 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse -v` | **green (27 tests OK)** 6 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | red (`recovery_probe: None`) — merge 前なので想定どおり |
+
+新たな発見は無し。
+
+### 発見 (仕様外・後で curriculum が拾う候補)
+
+- **merge 待ち状態で worker ループが回り続けると数分間隔のログ追記 commit が積み上がる**
+  (session 4→7 がいずれも 2 分前後の間隔で「変化ゼロ」commit)。ブランチ履歴が
+  ノイズで汚れるため、wrapper 側に「main も reporter run も不変なら commit せず
+  skip する」等の抑止があると良いかもしれない。本ブランチの実装とは無関係
+
+## 次のセッションへの一言
+
+セッション 4〜6 と同じ。**やることは「merge 待ち」以外にない。** 起動したら最初に
+`git branch -r --merged origin/main | grep p-0258` で merge 済みかだけ確認し、未 merge で
+main も reporter run も不変なら、verify 1/2 の再実測と上表の更新だけでよい (状況が
+凍結している以上、それ以上の作業は発生しない)。merge された世界になったら
+セッション 3 記載の手順 (ArgoCD sync 確認 → 手動 Job or 03:43 JST 待ち →
+reporter run 待ち) で初回計測を起こし、verify 3 を green にするのが最初で最後の残作業。
