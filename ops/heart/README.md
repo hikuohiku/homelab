@@ -109,7 +109,10 @@ curriculum Job --result.json (spec 全文)--> heart --> ops-state/projects.json 
 - **運用パラメータは ops/rules.json、モデルは ops/models.json** が単一情報源。
   どちらも人間レビュー必須パス (ruleset) に含める
 - **状態は ops-state ブランチ** (単一書き手 = heart)。main の CI 外だが、push 前に
-  statefiles.validate_projects() が守る
+  statefiles.validate_projects() が守る。git に出るのは外から見える
+  projects.json / heartbeat.json (と経過措置の metrics.jsonl 1 行) だけで、
+  heart しか読まない作業ファイル (キュー・監査・カーソル = statefiles.WORK_FILES)
+  は PVC の `/data/work` に置く (設計 state-out-of-git Phase 3)
 - **書き置きは 2 経路から読む**。issue #56 / ops-feedback ブランチ (GitHub) に加えて、
   同居する Go サイドカー (`apps/autopilot/bus-sidecar`) が NATS から
   `/data/feedback-bus/inbox/<id>.json` に落としたぶんも読む。所有者の「止めて」を

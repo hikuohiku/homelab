@@ -87,10 +87,10 @@ class CommandBeatTest(unittest.TestCase):
             self.h.beat(n)
 
     def queue(self):
-        return StateFiles(self.h.state_dir).read_jsonl(tasks.QUEUE_FILE)
+        return self.h.work.read_jsonl(tasks.QUEUE_FILE)
 
     def ledger(self):
-        return StateFiles(self.h.state_dir).read_jsonl(tasks.COMMAND_LEDGER_FILE)
+        return self.h.work.read_jsonl(tasks.COMMAND_LEDGER_FILE)
 
     def test_command_lands_in_task_queue_once(self):
         self.write_command("core-abc123")

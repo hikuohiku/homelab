@@ -116,10 +116,10 @@ class BudgetAlertBeatTest(unittest.TestCase):
             self.h.beat(1)
 
     def _cursors(self):
-        return json.loads((self.h.state_dir / "cursors.json").read_text())
+        return json.loads((self.h.work_dir / "cursors.json").read_text())
 
     def _budget_queue_entries(self):
-        sf = StateFiles(self.h.state_dir)
+        sf = self.h.work
         return [
             r
             for r in sf.read_jsonl("briefing-queue.jsonl")

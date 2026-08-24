@@ -4,7 +4,7 @@ P-0091。「やって」という人間の依頼は、今の器では triage の
 briefing に積まれるだけで立案 (curriculum) に流れない。ここは依頼を
 「受領 → 未処理キュー → 採択で処理済み」の遷移として固定する部分。
 
-キューの実体は ops-state ブランチの task-requests.jsonl (単一書き手 = heart)。
+キューの実体は PVC の work/task-requests.jsonl (単一書き手 = heart)。
 I/O は heart.py だけが行い、判断はこの純関数群と reconcile.decide() に集約する
 (README「原則」と同じ分業)。
 
@@ -31,7 +31,7 @@ QUEUE_FILE = "task-requests.jsonl"
 PENDING = "pending"
 PROCESSED = "processed"
 
-# 常駐コア発の command (設計 D3/D21) の処理済み台帳。ops-state ブランチに置く
+# 常駐コア発の command (設計 D3/D21) の処理済み台帳。キューと同じ PVC に置く
 # (書き手は heart だけ)。二重実行の唯一の歯止めなので、キューとは別に持つ:
 # キュー側の記録は「依頼として受けたか」であって「command を処理したか」ではない
 # (未知の種別・停止中に落とした command はキューに載らない)。
