@@ -7221,13 +7221,60 @@
         "broken": []
       },
       "stalled_reason": "adopt_gate_some_pass"
+    },
+    {
+      "id": "P-9017",
+      "title": "クラスタの脳を B2 から戻せる証明 — k3s 状態ストア (kine/sqlite) の復元ドリルと、未 merge ブランチ phase0-k3s-datastore-backup の検収",
+      "state": "proposed",
+      "branch": "project/p-9017",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": true,
+      "verify": [
+        "test -x ops/drills/k3s_datastore_restore_drill.sh",
+        "python3 -c \"import json,glob,time,sys; f=sorted(glob.glob('ops/drills/results/k3s-datastore-restore-*.json'))[-1]; d=json.load(open(f)); assert d.get('sqlite_integrity_ok') is True and d.get('ca_restored') is True and d.get('token_restored') is True and d.get('cleanup_done') is True and time.time()-d.get('finished_at',0)<30*86400, d\"",
+        "! grep -qE 'restic +(forget|prune|unlock)' ops/drills/k3s_datastore_restore_drill.sh",
+        "grep -q 'k3s 状態ストア' docs/backup.md"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-9017",
+        "title": "クラスタの脳を B2 から戻せる証明 — k3s 状態ストア (kine/sqlite) の復元ドリルと、未 merge ブランチ phase0-k3s-datastore-backup の検収",
+        "why": "archive.jsonl 385 行に datastore / etcd / k3s-backup の言及が 1 件も無い (2026-08-24 実測 grep 0 件)。全損演習 (P-0054 採択) は PVC データだけを扱い、クラスタ自身の状態 (state.db 内の CR・Secret・ArgoCD 状態・cluster CA・server token) を掬う案が存在しない。一方 2026-08-24T21:22Z に人間セッションが apps/k3s-backup/ を実装したブランチ phase0-k3s-datastore-backup (b4d2e303、kine/sqlite state.db と server token を restic→B2 へ入れる CronJob) を origin へ push 済みだが main 未 merge・復元試験ゼロ。P-0005 の未消化原則「バックアップは戻せて初めてバックアップ」がクラスタの状態層に未適用。P-0341 が append-only 鍵で PVC データを戻せることを閉じたのに対し、これはクラスタの脳を掬う別の層",
+        "cell": [
+          "storage",
+          "experiment"
+        ],
+        "dod": "(1) ops/drills/k3s_datastore_restore_drill.sh が、B2 上の最新 k3s 状態ストア snapshot (apps/k3s-backup が書いたもの) を使い捨ての emptyDir へ restore し、(a) state.db の SQLite integrity_check が ok、(b) cluster CA / server token が snapshot から復元できる、(c) 復元した state を kine として dry-run 起動して READY になる、までを実測する。本番の /var/lib/rancher/k3s には一切触れない。(2) ブランチ phase0-k3s-datastore-backup の apps/k3s-backup を検収して main へ乗せる (manifest 妥当性・backup CronJob の実走確認)。(3) docs/backup.md に「k3s 状態ストア」節を追加し、実測した復元手順・所要時間・対象 (state.db / CA / token) を書く。(4) スクリプト自身に forget/prune/unlock の grep ガードを持たせ、削除系コマンドが現れたら即異常終了 (P-0288 の自己検査を踏襲)",
+        "verify": [
+          "test -x ops/drills/k3s_datastore_restore_drill.sh",
+          "python3 -c \"import json,glob,time,sys; f=sorted(glob.glob('ops/drills/results/k3s-datastore-restore-*.json'))[-1]; d=json.load(open(f)); assert d.get('sqlite_integrity_ok') is True and d.get('ca_restored') is True and d.get('token_restored') is True and d.get('cleanup_done') is True and time.time()-d.get('finished_at',0)<30*86400, d\"",
+          "! grep -qE 'restic +(forget|prune|unlock)' ops/drills/k3s_datastore_restore_drill.sh",
+          "grep -q 'k3s 状態ストア' docs/backup.md"
+        ],
+        "irreversible": false,
+        "capabilities": [
+          "kubectl-write"
+        ],
+        "touches_apps": true,
+        "confidence": "unsure",
+        "adopted": true,
+        "proposed_at": "2026-08-24T22:48:07Z"
+      },
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T22:36:54Z",
-  "last_activity_at": "2026-08-24T22:43:37Z",
+  "last_activity_at": "2026-08-24T22:48:09Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false,
-  "curriculum_registered_pr": 637
+  "curriculum_registered_pr": 640
 }
