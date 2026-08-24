@@ -6943,13 +6943,60 @@
       },
       "adopt_gate_attempts": 3,
       "stalled_reason": "adopt_gate_unmeasurable"
+    },
+    {
+      "id": "P-0341",
+      "title": "消せない鍵で戻せるかは誰も試していない — append-only 鍵での restore 可読性を初めて実測する",
+      "state": "proposed",
+      "branch": "project/p-0341",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": false,
+      "verify": [
+        "bash -n ops/drills/appendonly_restore_drill.sh",
+        "python3 -c \"import glob,json,time,sys; f=sorted(glob.glob('ops/drills/results/appendonly-restore-*.json'))[-1]; d=json.load(open(f)); assert d.get('ok') is True and time.time()-d['finished_at']<30*86400, 'drill 未成功または古い'\"",
+        "! grep -qE 'restic +(forget|prune|unlock)' ops/drills/appendonly_restore_drill.sh",
+        "grep -q 'append-only' docs/backup.md"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-0341",
+        "title": "消せない鍵で戻せるかは誰も試していない — append-only 鍵での restore 可読性を初めて実測する",
+        "why": "backup 系の restic CronJob は既に append-only 鍵 (<app>-restic-backup-credentials、deleteFiles を持たない B2 application key) で動いている (immich/coder/adguard 実測)。P-0028 は backup 側の書き込みを実測したが、その鍵で restore (読み取り) が通るかは未実測のまま — append-only 化は「消せない」を買った代わりに「読めない」を抱えている可能性があり、実装次第ではいざというとき戻せない。P-0333 判決の improve_hint「まず P-0288 の実行結果を確認し、残った新規性 (append-only 鍵での restore 可読性の実測 = P-0028 の restore 側) だけに絞る」への応答。restore は読み取り専用操作 (snapshots/restore) で完結し forget/prune/unlock に触れない — P-0274 の失格条件 (削除権限を使う Job) を構造的に回避する。「バックアップは戻せて初めてバックアップ」(P-0005) の最後の不確実性を閉じる。",
+        "cell": [
+          "storage",
+          "experiment"
+        ],
+        "dod": "(1) ops/drills/appendonly_restore_drill.sh が既存 <app>-restic-backup-credentials (read-only 参照) で最新 snapshot を emptyDir へ restore し、ファイル数・代表 path の存在・restore 所要秒を測り、結果 JSON を ops/drills/results/appendonly-restore-*.json に書き、trap で必ず掃除する。(2) スクリプト自身に forget/prune/unlock の grep ガードを持たせ、現れたら即異常終了する (P-0288 の自己検査を踏襲)。(3) ops/drills/check_drill_freshness.py が結果の鮮度を検査する。(4) docs/backup.md に「append-only 鍵での restore 可読性」節を書き、読めない場合は restore 専用読み取り鍵の要否を結論として残す。P-0288 が既に append-only restore まで検証済みなら、(1)(2)(3) はその実績を引用し (4) の結論整理のみで完了としてよい。",
+        "verify": [
+          "bash -n ops/drills/appendonly_restore_drill.sh",
+          "python3 -c \"import glob,json,time,sys; f=sorted(glob.glob('ops/drills/results/appendonly-restore-*.json'))[-1]; d=json.load(open(f)); assert d.get('ok') is True and time.time()-d['finished_at']<30*86400, 'drill 未成功または古い'\"",
+          "! grep -qE 'restic +(forget|prune|unlock)' ops/drills/appendonly_restore_drill.sh",
+          "grep -q 'append-only' docs/backup.md"
+        ],
+        "irreversible": false,
+        "capabilities": [
+          "kubectl-write"
+        ],
+        "touches_apps": false,
+        "confidence": "unsure",
+        "adopted": true,
+        "proposed_at": "2026-08-24T21:28:18Z"
+      },
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T21:13:16Z",
-  "last_activity_at": "2026-08-24T21:22:09Z",
+  "last_activity_at": "2026-08-24T21:29:00Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false,
-  "curriculum_registered_pr": 616
+  "curriculum_registered_pr": 623
 }
