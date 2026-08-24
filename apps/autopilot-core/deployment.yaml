@@ -67,7 +67,7 @@ spec:
         # subPath で mount するため。subPath のディレクトリが無いと kubelet が
         # root 所有で作ってしまい、10001 で走る driver が作業コピーを書けなくなる
         - name: bootstrap-workdir
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:f9afede153954fd94cfe2bd55907628ee1219120e72bf675b10b4d3f3d8e2d34
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:80fc3a3e2193c2b67c8c780b514c92fd5468ea0d40b5e14f851a2ebc18b03ce9
           command:
             - sh
             - -c
@@ -147,7 +147,7 @@ spec:
         # opencode.json の headers にトークンを置くのは**逆効果**で、GET /config が
         # {env:...} 展開後の値をそのまま返すためコアから丸見えになる。
         - name: telegram-adapter
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:f9afede153954fd94cfe2bd55907628ee1219120e72bf675b10b4d3f3d8e2d34
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:80fc3a3e2193c2b67c8c780b514c92fd5468ea0d40b5e14f851a2ebc18b03ce9
           terminationMessagePolicy: FallbackToLogsOnError
           command: ["/usr/local/bin/telegram-adapter", "mcp", "--listen", "127.0.0.1:4097"]
           env:
@@ -185,7 +185,7 @@ spec:
         # 権限は ClusterRole `autopilot-reader` の get/list と、健全性レポートの
         # ConfigMap 1 個の get だけで、Secret も書き込み動詞も含まれない (rbac.yaml)
         - name: core-driver-mcp
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:f9afede153954fd94cfe2bd55907628ee1219120e72bf675b10b4d3f3d8e2d34
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:80fc3a3e2193c2b67c8c780b514c92fd5468ea0d40b5e14f851a2ebc18b03ce9
           terminationMessagePolicy: FallbackToLogsOnError
           command: ["/usr/local/bin/core-driver", "mcp", "--listen", "127.0.0.1:4098"]
           volumeMounts:
@@ -229,7 +229,7 @@ spec:
 
         # --- イベントを渡す係 ---
         - name: driver
-          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:f9afede153954fd94cfe2bd55907628ee1219120e72bf675b10b4d3f3d8e2d34
+          image: ghcr.io/hikuohiku/homelab-autopilot-core@sha256:80fc3a3e2193c2b67c8c780b514c92fd5468ea0d40b5e14f851a2ebc18b03ce9
           terminationMessagePolicy: FallbackToLogsOnError
           env:
             - name: AUTOPILOT_GITHUB_TOKEN
