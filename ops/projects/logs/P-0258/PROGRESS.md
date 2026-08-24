@@ -1275,12 +1275,44 @@ conflict リスク無し。spec・runner 非接触。デッドロック世界に
 
 新たな発見は無い。
 
+## セッション 41 (2026-08-24、UTC 01:32 開始 = JST 10:32)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 17 から不変。新 curriculum ブランチも
+無し (`heart/curriculum-20260824-002231` のみ、tracking ref = ls-remote = 00de3c47b で不変を
+実測)。P-0279 も未着地 (`git grep -il recovery origin/main -- apps/ops-health-reporter/` が
+rc=1 ゼロ件)。pull ref 一致を確認 (local HEAD = origin/p-0258 = ls-remote = 0e3c04718 =
+session 40 commit)。**reporter ブランチが 2 度目の移動 (08de63306..72b921e43)** —
+内容は定期 report 更新のみ (latest.json 123+/134- と history jsonl +1 行の 2 commit、
+コード変更ゼロ)、キー構成に変化無く `recovery_probe` は依然不在のため非接触。
+移動があったため verify 3 を本セッションで再実測した (下表の通り red 継続)。
+待機中の動きは ops-state beat (7849307fd..4b71ddf87、差分は既知の
+`heartbeat.json`/`metrics.jsonl` のみを diff --stat で実測)、p-0243
+(1d240f599..097420c90) の自己ログ追記 (+82 行)、p-0272 (0e652e1ab..c34b5c72c) の
+自己ログ追記 (+45 行) のみ (いずれも diff --stat で自 PROGRESS.md のみを実測)。
+本 spec への接触ゼロ、conflict リスク無し。spec・runner 非接触。デッドロック世界に変化なし。
+最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 39 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 39 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | **red 再実測** (recovery_probe None、キー構成従来通り) — reporter 移動に伴う確認 |
+
+発見: 起動直後の `git fetch --prune` が reporter 移動 (commit 01:30:11Z) を拾わず、
+明示 `git fetch origin ops-health-report` で初めて tracking ref が更新された。
+refspec は標準 (`+refs/heads/*`) なので設定の罠ではなく push とのレースと判断
+(報告用 CronJob が分単位で push するため、ls-remote と fetch の間で差が出うる)。
+**今後、ls-remote と tracking ref が食い違ったら明示 fetch で追い付いてから判断すること。**
+
 ## 次のセッションへの一言
 
-セッション 13〜40 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+セッション 13〜41 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
 `git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
 spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
-(一時ファイルは必ず `mktemp`)。curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
+(一時ファイルは必ず `mktemp`)。reporter ブランチが動いたら verify 3 も再実測する
+(session 30/41 の前例。食い違いがあれば明示 fetch してから — session 41 の発見参照)。
+curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
 か runner escape hatch が着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or
 03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
 なお P-0279 が merge されたら `apps/ops-health-reporter/` の conflict 有無を先に確認
