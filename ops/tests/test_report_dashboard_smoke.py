@@ -22,6 +22,7 @@ report.py 自身は import 時に ServiceAccount token を読むため cluster �
 import ast
 import datetime
 import json
+import types
 import unittest
 from pathlib import Path
 
@@ -55,6 +56,23 @@ def load_functions():
 rep = load_functions()
 
 NOW = datetime.datetime(2026, 8, 23, 3, 0, 0, tzinfo=datetime.timezone.utc)
+
+
+class _FixedDatetime(datetime.datetime):
+    """collect_dashboard_smoke 内の datetime.datetime.now() を NOW に固定する。
+
+    実時計のままだと stamp_ago(600) が実行日に応じて stale 判定へ倒れ、
+    テストが日付で壊れる。strptime 等は datetime のサブクラスなのでそのまま効く。"""
+
+    @classmethod
+    def now(cls, tz=None):
+        return NOW if tz is None else NOW.astimezone(tz)
+
+
+# 抽出した関数が参照する datetime モジュールを固定時計版に差し替える
+rep["datetime"] = types.SimpleNamespace(
+    datetime=_FixedDatetime, timezone=datetime.timezone
+)
 
 
 def stamp_ago(seconds):
