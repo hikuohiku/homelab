@@ -101,8 +101,8 @@ curriculum Job --result.json (全案)--> heart --+--> Project CR (採択の正) 
 棄却案は `state: rejected` の Project CR になる (`heart.sync_project_crs` →
 `projectcr.plan_rejected`、1 ビート 25 件ずつ)。取り込み元は 2 つ:
 凍結された `archive.jsonl` と、curriculum の result.json から heart が写した
-PVC の台帳 (`/data/work/curriculum-rejected.jsonl`)。**CR にするまで消さない**
-ので、CR の書き込みが失敗しても死因は残る。
+PVC の台帳 (`/data/work/curriculum-rejected.jsonl`)。PVC の台帳の行は
+**CR の存在を確かめてから**落とす — 書き込みが失敗した行は残るので、死因は消えない。
 `rejected` は終端なので状態機械は触らず、doc にも載らない。
 
 コアのサブエージェント (立案役 / 判定役) はこの CR を MCP の `homelab_proposals` で

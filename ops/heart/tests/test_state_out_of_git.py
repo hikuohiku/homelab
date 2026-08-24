@@ -237,13 +237,32 @@ class RejectedProposalsSurvive(BeatCase):
         self.assertEqual(cr["spec"]["state"], "rejected")
         self.assertEqual(cr["spec"]["spec"]["reject_reason"], "同型の再提案")
 
-    def test_the_ledger_does_not_grow_on_every_beat(self):
+    def test_the_ledger_is_emptied_once_the_cr_exists(self):
+        """CR になった行だけを落とす。台帳は毎ビート読むので伸ばさない。"""
         self.h.docs.save_projects(dict(EMPTY_DOC))
         k8s = FakeK8s()
         self.beat(k8s, curriculum=self.CUR)
-        self.beat(k8s, n=2, curriculum=self.CUR)
+        # 1 ビート目は apply した直後なので残る (存在を確かめてから消す)
         self.assertEqual(
             len(self.h.work.read_jsonl(heart_module.REJECTED_LEDGER_FILE)), 1
+        )
+        self.beat(k8s, n=2, curriculum=self.CUR)
+        self.assertEqual(self.h.work.read_jsonl(heart_module.REJECTED_LEDGER_FILE), [])
+
+    def test_the_ledger_keeps_records_whose_cr_never_landed(self):
+        """CR に書けなかった行は残す — 消したら死因ごと消える。"""
+        self.h.docs.save_projects(dict(EMPTY_DOC))
+
+        class Broken(FakeK8s):
+            def apply_custom(self, *a, **k):
+                raise RuntimeError("書けない")
+
+        k8s = Broken()
+        self.beat(k8s, curriculum=self.CUR)
+        self.beat(k8s, n=2, curriculum=self.CUR)
+        self.assertEqual(
+            [r["id"] for r in self.h.work.read_jsonl(heart_module.REJECTED_LEDGER_FILE)],
+            ["P-9001"],
         )
 
     def test_the_frozen_git_ledger_is_still_read(self):

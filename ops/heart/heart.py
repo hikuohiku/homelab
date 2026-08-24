@@ -906,6 +906,24 @@ class Heart:
         if added:
             log(f"棄却案 {added} 件を PVC の台帳に記録した")
 
+    def prune_rejected_ledger(self, existing):
+        """CR になった棄却案を PVC の台帳から落とす。
+
+        **CR が実在することを確かめた行だけ**を消す (このビートの list_custom の
+        結果で見る)。同じビートで apply したばかりの行は残す — 次のビートで
+        存在が確認できてから消せばよく、急いで消して得るものが無い。
+        こうしないと台帳は毎ビート読む一方で伸び続ける。
+        """
+        have = {(item.get("metadata") or {}).get("name") for item in existing}
+        records = self.work.read_jsonl(REJECTED_LEDGER_FILE)
+        kept = [
+            r for r in records
+            if not (r.get("id") and projectcr.cr_name(r["id"]) in have)
+        ]
+        if len(kept) != len(records):
+            self.work.rewrite_jsonl(REJECTED_LEDGER_FILE, kept)
+            log(f"棄却案 {len(records) - len(kept)} 件は CR になったので台帳から落とした")
+
     def rejected_records(self):
         """棄却案の全部。凍結された git の台帳 + PVC に積んだ新しい行。
 
@@ -965,6 +983,8 @@ class Heart:
             self.cfg.namespace,
             {p["id"] for p in doc.get("projects", [])},
         )
+        # CR になった行は PVC の台帳から落とす (毎ビート読むので伸ばさない)
+        self.prune_rejected_ledger(existing)
         failed = 0
         for cr in write + rejected:
             try:
