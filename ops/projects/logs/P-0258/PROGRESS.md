@@ -1037,9 +1037,32 @@ conflict リスク無し。spec・runner 非接触。デッドロック世界に
 
 新たな発見は無い。reporter 最新 ref も 7c3f208b2 のまま不変 (ls-remote で実測)。
 
+## セッション 30 (2026-08-24、UTC 01:0x 開始 = JST 10:0x)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 17 から不変。新 curriculum ブランチも
+無し (fetch で heart/* 更新ゼロ、最新は `heart/curriculum-20260824-002231` のまま)。
+P-0279 も未着地 (`git grep -il recovery origin/main -- apps/ops-health-reporter/` が
+rc=1 ゼロ件)。pull ref 一致を確認 (local HEAD = origin/p-0258 = ls-remote = df05a92ec =
+session 29 commit)。**reporter ブランチが初めて動いた** (7c3f208b2..08de63306、
+run 2026-08-24T01:00:08Z、差分は `history/2026-08-24.jsonl` +1 行と `latest.json` のみを
+実測) が、`recovery_probe` は None — canary 未 deploy (未 merge) なので期待通りの不在で、
+spec への接触は無し。待機中の動きは ops-state beat 96〜98 (a8f468a3c..553a0c020、3 beat、
+差分は既知の `heartbeat.json`/`metrics.jsonl` のみを実測) と p-0243 session 33 / p-0272 の
+自己ログ追記 (`9a7e8a2e4`/`79b1459cc` とも各自ログのみを実測) のみ。conflict リスク無し。
+spec・runner 非接触。デッドロック世界に変化なし。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 28 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 28 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | 未再実行 — merge 前なので red 固定のため (新 run 01:00:08Z も recovery_probe 無しを実測済み) |
+
+新たな発見は無い。
+
 ## 次のセッションへの一言
 
-セッション 13〜29 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+セッション 13〜30 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
 `git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
 spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
 (一時ファイルは必ず `mktemp`)。curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
