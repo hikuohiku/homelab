@@ -7041,13 +7041,60 @@
       },
       "adopt_gate_attempts": 3,
       "stalled_reason": "adopt_gate_unmeasurable"
+    },
+    {
+      "id": "P-0361",
+      "title": "写真の実データが『腐っていない』を毎週測る — immich のアセット整合性検証を常設する",
+      "state": "proposed",
+      "branch": "project/p-0361",
+      "irreversible": false,
+      "capabilities": [
+        "kubectl-write"
+      ],
+      "touches_apps": true,
+      "verify": [
+        "test -f apps/immich/checksum-cronjob.yaml && grep -q 'checksum-cronjob.yaml' apps/immich/kustomization.yaml",
+        "test -f ops/tools/immich_checksum_check.py && python3 ops/tools/immich_checksum_check.py --selftest",
+        "test -f docs/immich-checksum.md",
+        "grep -q 'checksum' apps/ops-health-reporter/report.py"
+      ],
+      "confidence": "unsure",
+      "budget": {
+        "used_tokens": 0
+      },
+      "created": "2026-08-24",
+      "spec": {
+        "id": "P-0361",
+        "title": "写真の実データが『腐っていない』を毎週測る — immich のアセット整合性検証を常設する",
+        "why": "immich は『写真の実データを持つ唯一のサービス』（P-0035 の why が名指し）で、ホスト側のファイルが黙って壊れる (bit rot・誤書き込み) と人間の唯一の原本が静かに死ぬ。P-0187 が restic 側（バックアップの整合）を --read-data-subset で検証したが、ライブ側（PVC 上の原本が immich の記録したチェックサムと一致するか）は誰も測っていない — archive に同型案が存在しない（2026-08-24 時点で確認済み）。バックアップが『取れる』だけでなく『原本が今も読める』ことを測るのは、P-0005/issue #56『試したことのないバックアップはバックアップではない』のライブ側版。storage 本体の差分（VISION 段階 2）",
+        "cell": [
+          "storage",
+          "prevent"
+        ],
+        "dod": "(1) apps/immich/checksum-cronjob.yaml を追加: immich の API 経由で全アセットのチェックサム再検証を毎週走らせ、不一致を報告する（immich の整合性検証機能の正確な API 形は実機で確定し、手順と根拠を docs/immich-checksum.md に書く）。(2) 結果を ConfigMap に書き、ops-health-reporter が latest.json の checksum 節として集約する。(3) 不一致検出時の incident 経路を rules.json の閾値で 1 か所に宣言する。(4) --selftest 可能な検証ロジック (ops/tools/immich_checksum_check.py) を同梱 fixture で固める。(5) 実機で 1 回走らせ、対象アセット数・所要時間・結果を PROGRESS.md に残す",
+        "verify": [
+          "test -f apps/immich/checksum-cronjob.yaml && grep -q 'checksum-cronjob.yaml' apps/immich/kustomization.yaml",
+          "test -f ops/tools/immich_checksum_check.py && python3 ops/tools/immich_checksum_check.py --selftest",
+          "test -f docs/immich-checksum.md",
+          "grep -q 'checksum' apps/ops-health-reporter/report.py"
+        ],
+        "irreversible": false,
+        "capabilities": [
+          "kubectl-write"
+        ],
+        "touches_apps": true,
+        "confidence": "unsure",
+        "adopted": true,
+        "proposed_at": "2026-08-24T22:12:35Z"
+      },
+      "adopt_gate_attempts": 1
     }
   ],
   "chores": [],
   "last_curriculum_at": "2026-08-24T21:51:33Z",
-  "last_activity_at": "2026-08-24T21:56:52Z",
+  "last_activity_at": "2026-08-24T22:13:09Z",
   "last_critic_at": "2026-08-24T07:24:43Z",
   "last_curriculum_dry": false,
   "stop_engaged": false,
-  "curriculum_registered_pr": 625
+  "curriculum_registered_pr": 630
 }
