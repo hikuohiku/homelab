@@ -15,10 +15,10 @@ interface DailyUsage {
 
 interface OpsState {
   projects: Project[];
-  heartbeat: { beat?: number; at?: string };
-  // usage は当日の消費量の計測 (2026-08-24 以前は breaker キー。過去の state も読む)。
-  // tokens は 2026-08-24 の集計修正で追加 (定額では cost_usd が 0 のまま張り付く)
-  metrics: { usage?: DailyUsage; breaker?: DailyUsage };
+  // usage は当日の消費量の計測。2026-08-25 以前は metrics.jsonl の最終行から
+  // 読んでいたが、そのために 8.9 MB のファイルを 20 秒ごとに fetch していた。
+  // 指標は git から出た (設計 state-out-of-git Phase 1) ので heartbeat に相乗り
+  heartbeat: { beat?: number; at?: string; usage?: DailyUsage };
   stopEngaged: boolean;
   warning?: string;
 }
@@ -28,14 +28,6 @@ let refreshInFlight: Promise<OpsState> | undefined;
 
 function parseJson<T>(text: string, fallback: T): T {
   try { return JSON.parse(text) as T; } catch { return fallback; }
-}
-
-function parseJsonlLast(text: string): Record<string, unknown> {
-  const lines = text.trim().split("\n").reverse();
-  for (const line of lines) {
-    try { return JSON.parse(line) as Record<string, unknown>; } catch { /* skip broken tail */ }
-  }
-  return {};
 }
 
 function mergeArchive(projects: Project[], archiveText: string): Project[] {
@@ -83,33 +75,29 @@ async function loadFromGit(): Promise<OpsState> {
     "+refs/heads/ops-state:refs/remotes/origin/ops-state",
     "+refs/heads/main:refs/remotes/origin/main",
   ]);
-  const [projectsText, heartbeatText, metricsText, archiveText] = await Promise.all([
+  const [projectsText, heartbeatText, archiveText] = await Promise.all([
     git(["show", "origin/ops-state:projects.json"]),
     git(["show", "origin/ops-state:heartbeat.json"]),
-    git(["show", "origin/ops-state:metrics.jsonl"]),
     git(["show", "origin/main:ops/projects/archive.jsonl"]),
   ]);
   const projectDoc = parseJson<{ projects?: Project[]; stop_engaged?: boolean }>(projectsText, {});
   return {
     projects: mergeArchive(projectDoc.projects ?? [], archiveText),
     heartbeat: parseJson(heartbeatText, {}),
-    metrics: parseJsonlLast(metricsText),
     stopEngaged: Boolean(projectDoc.stop_engaged),
   };
 }
 
 async function loadFromDirectory(directory: string): Promise<OpsState> {
-  const [projectsText, heartbeatText, metricsText, archiveText] = await Promise.all([
+  const [projectsText, heartbeatText, archiveText] = await Promise.all([
     readFile(`${directory}/projects.json`, "utf8"),
     readFile(`${directory}/heartbeat.json`, "utf8"),
-    readFile(`${directory}/metrics.jsonl`, "utf8"),
     readFile(`${directory}/archive.jsonl`, "utf8").catch(() => ""),
   ]);
   const projectDoc = parseJson<{ projects?: Project[]; stop_engaged?: boolean }>(projectsText, {});
   return {
     projects: mergeArchive(projectDoc.projects ?? [], archiveText),
     heartbeat: parseJson(heartbeatText, {}),
-    metrics: parseJsonlLast(metricsText),
     stopEngaged: Boolean(projectDoc.stop_engaged),
   };
 }
@@ -122,7 +110,7 @@ async function refresh(): Promise<OpsState> {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (cached) return { ...cached.value, warning: `ops-state 更新失敗: ${message}` };
-    return { projects: [], heartbeat: {}, metrics: {}, stopEngaged: false, warning: `ops-state 取得失敗: ${message}` };
+    return { projects: [], heartbeat: {}, stopEngaged: false, warning: `ops-state 取得失敗: ${message}` };
   } finally {
     refreshInFlight = undefined;
   }

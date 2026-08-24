@@ -89,6 +89,9 @@ class Heart:
         self.repo_dir = self.cfg.repo_dir
         self.repo_url = f"https://github.com/{self.cfg.repo}.git"
         self.state_dir = self.cfg.data_dir / "ops-state"
+        # 指標は git に出さない (設計 state-out-of-git Phase 1)。PVC 上に
+        # 保持窓ぶんだけ置く。誰も読み戻さないので、消えても判断は狂わない
+        self.metrics_store = StateFiles(self.cfg.data_dir / "metrics")
         self.transcripts = self.cfg.data_dir / "transcripts"
         self.gh = Gh(self.cfg.github_token, self.cfg.repo)
         self.k8s = None  # 遅延初期化 (単体テスト・クラスタ外実行のため)
@@ -391,7 +394,9 @@ class Heart:
         2000 行超の metrics.jsonl を生読みすることになる (生読みは上位モデルでも低精度)。
         """
         day = now_iso(now)[:10]
-        summary = metrics.summarize_beats(sf.read_jsonl("metrics.jsonl"), now)
+        summary = metrics.summarize_beats(
+            self.metrics_store.read_jsonl("metrics.jsonl"), now
+        )
         summary["stalled"] = metrics.summarize_stalled(doc)
         summary["targets"] = self.recent_transcripts()
         path = self.critic_dir() / f"input-{day}.json"
@@ -621,27 +626,34 @@ class Heart:
             else:
                 notifier.send("incident", smoke_incident_text, now)
 
-        sf.append_jsonl(
-            "metrics.jsonl",
-            {
-                "at": now_iso(now),
-                "beat": i,
-                "projects": {p["id"]: p["state"] for p in doc["projects"]},
-                "jobs": len(jobs) if jobs is not None else None,
-                "open_prs": len(open_prs),
-                "unhealthy_apps": unhealthy_apps,
-                "health_fresh": health_fresh,
-                "usage": usage_info,
-                "budget_status": budget["status"] if budget else None,
-                "dashboard_smoke_status": smoke["status"] if smoke else None,
-                "vetoes": vetoes,
-                "stop_all": stop_all,
-                "actions": [a["type"] for a in actions],
-                "shadow": self.cfg.shadow,
-            },
+        record = metrics.beat_record(
+            now,
+            i,
+            doc,
+            jobs=len(jobs) if jobs is not None else None,
+            open_prs=len(open_prs),
+            unhealthy_apps=unhealthy_apps,
+            health_fresh=health_fresh,
+            usage=usage_info,
+            budget_status=budget["status"] if budget else None,
+            dashboard_smoke_status=smoke["status"] if smoke else None,
+            vetoes=vetoes,
+            stop_all=stop_all,
+            actions=[a["type"] for a in actions],
+            shadow=self.cfg.shadow,
         )
+        self.metrics_store.append_jsonl("metrics.jsonl", record)
+        self.prune_metrics(now)
+        # 経過措置: 旧ダッシュボードのイメージは ops-state の metrics.jsonl の
+        # 最終行から usage を読む。全履歴 (8.9 MB) を置く必要は無いので
+        # **最新の 1 行だけ**に切り詰める。新イメージを pin したらこの行ごと消す
+        # (設計 state-out-of-git Phase 1)
+        sf.rewrite_jsonl("metrics.jsonl", [record])
         sf.save_projects(doc)
-        sf.write_heartbeat(i, now)
+        # usage は heartbeat に載せる。ダッシュボードの唯一の metrics 利用が
+        # 「最終行の usage」だけで、そのために 8.9 MB の metrics.jsonl を
+        # 20 秒ごとに fetch していた (設計 state-out-of-git Phase 1)
+        sf.write_heartbeat(i, now, usage=usage_info)
         # admission gate に判定材料の写しを渡す (設計 rev3 Phase D)。
         # この写しの鮮度そのものが安全装置で、ビートが詰まればゲートは自動的に
         # 閉じる (reconcile.DISPATCH_SNAPSHOT_MAX_AGE_SECONDS)
@@ -655,6 +667,14 @@ class Heart:
         gitutil.commit_and_push_state(
             self.state_dir, self.cfg.state_branch, f"heart: beat {i}"
         )
+
+    def prune_metrics(self, now):
+        """保持窓より古い指標行を落とす。行数が変わったときだけ書き直す。"""
+        records = self.metrics_store.read_jsonl("metrics.jsonl")
+        kept = metrics.prune_beats(records, now)
+        if len(kept) != len(records):
+            self.metrics_store.rewrite_jsonl("metrics.jsonl", kept)
+            log(f"pruned {len(records) - len(kept)} old metric beats")
 
     def self_update_check(self):
         # ops/heart だけでなく rules.json / models.json も監視する。config は起動時に

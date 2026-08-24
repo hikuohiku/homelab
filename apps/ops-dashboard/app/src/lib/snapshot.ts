@@ -69,7 +69,7 @@ export async function getSnapshot(): Promise<Snapshot> {
   }));
   const agents = [...jobAgents, ...residentAgents];
   const heartbeatAt = state.heartbeat.at ? Date.parse(state.heartbeat.at) : 0;
-  const usage = state.metrics.usage ?? state.metrics.breaker ?? {};
+  const usage = state.heartbeat.usage ?? {};
   const warnings = [state.warning, kube.warning].filter((value): value is string => Boolean(value));
   const projects = [...state.projects].sort((a, b) => {
     const ai = FLOW_ORDER.indexOf(a.state);
