@@ -2119,3 +2119,47 @@ curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
 03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
 なお P-0279 が merge されたら `apps/ops-health-reporter/` の conflict 有無を先に確認
 してから verify を回すこと。
+
+## セッション 73 (2026-08-24)
+
+**実装は無し。ブランチは未 merge** (`git branch -r --merged origin/main | grep p-0258`
+で不在)。main 先頭は #580 (59169fddf) のまま session 17 から不変。新 curriculum ブランチも
+無し (`heart/curriculum-20260824-002231` のみ、ls-remote = 00de3c47b で不変)。
+P-0279 も未着地 (`git grep -il recovery origin/main -- apps/ops-health-reporter/` が
+rc=1 ゼロ件)。pull ref 一致を確認 (local HEAD = origin/project/p-0258 = 7c958b35f =
+session 72 commit、status で ahead/behind 無し)。PR も無し — `git ls-remote 'refs/pull/*/head'`
+全 556 件のうち自ブランチ先頭 (ff08d7cfd / 7c958b35f) との一致数を実測し **0** を確認。
+reporter ブランチは不変 (ec5443b69、ls-remote 実測) のため verify 3 は参考確認のみ —
+`recovery_probe: None` で **red 継続**。top-level keys 実測も session 52〜72 と同一
+(applications/autopilot/dashboard_smoke/download_budget/externalsecrets/generated_at/
+node_metrics/nodes/notes/pod_issues/pod_metrics/pvc_usage/pvcs、recovery_probe 無し)。
+待機中の動きは ops-state beat 204〜208 (b62dafd0e..4d3cff84b) の heartbeat.json/metrics.jsonl
+のみで projects.json への diff は 0 行 (実測)。p-0243 も bfd4d427e..995732e62 まで動いたが
+自己ログ PROGRESS.md +70 行のみで非関連。spec・runner 非接触。
+デッドロック世界に変化なし。最小プロトコルを踏襲:
+
+| # | コマンド | 結果 |
+|---|---------|------|
+| 1 | `kubectl kustomize apps \| grep -q 'name: recovery-canary'` | **green (rc=0)** 71 回目の実測 |
+| 2 | `python3 -m unittest ops.tests.test_recovery_probe_parse` | **green (27 tests OK)** 71 回目の実測 |
+| 3 | `git show origin/ops-health-report:...` | reporter ブランチ不変につき参考確認のみ — recovery_probe: None で red 継続 |
+
+新たな発見は無い。
+
+## 次のセッションへの一言
+
+セッション 13〜73 と同じ最小プロトコル (session 12 記載のもの)。起動したら最初に
+`git branch -r --merged origin/main | grep p-0258` と pull ref 一致を確認し、未 merge かつ
+spec・runner 非接触なら verify 1/2 の再実測と上表の更新だけで短く切り上げること
+(一時ファイルは必ず `mktemp`)。reporter ブランチが動いたら verify 3 も再実測する
+(session 30/41/51/62/72 の前例。食い違いがあれば明示 fetch してから — session 41 の発見参照)。
+reporter ブランチの動きは現状 routine データ beat なので、**diff --stat に ops/health 以外
+(= report.py / rbac.yaml 等のコード) が載った時だけ**中身を見ればよい。
+ops-state beat の `projects.json` に P-0258 への言及があってもそれは毎 beat の全プロジェクト
+状態ダンプなので、**自プロジェクトの status 文字列が変わった時だけ**注意深く見ればよい
+(session 42 で確認済み)。
+curriculum / 人間による spec 修正 (verify 3 の merge 後移管)
+か runner escape hatch が着地した世界でのみ、通常の残作業 (ArgoCD sync 確認 → 手動 Job or
+03:43 JST 待ち → reporter run 待ち → verify 3 green 化) に戻る。
+なお P-0279 が merge されたら `apps/ops-health-reporter/` の conflict 有無を先に確認
+してから verify を回すこと。
