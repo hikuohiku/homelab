@@ -54,6 +54,8 @@ EXPECTED = {
     # 接続拒否と DNS 失敗は同一文言を実測
     "network_refused.txt": {"rc": 1, "expect": "network"},
     "network_dns_failure.txt": {"rc": 1, "expect": "network"},
+    # ストリーム途中の切断。本番の curriculum Job が実際にこれで死んだ (P-0278)
+    "network_provider_stream_error.txt": {"rc": 1, "expect": "network"},
     # モックによる HTTP 429 は UnknownError に潰れる → usage_limit 復元不能
     "usage_limit_429_mocked.txt": {"rc": 1, "expect": "unknown"},
 }
@@ -146,6 +148,18 @@ class TestClassificationFromObservedOutput(unittest.TestCase):
             with self.subTest(name=name):
                 got = classify_session_failure(full_output_blob(load_fixture(name)))
                 self.assertEqual(got, want["expect"])
+
+    def test_provider_stream_error_is_network_not_unknown(self):
+        # 実測原本 ops/projects/logs/P-0227/raw-result-20260823T171940Z.json の
+        # stderr_tail をそのまま分類する。表に無かった間これは unknown に落ち、
+        # 直後の API プローブが返した 401 に死因を乗っ取られて auth と記録され、
+        # 「鍵が悪い」という誤誘導を 5 件生んでいた (P-0278)
+        raw = json.loads(
+            (ROOT / "ops" / "projects" / "logs" / "P-0227"
+             / "raw-result-20260823T171940Z.json").read_text()
+        )
+        self.assertEqual(raw["stderr_tail"], "\nProvider finish_reason: network_error")
+        self.assertEqual(classify_session_failure(raw["stderr_tail"]), "network")
 
     def test_ok_session_yields_no_error_input(self):
         # 成功セッションは分類そのものが走らないが、うっかり result イベントや

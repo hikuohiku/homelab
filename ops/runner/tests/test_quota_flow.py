@@ -168,9 +168,10 @@ class TestInitializerQuota(QuotaFlowTest):
         self.assertEqual(r.tags, ["s0-init"])
 
     def test_other_failures_still_error_and_name_the_kind(self):
-        # incident 通知の本文に出るのは error フィールドだけ。死因を本文に入れる
+        # incident 通知の本文に出るのは error フィールドだけ。死因を本文に入れる。
+        # P-0278 以降、error を書くのは 3 回連続で死んだ後 (下の TestInitializerRetry)
         r = FakeRunner(
-            self.tmp, outcomes=[("error", "auth")], verify_seq=[FAIL]
+            self.tmp, outcomes=[("error", "auth")] * 3, verify_seq=[FAIL]
         )
         rc = r.mode_worker()
         self.assertEqual(rc, 1)
@@ -178,6 +179,105 @@ class TestInitializerQuota(QuotaFlowTest):
         self.assertEqual(doc["state"], "error")
         self.assertIn("failure_kind=auth", doc["error"])
         self.assertEqual(doc["failure_kind"], "auth")
+
+
+class TestInitializerRetry(QuotaFlowTest):
+    """initializer の有界リトライ (P-0278)。
+
+    2026-08-24、runner-p-0278-a1 は s0-init が 1 回 error で死んだだけで
+    プロジェクトを作業 1 行も無いまま stalled にした。同じ鍵・同じモデルの
+    隣接実行 (07:56 の runner-p-0284-a1) は s1/s2 で同じ死因を食らいながら
+    s3 で completed している — 一時的な失敗を 1 回で致命扱いしていた。
+    本ループ (3 回連続 error まで耐える) との非対称を解消する。
+    """
+
+    def test_transient_death_is_retried_not_fatal(self):
+        for kind in ("auth", "network", "unknown"):
+            with self.subTest(kind=kind):
+                r = FakeRunner(
+                    self.tmp,
+                    outcomes=[("error", kind), ("error", kind),
+                              ("completed", None)],
+                    verify_seq=[FAIL, PASS],
+                )
+                rc = r.mode_worker()
+                self.assertEqual(rc, 0)
+                self.assertEqual(r.result_doc()["state"], "ready_for_review")
+                # 3 回とも同じ initializer を出し直している
+                self.assertEqual(r.tags, ["s0-init"] * 3)
+                # リトライは待たない (待つのは上限のときだけ)
+                self.assertEqual(self.slept, [])
+
+    def test_bound_is_three_and_then_error(self):
+        for kind in ("auth", "network", "unknown"):
+            with self.subTest(kind=kind):
+                r = FakeRunner(
+                    self.tmp, outcomes=[("error", kind)] * 3, verify_seq=[FAIL]
+                )
+                rc = r.mode_worker()
+                self.assertEqual(rc, 1)
+                doc = r.result_doc()
+                self.assertEqual(doc["state"], "error")
+                self.assertEqual(doc["failure_kind"], kind)
+                self.assertIn("3 回連続", doc["error"])
+                self.assertEqual(r.tags, ["s0-init"] * 3)
+
+    def test_runner_killed_outcomes_are_also_retried(self):
+        # session_timeout / inactive_killed も有界リトライの対象
+        for outcome in ("session_timeout", "inactive_killed"):
+            with self.subTest(outcome=outcome):
+                r = FakeRunner(
+                    self.tmp,
+                    outcomes=[(outcome, None), ("completed", None)],
+                    verify_seq=[FAIL, PASS],
+                )
+                self.assertEqual(r.mode_worker(), 0)
+                self.assertEqual(r.result_doc()["state"], "ready_for_review")
+                self.assertEqual(r.tags, ["s0-init"] * 2)
+
+    def test_usage_limit_is_not_counted_toward_the_bound(self):
+        # 上限は器の外側の事実。何回来ても error 連続には数えない (回帰防止)
+        r = FakeRunner(
+            self.tmp,
+            outcomes=[("error", "usage_limit")] * 5 + [("completed", None)],
+            verify_seq=[FAIL, PASS],
+        )
+        self.assertEqual(r.mode_worker(), 0)
+        self.assertEqual(r.result_doc()["state"], "ready_for_review")
+        self.assertEqual(self.slept, [R.DEFAULT_QUOTA_WAIT_SECONDS] * 5)
+
+    def test_retries_still_respect_max_sessions(self):
+        # 有界リトライで max_sessions_per_project (別軸の歯止め) を外さない
+        r = FakeRunner(
+            self.tmp, outcomes=[("error", "auth")] * 3, verify_seq=[FAIL]
+        )
+        r.budget = R.Budget(1)
+        rc = r.mode_worker()
+        self.assertEqual(rc, 0)
+        self.assertEqual(r.result_doc()["state"], "session_limit")
+        self.assertEqual(r.tags, ["s0-init"])
+
+
+class TestSessionRetryAction(unittest.TestCase):
+    """共有された純関数の 4 値マッピング (curriculum と initializer の共通部)。"""
+
+    def test_completed_is_done(self):
+        self.assertEqual(R.session_retry_action("completed", None, 0), "done")
+
+    def test_usage_limit_always_waits(self):
+        for n in range(R.SESSION_MAX_CONSECUTIVE_ERRORS + 3):
+            self.assertEqual(
+                R.session_retry_action("error", "usage_limit", n), "quota_wait"
+            )
+
+    def test_transient_kinds_share_one_bound(self):
+        for kind in ("auth", "network", "unknown", None):
+            with self.subTest(kind=kind):
+                seen = [
+                    R.session_retry_action("error", kind, n)
+                    for n in range(R.SESSION_MAX_CONSECUTIVE_ERRORS)
+                ]
+                self.assertEqual(seen, ["retry", "retry", "give_up"])
 
 
 class TestWorkerLoopQuota(QuotaFlowTest):

@@ -7,6 +7,13 @@
 
 root_cause: auth
 
+> **訂正 (2026-08-24, P-0278)**: この `auth` は分類の穴による誤りだった。
+> エンジンの言葉 `Provider finish_reason: network_error` が FAILURE_PATTERNS の
+> network 群に無く unknown へ落ち、直後の死因プローブが返した偶発的な 401 に
+> 死因を乗っ取られていた。鍵は有効だったので、下の「鍵が悪い」方向の記述は
+> 読み替えること。正しい死因は **network** (ストリーム途中の接続断)。
+> 一時的な故障であること、歯止め (有界リトライ) が要ることは変わらない。
+
 ## 断定
 
 **failure_kind = auth** — 推論 API (opencode zen) 側の瞬間的な拒否窓で

@@ -1,0 +1,14 @@
+# P-0278 実測フィクスチャ: プロバイダとの接続がストリーム途中で切れた回
+# observed_at: 2026-08-23T17:19Z / engine: opencode CLI v1.18.21 (--format json)
+# model: opencode-go/ox-alpha-free / cwd: curriculum Job (cur-judge フェーズ)
+# how: 本番の curriculum Job がそのまま死んだ回。原本は
+#      ops/projects/logs/P-0227/raw-transcript-20260823T171755-cur-judge.jsonl
+#      (下の error 行はそこからの逐語コピー) と
+#      ops/projects/logs/P-0227/raw-result-20260823T171940Z.json
+#      (stderr_tail: "\nProvider finish_reason: network_error")。
+#      直前に step_start が 6 回 = opencode 自前の指数退避リトライを使い切っている
+# rc: 1
+# expect_failure_kind: network
+--- stdout ---
+{"type":"error","timestamp":1787505559690,"sessionID":"ses_fd05ef2feffes266FKEFvuttg5","error":{"name":"APIError","data":{"message":"Provider finish_reason: network_error","isRetryable":true,"metadata":{"code":"ProviderResponseStreamError"}}}}
+--- stderr ---
