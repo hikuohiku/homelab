@@ -7361,7 +7361,51 @@
         "adopted": true,
         "proposed_at": "2026-08-24T23:04:24Z"
       },
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-24T23:05:08Z",
+        "verify": [
+          {
+            "cmd": "test -f ops/vaultwarden_restore.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "test -f ops/projects/logs/P-9025/restore-summary.json",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -c \"import json;d=json.load(open('ops/projects/logs/P-9025/restore-summary.json'));assert d['integrity']=='ok' and d['rows']>0 and d['duration_seconds']>0\"",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json;d=json.load(open('ops/projects/logs/P-9025/restore-summary.json'));assert d['integrity']=='ok' and d['rows']>0 and d['duration_seconds']>0\n                            ~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nFileNotFoundError: [Errno 2] No such file or directory: 'ops/projects/logs/P-9025/restore-summary.json'\n"
+          },
+          {
+            "cmd": "grep -q 'scratch' ops/projects/logs/P-9025/restore-summary.json",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "grep: ops/projects/logs/P-9025/restore-summary.json: No such file or directory\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
