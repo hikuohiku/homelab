@@ -16,6 +16,27 @@ metadata:
   name: autopilot-core-config
   namespace: autopilot
 data:
+  # ── permission について（触る前に読むこと）────────────────────────────
+  #
+  # **`ask` を 1 つも書かない。** opencode の permission は「マッチするルールが無いと
+  # 既定が ask」なので、書き漏らした種類のツールは自動的に ask になる。誰も答えられない
+  # 常駐コアが ask を踏むと、そのまま応答待ちで固まる（CHARTER §5.1、run #1 の事故と
+  # 同型）。だから **コアが使いうるツールを全部ここに列挙して allow か deny で埋める**。
+  # 検査は ops/tests/test_core_permissions.py が CI で毎回行う。
+  #
+  # deny にしているものの理由:
+  #   edit       — 設計 D30。コアは git に書かない。実装は heart の担当
+  #   task       — 子エージェントを産ませない。重い調査は Job へ発注する（D2）
+  #   question   — 人間の応答を待つ形の質問。誰も答えられないので ask と同じ穴になる
+  #   lsp        — 言語サーバは常駐コストが大きい。node01 は 4 コアしかない
+  #   skill      — 積んでいない
+  #   doom_loop  — 自走ループ。起こすのは driver の役目
+  #
+  # bash は「main の履歴を読む」ためだけに開けてある。ファイルの中身は read / grep /
+  # glob で読めるので、bash に要るのは git の履歴系だけ。既定を deny にして、
+  # 使う形だけを列挙する（ブランケット allow にはしない）。
+  # 作業コピー /data/repo は opencode コンテナには **read-only で mount** してあるので、
+  # 万一パターンをすり抜けても書き換えはできない（deployment.yaml を参照）。
   opencode.json: |
     {
       "$schema": "https://opencode.ai/config.json",
@@ -35,8 +56,34 @@ data:
       },
       "permission": {
         "edit": "deny",
-        "bash": "deny",
-        "webfetch": "allow"
+        "task": "deny",
+        "question": "deny",
+        "lsp": "deny",
+        "skill": "deny",
+        "doom_loop": "deny",
+        "read": "allow",
+        "list": "allow",
+        "glob": "allow",
+        "grep": "allow",
+        "external_directory": "allow",
+        "todowrite": "allow",
+        "webfetch": "allow",
+        "websearch": "allow",
+        "bash": {
+          "*": "deny",
+          "date": "allow",
+          "date *": "allow",
+          "git -C /data/repo log*": "allow",
+          "git -C /data/repo show*": "allow",
+          "git -C /data/repo diff*": "allow",
+          "git -C /data/repo blame*": "allow",
+          "git -C /data/repo grep*": "allow",
+          "git -C /data/repo ls-files*": "allow",
+          "git -C /data/repo ls-tree*": "allow",
+          "git -C /data/repo shortlog*": "allow",
+          "git -C /data/repo describe*": "allow",
+          "git -C /data/repo rev-parse*": "allow"
+        }
       }
     }
 
@@ -51,15 +98,28 @@ data:
     - `telegram_reply` で所有者へ直接 Telegram DM を送る。これがあなたの声です
     - `homelab_status` で autopilot 自身の状態を見る（走行中のエージェント、
       プロジェクトの状態機械、要対応、最後の心拍、当日の消費）
-    - `homelab_health` で homelab の健全性を見る（ArgoCD Application、Pod、PVC、Node）
+    - `homelab_health` で健全性レポートを見る（30 分ごとに更新される定点観測）
+    - `homelab_applications` / `homelab_pods` / `homelab_events` で **いまこの瞬間の**
+      クラスタを見る（ArgoCD の sync/health、Pod、Warning 系の Event）。
+      レポートとズレていたら、新しいのはこちらです
+    - **`/data/repo` に `main` の作業コピーがあります。** read / grep / glob で
+      そのまま読めます。数分ごとに `main` へ合わせているので、ごく最近の変更は
+      まだ載っていないことがあります
+    - 履歴は bash の git で読めます。**必ず `git -C /data/repo <サブコマンド>` の形**で
+      呼んでください（このディレクトリを指定した形だけが許可されています）。
+      使えるのは `log` / `show` / `diff` / `blame` / `grep` / `ls-files` / `ls-tree` /
+      `shortlog` / `describe` / `rev-parse` と `date` だけです
     - `request_task` で実装・変更の依頼を heart のタスク依頼キューに**起票**する
-    - webfetch で外部の情報を読む
+    - webfetch / websearch で外部の情報を読む
 
     ## いまできないこと（意図的な制限）
 
-    - ファイルの編集・コマンドの実行はできません（設定で拒否されています）
-    - リポジトリへの書き込み、PR の作成、Job の起動はできません。`request_task` は
-      「依頼を出す」だけで、Job の種類もモデルも優先度も選べません
+    - ファイルの編集はできません。`/data/repo` は read-only で mount されており、
+      commit も push もできません（変更は heart が git 経由で行います）
+    - 上に挙げた以外のコマンドは実行できません。試すと拒否されます
+    - リポジトリへの書き込み、PR の作成、Job の起動、クラスタへの書き込みはできません。
+      k8s は読み取り専用の権限しか持っていません（Secret は読めません）
+    - `request_task` は「依頼を出す」だけで、Job の種類もモデルも優先度も選べません
     - それらが必要な作業は **heart** が担当しています。あなたは着手しません
 
     ## 振る舞い
@@ -69,8 +129,10 @@ data:
 
     - 質問・雑談 → その場で答える
     - **homelab の状態を聞かれたら → 必ずツールを呼んでから答える。**
-      `homelab_status` / `homelab_health` を使い、取れた値だけを述べる。
       呼ばずに答えない。取れなければ「取れなかった」と言う
+    - **「なぜそうなっているのか」を聞かれたら → `/data/repo` を読んで答える。**
+      マニフェストの実物とコメント、`git -C /data/repo log` の履歴が一次情報です。
+      記憶や推測で構成を語らない
     - 調べればわかること → 調べて答える
     - 実装や変更の依頼 → `request_task` で起票する。ただし **「やっておきます」と
       言わない**。あなたが実装するのではありません。起票したものは heart のキューに載り、

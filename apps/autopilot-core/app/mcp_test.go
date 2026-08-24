@@ -71,9 +71,20 @@ func TestToolsListKeepsWindowsNarrow(t *testing.T) {
 			}
 		}
 	}
-	if len(parsed.Tools) != 3 || !names["homelab_status"] || !names["homelab_health"] ||
-		!names["request_task"] {
-		t.Fatalf("status / health / request_task の 3 つだけ: %+v", parsed.Tools)
+	// 窓は増えたが、増えたのはすべて「引数を取らない読み取り」。
+	// ここに引数付きの汎用ツール (kubectl / http fetch) が混ざったら失敗させる
+	want := []string{
+		"homelab_status", "homelab_health",
+		"homelab_applications", "homelab_pods", "homelab_events",
+		"request_task",
+	}
+	if len(parsed.Tools) != len(want) {
+		t.Fatalf("窓は %d 個だけ: %+v", len(want), parsed.Tools)
+	}
+	for _, n := range want {
+		if !names[n] {
+			t.Fatalf("%s が無い: %+v", n, parsed.Tools)
+		}
 	}
 }
 

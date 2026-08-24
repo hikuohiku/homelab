@@ -5,6 +5,7 @@ kind: Kustomization
 # namespace は既存の autopilot を使うため namespace.yaml は無い
 resources:
   - serviceaccount.yaml
+  - rbac.yaml
   - pvc.yaml
   - config.yaml
   - external-secret.yaml

@@ -1,15 +1,21 @@
 // MCP stdio サーバ。コアに「homelab を見る目」と「heart に仕事を頼む口」を与える。
 //
-//	homelab_status — autopilot 自身の状態 (走行中エージェント / プロジェクト / 要対応 / 心拍 / 当日消費)
-//	homelab_health — ArgoCD Application / Pod / PVC / Node の健全性
-//	request_task   — 実装依頼を heart のパイプラインに載せる (bus へ publish)
+//	homelab_status       — autopilot 自身の状態 (走行中エージェント / プロジェクト / 要対応 / 心拍 / 当日消費)
+//	homelab_health       — ArgoCD Application / Pod / PVC / Node の健全性 (30 分ごとのレポート)
+//	homelab_applications — ArgoCD Application の sync/health を live で (k8s API 直読み)
+//	homelab_pods         — 全 namespace の Pod を live で
+//	homelab_events       — 直近の Warning 系 Event を live で
+//	request_task         — 実装依頼を heart のパイプラインに載せる (bus へ publish)
 //
-// 読み取りの 2 つは引数を取らない。汎用の HTTP fetch や kubectl を与えるのではなく
+// 読み取りはすべて引数を取らない。汎用の HTTP fetch や kubectl を与えるのではなく
 // 用途を固定した窓を開けるだけにしてあるのは、コアが到達できる先を設定ではなく
 // コードで縛るため。新しい credential も RBAC も要らない:
 //
 //   - status はクラスタ内の ops-dashboard (認証不要・read-only の API)
 //   - health は driver が既に持つ GitHub トークンで ops-health-report ブランチを読む
+//   - live の 3 つは k8s API を read-only の ClusterRole (autopilot-reader) で直読みする。
+//     トークンは projected volume で**このサイドカーにだけ** mount してあり、
+//     opencode コンテナからは見えない (k8s.go の冒頭を参照)
 //
 // request_task も同じ思想で、**依頼を出す以上のことはできない**。Job の種類も
 // モデルも優先度も引数に無く、採否・実行・納品の判断はすべて heart の領分のまま
@@ -102,6 +108,25 @@ func toolDefs() []toolDef {
 			InputSchema: noArgsSchema(),
 		},
 		{
+			Name: "homelab_applications",
+			Description: "ArgoCD Application の sync/health を **いまこの瞬間** の値で返す。引数は取らない。" +
+				"homelab_health は 30 分ごとのレポートなので、ズレを疑うときや直後の変化を見たいときはこちらを使う。",
+			InputSchema: noArgsSchema(),
+		},
+		{
+			Name: "homelab_pods",
+			Description: "全 namespace の Pod を live で返す (phase / ready / 再起動回数 / ノード / 理由)。" +
+				"引数は取らない。CrashLoopBackOff や Pending の実物を見るときに使う。",
+			InputSchema: noArgsSchema(),
+		},
+		{
+			Name: "homelab_events",
+			Description: "Normal でない k8s Event を新しい順で返す。引数は取らない。" +
+				"OOMKilled・スケジュール失敗・probe 失敗の「起きた瞬間」がここに出る。" +
+				"Event は 1 時間程度で消えるので、空でも「異常が無かった」ではない。",
+			InputSchema: noArgsSchema(),
+		},
+		{
 			Name: "request_task",
 			Description: "実装・変更の依頼を heart のタスク依頼キューに載せる。" +
 				"あなたはこれで起票できるが、実装するのは heart 配下の runner であり、" +
@@ -186,6 +211,23 @@ type mcpServer struct {
 	dispatch func(commandEvent) error
 	pub      *busPublisher
 	now      func() time.Time
+	// kube は k8s API への read 専用の口。最初に使うときだけ作る
+	// (トークンが無い構成でも他のツールは動くようにするため)。
+	kube    *kubeClient
+	kubeErr error
+	kubeMu  sync.Mutex
+}
+
+// kubeAPI は k8s クライアントを遅延で用意する。作れなかった理由は覚えておいて
+// 毎回同じことを返す (取れないことを isError で伝えるのはツール側の仕事)。
+func (s *mcpServer) kubeAPI() (*kubeClient, error) {
+	s.kubeMu.Lock()
+	defer s.kubeMu.Unlock()
+	if s.kube != nil || s.kubeErr != nil {
+		return s.kube, s.kubeErr
+	}
+	s.kube, s.kubeErr = newKubeClient()
+	return s.kube, s.kubeErr
 }
 
 // publishCommand は command を 1 件流す。接続は最初の依頼まで張らない。
@@ -244,6 +286,22 @@ func (s *mcpServer) respondError(id json.RawMessage, code int, message string) {
 	_ = s.out.Encode(rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: message}})
 }
 
+// callKube は live の k8s 読み取り 3 種を捌く。
+func (s *mcpServer) callKube(ctx context.Context, name string) (string, error) {
+	k, err := s.kubeAPI()
+	if err != nil {
+		return "", err
+	}
+	switch name {
+	case "homelab_applications":
+		return k.applications(ctx)
+	case "homelab_pods":
+		return k.pods(ctx)
+	default:
+		return k.events(ctx)
+	}
+}
+
 func (s *mcpServer) callTool(ctx context.Context, name string, args json.RawMessage) toolResult {
 	var (
 		body string
@@ -254,6 +312,8 @@ func (s *mcpServer) callTool(ctx context.Context, name string, args json.RawMess
 		body, err = s.client.fetchStatus(ctx)
 	case "homelab_health":
 		body, err = s.client.fetchHealth(ctx)
+	case "homelab_applications", "homelab_pods", "homelab_events":
+		body, err = s.callKube(ctx, name)
 	case "request_task":
 		body, err = s.requestTask(args)
 		if err != nil {
