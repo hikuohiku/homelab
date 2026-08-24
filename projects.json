@@ -6095,7 +6095,73 @@
         "used_tokens": 0
       },
       "created": "2026-08-24",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-24T08:29:11Z",
+        "verify": [
+          {
+            "cmd": "kubectl -n immich get deploy,sts -o jsonpath='{range .items[*]}{.spec.template.spec.containers[0].image}{\"\\n\"}{end}' | grep -q 'vectorchord.*16\\.14-1\\.1\\.1'",
+            "ok": true,
+            "rc": 0,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "kubectl -n immich get pods -o json | python3 -c 'import json,sys; ps=json.load(sys.stdin)[\"items\"]; pg=[p for p in ps if \"postgres\" in p[\"metadata\"][\"name\"]]; assert pg, \"pg pod missing\"; cs=pg[0][\"status\"].get(\"containerStatuses\",[]); assert cs and all(c[\"ready\"] for c in cs)'",
+            "ok": true,
+            "rc": 0,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "PG=$(kubectl -n immich get pods -o name | grep -i postgres | head -1) && kubectl -n immich \"$PG\" -- psql -U immich -tAc \"select extversion from pg_extension where extname='vchord'\" | grep -qE '^1\\.'",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Error: flags cannot be placed before plugin name: -n\n"
+          },
+          {
+            "cmd": "PG=$(kubectl -n immich get pods -o name | grep -i postgres | head -1) && kubectl -n immich \"$PG\" -- psql -U immich -tAc \"show vchordrq.probes\" | grep -q 1",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Error: flags cannot be placed before plugin name: -n\n"
+          },
+          {
+            "cmd": "PG=$(kubectl -n immich get pods -o name | grep -i postgres | head -1) && ! kubectl -n immich logs \"$PG\" --since=30m 2>&1 | grep -qi 'FATAL'",
+            "ok": true,
+            "rc": 0,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "git show origin/ops-health-report:ops/health/latest.json | python3 -c 'import json,sys; d=json.load(sys.stdin); a=[x for x in d[\"applications\"] if x[\"name\"]==\"immich\"]; assert a and a[0][\"health\"]==\"Healthy\", a'",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\n    import json,sys; d=json.load(sys.stdin); a=[x for x in d[\"applications\"] if x[\"name\"]==\"immich\"]; assert a and a[0][\"health\"]==\"Healthy\", a\n                                                                                                             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\nAssertionError: [{'name': 'immich', 'namespace': 'argocd', 'sync': 'OutOfSync', 'health': 'Degraded'}]\n"
+          }
+        ],
+        "verdict": "some_pass",
+        "passed": [
+          "kubectl -n immich get deploy,sts -o jsonpath='{range .items[*]}{.spec.template.spec.containers[0].image}{\"\\n\"}{end}' | grep -q 'vectorchord.*16\\.14-1\\.1\\.1'",
+          "kubectl -n immich get pods -o json | python3 -c 'import json,sys; ps=json.load(sys.stdin)[\"items\"]; pg=[p for p in ps if \"postgres\" in p[\"metadata\"][\"name\"]]; assert pg, \"pg pod missing\"; cs=pg[0][\"status\"].get(\"containerStatuses\",[]); assert cs and all(c[\"ready\"] for c in cs)'",
+          "PG=$(kubectl -n immich get pods -o name | grep -i postgres | head -1) && ! kubectl -n immich logs \"$PG\" --since=30m 2>&1 | grep -qi 'FATAL'"
+        ],
+        "broken": []
+      }
     },
     {
       "id": "P-0297",
@@ -6115,7 +6181,42 @@
         "used_tokens": 0
       },
       "created": "2026-08-24",
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-24T08:29:11Z",
+        "verify": [
+          {
+            "cmd": "python3 ops/tools/permission_audit.py --run --selfcheck",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-enamxus7/repo/ops/tools/permission_audit.py': [Errno 2] No such file or directory\n"
+          },
+          {
+            "cmd": "test -f docs/BLAST-RADIUS.md && grep -q 'verified_at' docs/BLAST-RADIUS.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "grep -q 'BLAST-RADIUS\\|permission_audit' ops/memory/substrate.md",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
