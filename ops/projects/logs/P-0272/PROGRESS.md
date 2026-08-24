@@ -87,3 +87,33 @@ parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に�
 autopilot から書ける状態になっていれば verify 1 をそのまま実行して green を貼るだけでよい。
 まだ root 所有なら上記の wrapper への依頼が未処理ということ (コード側にやることは無い)。
 parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
+
+### 2026-08-24 セッション 3 — 環境は依然未修正。全 verify を再実測して記録更新 (コード変更ゼロ)
+
+**状況**: レビュー指摘なし、failing は verify 1 のみ。セッション 2 の方針どおり
+`ls -ld /tmp/opencode` から確認したところ **まだ `root:root drwxr-xr-x` のまま**
+(mtime も 08-22 07:41 から不変) → wrapper への依頼は未処理。
+
+**本セッションの実測 (証跡)**:
+
+- worker 引き続き `uid=10001(autopilot)`、sudo 無し。`/tmp/opencode` は root 所有で
+  **ディレクトリ内は空** (失敗によりファイルが一度も作られていない)。
+  → chown されさえすれば掃除不要で verify 1 は即通る (セッション 2 が懸念した「残骸ファイル」は存在しない)
+- verify 1 再実行 → 同一トレースの PermissionError、rc=1。OS 的に不可能なのは前セッション断定済みで、
+  コード側に打てる手は存在しない (verify の `python3 -c` がそのパスから直接読むため、
+  書き先を変える抜け道も無い)
+- verify 2: rc=0 green / verify 3: unittest 10 tests OK / TS ミラーテスト (`npm test`): 10 pass 0 fail。
+  実装一式は本日時点で再現性あり (node_modules は残っていたので npm ci 不要だった)
+
+**やったこと**: 上記の再実測とこの記録のみ。コード・spec・帳簿への変更はゼロ
+(PROGRESS への追記以外)。これ以上 worker 側でできることはない。
+
+**分かったこと / 罠**: 新規なし。強いて言えば「node_modules がコンテナ再起動を跨いで
+残っている場合がある」ので、TS テスト前に existence check すると無駄な npm ci を避けられる。
+
+**発見 (spec 外)**: 新規なし (固定パス問題の継続観測のみ)。
+
+**次のセッションへ一言**: まず `ls -ld /tmp/opencode`。書けるようになっていれば verify 1 をそのまま実行し
+green と出力 JSON を貼るだけ (掃除は不要、中身は空)。まだ root 所有なら依頼がまだ届いていないので、
+この PROGRESS のセッション 2 「wrapper への依頼」節をそのまま参照させること。
+コードに触れる必要は依然ゼロ。parse 挙動を変えるときは py/ts/fixture の 3 点セットを同時に。
