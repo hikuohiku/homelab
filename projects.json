@@ -7459,7 +7459,42 @@
         "adopted": true,
         "proposed_at": "2026-08-24T23:22:06Z"
       },
-      "adopt_gate_attempts": 1
+      "adopt_gate_attempts": 1,
+      "adopt_gate": {
+        "at": "2026-08-24T23:23:00Z",
+        "verify": [
+          {
+            "cmd": "test -f ops/tools/reachability_probe.py",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": ""
+          },
+          {
+            "cmd": "python3 -m pytest ops/tests/test_reachability_probe.py -q",
+            "ok": false,
+            "rc": 1,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "/usr/bin/python3: No module named pytest\n"
+          },
+          {
+            "cmd": "python3 ops/tools/reachability_probe.py --selftest",
+            "ok": false,
+            "rc": 2,
+            "timeout": false,
+            "syntax_error": false,
+            "not_found": false,
+            "output": "python3: can't open file '/tmp/adoptgate-s2iiuk99/repo/ops/tools/reachability_probe.py': [Errno 2] No such file or directory\n"
+          }
+        ],
+        "verdict": "all_fail",
+        "passed": [],
+        "broken": []
+      }
     }
   ],
   "chores": [],
