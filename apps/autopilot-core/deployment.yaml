@@ -32,7 +32,7 @@ spec:
         app: autopilot-core
       annotations:
         # pod の強制再作成用 (heart と同型。K8s write 権限なしで再起動したいとき)
-        homelab.hikuohiku.dev/restart-stamp: "2026-08-23T10:40Z"
+        homelab.hikuohiku.dev/restart-stamp: "2026-08-24T17:12Z"
     spec:
       terminationGracePeriodSeconds: 30
       # 専用 SA。read 専用の ClusterRole `autopilot-reader` に bind してある
