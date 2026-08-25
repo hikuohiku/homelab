@@ -22,22 +22,31 @@
     (append-only 鍵) を参照する** (apps/immich/restic-external-secret.yaml)。restore は
     読み取り (readFiles) で完結し、削除権限つき鍵 `immich-restic-credentials` は持ち出さない
     (P-0341 の結論。P-9025/P-0047 で実証済み)。
-  - **実行の形**: immich namespace の使い捨て Job。1 Pod に initContainer 2 本
-    (restic バイナリの空き emptyDir へのコピー / postgres の initdb+ext ブートストラップ) と
-    コンテナ 4 個 (driver / postgres / valkey / immich-server) を同居させる。
-    driver は vectorchord イメージ (python3 + psql + pg_isready を持つ) を root で動かし、
-    restic restore の CHOWN/FOWNER/DAC_OVERRIDE 3 capability を付ける
-    (docs/backup.md の T-0071 の教訓)。再実行時は scratch を先に掃除する。
-  - **順序の保証**: immich-server は起動コマンドをラップし、driver が dump を psql で
-    流し終えてから (/work/load-done マーカー) 起動する。空 DB に対して immich-server 自身の
-    migration が走ってから dump を流す順序の衝突を避ける。
+  - **実行の形 (実測で確定した分割構成。docs/backup.md の手順 1-5 と一致)**:
+    immich namespace の使い捨てリソースを `kubectl apply` で投入し、終わったら削除する。
+    ① scratch postgres + valkey は **Deployment + Service** (initContainer で initdb →
+    vchord bootstrap。本番 apps/immich/postgres.yaml の init-bootstrap と同型)。
+    ② driver は 1 回で終わる **Job** — restic バイナリを initContainer から /tools へ
+    コピー、main は vectorchord イメージ (python3 + psql + pg_isready を持つ) を root で
+    動かし、restic restore の CHOWN/FOWNER/DAC_OVERRIDE 3 capability を付ける
+    (docs/backup.md の T-0071 の教訓)。このスクリプトは復元・DB 検証までを行い、API probe は
+    しない (report の api_status は null のまま)。再実行時は scratch を先に掃除する。
+    ③ immich-server は後段の **別 Job/Deployment** で立て、`--probe` モードか curl で
+    `/api/server/ping` の 200 を実測する。
+    **単一 Job に postgres/valkey/immich-server を同居させる構成は放棄した** —
+    k3s 1.34 ではサーバ系が常駐し、`restartPolicy: Always` の sidecar は Job 完了時に
+    自動終了されず Job が完了しない (実測)。サーバ系は Deployment、driver は 1 回で終わる
+    Job に分ける。
+  - **順序の保証**: 空 DB に対して immich-server 自身の migration が先に走ってから dump を
+    流す衝突は、driver が psql 投入 → 検証を終えた後に server を立てる順序で避ける。
   - **dump のバージョン整合**: 内蔵ダンプのファイル名 `immich-db-backup-{ts}-v{server}-pg{pg}`
     の `pg` 部分と scratch postgres の `SHOW server_version` を突き合わせ、不一致なら
     fail-closed (docs/backup.md の注意)。
   - **記録**: 成功/失敗に関わらず report JSON を WORK_DIR/report.json と stdout に出す
-    (stdout の最終行は `REPORT: {json}`)。ConfigMap `immich-restore-drill-report`
-    (autopilot ns) への書き込みは `--publish` モードが行う (Job の SA には autopilot ns への
-    書き込み権限が無いため、wrapper/人間が kubectl を持つ場所から publish する)。
+    (stdout の最終行は `REPORT: {json}`)。driver の report は api_status が null のままなので、
+    server の probe 結果 (api_status=200) を wrapper/人間がマージし、ConfigMap
+    `immich-restore-drill-report` (autopilot ns) への書き込みは `--publish` モードが行う
+    (api_status=200 かつ photo_count_matches=true を要求する。失敗記録が混ざらない)。
   - 標準ライブラリのみ。gzip (dump 展開) と urllib (API probe) で完結する。
 
 終了コード:
@@ -80,8 +89,8 @@ DEFAULT_MAX_SNAPSHOT_AGE_HOURS = 24.0
 CONFIGMAP_NAME = "immich-restore-drill-report"
 CONFIGMAP_NS = "autopilot"
 
-# 復元先 postgres (scratch) と API probe。単一 Pod 同居時は localhost、別 Deployment 構成では
-# env DRILL_DB_HOST で Service 名を渡す (--skip-probe 構成)。
+# 復元先 postgres (scratch)。driver からは別 Deployment 構成の Service 名を env DRILL_DB_HOST
+# で渡す。API probe は --probe モードが --api-url で実測する。
 DB_HOST = os.environ.get("DRILL_DB_HOST", "127.0.0.1")
 DB_PORT = int(os.environ.get("DRILL_DB_PORT", "5432"))
 DB_USER = os.environ.get("DRILL_DB_USER", "immich")
@@ -403,7 +412,7 @@ def run_drill(args, now) -> int:
         dump_path = find_latest_dump(scratch)
         report["dump_file"] = os.path.basename(dump_path)
 
-        # scratch postgres (単一 Pod 同居なら localhost、別 Deployment なら DRILL_DB_HOST) を待ち、
+        # scratch postgres (別 Deployment 構成の DRILL_DB_HOST Service 名) を待ち、
         # バージョン突き合わせ → 投入 → 検証
         wait_for_postgres()
         postgres_version = psql_query("SHOW server_version;")
@@ -435,15 +444,9 @@ def run_drill(args, now) -> int:
             )
         report["photo_count_matches"] = photo_count == expected_photo_count
 
-        # immich-server は単一 Pod 同居時は load-done を待って起動し、--skip-probe でない
-        # ときだけ API が 200 を返すまで待つ。別 Deployment 構成 (--skip-probe) では
-        # サーバは後段の Job/Deployment が立て、probe は --probe モードか wrapper が行う。
-        if not args.skip_probe:
-            os.makedirs(work_dir, exist_ok=True)
-            open(os.path.join(work_dir, "load-done"), "w").close()
-            api_status = probe_api()
-            report["api_status"] = api_status
-
+        # API probe は行わない (report の api_status は null のまま)。immich-server は後段の
+        # Job/Deployment で立て、--probe モードか curl で 200 を実測し、wrapper/人間が report に
+        # マージしてから --publish する。
         report["duration_seconds"] = int(time.monotonic() - start)
         write_report(report, work_dir)
         return 0
@@ -471,7 +474,7 @@ def parse_max_age(text):
 def cmd_probe(args) -> int:
     """--api-url (既定 DRILL_API_URL か 127.0.0.1:2283) が 200 を返すか実測し、JSON を stdout に出す。
 
-    別 Deployment 構成 (--skip-probe で driver を回した後) の API 確認に使う。
+    driver Job で復元した後、後段に立てた immich-server の API 確認に使う。
     kubectl もクラスタ内ネットワークも、スクリプト自身が持つ必要はない。
     """
     url = args.api_url or API_URL
@@ -622,7 +625,7 @@ def main(argv=None) -> int:
     mode.add_argument("--publish", action="store_true",
                       help="report JSON (--report か stdin) を ConfigMap に書き込む (upsert)")
     mode.add_argument("--probe", action="store_true",
-                      help="--api-url が 200 を返すか実測し JSON を stdout に出す (別 Deployment 構成の API 確認用)")
+                      help="--api-url が 200 を返すか実測し JSON を stdout に出す (後段に立てた immich-server の API 確認用)")
 
     ap.add_argument("--scratch-dir", default=os.environ.get("SCRATCH_DIR", "/scratch"),
                     help="復元先の scratch ディレクトリ (既定 $SCRATCH_DIR か /scratch)")
@@ -639,8 +642,6 @@ def main(argv=None) -> int:
     ap.add_argument("--expected-server-version",
                     default=os.environ.get("EXPECTED_SERVER_VERSION", DEFAULT_EXPECTED_SERVER_VERSION),
                     help=f"復元する immich server バージョン (dump の -v{{server}} と突き合わせ)。既定 {DEFAULT_EXPECTED_SERVER_VERSION}")
-    ap.add_argument("--skip-probe", action="store_true",
-                    help="immich-server の起動待ち/probe をスキップする (別 Deployment 構成。probe は --probe で行う)")
     ap.add_argument("--api-url", default=None,
                     help="--probe が実測する URL (既定 $DRILL_API_URL か http://127.0.0.1:2283/api/server/ping)")
     ap.add_argument("--probe-timeout", type=int, default=240,

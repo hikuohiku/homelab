@@ -502,7 +502,8 @@ commit せず `kubectl apply` で投入し、終わったら削除）。drill �
 1. **scratch postgres + valkey**（Deployment + Service。initContainer で initdb → vchord を
    bootstrap。本番 `apps/immich/postgres.yaml` の init-bootstrap と同じ形）を立てる
 2. **driver Job**（restic バイナリを initContainer から /tools へコピー、main は
-   vectorchord イメージ = python3 + psql を持つ、`--skip-probe` で immich-server 起動待ちを省く）。
+   vectorchord イメージ = python3 + psql を持つ。API probe はこの Job では行わない —
+   driver の report は `api_status` が null のまま）。
    credential は `immich-restic-backup-credentials`（append-only 鍵）、`DRILL_DB_HOST` に
    scratch postgres の Service 名、`EXPECTED_PHOTO_COUNT` に本番 `asset` 行数を渡す。
    securityContext は `CHOWN`/`FOWNER`/`DAC_OVERRIDE` + drop ALL（restore の 3 capability）。
@@ -510,14 +511,16 @@ commit せず `kubectl apply` で投入し、終わったら削除）。drill �
 3. **server Job**（immich-server v3.1.0。`UPLOAD_LOCATION` は scratch PVC の
    `mnt/immich-library` を `subPath` でマウント — **PVC ルート直マウントだとストレージ検査
    （`upload/.immich` 等のマーカー）に失敗する**）。node をバックグラウンド起動し
-   `/api/server/ping` が 200 を返すまで curl で待ってから kill して exit 0
+   `/api/server/ping` が 200 を返すまで curl で待つ（`--probe` モード
+   `python3 /scripts/immich_restore_drill.py --probe` で同じことを実測してもよい）→
+   kill して exit 0
 4. driver の report に api_status=200 をマージし、`--publish` で ConfigMap
    `autopilot/immich-restore-drill-report` に記録（復元日時・snapshot id・写真数・所要時間）
 5. 検証リソースはすべて削除（本番は不触）
 
 ```yaml
 # driver Job: initContainer で restic バイナリを emptyDir へコピー (restic/restic:0.19.1 → /tools/restic)
-# main container: vectorchord 16.14-1.1.1, command: python3 /scripts/immich_restore_drill.py --skip-probe
+# main container: vectorchord 16.14-1.1.1, command: python3 /scripts/immich_restore_drill.py
 # env: immich-restic-backup-credentials の secretKeyRef (RESTIC_B2_BUCKET / RESTIC_PASSWORD /
 #      B2_ACCOUNT_ID / B2_ACCOUNT_KEY) + RESTIC_REPOSITORY="b2:$(RESTIC_B2_BUCKET):immich"
 #      + SCRATCH_DIR=/scratch + RESTIC_BINARY=/tools/restic + DRILL_DB_HOST=<scratch pg Service>

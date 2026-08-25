@@ -138,3 +138,64 @@
   auto-sync 復元（`apps` Application に `automated: {prune: true, selfHeal: true}`
   を付け直す）が必要。この PROGRESS を読む側が実行すること。
 - 残タスクは無い想定。wrapper が PR を出す。
+
+## 2026-08-25（レビュー差し戻し対応 #2: docstring を実測構成に書き直し / preview reset を機械化）
+
+### やったこと
+
+- **レビュー指摘 1（docstring が放棄した単一 Pod 同居構成を『設計』と記述）の解消**:
+  - `ops/tools/immich_restore_drill.py` の docstring「実行の形」「順序の保証」を、実測で
+    成功した分割構成に書き直した。① scratch postgres + valkey は Deployment + Service
+    （initContainer で initdb → vchord bootstrap）② driver は 1 回で終わる Job
+    （restic を initContainer から /tools へコピー、main は vectorchord イメージ）③
+    immich-server は後段の別 Job/Deployment で立て `--probe` モードか curl で
+    `/api/server/ping` の 200 を実測。**単一 Pod 同居構成は k3s 1.34 で Job が完了しない
+    ため放棄した**、と明記。
+  - **既定プローブ経路と load-done 機構を削除し、実行経路を 1 つに絞った**。`--skip-probe`
+    フラグを削除。driver は API probe を一切しない（report の `api_status` は null のまま）。
+    API 確認は `--probe` モードに一本化（docs/backup.md の手順 3 も `--probe` を代替案として
+    追記）。
+  - テスト更新: driver の report が `api_status=null` のまま完走することを固定し、`--probe`
+    モードの 200 成功 / 失敗の 2 ケースを追加（ops/tests/test_immich_restore_drill.py、17 tests）。
+    全 **603 tests OK**（前回 601 から +2）。verify 3 項目も wrapper 実測で green。
+- **レビュー指摘 2（ArgoCD preview 放置）は merge 前の reset を意図的に行わなかった**。
+  理由は「分かったこと」参照。代わりに後片付けを機械化した:
+  - `ops/tools/argocd_preview_reset.sh` を追加。① autopilot Application の
+    targetRevision → HEAD ② apps（root）Application の `syncPolicy.automated
+    {prune:true, selfHeal:true}` 復元 ③ Synced になるまで待つ、を冪等に実行。
+    `--check` で preview 残留の検出（preview 中なら rc=1）、`--yes` で非対話。
+    P-0028 が PROGRESS に書いた手順をコマンド化したもの。
+  - 現状を実測: autopilot=`project/p-9047` 追跡中、apps(root) は automated 無しで
+    OutOfSync。`--check` が正しく「preview 有効」を報告（rc=1）し、確認プロンプトの
+    中止経路（'n'）が動くことを確認した。
+
+### 分かったこと
+
+- **ArgoCD preview は P-9047 では merge 前に戻せない**（実行してはいけない）:
+  - 差し戻し #1 で追加した RBAC（Role + RoleBinding `immich-restore-drill-report-reader`）は
+    このブランチにしか無く、preview（autopilot app → `project/p-9047`）経由でクラスタに
+    適用されている。
+  - reviewer の verify は SA `autopilot-runner` で走るため、この RBAC が無いと
+    `kubectl get configmap` が Forbidden で落ちる（= #1 で直した元の状態に戻る）。
+  - autopilot Application は `prune:true` なので targetRevision を HEAD に戻して sync すると
+    RBAC が消える。root apps の auto-sync を復元しても selfHeal が autopilot を HEAD に
+    戻すため同じ結果になる。
+  - このセッションの SA（autopilot-writer）は autopilot ns の Role/RoleBinding を作成する
+    権限が無い（`auth can-i` で実測）。一度消したら復元できない。
+  - したがって reset は **merge 後**（main に RBAC が入った後）にのみ安全。
+- **wrapper 自身の verify は preview に依存しない**: wrapper（runner Job）は SA
+  autopilot-writer で走り、autopilot ns の ConfigMap を読める（実測）。preview が要るのは
+  reviewer（autopilot-runner）の verify だけ。だから「wrapper 実測は green なのに reviewer
+  実測は Forbidden」が起きる（#1 の回帰テストで固定済み）。
+- `--probe` モードと `curl` は等価（どちらも `GET /api/server/ping` の 200 を見る）。
+
+### 次のセッションへ
+
+- 3 つの verify は wrapper 実測で green:
+  1. `--check` rc=0 / 2. `photo_count` が数字 / 3. `--verify-freshness --max-age 3d` rc=0。
+- **merge 後、必ず `ops/tools/argocd_preview_reset.sh --yes` を実行する**
+  （autopilot → HEAD、apps root の auto-sync 復元、Synced 確認まで 1 コマンド）。
+  実行できない環境では `--check` で残留を検出し、手で patch する（スクリプト内にコマンドあり）。
+- ArgoCD 現状は **merge まで意図的に放置**: autopilot=`project/p-9047`、apps(root)=OutOfSync。
+  これが無いと reviewer の verify が Forbidden で落ちる。
+- 残タスクは無い想定。wrapper が PR を出す。

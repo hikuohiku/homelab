@@ -213,6 +213,7 @@ class ApiProbe:
 
     def __exit__(self, *exc):
         self._server.shutdown()
+        self._server.server_close()
         self._thread.join()
 
 
@@ -227,7 +228,7 @@ def make_dump_gz():
 
 class TestDrillEndToEnd(unittest.TestCase):
     def run_drill(self, asset_count, expected, now="2026-08-25T00:00:00Z", extra=None):
-        with tempfile.TemporaryDirectory() as d, ApiProbe():
+        with tempfile.TemporaryDirectory() as d:
             root = Path(d)
             fake_restic = FakeRestic(root, make_dump_gz())
             fake_pg = FakePostgresTools(root, asset_count)
@@ -272,7 +273,10 @@ class TestDrillEndToEnd(unittest.TestCase):
         self.assertTrue(report["postgres_ok"])
         self.assertEqual(report["vchord_version"], "1.1.1")
         self.assertTrue(report["vchord_ok"])
-        self.assertEqual(report["api_status"], 200)
+        # driver は API probe をしない (後段の server Job + --probe モードの仕事)。
+        # マージして --publish するのは wrapper/人間の役割なので、driver の report は
+        # api_status が null のまま完走できることだけをここでは固定する。
+        self.assertIsNone(report["api_status"])
         self.assertGreater(report["duration_seconds"], 0)
         self.assertEqual(report["snapshot_id"], "61c022b6")
         self.assertIn("scratch", report["target"])
@@ -289,6 +293,25 @@ class TestDrillEndToEnd(unittest.TestCase):
         rc, report, out = self.run_drill(19, 19, now="2026-09-01T00:00:00Z")
         self.assertEqual(rc, 1)
         self.assertIn("24h", report["error"])
+
+
+class TestProbeMode(unittest.TestCase):
+    """--probe モード: 後段に立てた immich-server の API が 200 を返すかの実測。"""
+
+    def test_probe_returns_200(self):
+        buf = io.StringIO()
+        with ApiProbe(), redirect_stdout(buf):
+            rc = imd.main(["--probe"])
+        self.assertEqual(rc, 0)
+        self.assertIn('"api_status": 200', buf.getvalue())
+
+    def test_probe_reports_failure(self):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = imd.main(["--probe", "--api-url", "http://127.0.0.1:1/api/server/ping",
+                           "--probe-timeout", "1"])
+        self.assertEqual(rc, 1)
+        self.assertIn('"api_status": null', buf.getvalue())
 
 
 if __name__ == "__main__":
