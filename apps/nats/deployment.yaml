@@ -24,7 +24,7 @@ spec:
         # nats.conf は ConfigMap の mount で、書き換えても server は読み直さない。
         # ACL を変えたらこの値も更新して Pod を作り直す (kustomize の名前ハッシュを
         # 使っていないので、これが唯一の反映手段)
-        homelab.hikuohiku.dev/config-stamp: "2026-08-23-core-dispatch"
+        homelab.hikuohiku.dev/config-stamp: "2026-08-25-dashboard-nkey"
     spec:
       securityContext:
         runAsNonRoot: true
