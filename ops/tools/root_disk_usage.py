@@ -72,12 +72,19 @@ BREAKDOWN_UNMEASURABLE = frozenset(("k3s_bytes", "containerd_bytes", "logs_bytes
 
 
 def _num(v):
-    """int へ変換。bool / None / 壊れた値は None (1 項目の壊れで計測全体を止めない)。"""
+    """int へ変換。bool / None / 壊れた値は None (1 項目の壊れで計測全体を止めない)。
+
+    OverflowError も掴む — JSON は `1e999` や `Infinity` を float('inf') として
+    パースする (2026-08-25 実測) ため、ConfigMap 履歴に手動編集等で入った巨大な値は
+    `int(inf)` で OverflowError を漏らし、_usable_samples → forecast → build_report を
+    突き抜けて root_disk 節全体を {"error": ...} にし fill_days キーの契約 (受入検証)
+    を壊す。壊れた値は None (計測全体を止めない) に倒す。
+    """
     if isinstance(v, bool) or v is None:
         return None
     try:
         return int(v)
-    except (TypeError, ValueError):
+    except (TypeError, ValueError, OverflowError):
         return None
 
 
@@ -464,6 +471,21 @@ def _selfcheck():
     expect(sample_from_summary({}) is None, "空 dict は None")
     expect(sample_from_summary({"node": {}}) is None, "node に fs が無いと None")
     expect(sample_from_summary({"node": {"fs": {}}}) is None, "fs が空だと None")
+
+    # used_bytes が inf (JSON の 1e999/Infinity のパース結果) → None (int(inf) の
+    # OverflowError を漏らさない — 取りこぼすと build_report がクラッシュし
+    # root_disk 節が {"error": ...} になって fill_days キーの契約が壊れる)
+    expect(_num(float("inf")) is None, "inf は None")
+    expect(_num(float("-inf")) is None, "-inf は None")
+    expect(_num(float("nan")) is None, "nan は None")
+    inf_hist = [
+        {"ts": "2026-08-23T00:00:00Z", "used_bytes": 100},
+        {"ts": "2026-08-24T00:00:00Z", "used_bytes": float("inf")},
+        {"ts": "2026-08-25T00:00:00Z", "used_bytes": 300},
+    ]
+    expect(daily_increase_bytes(inf_hist) == 100.0, "inf エントリは捨てて予報する")
+    inf_fc = forecast(inf_hist, 100000)
+    expect("fill_days" in inf_fc, "inf 混じり履歴でも forecast は fill_days キーを返す")
 
     # availableBytes が無いとき capacity - used で補完
     s2 = sample_from_summary({"node": {"fs": {"usedBytes": 100, "capacityBytes": 200}}})

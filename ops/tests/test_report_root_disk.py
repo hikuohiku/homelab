@@ -449,6 +449,12 @@ class ReportRootDiskContractTest(unittest.TestCase):
                     None,  # 非 dict
                 ]
             }),
+            json.dumps({  # (e) used_bytes が inf (JSON の 1e999/Infinity のパース結果)
+                "samples": [
+                    {"ts": "2026-08-23T00:00:00Z", "used_bytes": 100},
+                    {"ts": "2026-08-24T00:00:00Z", "used_bytes": float("inf")},
+                ]
+            }),
         )
         for bad in corrupt_keys:
             self.k8s = FakeK8s(

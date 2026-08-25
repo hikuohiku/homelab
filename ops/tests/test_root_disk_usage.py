@@ -181,6 +181,20 @@ class ForecastTest(unittest.TestCase):
         ]
         self.assertEqual(ru.daily_increase_bytes(hist), 100.0)
 
+    def test_infinite_used_bytes_sample_is_dropped(self):
+        # JSON は `1e999` / `Infinity` を float('inf') としてパースするため、
+        # ConfigMap 履歴に手動編集等で入った巨大な値は int(inf) で OverflowError を
+        # 漏らす (TypeError/ValueError とは違う例外族)。_num が None に倒し、
+        # 予報がクラッシュしない (fill_days キーの契約 — P-9062)
+        self.assertIsNone(ru._num(float("inf")))
+        self.assertIsNone(ru._num(float("nan")))
+        hist = [
+            {"ts": "2026-08-23T00:00:00Z", "used_bytes": 100},
+            {"ts": "2026-08-24T00:00:00Z", "used_bytes": float("inf")},
+            {"ts": "2026-08-25T00:00:00Z", "used_bytes": 300},
+        ]
+        self.assertEqual(ru.daily_increase_bytes(hist), 100.0)
+
     def test_forecast_note_reports_dropped_corrupt_samples(self):
         # 履歴はあるが使えるサンプルが 2 点未満のとき、note は「若い」ではなく
         # 「破損で捨てた件数」を正直に載せる (計測不能をデータとして出す — P-9062)。
@@ -275,6 +289,24 @@ class BuildReportTest(unittest.TestCase):
                 return {"error": "{}: {}".format(type(e).__name__, e)}
         wrapped = collect(lambda: ru.build_report([], "2026-08-25T12:00:00Z"))[0]
         self.assertIn("fill_days", wrapped)
+
+    def test_infinite_used_bytes_history_keeps_fill_days_contract(self):
+        # 実測経路の結合: 履歴の used_bytes に inf (JSON の `1e999`/`Infinity` の
+        # パース結果) が混じっても build_report は例外を漏らさず root_disk 節を
+        # 必ず作り fill_days キーを持つ。_num の OverflowError 取りこぼしは
+        # _usable_samples → forecast → build_report を突き抜けて collect() が
+        # root_disk 節を {"error": ...} にし受入検証の契約を壊す (P-9062)
+        hist = [
+            {"ts": "2026-08-23T00:00:00Z", "used_bytes": 100},
+            {"ts": "2026-08-24T00:00:00Z", "used_bytes": float("inf")},
+        ]
+        section, samples = ru.build_report(
+            hist, "2026-08-25T12:00:00Z", node_name="node01", summary_doc=None
+        )
+        self.assertIn("fill_days", section)
+        self.assertEqual(section["source"], "statvfs")
+        # inf エントリは捨てられ、健全な古い 1 点 + 今回の 1 点が残る
+        self.assertEqual(len(samples), 3)
 
 
 class FetchKubeletSummaryTest(unittest.TestCase):
