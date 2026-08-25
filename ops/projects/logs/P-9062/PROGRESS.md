@@ -1,5 +1,89 @@
 # P-9062 — 進捗記録
 
+## 2026-08-25（最終状態の全量再検証セッション。コード変更なし — 実装は完成済み）
+
+### やったこと
+
+- 前セッション (5a9f070e) までの実装を**改めて全量再検証**した。ローカルで回せる
+  CI 相当ゲートは全て green を実測し、**sandbox で追加実装できることは何も残って
+  いない**ことを再確認した (4 セッション連続で同じ結論。今セッションはコード
+  変更なしで、その事実を自分の実測で裏取りした)。
+- 受入検証 2 項目の現在地を自分の手で再測定した:
+  - `python3 ops/tools/root_disk_usage.py --check` → rc=0 (**green**)。
+  - `kubectl get cm ... | python3 -c 'assert root_disk + fill_days'` → rc=1
+    (JSONDecodeError: 空入力)。原因は wrapper の実測どおり**クラスタ到達不能** —
+    この sandbox は node01 上の pod だが SA token がマウントされていない
+    (`/var/run/secrets/kubernetes.io/serviceaccount` が存在しない、実測)。kubectl
+    自体は v1.35.0 が存在するが認証情報が無く、これ以上ローカルで詰められない。
+
+### verify 実測 (全てこのセッションで実行)
+
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0 (**受入検証の 1 項目 green**)
+- `python3 -m unittest ops.tests.test_report_root_disk -v` → **5 tests OK**
+  (受入検証コマンド全体を kubectl 偽物でリテラル実行する test_acceptance_kubectl_
+  command_verbatim 含む)
+- `python3 -m unittest discover -s ops/tests -t .` → **608 OK**
+- `python3 -m unittest discover -s ops/heart/tests -t .` → 448 OK、
+  `python3 -m unittest discover -s ops/runner/tests -t .` → 53 OK
+- consistency checks 10 本 (check_version_sync / check_pvc_usage_script_sync /
+  check_download_ledger_script_sync / check_dashboard_smoke_script_sync /
+  check_node_saturation_script_sync / **check_root_disk_usage_script_sync** /
+  check_health_reporter_target / check_doc_commands / check_feedback /
+  check_credential_map) → 全 OK
+- `python3 ops/validate.py` → 0 error (warning 11 は全て既存・対象外)
+- `diff ops/tools/root_disk_usage.py apps/ops-health-reporter/root_disk_usage.py` →
+  一致 (canonical / コピーの drift なし)
+- `kubectl kustomize apps/ops-health-reporter` → build OK。**ClusterRole の
+  nodes/proxy / nodes/stats が両方 resourceNames ["node01"]** (nodes/proxy の
+  resourceNames は node 名と照合される罠の修正後)、ConfigMap に root_disk_usage.py
+  と ROOT_DISK_HISTORY_KEY が載ることを実測。
+
+### 分かったこと (実測・調査)
+
+- **受入検証の kubectl 項目の失敗は「root_disk が無い」実装起因ではなくクラスタ
+  到達不能だけ**。report.py 側の契約 (root_disk 節 + fill_days キー) は
+  test_report_root_disk.py が「受入検証コマンド全体を kubectl 偽物でリテラル実行」
+  する形で CI 固定済み (main() 本体を実行するため配線の変化を検出できる)。merge 後
+  wrapper 環境で reporter (SA token マウント済み) が 1 回走れば green になる想定。
+- DoD の残要素は全て埋まっていることを再確認: 内訳 (images/PVC は summary 経由、
+  k3s/containerd/ログ は None=計測不能を正直に) / fill_days 予報 (履歴が 1 日分
+  溜まるまで None + note) / 取得源 (statvfs は実環境で実測済みの検証済み経路、
+  kubelet summary は RBAC nodes/proxy+stats 追加済み)。
+- 履歴の壊れ耐性も実装で担保済み: `_read_root_disk_history` は例外を握って空履歴に
+  巻き戻す (report 全体が落ちない)、summary の JSON パース失敗は statvfs へ倒れる
+  (root_disk 節が必ず正規の section + fill_days キーを持つ)。
+
+### 発見（スコープ外、curriculum へ）
+
+- なし (dashboard_smoke の no-lie-coexistence 論点は据え置き)。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **ローカルでやることは残っていない (4 回目の確認)。** 受入検証の残り 1 項目
+  (kubectl) は wrapper 環境で reporter が 1 回走った後、認証付きの文脈で green に
+  なる。この sandbox では SA token が無く実行不能。
+- 差し戻されたら以下を疑う (優先順):
+  1. `nodes/proxy` / `nodes/stats` の resourceNames が node01 のままか (回帰テスト
+     TestRbac.test_kubelet_summary_proxy_resource_names_match_node が縛っている)
+  2. ArgoCD が configMapGenerator を sync するまで reporter が旧 ConfigMap で走る
+     自愈待ち (P-9037 と同じ。数回で治る)
+  3. 受入検証コマンドの形 (jsonpath・namespace/name・パイプ) が spec からずれて
+     いないか (test_acceptance_kubectl_command_verbatim が縛っている)
+  4. summary 経路の例外が fallback をすり抜けていないか
+     (FetchKubeletSummaryTest が縛っている)
+- **merge 後 (wrapper 環境) に確認すること**:
+  1. reporter が 1 回走る → `kubectl get cm -n autopilot ops-health-report -o
+     jsonpath='{.data.latest.json}'` に `root_disk.source` と `fill_days` キー
+     (初回 None) が載る → 受入検証 green
+  2. `root_disk.source` が `kubelet_summary` になるか (RBAC nodes/proxy+stats の
+     通し)。取れていれば breakdown の images/PVC が載り、取れなくても statvfs
+     総量 + None で正常動作 (実測済みの fallback)。実測したら substrate.md を
+     更新する。
+  3. 1 日分の履歴が溜まったら fill_days が数値になる (観測窓 MIN_WINDOW_DAYS=1.0)。
+     「予報が出ていない」と指摘されたら「1 日分の履歴が必要」を説明する。
+
+---
+
 ## 2026-08-25（追加セッション: summary 経路の JSON パース失敗も statvfs fallback に含めた）
 
 ### やったこと
