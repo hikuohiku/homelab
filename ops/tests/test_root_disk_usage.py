@@ -250,6 +250,32 @@ class BuildReportTest(unittest.TestCase):
         self.assertEqual(section["source"], "statvfs")
         self.assertIsNone(section["breakdown"]["images_bytes"])
 
+    def test_total_measurement_failure_keeps_fill_days_contract(self):
+        # 計測が完全に失敗 (summary が None で statvfs も例外) でも build_report は
+        # 例外を漏らさず正規の section (source=error) + fill_days キーを返す。
+        # 例外を漏らすと report.py の collect() が root_disk 節を {"error": ...}
+        # にして fill_days キーの契約 (受入検証) が壊れる — summary パース失敗・
+        # 履歴の壊れと同じ論理で塞ぐ (P-9062)
+        real_disk_usage = ru.shutil.disk_usage
+        self.addCleanup(setattr, ru.shutil, "disk_usage", real_disk_usage)
+        ru.shutil.disk_usage = lambda p: (_ for _ in ()).throw(OSError("device busy"))
+        hist = [{"ts": "2026-08-23T00:00:00Z", "used_bytes": 100}]
+        section, samples = ru.build_report(hist, "2026-08-25T12:00:00Z")
+        self.assertEqual(section["source"], "error")
+        self.assertIn("fill_days", section)
+        self.assertIsNone(section["fill_days"])
+        self.assertIsNotNone(section["fill_days_note"])
+        # 履歴は汚さない (計測不能のエントリを混ぜない)
+        self.assertEqual(samples, hist)
+        # collect() の wrap でも root_disk 節を {"error": ...} にしない
+        def collect(fn):
+            try:
+                return fn()
+            except Exception as e:
+                return {"error": "{}: {}".format(type(e).__name__, e)}
+        wrapped = collect(lambda: ru.build_report([], "2026-08-25T12:00:00Z"))[0]
+        self.assertIn("fill_days", wrapped)
+
 
 class FetchKubeletSummaryTest(unittest.TestCase):
     def setUp(self):

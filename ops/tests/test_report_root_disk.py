@@ -385,6 +385,41 @@ class ReportRootDiskContractTest(unittest.TestCase):
         self.assertIsNone(rd["fill_days"])
         self.assertIsNotNone(rd["fill_days_note"])
 
+    def test_total_measurement_failure_keeps_fill_days_contract(self):
+        # 計測が完全に失敗 (kubelet summary も statvfs も取れない) でも root_disk 節は
+        # 必ず正規の section (source=error) + fill_days キーを持つ。build_report が
+        # 例外を漏らすと collect() が {"error": ...} にして受入検証の assert
+        # ("fill_days" in root_disk) が落ちる — 前セッションまでの summary パース失敗 /
+        # 履歴の壊れと同じ論理で塞ぐ (P-9062)
+        real_ru_k8s_get = root_disk_usage.k8s_get
+        real_disk_usage = root_disk_usage.shutil.disk_usage
+
+        def boom(path):
+            raise OSError("offline: no cluster")
+
+        root_disk_usage.k8s_get = boom
+        root_disk_usage.shutil.disk_usage = lambda p: (_ for _ in ()).throw(
+            OSError("device busy")
+        )
+        try:
+            latest = self._run_main()
+        finally:
+            root_disk_usage.k8s_get = real_ru_k8s_get
+            root_disk_usage.shutil.disk_usage = real_disk_usage
+        rd = latest["root_disk"]
+        self.assertEqual(rd["source"], "error")
+        self.assertIn("fill_days", rd)
+        self.assertIsNone(rd["fill_days"])
+        self.assertIsNotNone(rd["fill_days_note"])
+        # 受入検証そのもの (kubectl 以外の部分) も main() の出力で通る
+        proc = subprocess.run(
+            ["python3", "-c", SPEC_VERIFY_SNIPPET],
+            input=json.dumps(latest),
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
     def _run_verify_command(self, jsonpath_flag):
         """kubectl 偽物を PATH に差し込み、受入検証の形 (namespace/name・-o jsonpath・
         2>/dev/null・パイプ・python 断片) でコマンドを実行して返す。

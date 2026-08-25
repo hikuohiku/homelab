@@ -372,10 +372,39 @@ def build_report(previous_samples, now_iso, node_name="node01", statvfs_path="/"
 
     戻り値は (section, 更新後のサンプル列)。呼び出し側 (report.py) は新しい
     サンプル列を ConfigMap の root_disk_history.json キーへ永続化する。
+
+    計測が完全に失敗した場合 (kubelet summary が None で statvfs も例外を漏らす)
+    も**例外にせず**正規の section (source="error"、値は全て None、fill_days=None +
+    fill_days_note に理由) と**変更しない**履歴を返す。例外を漏らすと report.py の
+    collect() が root_disk 節を {"error": ...} にして fill_days キーの契約 (受入検証)
+    を壊す — summary のパース失敗・履歴の壊れと同じ論理で塞ぐ (P-9062)。
     """
-    sample = measure(
-        node_name=node_name, statvfs_path=statvfs_path, summary_doc=summary_doc
-    )
+    try:
+        sample = measure(
+            node_name=node_name, statvfs_path=statvfs_path, summary_doc=summary_doc
+        )
+    except Exception as e:  # noqa: BLE001 — 計測不能もデータとして正直に載せる
+        section = {
+            "node": node_name,
+            "source": "error",
+            "capacity_bytes": None,
+            "used_bytes": None,
+            "free_bytes": None,
+            "used_ratio": None,
+            "breakdown": {
+                "images_bytes": None,
+                "local_path_pvc_bytes": None,
+                "k3s_bytes": None,
+                "containerd_bytes": None,
+                "logs_bytes": None,
+            },
+            "daily_increase_bytes": None,
+            "fill_days": None,
+            "fill_days_note": "計測不能: {}: {}".format(type(e).__name__, e),
+            "samples": len(previous_samples or []),
+            "checked_at": now_iso,
+        }
+        return section, previous_samples
     samples = append_sample(previous_samples, sample["used_bytes"], now_iso)
     fc = forecast(samples, sample["free_bytes"])
     return build_section(sample, fc, node_name, now_iso), samples
@@ -530,6 +559,25 @@ def _selfcheck():
     expect("fill_days" in section, "section に fill_days キーが要る")
     expect(len(new_samples) == 1 and new_samples[0]["used_bytes"] == 74000000000,
            "build_report が履歴を返す")
+
+    # --- build_report: 計測が完全に失敗 (statvfs も例外) でも正規の section を返す ---
+    real_disk_usage = shutil.disk_usage
+    try:
+        shutil.disk_usage = lambda p: (_ for _ in ()).throw(
+            OSError("statvfs も失敗")
+        )
+        err_section, err_samples = build_report(
+            [{"ts": "2026-08-23T00:00:00Z", "used_bytes": 100}],
+            "2026-08-25T00:00:00Z",
+        )
+    finally:
+        shutil.disk_usage = real_disk_usage
+    expect(err_section["source"] == "error", "計測失敗は source=error")
+    expect("fill_days" in err_section and err_section["fill_days"] is None,
+           "計測失敗でも fill_days キー契約を守る")
+    expect(err_section["fill_days_note"] is not None, "計測失敗の note が要る")
+    expect(err_samples == [{"ts": "2026-08-23T00:00:00Z", "used_bytes": 100}],
+           "計測失敗では履歴を汚さない")
 
 
 def main(argv=None):
