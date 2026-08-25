@@ -28,6 +28,9 @@ import download_budget
 # configMapGenerator がこのディレクトリに置いた同一内容のコピーを import する
 # (drift は ops/check_node_saturation_script_sync.py が CI で検出)
 import node_saturation
+# ルートディスクの内訳実測と満杯予報 (P-9062)。canonical は
+# ops/tools/root_disk_usage.py (drift は ops/check_root_disk_usage_script_sync.py が検出)
+import root_disk_usage
 
 SA_DIR = "/var/run/secrets/kubernetes.io/serviceaccount"
 K8S_HOST = os.environ.get("KUBERNETES_SERVICE_HOST", "kubernetes.default.svc")
@@ -247,6 +250,33 @@ def collect_node_saturation():
         datetime.timezone.utc
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
     return report
+
+
+def collect_root_disk(previous_samples, now):
+    """node01 ルートディスクの内訳実測と満杯予報 (P-9062)。
+
+    CPU 飽和 (P-9037) と違いディスク満杯は「静かに進行する」。ルートディスク全体が
+    何に食われ、いつ満杯になるかを測る装置が無かったため (pvc-usage-reporter は
+    PVC ごとしか見ない。T-0079: ephemeral-storage は実ルートディスクと別物)、
+    内訳の実測と fill_days (残り日数) 予報を latest.json の root_disk 節に載せる。
+
+    総使用量は kubelet stats/summary の node.fs (nodes/proxy+stats RBAC) →
+    pod 内 statvfs 実測の順に試す (判定は root_disk_usage.measure の純関数)。
+    内訳のうち イメージ (imageFs) と local-path PVC (pod volume 合計) は summary が
+    取れたときだけ載り、k3s/containerd/ログ は非特権 pod からは読めないため
+    None (計測不能) で正直に載せる。fill_days は履歴 (ConfigMap の
+    root_disk_history.json キー) に最小二乗で日次増加量を当てて算出し、履歴が
+    1 日分溜まるまでは None (fill_days_note に理由) — 予報不能もデータとして出す。
+
+    戻り値は (section, 更新後の履歴サンプル列)。呼び出し側 (main) が新しい履歴を
+    同一 ConfigMap の root_disk_history.json キーへ永続化する。
+    """
+    section, new_samples = root_disk_usage.build_report(
+        previous_samples=previous_samples,
+        now_iso=now,
+        node_name="node01",
+    )
+    return section, new_samples
 
 
 PVC_USAGE_NAMESPACES = ["immich", "vaultwarden", "coder"]
@@ -715,6 +745,33 @@ def collect_autopilot_health():
 HEALTH_NAMESPACE = "autopilot"
 HEALTH_CONFIGMAP = "ops-health-report"
 HEALTH_KEY = "latest.json"
+# root_disk (P-9062) の満杯予報に要る履歴の置き場所。latest.json は最新 1 点のみで
+# 上書きされるため、日次増加量の算出元は同一 ConfigMap の別キーに最小限の形で持つ
+# (PROJECT.md「履歴は root_disk の増加量計算に必要な最小限に閉じる」)
+ROOT_DISK_HISTORY_KEY = "root_disk_history.json"
+
+
+def _read_root_disk_history(namespace, name):
+    """ConfigMap の root_disk_history.json キーから履歴サンプル列を読む (P-9062)。
+
+    まだ無い (最初の run)・壊れている場合も例外にせず空履歴を返す — 他の収集を
+    止めない (collect_pvc_usage と同じ思想)。壊れた履歴は空に巻き戻るだけで、
+    監視用メトリクスの再蓄積に過ぎない。
+    """
+    try:
+        data = k8s_get(
+            "/api/v1/namespaces/{}/configmaps/{}".format(namespace, name)
+        )
+        raw = data.get("data", {}).get(ROOT_DISK_HISTORY_KEY)
+        if not raw:
+            return []
+        parsed = json.loads(raw)
+        samples = parsed.get("samples") if isinstance(parsed, dict) else None
+        if not isinstance(samples, list):
+            raise ValueError("root_disk_history.json の samples がリストでない")
+        return samples
+    except Exception:  # noqa: BLE001 — 未作成・破損で他の収集を止めない
+        return []
 
 
 def k8s_request(method, path, body=None):
@@ -768,6 +825,17 @@ def main():
     name = os.environ.get("HEALTH_CONFIGMAP", HEALTH_CONFIGMAP)
 
     generated_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    # P-9062: 満杯予報の履歴。collect_root_disk が更新した新しい履歴を、同一 ConfigMap の
+    # root_disk_history.json キーへ latest.json と一緒に 1 回の PUT で書き戻す
+    # (別 PUT に分けると resourceVersion 競合の 409 になりうる)
+    root_disk_ctx = {"history": _read_root_disk_history(namespace, name)}
+
+    def _collect_root_disk():
+        section, root_disk_ctx["history"] = collect_root_disk(
+            root_disk_ctx["history"], generated_at
+        )
+        return section
+
     report = {
         "generated_at": generated_at,
         "applications": collect(collect_applications),
@@ -777,6 +845,7 @@ def main():
         "pod_metrics": collect(collect_pod_metrics),
         "node_metrics": collect(collect_node_metrics),
         "node_saturation": collect(collect_node_saturation),
+        "root_disk": collect(_collect_root_disk),
         "pvc_usage": collect(collect_pvc_usage),
         "download_budget": collect(collect_download_budget),
         "externalsecrets": collect(collect_externalsecrets),
@@ -830,13 +899,30 @@ def main():
              "briefing / incident へ流す）。loadavg は PID namespace で仮想化されないため node01 上の "
              "pod から host 全体の load が読める（2026-08-24 実測）。kubelet stats/summary には host "
              "load が無い（P-9029 審査指摘）ため取得源は /proc に倒している。"
+             " root_disk キーは node01 ルートディスクの内訳実測と満杯予報（P-9062）。"
+             " 総使用量は kubelet stats/summary の node.fs（nodes/proxy + nodes/stats の "
+             "RBAC を summary に限定して追加）か、pod 内の statvfs 実測（overlay の "
+             "statfs がホストルートディスクの値を透過する）のうち取れた方。内訳のうち "
+             " イメージ（imageFs.usedBytes）と local-path PVC（node.pods[].volume の "
+             "fs.usedBytes 合計。kubelet summary は SC を返さないため近似）は summary が "
+             "取れたときだけ載り、k3s/containerd/ログ は非特権 pod から hostPath 無しでは "
+             "読めないため None（計測不能）で正直に載せる。fill_days は履歴（同一 ConfigMap "
+             "の root_disk_history.json キー）に最小二乗で日次増加量を当て、free / 増加量で "
+             "算出。履歴が 1 日分溜まるまでは None（fill_days_note に理由を載せる）。"
         ),
     }
 
+    data = {HEALTH_KEY: json.dumps(report, ensure_ascii=False, indent=2)}
+    # P-9062: 満杯予報の履歴 (root_disk 節が書き出せたときだけ更新する)。
+    # 履歴が空 (1 点も無い) のうちはキー自体を書かない
+    if root_disk_ctx["history"]:
+        data[ROOT_DISK_HISTORY_KEY] = json.dumps(
+            {"samples": root_disk_ctx["history"]}, ensure_ascii=False
+        )
     put_configmap(
         namespace,
         name,
-        {HEALTH_KEY: json.dumps(report, ensure_ascii=False, indent=2)},
+        data,
     )
     print(
         "{}/{} の {} を更新しました ({})".format(namespace, name, HEALTH_KEY, generated_at)

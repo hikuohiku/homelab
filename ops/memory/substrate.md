@@ -178,3 +178,25 @@ autopilot namespace の Pod (heart / runner / reviewer / …) が動く環境の
   reporter (ops-health-reporter) には nodes/proxy を付けていない — summary に load が無いため
   /proc/loadavg で足りる。標準ツール (ops/tools/node_saturation.py) は summary → /proc の
   順に試す実装で、summary が load を持つようになったら優先される — 設計 (2026-08-24, P-9037)
+
+## ルートディスクの計測経路 (P-9062)
+
+> この節は P-9062 の worker が追記した (spec の dod が「取得源は実測できた方」を名指しで
+> 要求する例外。実測原本は本節の記録と ops/tools/root_disk_usage.py)。
+
+- **pod 内の `df /` / `shutil.disk_usage("/")` は node01 のホストルートディスク全体を返す。**
+  overlay の statfs は下層 (ホスト root ディスク) の値を透過する。この runner pod から実測:
+  overlay 251.65 GiB / used 74.07 GiB / free 167.28 GiB (2026-08-25 00:48 JST 前後)。node01
+  の root disk は 256GiB (2026-08-04 拡張) に整合 — T-0079 の「ephemeral-storage は実容量と
+  別物」の代替計測として使える — verified_at: 2026-08-25, P-9062
+- **非特権 pod から `/var/lib/rancher` は見えない (hostPath 無し)。** k3s / containerd /
+  ログの per-directory 内訳は pod 内からは実測不能。この runner pod で
+  `ls /var/lib/rancher` が No such file → 内訳は None (計測不能) を正直に載せる —
+  verified_at: 2026-08-25, P-9062
+- **kubelet stats/summary の node.fs / imageFs / pod volume (P-9062 の summary 経路) は
+  本 worker セッションでは実測できていない。** reporter に nodes/proxy (resourceNames
+  stats/summary) + nodes/stats (get、kubelet の Webhook 認可は resourceName に node 名を
+  入れるため resourceNames 不可) の read-only RBAC を追加したが、
+  この runner pod には SA token が無く確認できなかった。merge 後に reporter run を確認し、
+  取れていれば breakdown の images/PVC が載る。取れなくても statvfs の総量 + 内訳 None に
+  倒れる (root_disk_usage.measure の fallback) — 未実測 (2026-08-25, P-9062)

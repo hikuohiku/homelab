@@ -18,6 +18,9 @@ configMapGenerator:
       # report.py から `import node_saturation` される (P-9037)。canonical は
       # ops/tools/node_saturation.py (drift は ops/check_node_saturation_script_sync.py)
       - node_saturation.py
+      # report.py から `import root_disk_usage` される (P-9062)。canonical は
+      # ops/tools/root_disk_usage.py (drift は ops/check_root_disk_usage_script_sync.py)
+      - root_disk_usage.py
 
 generatorOptions:
   disableNameSuffixHash: true

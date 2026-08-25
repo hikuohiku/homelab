@@ -21,6 +21,20 @@ rules:
     resources: ["pods", "nodes"]
     verbs: ["get", "list"]
   - apiGroups: [""]
+    resources: ["nodes/proxy"]
+    # P-9062。kubelet stats/summary の `node.fs`（ルートディスク総量・imageFs・
+    # pod volume 使用量）を読むための get のみ。resourceNames で summary エンド
+    # ポイントに限定する（他の proxy 経路＝pods 一覧・metrics・log は開けない）
+    resourceNames: ["stats/summary"]
+    verbs: ["get"]
+  - apiGroups: [""]
+    resources: ["nodes/stats"]
+    # kubelet 側の Webhook 認可（apiserver 経由の proxy リクエストは kubelet が
+    # nodes/stats サブリソースとして検査する）に応じる read-only の get。kubelet は
+    # resourceName に node 名を入れて検査するため resourceNames では絞れない
+    # （stats サブリソース自体が read-only なので get のみで足りる）
+    verbs: ["get"]
+  - apiGroups: [""]
     resources: ["configmaps"]
     # download-budget (P-0128) は各 namespace の download-ledger CronJob が書く
     # B2 download cap の帳簿。pvc-usage-report への追加キーではなく専用名にした
