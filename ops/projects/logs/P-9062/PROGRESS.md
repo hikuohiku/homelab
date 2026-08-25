@@ -1,5 +1,45 @@
 # P-9062 — 進捗記録
 
+## 2026-08-25（追加セッション: 受入検証の残り 1 項目の契約を CI で固定した）
+
+### やったこと
+
+- **`ops/tests/test_report_root_disk.py`** を新設 (4 テスト)。受入検証の残り 1 項目
+  (`kubectl get cm ... ops-health-report ... root_disk + fill_days`) はクラスタ到達が
+  要り sandbox では実行できないため、**report.py の main() を AST 抽出し k8s 層を偽物に
+  差し替えて 1 周実行**し、書けた ConfigMap の `data[latest.json]` に受入検証の python 断片
+  (kubectl 以外の部分) を**そのまま流して rc=0** を CI で固定した。「たぶん通る」を
+  実測に変えたのが目的で、main() 本体を実行するので配線 (root_disk キー / fill_days /
+  履歴書き戻し) の変化を検出できる。
+- 追加で固定した契約: root_disk.source が kubelet_summary (RBAC 追加した nodes/proxy
+  経路を root_disk_usage.k8s_get の差し替えでオフライン実行。内訳 images/PVC まで載る)、
+  履歴は latest.json と**同じ 1 回の PUT** で root_disk_history.json に書かれる、初回 run
+  は fill_days=None + fill_days_note あり (受入検証はキー存在のみなので green になる)。
+
+### verify 実測
+
+- `python3 -m unittest ops.tests.test_report_root_disk -v` → 4 tests OK
+- `python3 -m unittest discover -s ops/tests -t .` → 603 OK (前回 599 + 新規 4)、
+  ops/heart/tests 448 OK、ops/runner/tests 53 OK
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0
+- consistency checks (root_disk_usage / node_saturation sync、health_reporter_target) OK
+- ruff は sandbox に無いため未実行 (CI で F821 のみ。新ファイルは未定義名なしを手検証)
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **受入検証の残り 1 項目はやはりクラスタ到達が必要。** 実装・契約は CI テストで固定した。
+  wrapper 環境で reporter が 1 回走れば green になる想定 (CronJob は 30 分毎)。
+  merge 後の最初の reporter run で `root_disk: {"error": ...}` でも ArgoCD の
+  configMapGenerator sync まで数回で自愈する (P-9037 と同じ)。
+- **未実測の罠は据え置き**: in-cluster で `root_disk.source` が本当に kubelet_summary
+  になるか (RBAC nodes/proxy + nodes/stats) は merge 後に reporter の実測で確認し、
+  substrate.md を更新する。テストは offline で summary 経路を固定したが、実 RBAC の
+  通しは未検証。
+- fill_days は履歴が 1 日分溜まるまで None (fill_days_note に理由)。「予報が出てない」と
+  指摘されたら「1 日分の履歴が必要」を説明する。
+
+---
+
 ## 2026-08-25（実装完了。verify 2 項目のうちローカル実行可能な方 (--check) は green）
 
 ### やったこと
