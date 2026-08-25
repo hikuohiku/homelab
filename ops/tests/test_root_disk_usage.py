@@ -161,6 +161,20 @@ class ForecastTest(unittest.TestCase):
         ]
         self.assertEqual(ru.daily_increase_bytes(hist), 100.0)
 
+    def test_forecast_note_reports_dropped_corrupt_samples(self):
+        # 履歴はあるが使えるサンプルが 2 点未満のとき、note は「若い」ではなく
+        # 「破損で捨てた件数」を正直に載せる (計測不能をデータとして出す — P-9062)。
+        # used_bytes 欠落 1 件 + 非数値 1 件を捨て、残りが 1 点しか無い場合
+        hist = [
+            {"ts": "2026-08-23T00:00:00Z", "used_bytes": 100},
+            {"ts": "2026-08-24T00:00:00Z"},  # used_bytes 欠落
+            {"ts": "2026-08-25T00:00:00Z", "used_bytes": "abc"},  # 非数値
+        ]
+        fc = ru.forecast(hist, 100000)
+        self.assertIsNone(fc["fill_days"])
+        self.assertIn("2 件が壊れている", fc["note"])
+        self.assertIn("3", fc["note"])  # 生の履歴件数
+
     def test_forecast_with_corrupt_history_keeps_fill_days_contract(self):
         # 実測経路の結合: 壊れた履歴を与えても build_report は root_disk 節を
         # 必ず作り、fill_days キーを持つ (受入検証の契約。summary パース失敗の

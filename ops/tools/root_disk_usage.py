@@ -301,8 +301,19 @@ def forecast(samples, free_bytes):
     fill_days = None
     if rate is None:
         valid = _usable_samples(samples)
+        raw_count = len(samples or [])
         if len(valid) < 2:
-            note = "履歴が 2 点に満たない (次の report 以降の蓄積が要る)"
+            dropped = raw_count - len(valid)
+            if dropped > 0:
+                # 履歴はあるが壊れたエントリ (ts/used_bytes 欠落・非数値) を捨てた結果
+                # 予報不能。「履歴が 2 点に満たない」とだけ言うのは誤解を招く
+                # (履歴が若いのではなく破損で失われている) ため、正直に件数を載せる
+                note = (
+                    "履歴 {} 件中 {} 件が壊れている (ts/used_bytes 欠落・非数値) "
+                    "ため予報不能 — 健全なサンプルの蓄積が要る"
+                ).format(raw_count, dropped)
+            else:
+                note = "履歴が 2 点に満たない (次の report 以降の蓄積が要る)"
         else:
             span_days = (_epoch(valid[-1]) - _epoch(valid[0])) / 86400.0
             if span_days < MIN_WINDOW_DAYS:
@@ -474,6 +485,16 @@ def _selfcheck():
     fc_short = forecast(short, 100000)
     expect(fc_short["fill_days"] is None, "観測窓 30 分は予報不能")
     expect("観測窓" in fc_short["note"], "観測窓不足の note が要る")
+
+    # 履歴はあるが壊れたエントリを捨てて 2 点未満 → note は破損件数を正直に載せる
+    corrupt_hist = [
+        {"ts": "2026-08-23T00:00:00Z", "used_bytes": 100},
+        {"ts": "2026-08-24T00:00:00Z"},  # used_bytes 欠落
+        {"ts": "2026-08-25T00:00:00Z", "used_bytes": "abc"},  # 非数値
+    ]
+    fc_corrupt = forecast(corrupt_hist, 100000)
+    expect(fc_corrupt["fill_days"] is None, "破損で 2 点未満は予報不能")
+    expect("2 件が壊れている" in fc_corrupt["note"], "破損件数の note が要る")
 
     shrinking = [
         {"ts": "2026-08-23T00:00:00Z", "used_bytes": 200},

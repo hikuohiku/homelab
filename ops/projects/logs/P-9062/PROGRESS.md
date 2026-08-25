@@ -1,5 +1,86 @@
 # P-9062 — 進捗記録
 
+## 2026-08-25（壊れた履歴を捨てたときの note が「履歴が若い」と誤解させる罠を直した。破損件数を正直に載せる。実装・予報ロジックは従来どおり完、verify[1] green / verify[0] は構造的不可能のまま）
+
+### やったこと
+
+- 前セッション (ed22bfba) の `_usable_samples` 硬化を信用せず、**再び全量を自分の手で
+  再検証**した。全 CI 相当ゲートは green を実測 (verify[1] green、614 OK)。その上で
+  新たに**実リスクを 1 つ**見つけて塞いだ:
+- **`forecast` の note が「履歴が若い」のか「破損で失われた」のかを区別していなかった**。
+  履歴はあるが使えるサンプルが 2 点未満のとき、従来の note は常に「履歴が 2 点に満たない
+  (次の report 以降の蓄積が要る)」と出る。しかし壊れたエントリ (ts/used_bytes 欠落・
+  非数値) を `_usable_samples` が捨てた結果 2 点未満になった場合、この note は
+  **「履歴が単に若い」と誤解させ、実際には監視履歴が破損で失われている**ことに気づかせない。
+  P-9062 の設計思想 (「計測不能をデータとして正直に載せる」) に反する — 人間の運用者が
+  fill_days が出ない理由を誤診する。実測で再現: 3 件の履歴 (うち 2 件破損) → 旧 note は
+  「履歴が 2 点に満たない」。
+- **修正**: `forecast` の 2 点未満分岐で、生の履歴件数 (`raw_count`) と捨てた件数
+  (`dropped`) を数え、`dropped > 0` なら「履歴 N 件中 M 件が壊れている (ts/used_bytes
+  欠落・非数値) ため予報不能 — 健全なサンプルの蓄積が要る」と**破損件数を明示**する。
+  破損が無ければ従来どおり「履歴が 2 点に満たない」。canonical と apps/ 側コピーの両方を
+  同じ PR で修正 (drift check が一致を確認済み)。
+- **テスト**: `ops/tests/test_root_disk_usage.py` に回帰テスト 1 本追加
+  (`test_forecast_note_reports_dropped_corrupt_samples` — 破損 2 件を捨てて note に
+  「2 件が壊れている」と生件数 3 が載る)、`_selfcheck` (--check) にも同ケースを追加
+  (ネットワーク非依存の自己検査を維持)。
+
+### verify 実測（全てこのセッションで実行）
+
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0（**受入検証の 1 項目は green**）
+- `python3 apps/ops-health-reporter/root_disk_usage.py --check` → rc=0（コピーも一致）
+- `python3 -m unittest ops.tests.test_root_disk_usage -v` → **21 tests OK** (前回 20 + 新規 1)
+- `python3 -m unittest ops.tests.test_report_root_disk` → 8 tests OK（受入検証コマンドの
+  kubectl 偽物 + 実 kubectl 固定本を含む）
+- `python3 -m unittest discover -s ops/tests -t .` → **614 OK** (前回 613 + 新規 1)
+- `python3 ops/check_root_disk_usage_script_sync.py` → 一致 OK、`diff` canonical/コピー → 一致
+- `kubectl kustomize apps/ops-health-reporter` → build OK（nodes/proxy + nodes/stats が
+  resourceNames ["node01"] のまま）
+- `python3 ops/validate.py` → 0 error（warning 11 は全て既存・対象外）
+- `python3 -m py_compile` 全対象 → OK
+
+### 分かったこと（実測・調査）
+
+- **破損で失われた監視履歴は「若い履歴」と見た目が同じだが意味が逆**。note が「2 点に
+  満たない」とだけ言うと、運用者は「あと 1 日待てば予報が出る」と誤解する。実際は破損で
+  蓄積が継続しても予報不能のまま。fill_days が出ない理由の診断材料として破損件数を
+  載せるのは、P-9062 の「計測不能を正直に」思想に沿う。fill_days キー契約 (受入検証) は
+  従来どおり満たす — 壊れた履歴でも root_disk 節は正規の section + fill_days キーを返す
+  (既存の test_forecast_with_corrupt_history_keeps_fill_days_contract が縛る)。
+- **verify[0] は変わらず 2 重に構造的不可能**（wrapper=runner Job にクラスタ資格情報が
+  無い + spec の jsonpath `{.data.latest.json}` が実 kubectl でドットキーを解けない）。
+  この 2 点は前セッションまでに実 kubectl + mock apiserver + spawn.py / test_gate.py で
+  CI 固定済み。worker は spec を変えられない。
+
+### 発見（スコープ外、curriculum へ）
+
+- なし（dashboard_smoke の no-lie-coexistence 論点は据え置き）。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **ローカルで追加実装できることは残っていない（再確認。今セッションはその上で note の
+  破損診断を直した）。** 受入検証の残り 1 項目 (kubectl) は verify[0] が 2 重に構造的
+  不可能（①wrapper=runner Job にクラスタ資格情報が無い → 常に空出力、②spec の jsonpath
+  `{.data.latest.json}` は実 kubectl でドットキーを解けない → `\.` エスケープが要る）。
+  worker は spec を変えられない。**このままでは wrapper は verify ゲートで max_sessions
+  まで回し続け、その後 heart が session_limit + question を人間へ出す**（runner.py:1015）。
+  人間の判断材料はこの PROGRESS.md。
+- **修正の方向は dispatch / 所有者が決める**（2 案は 7c1e7caa の記録参照）:
+  (a) 所有者判断 (2026-08-24) どおり dispatch 由来の verify を外す → wrapper が PR を出し、
+  独立レビュー (reviewer Job はクラスタ read 権限を持つ) と CI に完成の判断を移す
+  (b) verify[0] を worker 環境で実行可能な形に置き換える (例: `python3 -m unittest
+  ops.tests.test_report_root_disk`。P-9037 流)
+- 差し戻されたら従来どおり以下を疑う: nodes/proxy + nodes/stats の resourceNames が node01
+  のままか（回帰テストあり）/ configMapGenerator sync の自愈待ち / 受入検証コマンド形状の
+  drift（リテラル実行テストあり）/ 履歴エントリの壊れ（`_usable_samples` + 今回の note が
+  縛る）。
+- **merge 後に確認すること**（従来と変わらず）: reporter が 1 回走る → `root_disk.source`
+  が kubelet_summary になるか（RBAC nodes/proxy+stats の通し。取れていれば breakdown の
+  images/PVC が載り、取れなくても statvfs 総量 + None で正常動作）、1 日分の履歴が溜まったら
+  fill_days が数値になるか（MIN_WINDOW_DAYS=1.0）。実測したら substrate.md を更新する。
+
+---
+
 ## 2026-08-25（履歴エントリの壊れ (used_bytes 欠落/非数値) が予報をクラッシュさせ fill_days 契約を壊す経路を塞いだ。`_usable_samples` を新設し forecast を硬化。実装は完、受入検証は verify[1] green / verify[0] は構造的不可能のまま）
 
 ### やったこと
