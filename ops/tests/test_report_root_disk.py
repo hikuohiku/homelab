@@ -33,6 +33,8 @@ import json
 import os
 import re
 import subprocess
+import tempfile
+import textwrap
 import types
 import unittest
 import urllib.error
@@ -225,6 +227,52 @@ class ReportRootDiskContractTest(unittest.TestCase):
         # 受入検証はキー存在のみで green になるが、予報は履歴が 1 日分溜まってから
         self.assertIsNone(rd["fill_days"])
         self.assertIsNotNone(rd["fill_days_note"])
+
+    def test_acceptance_kubectl_command_verbatim(self):
+        """受入検証コマンドを kubectl だけ偽物にして**リテラル実行**する (P-9062)。
+
+        test_latest_json_has_root_disk_with_fill_days は python 断片のみを検証する。
+        こちらは残りの kubectl 側 (namespace/name・`-o jsonpath='{.data.latest.json}'`
+        の形・`2>/dev/null`・パイプ) も含めて、受入検証コマンドそのものを 1 文字たりと
+        崩さず実行し、クラスタ到達と reporter の実実行だけを残す。
+        kubectl 偽物は report.py が put_configmap に渡した ConfigMap 本文から
+        data.latest.json を jsonpath 相当で取り出して stdout へ流す (実 kubectl が
+        クラスタから ConfigMap を引いて .data.latest.json を出すのを模す)。引数が
+        受入検証の呼び出し形と 1 つでも違えば rc=2 で落とす — コマンドの形の drift を
+        機械で縛る。
+        """
+        self._run_main()
+        with tempfile.TemporaryDirectory() as td:
+            td = Path(td)
+            cm_file = td / "configmap.json"
+            cm_file.write_text(json.dumps(self.writer.written))
+            shim = td / "kubectl"
+            shim.write_text(textwrap.dedent("""\
+                #!/bin/sh
+                # 受入検証コマンドの kubectl 部分のエミュレート (引数も一致を検査する)
+                if [ "$1" != "get" ] || [ "$2" != "cm" ] || [ "$3" != "-n" ] || \\
+                   [ "$4" != "autopilot" ] || [ "$5" != "ops-health-report" ] || \\
+                   [ "$6" != "-o" ] || [ "$7" != "jsonpath={.data.latest.json}" ]; then
+                  echo "unexpected kubectl args: $*" >&2
+                  exit 2
+                fi
+                exec python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["data"]["latest.json"])' "$SHIM_CM_FILE"
+            """))
+            shim.chmod(0o755)
+            env = dict(os.environ)
+            env["PATH"] = str(td) + os.pathsep + env.get("PATH", "")
+            env["SHIM_CM_FILE"] = str(cm_file)
+            # 受入検証コマンド (spec の verify[0]) をそのまま実行する
+            cmd = (
+                "kubectl get cm -n autopilot ops-health-report "
+                "-o jsonpath='{.data.latest.json}' 2>/dev/null "
+                "| python3 -c 'import json,sys; d=json.load(sys.stdin); "
+                "assert d.get(\"root_disk\") and \"fill_days\" in d[\"root_disk\"]'"
+            )
+            proc = subprocess.run(
+                cmd, shell=True, text=True, capture_output=True, env=env
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
 
 
 if __name__ == "__main__":

@@ -243,3 +243,75 @@
      正常動作。実測したら substrate.md を更新する。
   3. 1 日分の履歴が溜まったら fill_days が数値になる (観測窓 MIN_WINDOW_DAYS=1.0)。
      「予報が出ていない」と指摘されたら「1 日分の履歴が必要」を説明する。
+
+---
+
+## 2026-08-25（受入検証コマンド全体を kubectl 偽物で CI 固定。ツールの実測経路を実環境で確認）
+
+### やったこと
+
+- **`ops/tests/test_report_root_disk.py` に受入検証コマンドのリテラル実行テストを追加**
+  (`test_acceptance_kubectl_command_verbatim`)。従来のテストは受入検証の python 断片
+  だけを検証していたが、残りの kubectl 側 (namespace/name・`-o jsonpath=
+  '{.data.latest.json}'` の形・`2>/dev/null`・パイプ) が spec のコマンドから 1 文字でも
+  ずれたら CI が拾えないまま wrapper の verify が「root_disk が無い」で永久に落ちる
+  リスクがあった。kubectl を PATH に差し込んだ偽物に差し替え、**受入検証コマンドを
+  spec のまま一字も崩さず実行**して rc=0 を固定した (残るのはクラスタ到達と reporter
+  の実実行のみ)。偽物は引数 7 個 (get cm -n autopilot ops-health-report -o
+  jsonpath={.data.latest.json}) を厳密に検査し、report.py が put_configmap に渡した
+  ConfigMap 本文から data.latest.json を jsonpath 相当で取り出す。
+- これで受入検証の **コマンド形状全体が CI 固定済み**になった。前セッションまでの
+  「受入検証の残りはクラスタ到達のみ」という契約が、python 断片単体ではなく
+  コマンド全体にまで閉じた。
+
+### verify 実測
+
+- `python3 -m unittest ops.tests.test_report_root_disk -v` → **5 tests OK** (前回 4 + 新規 1)
+- `python3 -m unittest discover -s ops/tests -t .` → **605 OK** (前回 604 + 新規 1)
+- ops/heart/tests 448 OK、ops/runner/tests 53 OK
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0 (**受入検証の 1 項目は green**)
+
+### 分かったこと (実測・調査)
+
+- **この sandbox は node01 上の pod そのもの** (mountinfo で overlay lowerdir が
+  `/var/lib/rancher/k3s/agent/containerd/...`、`KUBERNETES_SERVICE_HOST=10.43.0.1`、
+  statvfs が node01 の 251.6GiB/73.5GiB/167.9GiB に一致)。**apiserver 自体は
+  到達できる** (`curl -sk https://10.43.0.1:443/version` → 401 Unauthorized) —
+  kubectl が落ちるのはネットワーク不通ではなく**認証情報が無い (SA token も
+  kubeconfig も無い)** だけ。前セッションの「localhost:8080 拒否」は kubectl の
+  既定 kubeconfig 側の話で、両方 true。
+- **ツールの実測経路を実環境 (node01 上の非特権 pod) で通した**:
+  `python3 ops/tools/root_disk_usage.py --node node01 --json` → rc=0、
+  `source=statvfs` (summary は SA token 無しで None → 意図どおり statvfs に倒れる)、
+  `capacity_bytes=270202880000` / `used_bytes=78914818048` /
+  `free_bytes=180234514432`、`fill_days=None` + note「履歴が 2 点に満たない」。
+  設計どおりの fallback が実環境で動くことを確認した。
+- 受入検証コマンドの `2>/dev/null` は偽物の stderr を握りつぶすため、テストは
+  rc だけで判定する (shim の引数不一致は rc=2 で落ちる)。
+
+### 発見（スコープ外、curriculum へ）
+
+- なし (dashboard_smoke の no-lie-coexistence 論点は据え置き)。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **ローカルでやることは残っていない。** 受入検証の残り 1 項目 (kubectl) は
+  wrapper 環境で reporter が 1 回走った後、認証付きの文脈 (クラスタ到達) で green に
+  なる。sandbox では apiserver は 401 で到達できるが認証情報が無く、実行不能
+  (今回の実測)。
+- 差し戻されたら以下を疑う:
+  1. `nodes/proxy` / `nodes/stats` の resourceNames が node01 のままか (回帰テスト
+     TestRbac.test_kubelet_summary_proxy_resource_names_match_node が縛っている)
+  2. ArgoCD が configMapGenerator を sync するまで reporter が旧 ConfigMap で走る
+     自愈待ち (P-9037 と同じ。数回で治る)
+  3. 受入検証コマンドの形 (jsonpath・namespace/name・パイプ) が spec からずれていないか
+     (新設の test_acceptance_kubectl_command_verbatim が縛っている)
+- **merge 後 (wrapper 環境) に確認すること**:
+  1. reporter が 1 回走る → `kubectl get cm -n autopilot ops-health-report -o
+     jsonpath='{.data.latest.json}'` に `root_disk.source` と `fill_days` キー (初回
+     None) が載る → 受入検証 green
+  2. `root_disk.source` が `kubelet_summary` になるか (RBAC nodes/proxy+stats の通し)。
+     取れていれば breakdown の images/PVC が載り、取れなくても statvfs 総量 + None で
+     正常動作 (実測済みの fallback)。実測したら substrate.md を更新する。
+  3. 1 日分の履歴が溜まったら fill_days が数値になる (観測窓 MIN_WINDOW_DAYS=1.0)。
+     「予報が出ていない」と指摘されたら「1 日分の履歴が必要」を説明する。
