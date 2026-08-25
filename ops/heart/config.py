@@ -28,12 +28,11 @@ class Config:
         # 健全性レポートの置き場所 (設計 state-out-of-git Phase 5)。ops-health-reporter が
         # 30 分ごとに同じ namespace の ConfigMap を上書きする。GitHub を経由しない
         self.health_configmap = env.get("HEALTH_CONFIGMAP", "ops-health-report")
-        self.feedback_branch = env.get("FEEDBACK_BRANCH", "ops-feedback")
         self.feedback_issue = int(env.get("FEEDBACK_ISSUE", "56"))
-        # イベントバス経由の書き置きが落ちてくる場所 (同じ Pod のサイドカーが書く。
+        # 書き置きが落ちてくる場所 (同じ Pod のサイドカーが書く。
         # apps/autopilot/bus-sidecar)。既定値はサイドカーの BUS_SIDECAR_OUT_DIR と
-        # 揃えてあり、どちらも通常は設定しなくてよい。ディレクトリが無ければ
-        # 「バス経路が無い」として GitHub 経路だけで動く
+        # 揃えてあり、どちらも通常は設定しなくてよい。ops-feedback ブランチを畳んだ
+        # 今 (Phase 6)、ファイルで書き置きが届く経路はここ 1 本だけ
         self.feedback_bus_dir = Path(
             env.get("HEART_FEEDBACK_BUS_DIR") or (self.data_dir / "feedback-bus" / "inbox")
         )

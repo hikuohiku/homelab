@@ -8,7 +8,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from . import dispatch, gitutil, projectcr, tasks, triage
+from . import dispatch, projectcr, tasks, triage
 from .statefiles import parse_iso
 
 
@@ -276,59 +276,72 @@ def collect_prs(gh, project_branches):
     return open_prs, merged
 
 
-# 書き置きの既読を持つ鍵の形。GitHub 経路 (ops-feedback ブランチの ls-tree) が
-# この接頭辞つきのパスを返すので、バス経路のファイル名もこの形に寄せる。
-# 揃えることで cursors["seen_feedback_files"] 1 つで 2 経路の重複が落ちる
-# (autopilot-core の seenKey と同じ判断)。
+# 書き置きの既読を持つ鍵の形。ops-feedback ブランチを読んでいた頃のパスの形を
+# そのまま使う。バス経路だけになった今も変えないのは、cursors.json に既に載っている
+# 既読がこの形で、接頭辞を外すと全部が未読に戻って過去の書き置きを一斉に triage
+# してしまうため。
 FEEDBACK_KEY_PREFIX = "ops/feedback/inbox/"
-
-
-def _list_feedback_files(repo_dir, feedback_branch):
-    try:
-        listing = gitutil.run(
-            ["ls-tree", "-r", "--name-only", f"origin/{feedback_branch}",
-             "ops/feedback/inbox/"],
-            cwd=repo_dir, check=False,
-        )
-        return [line for line in listing.splitlines() if line.strip()]
-    except gitutil.GitError:
-        return []
 
 
 def _list_bus_notes(bus_dir):
     """バスのサイドカーが置いた書き置きを [(key, Path)] で返す。
 
-    key は GitHub 経路と同じ形 ("ops/feedback/inbox/<id>.json") にする。同じ書き置きは
-    両経路で同じ id を持つので、鍵を揃えれば既存の cursor がそのまま重複を落とす。
-
     サイドカー (apps/autopilot/bus-sidecar) が rename で置くまでファイルは現れないが、
     書きかけの一時ファイルを万一拾わないよう "." 始まりは読まない。
-    ディレクトリが無い / 読めないときは「バス経路が無い」として空を返す —
-    バスの不調で GitHub 経路まで止めない (停止経路を運ぶ側が可用性を下げない)。
+
+    読めないときは OSError をそのまま上げる。空を返すと「書き置きは無かった」と
+    区別がつかない — ブランチ経路が無くなった今、ここが唯一のファイル経路なので、
+    読めなかったことは feedback_bus_alert() が人間に運ぶ。
     """
     if bus_dir is None:
         return []
-    try:
-        names = sorted(
-            p.name for p in Path(bus_dir).iterdir()
-            if p.is_file() and p.name.endswith(".json") and not p.name.startswith(".")
-        )
-    except OSError:
-        return []
+    names = sorted(
+        p.name for p in Path(bus_dir).iterdir()
+        if p.is_file() and p.name.endswith(".json") and not p.name.startswith(".")
+    )
     return [(FEEDBACK_KEY_PREFIX + name, Path(bus_dir) / name) for name in names]
 
 
-def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_branch,
-                     bus_dir=None):
-    """issue #56 の新着コメント + ops-feedback ブランチ + バス経路の新着書き置きを
-    triage して (vetoes, acks, stop_all, review_needed, resume_all, task_requests,
+def feedback_bus_alert(bus_dir):
+    """書き置きのバス経路が読めるか見て、読めなければ警報 dict を返す。
+
+    ops-feedback ブランチを畳んだ後、所有者の「止めて」がファイルで届く経路は
+    ここ 1 本だけになった (残るもう 1 本は issue #56 の GitHub API)。読めないことを
+    黙って「書き置き無し」に倒すと、停止指示を捨てたまま自律走行が続く。
+    黙るかわりに budget_alert / dashboard_smoke_alert と同じ形の警報にして、
+    briefing と incident 通知に乗せる (再通知の抑制も同じ budget_alert_due が見る)。
+
+    読めれば None。bus_dir 未設定 (バスを使わない切り戻し構成) も None。
+    """
+    if bus_dir is None:
+        return None
+    try:
+        for _ in Path(bus_dir).iterdir():
+            break
+    except OSError as e:
+        return {
+            "status": "unreadable",
+            "reason": f"書き置きのバス inbox ({bus_dir}) を読めない: {e}",
+        }
+    return None
+
+
+def collect_feedback(gh, cursors, rules, feedback_issue, bus_dir=None):
+    """issue #56 の新着コメント + バス経路の新着書き置きを triage して
+    (vetoes, acks, stop_all, review_needed, resume_all, task_requests,
     approves, new_cursors) を返す。
 
-    bus_dir はイベントバス (NATS) のサイドカーが書き置きを落とすローカルディレクトリ
-    (移行の段階 3)。GitHub 経路を残したまま足すのは、所有者の「止めて」が GitHub の
-    可用性に依存する状態を先に解くため — 片方が死んでももう片方で届く。
-    どちらから来ても鍵は同じ ("ops/feedback/inbox/<id>.json") なので、同じ書き置きが
-    2 回処理されることはない。
+    経路は 2 本。ops-feedback ブランチの走査は落とした (設計 state-out-of-git
+    Phase 6) — 自宅クラスタの内部イベントが外部 SaaS を経由していた分は、
+    NATS → サイドカー → bus_dir のファイルに寄せてある。
+
+    issue #56 のコメントは残す。あれは git の commit ではなく GitHub API の read で、
+    「機械が git に定期コミットを打たない」(原則 3) の対象外。所有者が GitHub から
+    話しかける手段でもある。
+
+    bus_dir が読めないときは、そのビートの書き置きを諦めて issue 経路だけで進む。
+    黙って「書き置きは無かった」にはしない — 読めなかったことは
+    feedback_bus_alert() が別に人間へ運ぶ。
 
     初回起動 (cursor 未初期化) は **過去の全履歴を triage しない** (レビュー指摘 [7])。
     issue #56 には 100 件超の過去コメントがあり、旧 CHARTER の引用等に停止キーワードが
@@ -378,12 +391,17 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
             )
         except Exception:
             new_cursors["issue_comments_since"] = None
-        # バス経路のぶんも「現在までを既読」に含める。ここを落とすと初回起動で
-        # 手元に残っている過去の書き置きを一斉に triage してしまう
-        new_cursors["seen_feedback_files"] = sorted(
-            set(_list_feedback_files(repo_dir, feedback_branch))
-            | {key for key, _ in _list_bus_notes(bus_dir)}
-        )
+        # バス経路のぶんを「現在までを既読」に含める。ここを落とすと初回起動で
+        # 手元に残っている過去の書き置きを一斉に triage してしまう。
+        # 読めなければ既読を足さない (次のビートで拾い直す)
+        try:
+            new_cursors["seen_feedback_files"] = sorted(
+                key for key, _ in _list_bus_notes(bus_dir)
+            )
+        except OSError:
+            new_cursors["seen_feedback_files"] = sorted(
+                cursors.get("seen_feedback_files", [])
+            )
         return [], [], False, [], False, [], [], new_cursors
 
     # issue コメントは自由文 (kind を持たない) なので通常経路。
@@ -423,19 +441,13 @@ def collect_feedback(gh, repo_dir, cursors, rules, feedback_issue, feedback_bran
 
     seen = set(cursors.get("seen_feedback_files", []))
     new_seen = set(seen)
-    for path in _list_feedback_files(repo_dir, feedback_branch):
-        if path in seen:
-            continue
-        new_seen.add(path)
-        raw = gitutil.show(repo_dir, f"origin/{feedback_branch}", path)
-        if raw is None:
-            continue
-        handle_note(raw, path)
-
-    # バス経路 (NATS → サイドカー → ローカルファイル)。GitHub 経路と同じ鍵を使うので、
-    # 同じ書き置きが両方から来ても 2 回処理されない。判定に new_seen を使うのは、
-    # 同一ビート内で先に GitHub 側が拾ったぶんも落とすため
-    for key, path in _list_bus_notes(bus_dir):
+    # バス経路 (NATS → サイドカー → ローカルファイル)。読めなければ既読を進めずに
+    # 飛ばす — 次のビートで同じファイルを拾い直せる
+    try:
+        bus_notes = _list_bus_notes(bus_dir)
+    except OSError:
+        bus_notes = []
+    for key, path in bus_notes:
         if key in new_seen:
             continue
         try:

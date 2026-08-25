@@ -1,6 +1,7 @@
 """feedback 取り込みの分岐テスト (P-0091 の task-request 分流を含む)。
 
-collect_feedback() は gh と git に依存するので、両方を差し替えて
+書き置きの経路は issue #56 のコメントとバスのファイルの 2 本
+(ops-feedback ブランチは Phase 6 で落とした)。gh を差し替えて
 「note 1 件がどの受け皿に落ちるか」だけを見る。
 """
 
@@ -9,7 +10,6 @@ import shutil
 import tempfile
 import unittest
 from pathlib import Path
-from unittest import mock
 
 from ops.heart import facts
 
@@ -30,8 +30,10 @@ _DEFAULT = object()
 
 
 class FakeGh:
+    comments: list = []
+
     def issue_comments_since(self, issue, since):
-        return []
+        return self.comments
 
 
 def note_raw(kind=None, body="vaultwarden を最新化して"):
@@ -42,13 +44,10 @@ def note_raw(kind=None, body="vaultwarden を最新化して"):
 
 
 def collect_with_note(raw):
-    with (
-        mock.patch.object(facts, "_list_feedback_files", return_value=[NOTE]),
-        mock.patch.object(facts.gitutil, "show", return_value=raw),
-    ):
-        return facts.collect_feedback(
-            FakeGh(), "/repo", dict(CURSORS), RULES, 56, "ops-feedback"
-        )
+    """バスの inbox に note 1 件だけを置いて collect_feedback を回す。"""
+    with tempfile.TemporaryDirectory() as bus:
+        (Path(bus) / "note-1.json").write_text(raw)
+        return facts.collect_feedback(FakeGh(), dict(CURSORS), RULES, 56, Path(bus))
 
 
 class TestCollectFeedbackTaskRequest(unittest.TestCase):
@@ -121,15 +120,11 @@ class TestCollectFeedbackFromBus(unittest.TestCase):
             doc["kind"] = kind
         (self.bus / f"{note_id}.json").write_text(json.dumps(doc, ensure_ascii=False))
 
-    def collect(self, branch_files=(), branch_raw=None, cursors=None, bus_dir=_DEFAULT):
-        with (
-            mock.patch.object(facts, "_list_feedback_files", return_value=list(branch_files)),
-            mock.patch.object(facts.gitutil, "show", return_value=branch_raw),
-        ):
-            return facts.collect_feedback(
-                FakeGh(), "/repo", dict(cursors or CURSORS), RULES, 56, "ops-feedback",
-                self.bus if bus_dir is _DEFAULT else bus_dir,
-            )
+    def collect(self, cursors=None, bus_dir=_DEFAULT):
+        return facts.collect_feedback(
+            FakeGh(), dict(cursors or CURSORS), RULES, 56,
+            self.bus if bus_dir is _DEFAULT else bus_dir,
+        )
 
     def test_stop_from_bus_stops_everything(self):
         """バス経由の「止めて」が GitHub を一切経由せずに stop_all になる。
@@ -141,15 +136,13 @@ class TestCollectFeedbackFromBus(unittest.TestCase):
         # 既読の鍵は GitHub 経路と同じ形 (ここがずれると重複排除が効かない)
         self.assertIn("ops/feedback/inbox/note-9.json", cursors["seen_feedback_files"])
 
-    def test_same_id_from_both_routes_is_handled_once(self):
-        """同じ書き置きがブランチ経由とバス経由の両方から来ても 1 回だけ。
-        2 回処理されると、同じ「止めて」で停止処理が二重に走る。"""
+    def test_seen_key_keeps_the_branch_era_shape(self):
+        """既読の鍵は ops-feedback を読んでいた頃と同じ形のまま。
+        接頭辞を変えると cursors.json の既読が全部未読に戻り、過去の
+        「止めて」を一斉に triage し直す。"""
         self.write_bus_note("note-1", "止めて")
-        _, _, stop_all, _, _, _, _, cursors = self.collect(
-            branch_files=[NOTE], branch_raw=json.dumps({"body": "止めて"}),
-        )
+        _, _, stop_all, _, _, _, _, cursors = self.collect()
         self.assertTrue(stop_all)
-        # 鍵が 1 つに畳まれていること (NOTE = ops/feedback/inbox/note-1.json)
         self.assertEqual(cursors["seen_feedback_files"], [NOTE])
 
     def test_already_seen_bus_note_is_not_reprocessed(self):
@@ -168,17 +161,38 @@ class TestCollectFeedbackFromBus(unittest.TestCase):
         self.assertEqual(len(reqs), 1)
         self.assertEqual(reqs[0]["source"], "ops/feedback/inbox/note-2.json")
 
-    def test_missing_bus_dir_does_not_break_existing_route(self):
-        """バスが死んでいて (書き出し先が存在しなくても) 既存経路は動く。
-        停止経路を運ぶ側が可用性を下げてはいけない。"""
-        _, _, stop_all, _, _, _, _, _ = self.collect(
-            branch_files=[NOTE], branch_raw=json.dumps({"body": "止めて"}),
-            bus_dir=self.bus / "存在しない",
+    def test_unreadable_bus_dir_does_not_stop_the_issue_route(self):
+        """inbox が読めなくても issue #56 の経路は生きる。
+        バスの不調で「所有者が GitHub から話しかける」手段まで止めない。"""
+        gh = FakeGh()
+        gh.comments = [{"id": 1, "created_at": "2026-08-02T00:00:00Z", "body": "止めて"}]
+        _, _, stop_all, _, _, _, _, _ = facts.collect_feedback(
+            gh, dict(CURSORS), RULES, 56, self.bus / "存在しない",
         )
         self.assertTrue(stop_all)
 
-    def test_bus_dir_none_keeps_legacy_behaviour(self):
-        """bus_dir を渡さない呼び出し (既存コード) は今までどおり。"""
+    def test_unreadable_bus_dir_does_not_advance_the_cursor(self):
+        """読めなかったビートは既読を進めない。進めると、復旧後に届いていた
+        書き置きを「もう読んだ」ことにして落とす。"""
+        _, _, _, _, _, _, _, cursors = self.collect(bus_dir=self.bus / "存在しない")
+        self.assertEqual(cursors["seen_feedback_files"], [])
+
+    def test_unreadable_bus_dir_is_reported_not_silently_empty(self):
+        """読めないことが警報になる。ここが黙ると「書き置きは無かった」と
+        区別がつかないまま自律走行が続く (fail-closed)。"""
+        alert = facts.feedback_bus_alert(self.bus / "存在しない")
+        self.assertIsNotNone(alert)
+        self.assertEqual(alert["status"], "unreadable")
+        self.assertIn("存在しない", alert["reason"])
+
+    def test_readable_bus_dir_raises_no_alert(self):
+        self.assertIsNone(facts.feedback_bus_alert(self.bus))
+        self.write_bus_note("note-7", "こんにちは")
+        self.assertIsNone(facts.feedback_bus_alert(self.bus))
+        self.assertIsNone(facts.feedback_bus_alert(None))
+
+    def test_bus_dir_none_reads_nothing(self):
+        """bus_dir 未設定 (バスを使わない切り戻し構成) はファイルを読まない。"""
         self.write_bus_note("note-3", "止めて")
         _, _, stop_all, _, _, _, _, _ = self.collect(bus_dir=None)
         self.assertFalse(stop_all)

@@ -1,7 +1,7 @@
 "use client";
 
 // 書き置きフォーム。旧ダッシュボードの feedback フォームの後継。
-// 投稿は /api/feedback → ops-feedback ブランチ (heart が次の起動で読む)。
+// 投稿は /api/feedback → NATS → heart (次のビートで読まれる)。
 
 import { useState } from "react";
 
