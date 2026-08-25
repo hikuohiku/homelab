@@ -476,6 +476,92 @@ migration が走るため、サーバと同じバージョンで戻す）。
 検証用リソース（scratch PVC・Job・ConfigMap・scratch サーバ Pod・probe Pod）は確認が取れたため
 すべて削除した（docs/backup.md の運用どおり）。
 
+### immich 復元 drill（実測、P-9047、2026-08-25）
+
+T-0071 の immich 復元試験は「restic がファイルを戻せた」だけで、**DB に写真が載って immich
+サーバが API を返す**ところまでは一度も実測されていなかった（P-0005 の初期棄却以来）。
+P-9047 で、最新 snapshot（DB ダンプ + uploads の両方が入る 1 本）を scratch に復元し、
+(a) postgres が起動して vchord が生き (b) 復元 DB の写真数（`asset` 行数）が本番の実測と一致し
+(c) 復元された immich-server の `/api` が 200 を返す、まで初めて実測した。「写真の金庫を
+開けて戻した」初の実績。
+
+#### 使い方（`ops/tools/immich_restore_drill.py`）
+
+`ops/tools/immich_restore_drill.py` が「snapshot の直近性確認 → restic restore → 最新ダンプの
+バージョン整合（`-v{server}-pg{pg}` を scratch postgres の実測と突き合わせ）→ gunzip + psql →
+postgres/vchord 生存確認 → `asset` 行数照合」まで 1 本で行う（標準ライブラリのみ。restic バイナリは
+env `RESTIC_BINARY`、postgres は env `DRILL_DB_HOST`）。**本番 PVC
+（`immich-library` / `immich-postgres-data`）には触れない**。復元先は使い捨ての scratch PVC のみ。
+
+実行は immich namespace の使い捨てリソースで行う（P-9047 の実測で使用した形。manifest は Git に
+commit せず `kubectl apply` で投入し、終わったら削除。`apps/` は変更しない）。
+
+1. **scratch postgres + valkey**（Deployment + Service。initContainer で initdb → vchord を
+   bootstrap。本番 `apps/immich/postgres.yaml` の init-bootstrap と同じ形）を立てる
+2. **driver Job**（restic バイナリを initContainer から /tools へコピー、main は
+   vectorchord イメージ = python3 + psql を持つ、`--skip-probe` で immich-server 起動待ちを省く）。
+   credential は `immich-restic-backup-credentials`（append-only 鍵）、`DRILL_DB_HOST` に
+   scratch postgres の Service 名、`EXPECTED_PHOTO_COUNT` に本番 `asset` 行数を渡す。
+   securityContext は `CHOWN`/`FOWNER`/`DAC_OVERRIDE` + drop ALL（restore の 3 capability）。
+   完了後 stdout の `REPORT:` 行が report JSON
+3. **server Job**（immich-server v3.1.0。`UPLOAD_LOCATION` は scratch PVC の
+   `mnt/immich-library` を `subPath` でマウント — **PVC ルート直マウントだとストレージ検査
+   （`upload/.immich` 等のマーカー）に失敗する**）。node をバックグラウンド起動し
+   `/api/server/ping` が 200 を返すまで curl で待ってから kill して exit 0
+4. driver の report に api_status=200 をマージし、`--publish` で ConfigMap
+   `autopilot/immich-restore-drill-report` に記録（復元日時・snapshot id・写真数・所要時間）
+5. 検証リソースはすべて削除（本番は不触）
+
+```yaml
+# driver Job: initContainer で restic バイナリを emptyDir へコピー (restic/restic:0.19.1 → /tools/restic)
+# main container: vectorchord 16.14-1.1.1, command: python3 /scripts/immich_restore_drill.py --skip-probe
+# env: immich-restic-backup-credentials の secretKeyRef (RESTIC_B2_BUCKET / RESTIC_PASSWORD /
+#      B2_ACCOUNT_ID / B2_ACCOUNT_KEY) + RESTIC_REPOSITORY="b2:$(RESTIC_B2_BUCKET):immich"
+#      + SCRATCH_DIR=/scratch + RESTIC_BINARY=/tools/restic + DRILL_DB_HOST=<scratch pg Service>
+#      + EXPECTED_PHOTO_COUNT=<本番 asset 行数> + PGPASSWORD=<scratch pg パスワード>
+# securityContext: runAsUser: 0 / allowPrivilegeEscalation: false /
+#   capabilities.drop: ["ALL"], add: ["CHOWN", "FOWNER", "DAC_OVERRIDE"]   # restore の 3 capability
+# volumes: scratch PVC (immich-drill-library) → /scratch, script ConfigMap → /scripts
+```
+
+- **credential は append-only 鍵 (`immich-restic-backup-credentials`) のみ**。復元は `readFiles`
+  で完結するので削除権限つき鍵 (`immich-restic-credentials`) は持ち出さない（P-0341 の結論。
+  P-9025 と同様にこれで成功した）。
+- **snapshot の直近性**: スクリプトが最新 snapshot の age を検査し、24h を超えていれば
+  fail-closed で「backup CronJob を回せ」と非 0 で終了する。
+- **dump のバージョン整合**: ダンプファイル名の `-pg{pg}` と scratch postgres の
+  `SHOW server_version`、`-v{server}` と immich-server のバージョンを突き合わせ、不一致なら
+  中止（docs/backup.md 冒頭の注意どおり）。
+- **検証**: `python3 ops/tools/immich_restore_drill.py --check`（自己検査）/ ConfigMap の
+  `photo_count` が数字 / `--verify-freshness --max-age 3d`（成功記録の古さ）。
+
+#### 実測結果（2026-08-25）
+
+| 項目 | 結果 |
+|---|---|
+| 使用 snapshot | `61c022b6`（2026-08-24 17:45 UTC = 日次 backup。6h30m 前） |
+| restore 結果 | 成功（173 files / 373,334,999 bytes） |
+| 所要時間 | **56 秒**（restore → psql 投入 → 検証まで） |
+| 復元 DB | PostgreSQL 16.14 / vchord 1.1.1 が生きたまま起動。`smart_search` を読める |
+| 写真数 | **19**（`asset` 行数。本番の実測 19 と一致） |
+| API | 復元された immich-server v3.1.0 が `GET /api/server/ping` に **HTTP 200** |
+| 復元先 | `immich-drill-library` scratch PVC（**scratch。本番 PVC には不触**） |
+| 成功記録 | ConfigMap `autopilot/immich-restore-drill-report`（restored_at / snapshot_id / photo_count / duration_seconds） |
+
+**教訓（次に復元する人へ）**:
+- restic restore の 3 capability（`CHOWN`/`FOWNER`/`DAC_OVERRIDE`）は P-9025/T-0071 と同じく必須。
+  backup 側の `DAC_READ_SEARCH` では足りない。restore 前に scratch を掃除する。
+- **immich-server の `UPLOAD_LOCATION` はライブラリルートそのもの**。restic は絶対パス
+  （`/mnt/immich-library`）のまま戻すので、PVC ルート直下ではなく `mnt/immich-library` を
+  `subPath` でマウントする。直マウントだとストレージ検査（`<folder>/.immich` マーカーの読み取り）
+  に失敗し microservices worker が死んで API が立たない（実測）。
+- **単一 Job に postgres/valkey/immich-server を同居させると Job が完了しない**（サーバ系が
+  常駐し、`restartPolicy: Always` の sidecar も Job 完了時には自動終了されない。k3s 1.34 実測）。
+  サーバ系は Deployment、driver と probe は 1 回で終わる Job に分けるのが安全。
+- postgres を別 Pod にした場合は `listen_addresses=*` と scram 認証に合わせて `PGPASSWORD`/
+  `DB_PASSWORD` を渡すこと（ループバック trust が効かない）。
+- 検証後、scratch リソースはすべて削除済み。
+
 ### coder-postgres（完了、2026-08-06）
 
 immich/vaultwarden とは異なり、PVC ではなく単一ファイルの `pg_dump -Fc` ダンプを使い回さない
