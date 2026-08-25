@@ -1,5 +1,71 @@
 # P-9062 — 進捗記録
 
+## 2026-08-25（spec の verify[0] ブロッカーを「実 kubectl + mock apiserver」で CI に閉じた。再現手順の独立確認つき）
+
+### やったこと
+
+- **`ops/tests/test_report_root_disk.py` に実 kubectl を使うテストを 2 本追加**。
+  従来の `KUBECTL_SHIM`（Python で kubectl の jsonpath 解釈を模す偽物）は前セッションで
+  実解釈に忠実化済みだが、**偽物が実 kubectl からずれていたら CI が緑のままブロッカーが
+  隠れる**余地が残っていた。今回、**mock apiserver（discovery + ConfigMap GET の最小
+  実装）に report.py の main() が実際に書く ConfigMap を配信させ、実 kubectl v1.35.0 で
+  spec の verify[0] コマンドを一字も崩さず実行**するテストを追加した（kubectl が無ければ
+  skip。CI の ubuntu-latest には含まれる）:
+  - `test_real_kubectl_spec_verify_verbatim_unsatisfiable` — spec の
+    `{.data.latest.json}` は実 kubectl では入れ子解釈になり空出力 → JSONDecodeError
+    (rc=1)。**正しく populate された ConfigMap（root_disk + fill_days 入り）でも通らない**。
+  - `test_real_kubectl_escaped_verify_passes` — エスケープ形 `{.data.latest\.json}`
+    なら同じ ConfigMap で rc=0（spec 修正後の green 形）。
+- **再現手順を独立に再実行した**（mock apiserver + kubeconfig を mktemp に用意 → 実
+  kubectl で 2 形を比較）。wrapper の verify[0] 実測出力（`JSONDecodeError: Expecting
+  value: line 1 column 1 (char 0)`）と**完全に同一**の失敗を実バイナリで再現した。
+  つまり「クラスタ到達・ConfigMap 内容・reporter 実装が全て正しくても spec の verify[0]
+  は通らない」ことが、実機で確定した。
+
+### verify 実測（全てこのセッションで実行）
+
+- `python3 -m unittest ops.tests.test_report_root_disk -v` → **8 tests OK**（前回 6 + 新規 2）
+- `python3 -m unittest discover -s ops/tests -t .` → **611 OK**（前回 609 + 新規 2）
+- ops/heart/tests 448 OK、ops/runner/tests 53 OK
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0（**受入検証の 1 項目は green**）
+- `python3 ops/check_root_disk_usage_script_sync.py` → 一致 OK、canonical と apps/ コピー diff 一致
+- `python3 ops/validate.py` → 0 error（warning 11 は全て既存・対象外）
+
+### 分かったこと（実測・調査）
+
+- **ブロッカーは 1 点に確定し、その証拠が実バイナリに昇格した。** spec の verify[0] の
+  jsonpath を `{.data.latest.json}` → `{.data.latest\.json}` にエスケープ修正するだけ。
+  worker は採択済み spec を変えられない（dispatch の領分）。修正されれば wrapper 環境で
+  reporter（CronJob 30 分毎）が 1 回走って ConfigMap が書かれた時点で verify[0] は green
+  になる（`test_real_kubectl_escaped_verify_passes` がその形を実バイナリで固定済み）。
+- 実装側（report.py の root_disk 節 + fill_days、履歴の同一 PUT、RBAC node01 限定、
+  statvfs/summary の fallback）は今回も問題なし。受入検証のもう 1 項目
+  （`root_disk_usage.py --check`）は green。
+
+### 発見（スコープ外、curriculum へ）
+
+- なし（dashboard_smoke の no-lie-coexistence 論点は据え置き）。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **最初にやること**: spec の verify[0] が修正されたか確認する（wrapper の verify 実測で
+  判断できる。修正前は必ず JSONDecodeError）。修正されていない限り、このプロジェクトは
+  verify が永久に red で wrapper がレビューへ進めない — **コード変更では解けない**。
+- 修正されていれば: `test_real_kubectl_escaped_verify_passes` が green のまま、あとは
+  wrapper 環境で reporter が 1 回走り ConfigMap が書かれるのを待つだけ。
+- ローカルでやることは残っていない。実測の再現手順: mktemp に mock apiserver
+  （discovery: /api・/apis・/api/v1（configmaps + shortName cm）+ ConfigMap GET）と
+  kubeconfig（server http://127.0.0.1:port）を用意し、実 kubectl で
+  `get cm -o jsonpath='{.data.latest.json}'` と `{.data.latest\.json}` を比較
+  （前者は空出力・後者は内容が出る）。テストファイルに MockAPIServer として収録済み。
+- 差し戻されたら従来どおり以下を疑う: nodes/proxy resourceNames=node01（回帰テストあり）/
+  configMapGenerator sync 自愈待ち / コマンド形状の drift。
+- **merge 後に確認すること**: `root_disk.source` が kubelet_summary になるか（RBAC
+  nodes/proxy+stats の通し）、1 日分の履歴が溜まったら fill_days が数値になるか
+  （MIN_WINDOW_DAYS=1.0）。実測したら substrate.md を更新。
+
+---
+
 ## 2026-08-25（受入検証 verify[0] の jsonpath が実 kubectl では解けないことを mock apiserver で実測。spec レベルのブロッカーを発見し CI テストを真実に直した）
 
 ### やったこと

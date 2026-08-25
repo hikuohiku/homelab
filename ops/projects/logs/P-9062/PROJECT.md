@@ -22,6 +22,9 @@ initializer が 2026-08-25 に `project/p-9062` checkout のリポジトリル�
     空出力になり、JSONDecodeError は消えない。リテラルのドットキーは `{.data.latest\.json}` とエスケープする
     必要がある（ops/CHARTER.md §5.5 の実測済み読み方）。**spec の verify[0] 自体の修正（エスケープ）が
     必要**で、これは worker の立場では直せない（詳細は PROGRESS.md 2026-08-25 のセッション記録を参照）。
+    この事実は **実 kubectl + mock apiserver** のテストで CI 固定済み
+    （test_report_root_disk.py の test_real_kubectl_spec_verify_verbatim_unsatisfiable /
+    test_real_kubectl_escaped_verify_passes）。
 - [ ] `python3 ops/tools/root_disk_usage.py --check`
   — 内訳実測ツールが実在し、`--check`（ネットワーク非依存の自己検査）が rc=0 で終わることを確認している。
     実測 rc=2（ファイル未存在）。

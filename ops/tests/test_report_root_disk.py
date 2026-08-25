@@ -18,8 +18,10 @@ k8s_get / k8s_request を偽物に差し替えて 1 周実行させ、書けた 
 data[latest.json] に受入検証の python 断片をそのまま流して通ることを CI で固定する。
 kubectl 偽物は**実 kubectl の jsonpath 解釈を忠実に模す** (ドット=入れ子・`\\.`=リテラル、
 欠落フィールドは空出力) ため、「verify[0] が実 kubectl では空出力になる」事実も CI に
-閉じる。main() 本体を実行するので配線 (report の root_disk キー・fill_days・履歴書き戻し)
-の変化を検出できる。
+閉じる。加えて **実 kubectl + mock apiserver** (report.py の main() が書いた ConfigMap
+を配信) で spec の verify[0] をリテラル実行するテストが、偽物を介さず実バイナリで
+同じ事実を固定する (kubectl が無ければ skip)。main() 本体を実行するので配線 (report の
+root_disk キー・fill_days・履歴書き戻し) の変化を検出できる。
 
 root_disk の取得源は kubelet stats/summary が優先 (RBAC 追加済み、nodes/proxy +
 nodes/stats) なので、root_disk_usage.k8s_get も summary を返す偽物に差し替えて
@@ -38,13 +40,16 @@ source=kubelet_summary の経路をオフラインで通す (内訳 images/PVC �
 
 import ast
 import datetime
+import http.server
 import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import textwrap
+import threading
 import types
 import unittest
 import urllib.error
@@ -127,6 +132,85 @@ KUBECTL_SHIM = textwrap.dedent(
         sys.exit(main(sys.argv))
     """
 )
+
+class MockAPIServer:
+    """kube-apiserver の最小偽物 (実 kubectl を動かすための discovery + ConfigMap GET)。
+
+    kubectl は起動時に /api・/apis・/api/v1 を discovery し、短縮名 "cm" を
+    configmaps へ解決してから対象を GET する。この偽物はその 4 種だけを実装し、
+    それ以外は 404 を返す。TLS なし (http) で立て、kubeconfig の server を
+    http://127.0.0.1:<port> にする (insecure-skip-tls-verify 不要)。
+    """
+
+    def __init__(self, configmap):
+        self._server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), _MockHandler)
+        self._server.mock_cm = configmap
+        threading.Thread(target=self._server.serve_forever, daemon=True).start()
+
+    @property
+    def base_url(self):
+        return "http://127.0.0.1:{}".format(self._server.server_address[1])
+
+    def close(self):
+        self._server.shutdown()
+        self._server.server_close()
+
+
+class _MockHandler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        path = urllib.parse.urlparse(self.path).path
+        cm = self.server.mock_cm
+        if path == "/api":
+            body = {
+                "kind": "APIVersions",
+                "versions": ["v1"],
+                "serverAddressByClientCIDRs": [],
+            }
+        elif path == "/apis":
+            body = {"kind": "APIGroupList", "apiVersion": "v1", "groups": []}
+        elif path == "/api/v1":
+            body = {
+                "apiVersion": "v1",
+                "groupVersion": "v1",
+                "kind": "APIResourceList",
+                "resources": [
+                    {
+                        "name": "configmaps",
+                        "singularName": "configmap",
+                        "namespaced": True,
+                        "kind": "ConfigMap",
+                        "verbs": ["get", "list"],
+                        "shortNames": ["cm"],
+                    },
+                    {
+                        "name": "namespaces",
+                        "singularName": "namespace",
+                        "namespaced": False,
+                        "kind": "Namespace",
+                        "verbs": ["get", "list"],
+                    },
+                ],
+            }
+        elif path == "/api/v1/namespaces/autopilot/configmaps/ops-health-report":
+            body = cm
+        else:
+            body = {
+                "kind": "Status",
+                "apiVersion": "v1",
+                "status": "Failure",
+                "reason": "NotFound",
+                "code": 404,
+            }
+        data = json.dumps(body).encode()
+        self.send_response(200 if body.get("kind") != "Status" else 404)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def log_message(self, *args):  # noqa: ARG002 — テスト出力を汚さない
+        pass
+
 
 # 実スキーマに即した kubelet stats/summary fixture (test_root_disk_usage.py と同一)
 SUMMARY = {
@@ -352,6 +436,77 @@ class ReportRootDiskContractTest(unittest.TestCase):
         green になることを、同じ偽物で固定する (P-9062)。
         """
         proc = self._run_verify_command(
+            "-o jsonpath='{.data.latest\\.json}' 2>/dev/null "
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def _run_real_kubectl_verify(self, jsonpath_flag):
+        """受入検証コマンドを**実 kubectl + mock apiserver** で spec のまま実行する。
+
+        report.py の main() が書いた ConfigMap (root_disk + fill_days 入り) を
+        mock apiserver が配信し、実 kubectl で引いて、後段の python 断片まで
+        通す。KUBECTL_SHIM と違い kubectl バイナリそのものを使うため、
+        「偽物が実 kubectl と違う解釈をしていた」事態を構造的に排除できる
+        (2026-08-25 に mock apiserver + kubectl v1.35.0 で実測した再現手順)。
+        kubectl が無ければ skipTest (CI の ubuntu-latest には含まれる)。
+        """
+        if shutil.which("kubectl") is None:
+            self.skipTest("実 kubectl が PATH に無いためスキップ")
+        self._run_main()
+        srv = MockAPIServer(self.writer.written)
+        self.addCleanup(srv.close)
+        with tempfile.TemporaryDirectory() as td:
+            kubeconfig = os.path.join(td, "kubeconfig")
+            with open(kubeconfig, "w") as f:
+                f.write(
+                    "apiVersion: v1\nkind: Config\n"
+                    'clusters:\n- cluster: {{server: "{0}"}}\n  name: mock\n'
+                    "contexts:\n- context: {{cluster: mock, user: mock}}\n  name: mock\n"
+                    "current-context: mock\n"
+                    "users:\n- name: mock\n  user: {{token: dummy}}\n".format(
+                        srv.base_url
+                    )
+                )
+            env = dict(os.environ)
+            env["KUBECONFIG"] = kubeconfig
+            env["KUBECACHEDIR"] = os.path.join(td, "cache")
+            cmd = (
+                "kubectl get cm -n autopilot ops-health-report "
+                + jsonpath_flag
+                + "| python3 -c 'import json,sys; d=json.load(sys.stdin); "
+                "assert d.get(\"root_disk\") and \"fill_days\" in d[\"root_disk\"]'"
+            )
+            return subprocess.run(
+                cmd, shell=True, text=True, capture_output=True, env=env, timeout=60
+            )
+
+    def test_real_kubectl_spec_verify_verbatim_unsatisfiable(self):
+        """**実 kubectl** で spec の verify[0] をリテラル実行し、正しく populate された
+        ConfigMap (report.py の main() が実際に書いたもの) でも空出力 →
+        JSONDecodeError (rc=1) になることを固定する (P-9062)。
+
+        `{.data.latest.json}` は実 kubectl では入れ子 (data["latest"]["json"]) と
+        解釈され、キーがリテラル `latest.json` の ConfigMap では常に空出力になる。
+        wrapper の verify 出力 (JSONDecodeError: Expecting value line 1 column 1) と
+        同一の失敗を、実バイナリ + 実 reporter 出力で再現する。つまりクラスタ到達・
+        ConfigMap 内容・reporter 実装が全て正しくても spec の verify[0] は通らない
+        というブロッカーを、kubectl の実解釈に依存した形で CI に閉じる。
+        """
+        proc = self._run_real_kubectl_verify(
+            "-o jsonpath='{.data.latest.json}' 2>/dev/null "
+        )
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(proc.stdout, "")
+        self.assertIn("JSONDecodeError", proc.stderr)
+
+    def test_real_kubectl_escaped_verify_passes(self):
+        """同じ ConfigMap に対し、エスケープ形 `{.data.latest\\.json}` なら**実
+        kubectl** でも受入検証コマンドは rc=0 で通る (P-9062)。
+
+        spec の verify[0] がこの形に修正されたときに wrapper で green になる形を、
+        実バイナリで固定する (shim 版 test_escaped_jsonpath_verify_command_passes の
+        実機対)。"""
+        proc = self._run_real_kubectl_verify(
             "-o jsonpath='{.data.latest\\.json}' 2>/dev/null "
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
