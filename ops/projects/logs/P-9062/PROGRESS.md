@@ -1,5 +1,88 @@
 # P-9062 — 進捗記録
 
+## 2026-08-25（計測が「完全に失敗」したときの fill_days 契約破壊経路を塞いだ。summary も statvfs も取れない場合、build_report が例外を漏らし collect() が root_disk 節を {"error": ...} にしていた。source=error の正規 section + 変更しない履歴を返すように。verify[1] green / verify[0] は構造的不可能のまま）
+
+### やったこと
+
+- 前セッション (fc90dfa4) までの実装を全量再検証し、**新たに実リスクを 1 つ見つけて塞いだ**:
+- **`measure()` が例外を漏らす経路が残っていた**。これまでの壊れ耐性は「summary 経路が None を返す
+  → statvfs へ倒れる」を前提にしており、summary が None かつ **statvfs (`shutil.disk_usage("/")`) も
+  例外を漏らす**場合に `build_report` が例外を伝播させ、report.py の `collect()` が root_disk 節全体を
+  `{"error": "OSError: ..."}` にしていた — **fill_days キーが消え、受入検証 (kubectl 側) の assert が
+  落ちる**。実測で再現確認 (statvfs を OSError に差し替え → build_report が例外伝播、collect() wrap で
+  `{"error": ...}`)。summary パース失敗 (ValueError)・履歴の壊れ (used_bytes 欠落 / 非 dict 末尾) と
+  同じ「root_disk 節は必ず正規の section + fill_days キーを持つ」契約の、最後の取りこぼし経路。
+- **修正**: `build_report` の `measure()` 呼び出しを try で包み、例外時は `source="error"` の正規
+  section (値は全て None、`fill_days=None` + `fill_days_note` に `計測不能: <Exception>: <msg>`) と
+  **変更しない**履歴 (previous_samples をそのまま返す — 計測不能のエントリを混ぜない) を返す。
+  例外を漏らさないので collect() の wrap を通っても `{"error": ...}` にならず、fill_days 契約が守られる。
+  canonical と apps/ 側コピーの両方を同じ PR で修正 (drift check が一致を確認済み)。
+- **テスト**: `_selfcheck` (--check) に計測失敗ケースを追加 (source=error / fill_days キー / note /
+  履歴不変)、`ops/tests/test_root_disk_usage.py` に回帰テスト 1 本追加 (`BuildReportTest`:
+  `test_total_measurement_failure_keeps_fill_days_contract` — statvfs 失敗でも正規 section +
+  collect() wrap でも fill_days キー保持)、`ops/tests/test_report_root_disk.py` に結合テスト 1 本追加
+  (main() 結合: 計測完全失敗でも latest.json の root_disk 節が source=error + fill_days キーを持ち、
+  受入検証スニペットをそのまま流して rc=0)。
+
+### verify 実測（全てこのセッションで実行）
+
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0（**受入検証の 1 項目は green**）
+- `python3 apps/ops-health-reporter/root_disk_usage.py --check` → rc=0（コピーも一致）
+- `python3 -m unittest ops.tests.test_root_disk_usage -v` → **25 tests OK** (前回 24 + 新規 1)
+- `python3 -m unittest ops.tests.test_report_root_disk` → **9 tests OK** (前回 8 + 新規 1)
+- `python3 -m unittest discover -s ops/tests -t .` → **619 OK** (前回 617 + 新規 2)
+- ops/heart/tests → 448 OK、ops/runner/tests → 53 OK
+- `python3 ops/check_root_disk_usage_script_sync.py` → 一致 OK、`diff` canonical/コピー → 一致
+- `kubectl kustomize apps/ops-health-reporter` → build OK（nodes/proxy + nodes/stats が
+  resourceNames ["node01"] のまま）
+- `python3 ops/validate.py` → 0 error（warning 11 は全て既存・対象外）
+- `python3 -m py_compile` 全対象 → OK
+- verify[0] をこの sandbox でリテラル実行 → 従来どおり JSONDecodeError（空入力。クラスタ資格情報が
+  無いため構造的に実行不能。前セッションの実測どおり）
+
+### 分かったこと（実測・調査）
+
+- **壊れ耐性の「穴」は必ず最外殻 (build_report の measure) に残る**。summary → statvfs の 2 段
+  fallback は「どちらかが取れる」前提で、**両方失敗**の経路が最後まで残っていた。前セッションまでの
+  修正 (summary パース失敗 / 履歴の壊れ) は全て「取れる方に倒れる」か「履歴が壊れていても section を
+  組む」で、`measure()` 自体が例外を漏らす場合には触れていなかった。build_report が全ての計測を唯一
+  通過する chokepoint なので、そこを try で包むのが最小で完全な塞ぎ。
+- 計測不能を「データとして」載せる (source=error + note) のは P-9062 の設計思想に沿う。履歴を
+  汚さない (previous_samples をそのまま返す) のは、次回の正常計測時に壊れた部分から再開できるように
+  するため。
+- verify[0] は変わらず 2 重に構造的不可能（wrapper=runner Job にクラスタ資格情報が無い +
+  spec の jsonpath `{.data.latest.json}` が実 kubectl でドットキーを解けない）。worker は spec を
+  変えられない。今回の修正は「spec 側が修正されてクラスタ到達が解決したとき」に `root_disk` が
+  `{"error": ...}` で落ちる最後の経路を 1 つ潰した、という位置づけ。
+
+### 発見（スコープ外、curriculum へ）
+
+- なし（dashboard_smoke の no-lie-coexistence 論点は据え置き）。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **ローカルで追加実装できることは残っていない（今セッションはその上で measure 失敗経路を直した）。**
+  受入検証の残り 1 項目 (kubectl) は verify[0] が 2 重に構造的不可能（①wrapper=runner Job に
+  クラスタ資格情報が無い → 常に空出力、②spec の jsonpath `{.data.latest.json}` は実 kubectl で
+  ドットキーを解けない → `\.` エスケープが要る）。worker は spec を変えられない。このままでは
+  wrapper は verify ゲートで max_sessions まで回し続け、その後 heart が session_limit + question を
+  人間へ出す (runner.py:1015)。人間の判断材料はこの PROGRESS.md。
+- 修正の方向は dispatch / 所有者が決める（2 案は 7c1e7caa の記録参照）:
+  (a) 所有者判断 (2026-08-24) どおり dispatch 由来の verify を外す → wrapper が PR を出し、独立
+  レビュー (reviewer Job はクラスタ read 権限を持つ) と CI に完成の判断を移す
+  (b) verify[0] を worker 環境で実行可能な形に置き換える (例: `python3 -m unittest
+  ops.tests.test_report_root_disk`。P-9037 流)
+- 差し戻されたら従来どおり以下を疑う: nodes/proxy + nodes/stats の resourceNames が node01 のままか
+  （回帰テストあり）/ configMapGenerator sync の自愈待ち / 受入検証コマンド形状の drift（リテラル
+  実行テストあり）/ 履歴エントリの壊れ（`_usable_samples` + append 側の isinstance ガード + 今回の
+  measure 失敗が縛る）。
+- **merge 後に確認すること**（従来と変わらず）: reporter が 1 回走る → `root_disk.source` が
+  kubelet_summary になるか（RBAC nodes/proxy+stats の通し。取れていれば breakdown の images/PVC が
+  載り、取れなくても statvfs 総量 + None で正常動作）、1 日分の履歴が溜まったら fill_days が数値に
+  なるか（MIN_WINDOW_DAYS=1.0）。実測したら substrate.md を更新する。
+
+---
+
 ## 2026-08-25（履歴末尾が dict でない壊れ (None/文字列/数値等) で append_sample が AttributeError を漏らし fill_days 契約を壊す経路を塞いだ。ed22bfba の _usable_samples 硬化が取りこぼしていた形状。verify[1] green / verify[0] は構造的不可能のまま）
 
 ### やったこと
