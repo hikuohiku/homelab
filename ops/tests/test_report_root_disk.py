@@ -1,15 +1,25 @@
 """report.py main() が ConfigMap に書く latest.json が P-9062 の受入検証を満たすことを、
 k8s 層を偽物に差し替えてクラスタ無しで固定する (P-9062)。
 
-P-9062 の受入検証 `kubectl get cm -n autopilot ops-health-report -o jsonpath=
-'{.data.latest.json}' ... | python3 -c 'root_disk と fill_days を assert'` はクラスタ
-到達が要るため、sandbox / CI ではそのまま実行できない (wrapper 環境は merge 後に
-reporter が 1 回走ってから green になる想定)。そこで report.py の main() を AST 抽出し
-(report.py は import 時に ServiceAccount token を読むため cluster 外から import 不可 —
-test_report_configmap_write.py と同じ流儀)、k8s_get / k8s_request を偽物に差し替えて
-1 周実行させ、書けた ConfigMap の data[latest.json] に受入検証の python 断片をそのまま
-流して通ることを CI で固定する。「たぶん通る」を CI に閉じ込めるのが目的で、main() 本体を
-実行するので配線 (report の root_disk キー・fill_days・履歴書き戻し) の変化を検出できる。
+**2026-08-25 実測で判明した spec レベルの罠**: P-9062 の受入検証 verify[0]
+`kubectl get cm -n autopilot ops-health-report -o jsonpath='{.data.latest.json}' ...` は
+**実 kubectl では決して green にならない**。実 kubectl の jsonpath は `{.data.latest.json}`
+を**入れ子フィールド** (data["latest"]["json"]) と解釈するため、data のキーが
+`latest.json` (リテラル) の ConfigMap では空出力になり、後段の json.load が
+JSONDecodeError で落ちる (mock apiserver + kubectl v1.35.0 で実測 — wrapper の verify
+出力と同一の失敗)。リテラルのドットキーを読むには `{.data.latest\\.json}` と
+バックスラッシュでエスケープする (ops/CHARTER.md §5.5 の実測済み読み方)。
+**クラスタ到達が解決しても verify[0] は通らない**ため、以前の「reporter が 1 回走れば
+green」という見込みは誤りで、spec の verify[0] 自体の修正 (エスケープ) が必要。
+
+report.py の main() を AST 抽出し (report.py は import 時に ServiceAccount token を
+読むため cluster 外から import 不可 — test_report_configmap_write.py と同じ流儀)、
+k8s_get / k8s_request を偽物に差し替えて 1 周実行させ、書けた ConfigMap の
+data[latest.json] に受入検証の python 断片をそのまま流して通ることを CI で固定する。
+kubectl 偽物は**実 kubectl の jsonpath 解釈を忠実に模す** (ドット=入れ子・`\\.`=リテラル、
+欠落フィールドは空出力) ため、「verify[0] が実 kubectl では空出力になる」事実も CI に
+閉じる。main() 本体を実行するので配線 (report の root_disk キー・fill_days・履歴書き戻し)
+の変化を検出できる。
 
 root_disk の取得源は kubelet stats/summary が優先 (RBAC 追加済み、nodes/proxy +
 nodes/stats) なので、root_disk_usage.k8s_get も summary を返す偽物に差し替えて
@@ -53,6 +63,69 @@ DOWNLOAD_BUDGET = REPO / "apps" / "ops-health-reporter" / "download_budget.py"
 SPEC_VERIFY_SNIPPET = (
     "import json,sys; d=json.load(sys.stdin); "
     "assert d.get(\"root_disk\") and \"fill_days\" in d[\"root_disk\"]"
+)
+
+# kubectl 偽物 (P-9062)。**実 kubectl v1.35.0 の -o jsonpath を忠実に模す**:
+# ドットは入れ子フィールド区切り、`\.` はリテラルのドット、欠落フィールドは空出力。
+# `{.data.latest.json}` は data["latest"]["json"] を探すため、data のキーが
+# `latest.json` (リテラル) の ConfigMap では空出力になる (mock apiserver で実測)。
+# 旧偽物は「jsonpath はリテラルキーを返す」と誤って模しており、spec の verify[0] が
+# 実 kubectl では通らない事実を隠していた。
+KUBECTL_SHIM = textwrap.dedent(
+    """\
+    #!/usr/bin/env python3
+    import json, os, sys
+
+    def resolve(obj, expr):
+        inner = expr.strip()
+        if inner.startswith("{") and inner.endswith("}"):
+            inner = inner[1:-1]
+        if inner.startswith("$"):
+            inner = inner[1:]
+        tokens, cur = [], []
+        i = 0
+        while i < len(inner):
+            c = inner[i]
+            if c == "\\\\" and i + 1 < len(inner):
+                cur.append(inner[i + 1])
+                i += 2
+                continue
+            if c == ".":
+                tokens.append("".join(cur))
+                cur = []
+            else:
+                cur.append(c)
+            i += 1
+        tokens.append("".join(cur))
+        if tokens and tokens[0] == "":
+            tokens = tokens[1:]
+        for t in tokens:
+            if not isinstance(obj, dict) or t not in obj:
+                return ""
+            obj = obj[t]
+        if isinstance(obj, (dict, list)):
+            return json.dumps(obj, ensure_ascii=False)
+        return str(obj)
+
+    def main(argv):
+        if len(argv) != 8 or argv[1:7] != [
+            "get", "cm", "-n", "autopilot", "ops-health-report", "-o"
+        ]:
+            sys.stderr.write("unexpected kubectl args: %s\\n" % (argv[1:],))
+            return 2
+        arg = argv[7]
+        if not arg.startswith("jsonpath="):
+            sys.stderr.write("expected -o jsonpath, got: %s\\n" % arg)
+            return 2
+        cm = json.load(open(os.environ["SHIM_CM_FILE"]))
+        out = resolve(cm, arg[len("jsonpath="):])
+        if out:
+            print(out)
+        return 0
+
+    if __name__ == "__main__":
+        sys.exit(main(sys.argv))
+    """
 )
 
 # 実スキーマに即した kubelet stats/summary fixture (test_root_disk_usage.py と同一)
@@ -228,18 +301,13 @@ class ReportRootDiskContractTest(unittest.TestCase):
         self.assertIsNone(rd["fill_days"])
         self.assertIsNotNone(rd["fill_days_note"])
 
-    def test_acceptance_kubectl_command_verbatim(self):
-        """受入検証コマンドを kubectl だけ偽物にして**リテラル実行**する (P-9062)。
+    def _run_verify_command(self, jsonpath_flag):
+        """kubectl 偽物を PATH に差し込み、受入検証の形 (namespace/name・-o jsonpath・
+        2>/dev/null・パイプ・python 断片) でコマンドを実行して返す。
 
-        test_latest_json_has_root_disk_with_fill_days は python 断片のみを検証する。
-        こちらは残りの kubectl 側 (namespace/name・`-o jsonpath='{.data.latest.json}'`
-        の形・`2>/dev/null`・パイプ) も含めて、受入検証コマンドそのものを 1 文字たりと
-        崩さず実行し、クラスタ到達と reporter の実実行だけを残す。
-        kubectl 偽物は report.py が put_configmap に渡した ConfigMap 本文から
-        data.latest.json を jsonpath 相当で取り出して stdout へ流す (実 kubectl が
-        クラスタから ConfigMap を引いて .data.latest.json を出すのを模す)。引数が
-        受入検証の呼び出し形と 1 つでも違えば rc=2 で落とす — コマンドの形の drift を
-        機械で縛る。
+        kubectl 偽物は実 kubectl の jsonpath 解釈を忠実に模すため、jsonpath_flag の
+        形 (エスケープの有無) によって出力が変わる。残るのはクラスタ到達と reporter
+        の実実行のみ。
         """
         self._run_main()
         with tempfile.TemporaryDirectory() as td:
@@ -247,32 +315,46 @@ class ReportRootDiskContractTest(unittest.TestCase):
             cm_file = td / "configmap.json"
             cm_file.write_text(json.dumps(self.writer.written))
             shim = td / "kubectl"
-            shim.write_text(textwrap.dedent("""\
-                #!/bin/sh
-                # 受入検証コマンドの kubectl 部分のエミュレート (引数も一致を検査する)
-                if [ "$1" != "get" ] || [ "$2" != "cm" ] || [ "$3" != "-n" ] || \\
-                   [ "$4" != "autopilot" ] || [ "$5" != "ops-health-report" ] || \\
-                   [ "$6" != "-o" ] || [ "$7" != "jsonpath={.data.latest.json}" ]; then
-                  echo "unexpected kubectl args: $*" >&2
-                  exit 2
-                fi
-                exec python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["data"]["latest.json"])' "$SHIM_CM_FILE"
-            """))
+            shim.write_text(KUBECTL_SHIM)
             shim.chmod(0o755)
             env = dict(os.environ)
             env["PATH"] = str(td) + os.pathsep + env.get("PATH", "")
             env["SHIM_CM_FILE"] = str(cm_file)
-            # 受入検証コマンド (spec の verify[0]) をそのまま実行する
             cmd = (
                 "kubectl get cm -n autopilot ops-health-report "
-                "-o jsonpath='{.data.latest.json}' 2>/dev/null "
-                "| python3 -c 'import json,sys; d=json.load(sys.stdin); "
+                + jsonpath_flag
+                + "| python3 -c 'import json,sys; d=json.load(sys.stdin); "
                 "assert d.get(\"root_disk\") and \"fill_days\" in d[\"root_disk\"]'"
             )
-            proc = subprocess.run(
+            return subprocess.run(
                 cmd, shell=True, text=True, capture_output=True, env=env
             )
-            self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_acceptance_kubectl_command_verbatim_unsatisfiable(self):
+        """spec の verify[0] を**リテラル実行**し、実 kubectl の jsonpath では
+        空出力 → JSONDecodeError (rc=1) になることを固定する (P-9062)。
+
+        spec の jsonpath `{.data.latest.json}` は実 kubectl では入れ子
+        (data["latest"]["json"]) と解釈され、ConfigMap の data キーが `latest.json`
+        (リテラル) の場合は空出力になる。クラスタ到達が解決しても verify[0] は
+        決して green にならない (spec レベルのバグ。mock apiserver + kubectl
+        v1.35.0 で実測)。このテストはその事実を CI に閉じ、旧偽物のように
+        「jsonpath がリテラルキーを返す」と誤って模して通ることを防ぐ。
+        """
+        proc = self._run_verify_command("-o jsonpath='{.data.latest.json}' 2>/dev/null ")
+        self.assertEqual(proc.returncode, 1)
+        self.assertEqual(proc.stdout, "")
+        self.assertIn("JSONDecodeError", proc.stderr)
+
+    def test_escaped_jsonpath_verify_command_passes(self):
+        """CHARTER.md §5.5 の実測済み読み方 `{.data.latest\\.json}` (エスケープ) なら
+        受入検証コマンドは通る。spec の verify[0] がこの形に修正されたときに
+        green になることを、同じ偽物で固定する (P-9062)。
+        """
+        proc = self._run_verify_command(
+            "-o jsonpath='{.data.latest\\.json}' 2>/dev/null "
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
 
 
 if __name__ == "__main__":

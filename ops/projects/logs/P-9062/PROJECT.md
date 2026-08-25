@@ -17,6 +17,11 @@ initializer が 2026-08-25 に `project/p-9062` checkout のリポジトリル�
     `fill_days`（残り日数）を持つことを確認している。
     実測 rc=1（kubectl がクラスタに到達できず空入力 → JSONDecodeError。また現在の report.py は
     `root_disk` キーを一切書かないため、到達できても assert が通らない）。
+    **2026-08-25 追記（mock apiserver + 実 kubectl で実測）**: クラスタ到達が解決してもこのコマンドは
+    green にならない。実 kubectl の jsonpath は `.` を入れ子区切りと解釈するため `{.data.latest.json}` は
+    空出力になり、JSONDecodeError は消えない。リテラルのドットキーは `{.data.latest\.json}` とエスケープする
+    必要がある（ops/CHARTER.md §5.5 の実測済み読み方）。**spec の verify[0] 自体の修正（エスケープ）が
+    必要**で、これは worker の立場では直せない（詳細は PROGRESS.md 2026-08-25 のセッション記録を参照）。
 - [ ] `python3 ops/tools/root_disk_usage.py --check`
   — 内訳実測ツールが実在し、`--check`（ネットワーク非依存の自己検査）が rc=0 で終わることを確認している。
     実測 rc=2（ファイル未存在）。

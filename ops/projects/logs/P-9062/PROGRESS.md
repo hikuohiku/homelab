@@ -1,5 +1,79 @@
 # P-9062 — 進捗記録
 
+## 2026-08-25（受入検証 verify[0] の jsonpath が実 kubectl では解けないことを mock apiserver で実測。spec レベルのブロッカーを発見し CI テストを真実に直した）
+
+### やったこと
+
+- **「verify[0] はクラスタ到達が解決すれば green になる」という前 5 セッションの結論が誤りであることを実測で確定した。**
+  spec の verify[0] `kubectl get cm -n autopilot ops-health-report -o jsonpath='{.data.latest.json}'` は、
+  **実 kubectl の jsonpath では決して green にならない**。実 kubectl は `.` を**入れ子フィールド区切り**と
+  解釈するため `{.data.latest.json}` は `data["latest"]["json"]` を探す。ConfigMap の data キーは `latest.json`
+  （リテラル、ドットはキー名の一部）なので **空出力**になり、後段の `json.load` が JSONDecodeError で落ちる。
+- **証明（mock apiserver + 実 kubectl v1.35.0）**: Python のローカル HTTP サーバーで kube-apiserver を模し
+  （`autopilot/ops-health-report` の data に `latest.json` = root_disk + fill_days 入り JSON を配信）、
+  実 kubectl で `get cm -o jsonpath` をそのまま通した:
+  - spec どおり `{.data.latest.json}` → **空出力（0 bytes）** → `JSONDecodeError: Expecting value: line 1
+    column 1 (char 0)`。**wrapper の verify 実測出力と完全に同一**の失敗。
+  - `{.data.latest\.json}`（エスケープ）→ root_disk + fill_days が読めて assert 通過（rc=0）。
+  - つまり **クラスタ到達・ConfigMap 内容・reporter 実装が全て正しくても verify[0] は通らない**。
+    仕様の verify[0] 自体の修正（jsonpath の `\.` エスケープ）が無い限り、このプロジェクトは受入検証を
+    永久に満たせない。
+- **既存の CI テストがこの罠を隠していた**: `test_report_root_disk.py` の kubectl 偽物は「jsonpath は
+  リテラルキーを返す」と誤って模しており、「verify[0] はコマンド形状ごと CI 固定済み、残るはクラスタ到達のみ」
+  という誤った結論を支えていた。**偽物を実 kubectl の jsonpath 解釈に忠実に書き直した**（ドット=入れ子・
+  `\.`=リテラル・欠落フィールド=空出力）上で、テストを 2 本に分けた:
+  1. `test_acceptance_kubectl_command_verbatim_unsatisfiable` — spec の verify[0] をリテラル実行し、
+     **実 kubectl では空出力 → rc=1（JSONDecodeError）になる**ことを固定（ブロッカーを CI に閉じる）。
+  2. `test_escaped_jsonpath_verify_command_passes` — CHARTER.md §5.5 の実測済み読み方 `{.data.latest\.json}`
+     なら rc=0 で通ることを固定（verify[0] が修正されたときに green になる形）。
+- **CHARTER.md §5.5 は既に正しい読み方を実測済みだった**: `kubectl -n autopilot get configmap
+  ops-health-report -o jsonpath='{.data.latest\.json}'`。repo 側はドットキーの罠を知っていたが、
+  spec の verify[0] には反映されていなかった。
+- PROJECT.md の受入チェックリスト該当項目に追記（verify[0] が spec レベルの修正待ちである旨）。
+
+### verify 実測（全てこのセッションで実行）
+
+- `python3 -m unittest ops.tests.test_report_root_disk -v` → **6 tests OK**（前回 5。うち 1 本は
+  verify[0] が実 kubectl で通らない事実の固定）
+- `python3 -m unittest discover -s ops/tests -t .` → **609 OK**（前回 608 + 1）
+- ops/heart/tests 448 OK、ops/runner/tests 53 OK
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0（**受入検証の 1 項目は green**）
+- `python3 ops/validate.py` → 0 error（warning 11 は全て既存・対象外）
+- `-W error::SyntaxWarning` で docstring のエスケープ警告なしを確認
+
+### 分かったこと (実測・調査)
+
+- **kubectl の jsonpath はドットキーを素直に読めない**。`{.data.latest.json}` は入れ子解釈、リテラルの
+  ドットキーは `\.` でエスケープする。これは kubectl の標準動作で、repo 内の CHARTER.md §5.5 が実測済み。
+- **受入検証の「残り 1 項目はクラスタ到達のみ」という結論は誤りだった。** 本当の残りは「spec の verify[0] の
+  jsonpath 修正（エスケープ）」で、**worker の立場では直せない**（spec は dispatch が採択したもの）。
+  reviewer / 所有者が spec の verify[0] を `{.data.latest\.json}` に直す必要がある。直せば merge 後に
+  reporter が 1 回走って ConfigMap が書かれた時点で verify[0] は green になる
+  （`test_escaped_jsonpath_verify_command_passes` がその形を固定済み）。
+- 実装側（report.py の root_disk 節 + fill_days、履歴の同一 PUT、RBAC node01 限定）は今回も問題なし。
+
+### 発見（スコープ外、curriculum へ）
+
+- **dispatch が verify を書くときの既知の罠として「ドットキー（latest.json 等）を jsonpath で引く場合は
+  `\.` エスケープが必要」を curriculum へ。** 今回のように CI の偽物が実 kubectl と異なる解釈をすると、
+  偽物テストが green のまま spec の verify が永遠に落ちる。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **最初にやること**: spec の verify[0] の jsonpath を `{.data.latest.json}` → `{.data.latest\.json}` に
+  修正できるか確認する（worker は spec を変えられない。reviewer / 所有者の判断）。修正されない限り verify[0] は
+  merge 後も空出力のまま JSONDecodeError で落ち続ける。
+- 修正されたら: `test_escaped_jsonpath_verify_command_passes` がその形を固定済み。あとは wrapper 環境で
+  reporter が 1 回走り ConfigMap が書かれるのを待つだけ。
+- 差し戻されたら従来どおり以下を疑う: nodes/proxy resourceNames=node01（回帰テストあり）/ configMapGenerator
+  sync 自愈待ち / コマンド形状の drift。
+- **merge 後に確認すること**: `root_disk.source` が kubelet_summary になるか（RBAC nodes/proxy+stats の通し）、
+  1 日分の履歴が溜まったら fill_days が数値になるか（MIN_WINDOW_DAYS=1.0）。実測したら substrate.md を更新。
+- 実測の手順は再現可能: ローカルに mock apiserver（mktemp）→ kubeconfig で kubectl を向ける →
+  `get cm -o jsonpath` の 2 形（`{.data.latest.json}` / `{.data.latest\.json}`）を比較。
+
+---
+
 ## 2026-08-25（5 回目の全量再検証セッション。コード変更なし — 前回までと同じ結論を実測で裏取り）
 
 ### やったこと
