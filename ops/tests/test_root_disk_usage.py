@@ -99,6 +99,26 @@ class AppendSampleTest(unittest.TestCase):
             )
         self.assertEqual(len(many), ru.MAX_SAMPLES)
 
+    def test_append_survives_corrupt_non_dict_tail(self):
+        # 末尾が dict でない壊れた履歴 (ConfigMap の手動編集・旧版の書き込み等)。
+        # 従来は AttributeError を漏らし、collect() が root_disk 節を {"error": ...}
+        # にして fill_days キーの契約 (受入検証) を壊していた。追記して壊れは
+        # forecast の _usable_samples に委ねる
+        for bad_tail in (None, "corrupt", 5):
+            hist = [{"ts": "2026-08-23T00:00:00Z", "used_bytes": 100}, bad_tail]
+            samples = ru.append_sample(hist, 200, "2026-08-25T00:00:00Z")
+            self.assertEqual(len(samples), 3)
+            self.assertEqual(samples[-1], {"ts": "2026-08-25T00:00:00Z", "used_bytes": 200})
+
+    def test_append_dedup_still_replaces_dict_tail(self):
+        # 健全な dict 末尾の同一 ts 置き換えは従来どおり (二重カウントを防ぐ)
+        samples = ru.append_sample(
+            [{"ts": "2026-08-25T00:00:00Z", "used_bytes": 100}],
+            210, "2026-08-25T00:00:00Z",
+        )
+        self.assertEqual(len(samples), 1)
+        self.assertEqual(samples[0]["used_bytes"], 210)
+
 
 class ForecastTest(unittest.TestCase):
     def test_one_gib_per_day_fixture(self):
@@ -189,6 +209,26 @@ class ForecastTest(unittest.TestCase):
         )
         self.assertIn("fill_days", section)
         self.assertEqual(section["source"], "statvfs")
+
+    def test_build_report_keeps_fill_days_with_non_dict_history_entry(self):
+        # 実測経路の結合: 履歴に dict でないエントリ (None 等) が混じっても
+        # append_sample はクラッシュせず、build_report は root_disk 節を必ず作り
+        # fill_days キーを持つ (受入検証の契約。ed22bfba の _usable_samples 硬化が
+        # 非 dict 末尾の AttributeError を塞ぎ損ねていた経路)
+        hist = [
+            {"ts": "2026-08-23T00:00:00Z", "used_bytes": 100},
+            None,
+            {"ts": "2026-08-25T00:00:00Z", "used_bytes": 300},
+        ]
+        section, samples = ru.build_report(
+            hist, "2026-08-25T12:00:00Z", node_name="node01", summary_doc=None
+        )
+        self.assertIn("fill_days", section)
+        self.assertEqual(section["source"], "statvfs")
+        # 非 dict の None は潰されず残り、新サンプルが末尾に追記される
+        self.assertEqual(len(samples), 4)
+        self.assertIsNone(samples[1])
+        self.assertEqual(samples[-1]["ts"], "2026-08-25T12:00:00Z")
 
 
 class BuildReportTest(unittest.TestCase):

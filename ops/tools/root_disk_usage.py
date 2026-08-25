@@ -252,11 +252,17 @@ def append_sample(samples, used_bytes, now_iso, max_samples=MAX_SAMPLES):
     """履歴に今回のサンプルを追加し、最大件数で切り詰める (純関数)。
 
     同一 ts の再実行 (同じ分に 2 回走った等) は置き換える — 二重カウントで
-    増加量が 0 に寄るのを防ぐ。
+    増加量が 0 に寄るのを防ぐ。末尾が dict でない壊れたエントリ
+    (ConfigMap 履歴の手動編集・旧版の書き込み等) でもクラッシュせず追記する —
+    壊れたエントリは forecast の _usable_samples が捨てる (1 項目の壊れで
+    計測全体を止めない、fill_days キーの契約を守る)。_usable_samples は
+    daily_increase_bytes / forecast の中でしか使われず、build_report は先に
+    append_sample を通るため、このガードが無いと非 dict 末尾で AttributeError を
+    漏らし root_disk 節全体が {"error": ...} になる。
     """
     samples = list(samples or [])
     entry = {"ts": now_iso, "used_bytes": int(used_bytes)}
-    if samples and samples[-1].get("ts") == now_iso:
+    if samples and isinstance(samples[-1], dict) and samples[-1].get("ts") == now_iso:
         samples[-1] = entry
     else:
         samples.append(entry)
@@ -449,6 +455,14 @@ def _selfcheck():
     samples = append_sample(samples, 210, "2026-08-25T00:30:00Z")
     expect(len(samples) == 2 and samples[-1]["used_bytes"] == 210,
            "同一 ts の再実行は置き換え (二重カウントしない)")
+    # 末尾が dict でない壊れた履歴でもクラッシュせず追記 (壊れは _usable_samples が捨てる)
+    bad_tail = append_sample(
+        [{"ts": "2026-08-23T00:00:00Z", "used_bytes": 100}, None],
+        200,
+        "2026-08-25T00:00:00Z",
+    )
+    expect(len(bad_tail) == 3 and bad_tail[-1]["used_bytes"] == 200,
+           "非 dict 末尾でクラッシュしない")
     many = []
     for i in range(MAX_SAMPLES + 5):
         many = append_sample(
