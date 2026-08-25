@@ -74,7 +74,7 @@ data:
           # telegram-adapter の producer 鍵を使い回さないのは、書き置きが
           # 「所有者の止めて」を運ぶ経路で、事故のときに出所を権限で切り分けたいため。
           # 流せるのは自分の subject 1 本だけで、他人のイベントは読めも消せもしない
-          nkey: UB5WEUVHNUPAEKQMS6RM3DFD7QJZ5G2PWCNCJEU2HD6FMMKPXNUI6HSY
+          nkey: UDFD2VJSIAYJTDY7F7RDYMIIQJGX3SB4TUGYAHVM5OT7C6TGJVJBIYO2
           permissions: {
             # JetStream の publish は subject へ投げて _INBOX で ack を受けるだけ。
             # $JS.API.> は要らない (あれば stream を消せてしまう)
