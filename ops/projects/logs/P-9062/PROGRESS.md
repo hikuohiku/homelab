@@ -1,5 +1,86 @@
 # P-9062 — 進捗記録
 
+## 2026-08-25（履歴末尾が dict でない壊れ (None/文字列/数値等) で append_sample が AttributeError を漏らし fill_days 契約を壊す経路を塞いだ。ed22bfba の _usable_samples 硬化が取りこぼしていた形状。verify[1] green / verify[0] は構造的不可能のまま）
+
+### やったこと
+
+- 前セッション (783ae9d2) までの実装を全量再検証し、**新たに実リスクを 1 つ見つけて塞いだ**:
+- **`append_sample` が履歴の「末尾が dict でない」壊れでクラッシュしていた**。前々セッション
+  (ed22bfba) の `_usable_samples` 硬化は ts 解釈不能・used_bytes 欠落/非数値 (いずれも dict 内の
+  壊れ) を対象にしており、`_usable_samples` 自体は非 dict エントリも `_epoch` で弾く。しかし
+  **`_usable_samples` は `daily_increase_bytes` / `forecast` の中でしか呼ばれず、`build_report` は
+  先に `append_sample` を通る**。`append_sample` は `samples[-1].get("ts")` をガード無しで呼ぶため、
+  履歴の**末尾**が `None` / `"corrupt"` / `5` などの非 dict だと AttributeError を漏らし、
+  `collect()` が root_disk 節全体を `{"error": "AttributeError: 'NoneType' object has no attribute
+  'get'"}` にしていた — **fill_days キーが消え、受入検証 (kubectl 側) の assert が落ちる**。
+  ConfigMap の手動編集・旧版の書き込み等で十分起こりうる形状。実測で再現確認 (3 種類の末尾で
+  CRASH)。
+- **修正**: `append_sample` の末尾チェックに `isinstance(samples[-1], dict)` ガードを追加。
+  非 dict 末尾でもクラッシュせず追記し、壊れたエントリは従来どおり `_usable_samples` が捨てる
+  (raw_count / dropped の破損件数診断も維持 — 潰さず残すのが設計思想に合う)。canonical と
+  apps/ 側コピーの両方を同じ PR で修正 (drift check が一致を確認済み)。
+- **テスト**: `ops/tests/test_root_disk_usage.py` に回帰テスト 3 本追加 (24 tests に):
+  `test_append_survives_corrupt_non_dict_tail` (None / "corrupt" / 5 の末尾でクラッシュせず追記) /
+  `test_append_dedup_still_replaces_dict_tail` (健全な dict 末尾の同一 ts 置き換えは従来どおり) /
+  `test_build_report_keeps_fill_days_with_non_dict_history_entry` (実測経路の結合: 非 dict 混じり
+  履歴でも build_report は root_disk 節 + fill_days キーを返す)。`_selfcheck` (--check) にも
+  同ケースを追加 (ネットワーク非依存の自己検査を維持)。
+
+### verify 実測（全てこのセッションで実行）
+
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0（**受入検証の 1 項目は green**）
+- `python3 apps/ops-health-reporter/root_disk_usage.py --check` → rc=0（コピーも一致）
+- `python3 -m unittest ops.tests.test_root_disk_usage -v` → **24 tests OK** (前回 21 + 新規 3)
+- `python3 -m unittest ops.tests.test_report_root_disk` → **8 tests OK**（受入検証コマンドの
+  kubectl 偽物 + 実 kubectl 固定本を含む）
+- `python3 -m unittest discover -s ops/tests -t .` → **617 OK** (前回 614 + 新規 3)
+- ops/heart/tests → 448 OK、ops/runner/tests → 53 OK
+- `python3 ops/check_root_disk_usage_script_sync.py` → 一致 OK、`diff` canonical/コピー → 一致
+- `kubectl kustomize apps/ops-health-reporter` → build OK（nodes/proxy + nodes/stats が
+  resourceNames ["node01"] のまま）
+- `python3 ops/validate.py` → 0 error（warning 11 は全て既存・対象外）
+
+### 分かったこと（実測・調査）
+
+- **履歴の壊れ耐性の「穴」は常に append 経路に残る**。`_usable_samples` は「読む側」のフィルタで、
+  「書く側」の `append_sample` は別物。build_report の実行順 (append → forecast) を考えると、
+  append が全履歴に触る (末尾) ため、append 側も壊れ耐性を持たないと結局クラッシュする。
+  今回のガードは「1 項目の壊れで計測全体を止めない」という設計思想 (ed22bfba の _num docstring)
+  の append 側への延長で、スコープは P-9062 の履歴壊れ耐性の範囲内に閉じている。
+- verify[0] は変わらず 2 重に構造的不可能（wrapper=runner Job にクラスタ資格情報が無い +
+  spec の jsonpath `{.data.latest.json}` が実 kubectl でドットキーを解けない）。worker は spec を
+  変えられない。このセッションの修正は、もし spec 側が修正されてクラスタ到達が解決したときに
+  「fill_days が無い」で落ちる別経路を 1 つ潰した、という位置づけ。
+
+### 発見（スコープ外、curriculum へ）
+
+- なし（dashboard_smoke の no-lie-coexistence 論点は据え置き）。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **ローカルで追加実装できることは残っていない（今セッションはその上で見つけた append 側の
+  壊れ耐性を直した）。** 受入検証の残り 1 項目 (kubectl) は verify[0] が 2 重に構造的不可能
+  （①wrapper=runner Job にクラスタ資格情報が無い → 常に空出力、②spec の jsonpath
+  `{.data.latest.json}` は実 kubectl でドットキーを解けない → `\.` エスケープが要る）。
+  worker は spec を変えられない。このままでは wrapper は verify ゲートで max_sessions まで
+  回し続け、その後 heart が session_limit + question を人間へ出す（runner.py:1015）。
+  人間の判断材料はこの PROGRESS.md。
+- 修正の方向は dispatch / 所有者が決める（2 案は 7c1e7caa の記録参照）:
+  (a) 所有者判断 (2026-08-24) どおり dispatch 由来の verify を外す → wrapper が PR を出し、
+  独立レビュー (reviewer Job はクラスタ read 権限を持つ) と CI に完成の判断を移す
+  (b) verify[0] を worker 環境で実行可能な形に置き換える (例: `python3 -m unittest
+  ops.tests.test_report_root_disk`。P-9037 流)
+- 差し戻されたら従来どおり以下を疑う: nodes/proxy + nodes/stats の resourceNames が node01
+  のままか（回帰テストあり）/ configMapGenerator sync の自愈待ち / 受入検証コマンド形状の
+  drift（リテラル実行テストあり）/ 履歴エントリの壊れ（`_usable_samples` + append 側の今回の
+  isinstance ガードが縛る）。
+- **merge 後に確認すること**（従来と変わらず）: reporter が 1 回走る → `root_disk.source`
+  が kubelet_summary になるか（RBAC nodes/proxy+stats の通し。取れていれば breakdown の
+  images/PVC が載り、取れなくても statvfs 総量 + None で正常動作）、1 日分の履歴が溜まったら
+  fill_days が数値になるか（MIN_WINDOW_DAYS=1.0）。実測したら substrate.md を更新する。
+
+---
+
 ## 2026-08-25（壊れた履歴を捨てたときの note が「履歴が若い」と誤解させる罠を直した。破損件数を正直に載せる。実装・予報ロジックは従来どおり完、verify[1] green / verify[0] は構造的不可能のまま）
 
 ### やったこと
