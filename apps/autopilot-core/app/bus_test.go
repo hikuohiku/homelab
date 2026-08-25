@@ -108,8 +108,8 @@ func TestConsumeBusSkipsAlreadySeenFromGitHub(t *testing.T) {
 	}
 }
 
-func TestConsumeBusMarksSeenSoGitHubPathSkipsIt(t *testing.T) {
-	// 逆向き。NATS が先に拾ったら、後から GitHub の inbox 一覧に出てきても未読に見えないこと
+func TestConsumeBusPersistsSeenBeforeAck(t *testing.T) {
+	// 再配送されたときに二度返事をしないこと。cursor は ack より先に永続化する
 	srv, texts, _ := promptRecorder(t, http.StatusNoContent)
 	dir := t.TempDir()
 	cursorPath := filepath.Join(dir, "cursor.json")
@@ -122,9 +122,8 @@ func TestConsumeBusMarksSeenSoGitHubPathSkipsIt(t *testing.T) {
 	if len(*texts) != 1 {
 		t.Fatalf("未読は 1 回だけ渡すべき: %v", *texts)
 	}
-	// GitHub 側は inbox のファイル名で未読を判定する。ここに残っていないと二重に渡る
-	if got := unseen([]string{"20260823-120317-1e88e232.json"}, seen); len(got) != 0 {
-		t.Fatalf("バスで渡したものは GitHub 経路から未読に見えてはいけない: %v", got)
+	if !seen["20260823-120317-1e88e232.json"] {
+		t.Fatal("渡したものは既読になっているべき (再配送で二度返事をしない)")
 	}
 	// cursor は ack の前に永続化されている。再起動しても既読が残ること
 	reloaded, had := loadSeen(cursorPath)

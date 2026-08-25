@@ -241,8 +241,8 @@ spec:
               value: opencode-go/deepseek-v4-flash
             - name: CORE_STATE_DIR
               value: /data
-            # 人間を待たせる時間はここで決まる (inbox に載ってからコアが読むまで)。
-            # 5s * 720 req/h で共有トークンの上限 5000 req/h に十分収まる
+            # バスから何も来ないときの待ち時間。書き置きは publish の瞬間に届くので、
+            # 人間を待たせる時間はこの値では決まらない
             - name: CORE_POLL_SECONDS
               value: "5"
             # 健全性レポートは 30 分周期の CronJob が書くので速く見ても意味が無い
@@ -279,9 +279,9 @@ spec:
               value: "0"
             - name: CORE_SHADOW_INTERVAL_HOURS
               value: "6"
-            # イベント経路 (設計 D16) からの入力。GitHub の inbox と両読みで、
-            # 同じ書き置きは cursor (/data/cursor.json) で 1 回に落とす。
-            # この 2 つを消せば GitHub 側だけの構成に切り戻る
+            # 書き置きの唯一の入り口 (設計 D16 / state-out-of-git Phase 7)。
+            # 再配送の重複は cursor (/data/cursor.json) で 1 回に落とす。
+            # ここを消すと所有者の「止めて」が届かなくなる
             - name: NATS_URL
               value: nats://nats.autopilot.svc:4222
             - name: NATS_NKEY_SEED
