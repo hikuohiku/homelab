@@ -2299,3 +2299,73 @@
   が kubelet_summary になるか（RBAC nodes/proxy+stats の通し。取れていれば breakdown の
   images/PVC が載り、取れなくても statvfs 総量 + None で正常動作）、1 日分の履歴が溜まったら
   fill_days が数値になるか（MIN_WINDOW_DAYS=1.0）。実測したら substrate.md を更新する。
+
+---
+
+## 2026-08-25（さらにフレッシュ起動の全量再検証。spec の verify は依然未修正。実装は完・全 CI 相当ゲート green。verify[1] green / verify[0] は変わらず仕様レベルで 2 重に構造的不可能 — 前セッションの結論を自分の手で独立に再現。コード変更なし）
+
+### やったこと
+
+- 前セッション (797d63c9) の「ローカルでやることは残っていない」を信用せず、フレッシュ
+  起動で**全量を自分の手で再検証**した。コード変更なし。
+- wrapper の verify 実測（worker プロンプト記載）を確認: verify[0] (kubectl) は従来どおり
+  JSONDecodeError（空入力）、verify[1] (`--check`) は green。**spec の verify は未修正のまま**
+  （jsonpath `{.data.latest.json}` は依然エスケープされていない）。dispatch / 所有者による
+  verify の修正・削除は未反映。
+- この sandbox（= runner Job pod そのもの）で verify[0] をリテラル実行し、wrapper の実測と
+  **完全に同一の JSONDecodeError** を再現（クラスタ資格情報が無いため構造的に実行不能。
+  automount=false / test_gate.py が CI 固定）。
+
+### verify 実測（全てこのセッションで実行）
+
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0（**受入検証の 1 項目は green**）
+- verify[0] をこの sandbox でリテラル実行 → 従来どおり JSONDecodeError（空入力。wrapper の実測と同一）
+- `python3 -m unittest ops.tests.test_report_root_disk` → **10 tests OK**
+- `python3 -m unittest discover -s ops/tests -t .` → **624 OK**
+- `diff` canonical/コピー → 完全一致、`python3 ops/check_root_disk_usage_script_sync.py` → 一致 OK
+- `kubectl kustomize apps/ops-health-reporter` → build OK（nodes/proxy + nodes/stats が
+  resourceNames ["node01"] のまま。TestRbac も縛る）
+- `python3 ops/validate.py` → 0 error（warning 11 は全て既存・対象外）
+- 受入検証コマンド形状の CI 固定 4 本を個別実行 → **全て OK**
+  （test_acceptance_kubectl_command_verbatim_unsatisfiable /
+  test_escaped_jsonpath_verify_command_passes /
+  test_real_kubectl_spec_verify_verbatim_unsatisfiable /
+  test_real_kubectl_escaped_verify_passes — 実 kubectl + mock apiserver 含む）
+- 実環境の計測経路を再実測: `python3 ops/tools/root_disk_usage.py --node node01 --json`
+  → rc=0、`source=statvfs`（SA token 無しで summary は None → 意図どおり statvfs に倒れる）、
+  `used_ratio=0.295`、`fill_days=None` + note「履歴が 2 点に満たない」。設計どおりの fallback が実環境で動く。
+
+### 分かったこと（実測・調査）
+
+- **worker の立場で手を動かせることは、このセッションでも新たに見つからなかった。**
+  実装は DoD（spec 本文）を満たし、受入検証の 1 項目 (verify[1] `--check`) は green。
+  残る verify[0]（kubectl）は仕様レベルで 2 重に構造的不可能（①wrapper=runner Job に
+  クラスタ資格情報が無い → 常に空出力、②spec の jsonpath `{.data.latest.json}` が実
+  kubectl でドットキーを解けない → `\.` エスケープが要る）。**worker は spec を変えられない。**
+- このままでは wrapper は verify ゲートで max_sessions まで回し続け、その後 heart が
+  session_limit + question を人間へ出す（runner.py:1015）。人間の判断材料はこの PROGRESS.md。
+  修正の方向（verify 削除 or 置き換え）は dispatch / 所有者が決める。
+
+### 発見（スコープ外、curriculum へ）
+
+- なし（dashboard_smoke の no-lie-coexistence 論点は据え置き）。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **最初に wrapper の verify 実測を確認し、spec の verify が修正されたかを確かめる。**
+  修正されない限りこのプロジェクトは verify ゲートで永久停止する。**ローカルで追加実装
+  できることは無い（再確認）。** 実装は DoD を満たし、全 CI 相当ゲートが green。
+- 修正の方向は dispatch / 所有者が決める（2 案は 7c1e7caa の記録参照）:
+  (a) 所有者判断 (2026-08-24) どおり dispatch 由来の verify を外す → wrapper が PR を出し、
+  独立レビュー (reviewer Job はクラスタ read 権限を持つ) と CI に完成の判断を移す
+  (b) verify[0] を worker 環境で実行可能な形に置き換える (例: `python3 -m unittest
+  ops.tests.test_report_root_disk`。P-9037 流)
+- 差し戻されたら従来どおり以下を疑う: nodes/proxy + nodes/stats の resourceNames が node01
+  のままか（回帰テストあり）/ configMapGenerator sync の自愈待ち / 受入検証コマンド形状の
+  drift（リテラル実行テストあり）/ 履歴エントリの壊れ（`_usable_samples` + append 側
+  isinstance ガード + measure 失敗 + main() 配線 + `_num` OverflowError + summary 内訳の
+  fs 非 dict が縛る）。
+- **merge 後に確認すること**（従来と変わらず）: reporter が 1 回走る → `root_disk.source`
+  が kubelet_summary になるか（RBAC nodes/proxy+stats の通し。取れていれば breakdown の
+  images/PVC が載り、取れなくても statvfs 総量 + None で正常動作）、1 日分の履歴が溜まったら
+  fill_days が数値になるか（MIN_WINDOW_DAYS=1.0）。実測したら substrate.md を更新する。
