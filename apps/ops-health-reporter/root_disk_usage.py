@@ -183,14 +183,17 @@ def _ssl_ctx():
 def fetch_kubelet_summary(node_name):
     """kubelet stats/summary を読む (nodes/proxy + nodes/stats の RBAC が要る)。
 
-    取れないときは None (403 / トークン無し / タイムアウトのどれでも)。呼び出し側は
-    None なら statvfs 実測へ倒す。
+    取れないときは None (403 / トークン無し / タイムアウト / 応答が JSON でない
+    (json.load の ValueError) のどれでも)。呼び出し側は None なら statvfs 実測へ
+    倒す — 「summary が取れない」を一括で落とすため ValueError (JSONDecodeError /
+    UnicodeDecodeError) も含める。取りこぼすと measure が例外を外へ漏らし
+    root_disk 節全体が {"error": ...} になり fill_days の契約を壊す。
     """
     if not node_name:
         return None
     try:
         return k8s_get("/api/v1/nodes/{}/proxy/stats/summary".format(node_name))
-    except (OSError, urllib.error.HTTPError, urllib.error.URLError):
+    except (OSError, ValueError, urllib.error.HTTPError, urllib.error.URLError):
         return None
 
 

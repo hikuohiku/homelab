@@ -6,6 +6,7 @@ unittest でも固定する (node_saturation.py の --check と ops/tests の二
 """
 
 import unittest
+import urllib.error
 
 from ops.tools import root_disk_usage as ru
 
@@ -167,6 +168,35 @@ class BuildReportTest(unittest.TestCase):
         )
         self.assertEqual(section["source"], "statvfs")
         self.assertIsNone(section["breakdown"]["images_bytes"])
+
+
+class FetchKubeletSummaryTest(unittest.TestCase):
+    def setUp(self):
+        self._orig = ru.k8s_get
+        self.addCleanup(setattr, ru, "k8s_get", self._orig)
+
+    def test_network_error_falls_back_to_none(self):
+        # 403 (RBAC 不備) や接続不能は None → statvfs へ倒れる
+        for exc in (OSError("no route"), urllib.error.HTTPError("u", 403, "Forbidden", {}, None)):
+            ru.k8s_get = lambda path: (_ for _ in ()).throw(exc)
+            self.assertIsNone(ru.fetch_kubelet_summary("node01"))
+
+    def test_non_json_response_falls_back_to_none(self):
+        # 200 だが応答が JSON でない (apiserver 前段のプロキシが HTML を返す等)。
+        # json.load の ValueError は OSError/HTTPError と違い漏れて root_disk 節を
+        # {"error": ...} にしていた (取りこぼすと fill_days の契約が壊れる — P-9062)
+        ru.k8s_get = lambda path: (_ for _ in ()).throw(ValueError("Expecting value"))
+        self.assertIsNone(ru.fetch_kubelet_summary("node01"))
+
+    def test_build_report_propagates_summary_fetch_failure_to_statvfs(self):
+        # 実測経路の結合: summary 取得が JSON パース失敗でも root_disk 節は必ず
+        # でき、fill_days キーを持つ (受入検証の契約)
+        ru.k8s_get = lambda path: (_ for _ in ()).throw(ValueError("Expecting value"))
+        section, _ = ru.build_report(
+            [], "2026-08-25T00:00:00Z", node_name="node01", summary_doc=None
+        )
+        self.assertEqual(section["source"], "statvfs")
+        self.assertIn("fill_days", section)
 
 
 if __name__ == "__main__":
