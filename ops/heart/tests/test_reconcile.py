@@ -5,6 +5,7 @@
 soak の baseline 比較、curriculum の取り込み) を含む。
 """
 
+import copy
 import json
 import unittest
 from datetime import datetime, timedelta, timezone
@@ -14,7 +15,18 @@ from ops.heart import reconcile
 
 RULES_PATH = Path(__file__).resolve().parents[2] / "rules.json"
 with open(RULES_PATH) as f:
-    RULES = json.load(f)
+    RULES_FILE = json.load(f)
+
+# 遷移表は器の仕様 (立案が有効なときの振る舞い) を測る。rules.json の
+# curriculum.enabled は運用の栓で、いま所有者の判断で false にしてある。
+# 表そのものを栓の状態に引きずられないよう、既定は有効に固定し、停止の行は
+# RULES_CURRICULUM_OFF (= 出荷している rules.json そのもの) で測る
+RULES = copy.deepcopy(RULES_FILE)
+RULES["curriculum"]["enabled"] = True
+RULES_CURRICULUM_OFF = copy.deepcopy(RULES_FILE)
+RULES_CURRICULUM_OFF["curriculum"]["enabled"] = False
+RULES_CURRICULUM_UNSET = copy.deepcopy(RULES_FILE)
+RULES_CURRICULUM_UNSET["curriculum"].pop("enabled", None)
 
 NOW = datetime(2026, 8, 7, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -1206,6 +1218,141 @@ class TestCurriculum(unittest.TestCase):
         """jobs 観測に失敗したビートは「走っていない」と断定できないので spawn しない。"""
         d, actions = reconcile.decide(doc(), facts(jobs=None), RULES, NOW)
         self.assertNotIn("spawn_curriculum", kinds(actions))
+
+
+class TestCurriculumDisabled(unittest.TestCase):
+    """rules.json curriculum.enabled=false で「立案だけ」を止める栓 (2026-08-25)。
+
+    止めるのは次を起こさないことだけ。走行中の Job は殺さず、last_curriculum_at も
+    進めない (再開したとき min_interval_hours の判定が狂わないように)。
+    """
+
+    OFF = RULES_CURRICULUM_OFF
+
+    def test_disabled_does_not_spawn_curriculum(self):
+        d, actions = reconcile.decide(doc(), facts(), self.OFF, NOW)
+        self.assertNotIn("spawn_curriculum", kinds(actions))
+
+    def test_disabled_does_not_touch_the_interval_state(self):
+        """last_curriculum_at を進めない = 再開したビートで従来どおり判定される。"""
+        d, _ = reconcile.decide(
+            doc(last_curriculum_at="2026-08-07T11:30:00Z", last_curriculum_dry=True),
+            facts(), self.OFF, NOW,
+        )
+        self.assertEqual(d["last_curriculum_at"], "2026-08-07T11:30:00Z")
+        self.assertTrue(d["last_curriculum_dry"])
+        # 同じ doc をそのまま有効な rules に戻せば、従来どおり min_interval が効く
+        _, actions = reconcile.decide(d, facts(), RULES, NOW)
+        self.assertNotIn("spawn_curriculum", kinds(actions))
+
+    def test_eager_replan_is_also_stopped(self):
+        """実りの直後 (last_curriculum_dry is False) の gap_ok 上書きに勝つ。"""
+        d, actions = reconcile.decide(
+            doc(last_curriculum_at="2026-08-07T11:59:00Z", last_curriculum_dry=False),
+            facts(), self.OFF, NOW,
+        )
+        self.assertNotIn("spawn_curriculum", kinds(actions))
+        self.assertEqual(d["last_curriculum_at"], "2026-08-07T11:59:00Z")
+
+    def test_missing_key_keeps_the_old_behaviour(self):
+        """鍵の無い古い rules.json は従来どおり立案する (既定 True)。"""
+        _, actions = reconcile.decide(doc(), facts(), RULES_CURRICULUM_UNSET, NOW)
+        self.assertIn("spawn_curriculum", kinds(actions))
+
+    def test_running_job_is_left_alone(self):
+        """走行中の curriculum Job を殺さない (kill_job を積まない)。"""
+        _, actions = reconcile.decide(
+            doc(), facts(jobs={"curriculum-abc": {"active": True}}), self.OFF, NOW
+        )
+        self.assertNotIn("kill_job", kinds(actions))
+        self.assertNotIn("spawn_curriculum", kinds(actions))
+
+    def test_result_of_a_running_job_is_still_consumed(self):
+        """止める前に走った Job の結果は今までどおり取り込む (採択も登録される)。"""
+        spec = {"id": "P-0100", "title": "拾う", "verify": ["true"], "irreversible": False}
+        d, actions = reconcile.decide(
+            doc(),
+            facts(curriculum={"state": "curriculum_done", "at": "2026-08-07T11:59:00Z",
+                              "adopted_specs": [spec]}),
+            self.OFF, NOW,
+        )
+        self.assertIn("consume_curriculum", kinds(actions))
+        self.assertEqual([p["id"] for p in d["projects"]], ["P-0100"])
+
+    def test_says_it_is_stopped_but_not_every_beat(self):
+        """黙って止まらない。ただし毎ビートは鳴らさない (60s ごとにログが埋まる)。"""
+        d, actions = reconcile.decide(doc(), facts(), self.OFF, NOW)
+        logs = [a for a in actions if a["type"] == "log"]
+        self.assertEqual(len(logs), 1)
+        self.assertIn("curriculum", logs[0]["text"])
+        self.assertEqual(d["last_curriculum_disabled_log_at"], "2026-08-07T12:00:00Z")
+        # 次のビート (1 分後) では鳴らさない
+        later = NOW + timedelta(minutes=1)
+        d2, actions2 = reconcile.decide(d, facts(), self.OFF, later)
+        self.assertEqual(kinds(actions2), [])
+        # 間隔を越えたらまた 1 行だけ
+        much_later = NOW + timedelta(
+            hours=reconcile.CURRICULUM_DISABLED_LOG_INTERVAL_HOURS + 1
+        )
+        _, actions3 = reconcile.decide(d2, facts(), self.OFF, much_later)
+        self.assertEqual([a["type"] for a in actions3], ["log"])
+
+    def test_the_notice_does_not_count_as_activity(self):
+        """止めた器が critic を毎日起こさない (log は活動に数えない)。"""
+        d, actions = reconcile.decide(doc(), facts(), self.OFF, NOW)
+        self.assertEqual(kinds(actions), ["log"])
+        self.assertNotIn("last_activity_at", d)
+        self.assertNotIn("spawn_critic", kinds(actions))
+
+
+class TestCurriculumDisabledDoesNotStopTheRest(unittest.TestCase):
+    """立案の停止が他の経路を巻き込まないこと。"""
+
+    OFF = RULES_CURRICULUM_OFF
+
+    def test_dispatch_still_lands(self):
+        """人間の依頼が通る道 (admission gate 経由の P-9NNN) は塞がない。"""
+        rec = {
+            "dispatch_id": "d-abc123", "project_id": "P-9000", "requested_by": "core",
+            "accepted_at": reconcile.now_iso(NOW), "title": "直す", "body": "直す",
+            "verify": ["true"], "spec": {"id": "P-9000", "verify": ["true"]},
+            "status": "dispatched", "job": "runner-p-9000-a1",
+        }
+        d, actions = reconcile.decide(doc(), facts(dispatches=[rec]), self.OFF, NOW)
+        self.assertEqual([p["id"] for p in d["projects"]], ["P-9000"])
+        self.assertEqual(d["projects"][0]["state"], "active")
+        self.assertIn("consume_dispatch", kinds(actions))
+
+    def test_runner_still_spawns(self):
+        p = project(state="announced", veto_deadline="2026-08-07T11:00:00Z")
+        d, actions = reconcile.decide(doc(p), facts(), self.OFF, NOW)
+        self.assertEqual(d["projects"][0]["state"], "active")
+        self.assertIn("spawn_runner", kinds(actions))
+
+    def test_reviewer_still_spawns(self):
+        p = project(state="active", job="runner-p-0001-a1")
+        d, actions = reconcile.decide(
+            doc(p),
+            facts(results={"P-0001": {"state": "ready_for_review", "pr": 42}},
+                  jobs={"runner-p-0001-a1": {"active": True}}),
+            self.OFF, NOW,
+        )
+        self.assertEqual(d["projects"][0]["state"], "in_review")
+        self.assertIn("spawn_reviewer", kinds(actions))
+
+    def test_critic_still_spawns(self):
+        p = project(state="announced", veto_deadline="2026-08-07T11:00:00Z")
+        d, actions = reconcile.decide(doc(p), facts(), self.OFF, NOW)
+        self.assertIn("spawn_critic", kinds(actions))
+
+    def test_merge_and_deliver_still_run(self):
+        p = project(state="merging", prs=[42], merging_since="2026-08-07T11:00:00Z")
+        d, actions = reconcile.decide(
+            doc(p),
+            facts(open_prs={42: {"head": "project/p-0001", "checks_green": True}}),
+            self.OFF, NOW,
+        )
+        self.assertIn("merge_pr", kinds(actions))
 
 
 class TestCritic(unittest.TestCase):

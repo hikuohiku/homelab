@@ -49,10 +49,11 @@
     "_comment": "PVC 上の生 stream-json の保持。heart が毎日ローテーション (古い順に削除)。git には持ち出さない (T-0110 と両立)"
   },
   "curriculum": {
+    "enabled": false,
     "exploration_quota": 0.25,
     "recent_cell_window": 5,
     "min_interval_hours": 1,
-    "_comment": "直近 window 件と同一セル [domain, kind] の案は判定で減点。exploration_quota は『修繕以外 (調査・実験・新規性駆動) を全プロジェクトの 1/4 以上に保つ』の下限"
+    "_comment": "enabled=false: 2026-08-25、所有者の判断で立案 (curriculum) を停止中 — ある程度データが取れたので、立案の質を改善するまで止める。戻すときは enabled を true に。直近 window 件と同一セル [domain, kind] の案は判定で減点。exploration_quota は『修繕以外 (調査・実験・新規性駆動) を全プロジェクトの 1/4 以上に保つ』の下限"
   },
   "allowed_autopilot_doppler_keys": [
     "CLAUDE_CODE_OAUTH_TOKEN",

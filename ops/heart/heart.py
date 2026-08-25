@@ -379,6 +379,9 @@ class Heart:
                         self.work.append_jsonl("audit.jsonl", line)
                     self.consume_dispatch(a.get("dispatch_id"), now)
                     log(f"dispatch consumed: {a.get('dispatch_id')} -> {pid}")
+                elif kind == "log":
+                    # 判断の記録だけを残す action (副作用なし)。shadow でも同じ
+                    log(a.get("text", ""))
                 elif kind == "record_drift":
                     audit["reason"] = a.get("reason")
             except Exception as e:
