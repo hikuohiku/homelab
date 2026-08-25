@@ -71,6 +71,55 @@ class SampleFromSummaryTest(unittest.TestCase):
         self.assertIsNone(ru._num(True))
         self.assertIsNone(ru._num("abc"))
 
+    def test_volume_fs_truthy_non_dict_is_skipped_not_crash(self):
+        # pod volume[].fs が truthy な非 dict (list 等) だと、従来は
+        # `(vol.get("fs") or {}).get("usedBytes")` が AttributeError を漏らし、
+        # node.fs (総量) が読めるのに計測全体が source=error に落ちていた
+        # (1 項目の壊れで計測全体を止めない契約 — P-9062)。該当 volume の寄与を
+        # 数えずに次へ進み、健全な volume の合計と総量は載せる
+        summary = {
+            "node": {
+                "nodeName": "node01",
+                "fs": {
+                    "availableBytes": 179000000000,
+                    "capacityBytes": 270000000000,
+                    "usedBytes": 74000000000,
+                },
+                "pods": [
+                    {"podRef": {"name": "p1"}, "volume": [{"name": "data", "fs": ["x"]}]},
+                    {"podRef": {"name": "p2"}, "volume": [{"name": "home", "fs": {"usedBytes": 250000000}}]},
+                ],
+            }
+        }
+        s = ru.sample_from_summary(summary)
+        self.assertIsNotNone(s)
+        self.assertEqual(s["source"], "kubelet_summary")
+        self.assertEqual(s["used_bytes"], 74000000000)
+        # 壊れた fs の volume は数えず、健全な volume の合計だけ載せる
+        self.assertEqual(s["local_path_pvc_bytes"], 250000000)
+
+    def test_volume_fs_truthy_non_dict_in_build_report_keeps_source(self):
+        # 実測経路の結合: fs が truthy 非 dict の volume が混じっても build_report は
+        # クラッシュせず source=kubelet_summary の正規 section + fill_days キーを返す
+        summary = {
+            "node": {
+                "nodeName": "node01",
+                "fs": {
+                    "availableBytes": 179000000000,
+                    "capacityBytes": 270000000000,
+                    "usedBytes": 74000000000,
+                },
+                "pods": [
+                    {"podRef": {"name": "p1"}, "volume": [{"name": "data", "fs": "oops"}]},
+                ],
+            }
+        }
+        section, _ = ru.build_report(
+            [], "2026-08-25T00:00:00Z", node_name="node01", summary_doc=summary
+        )
+        self.assertEqual(section["source"], "kubelet_summary")
+        self.assertIn("fill_days", section)
+
 
 class SampleFromStatvfsTest(unittest.TestCase):
     def test_total_only_with_none_breakdown(self):

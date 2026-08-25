@@ -118,6 +118,8 @@ def sample_from_summary(summary):
 
     node.fs が取れない (壊れている) 場合は None — 呼び出し側が statvfs へ倒す。
     内訳は取れるものだけ載せ、k3s/containerd/ログ は None (計測不能)。
+    pod volume の fs が truthy な非 dict でもクラッシュせず、その volume の寄与を
+    数えずに次へ進む (1 項目の壊れで計測全体を止めない — P-9062)。
     """
     if not isinstance(summary, dict):
         return None
@@ -149,7 +151,14 @@ def sample_from_summary(summary):
         for vol in pod.get("volume") or []:
             if not isinstance(vol, dict):
                 continue
-            v = _num((vol.get("fs") or {}).get("usedBytes"))
+            fs = vol.get("fs")
+            if not isinstance(fs, dict):
+                # volume[].fs が truthy な非 dict (list 等) だと `(v or {}).get` が
+                # AttributeError を漏らし、node.fs (総量) が読めるのに計測全体が
+                # source=error に落ちる (1 項目の壊れで止めない契約 — P-9062)。
+                # この volume の寄与は数えず次へ (取れるものだけ載せる)
+                continue
+            v = _num(fs.get("usedBytes"))
             if v is not None:
                 pvc += v
 
@@ -490,6 +499,28 @@ def _selfcheck():
     # availableBytes が無いとき capacity - used で補完
     s2 = sample_from_summary({"node": {"fs": {"usedBytes": 100, "capacityBytes": 200}}})
     expect(s2 is not None and s2["free_bytes"] == 100, "availableBytes 欠落は補完")
+
+    # pod volume の fs が truthy な非 dict (list 等) でもクラッシュせず、
+    # その volume の寄与を数えずに次へ進む (node.fs の総量は読める)
+    corrupt_vol = {
+        "node": {
+            "nodeName": "node01",
+            "fs": {
+                "availableBytes": 179000000000,
+                "capacityBytes": 270000000000,
+                "usedBytes": 74000000000,
+            },
+            "pods": [
+                {"podRef": {"name": "p1"}, "volume": [{"name": "data", "fs": ["x"]}]},
+                {"podRef": {"name": "p2"}, "volume": [{"name": "home", "fs": {"usedBytes": 250000000}}]},
+            ],
+        }
+    }
+    s_cv = sample_from_summary(corrupt_vol)
+    expect(s_cv is not None and s_cv["source"] == "kubelet_summary",
+           "fs 非 dict の volume が混じっても summary から sample が取れる")
+    expect(s_cv["local_path_pvc_bytes"] == 250000000,
+           "壊れた fs の volume は数えず健全分だけ合計する")
 
     # --- sample_from_statvfs ---
     sv = sample_from_statvfs(1000, 300, 700)
