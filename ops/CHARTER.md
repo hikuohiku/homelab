@@ -524,7 +524,7 @@ Application は読めない**）、restic/B2 の直接操作、node01 のファ�
 | ツール | 有無 | 備考 |
 |--------|------|------|
 | `git` | ○ | push 可（`main` 直 push は ruleset で拒否される） |
-| `python3` | ○ | 3.11。`ops/validate.py` / `ops/dashboard/build.py` はこれで動く |
+| `python3` | ○ | 3.11。`ops/validate.py` / `ops/heart/` はこれで動く |
 | `jq` | ○ | |
 | `curl` | ○ | ただし `api.github.com` / `registry.hub.docker.com` は組織 egress ポリシーで 403（`ghcr.io` / `raw.githubusercontent.com` 等は到達可）。**`WebFetch` ツールは curl とは別経路で、curl が 403 になるホスト（`hub.docker.com` で確認済み、2026-08-04 run #9）でも到達できることがある。** 上流のリリースノートやタグ一覧を調べるときは、`curl`/`urllib` が 403 になっても諦めず `WebFetch` を試す |
 | `node` | ○ | |
@@ -596,7 +596,7 @@ CRD やオブジェクトの実体を確認したいなら、chart がレンダ�
 動いている。** クラウド routine（`ops/state.json` の `routines`）は 2026-08-05 に `enabled: false`
 にして無効化済み（クラスタが壊れたときのバックストップとして残置、issue #56, 2026-08-05T18:32:03Z）。
 実際の稼働間隔は `ops/state.json` の `in_cluster_loop`（`apps/autopilot/deployment.yaml` の
-`INTERVAL_SECONDS` 由来、現行 120 秒）であり、ダッシュボードの cadence 表示（`ops/dashboard/build.py`
+`INTERVAL_SECONDS` 由来、現行 120 秒）であり、ダッシュボードの cadence 表示（Mission Control
 の `resolve_cadence()`）もこちらを優先する（T-0131, run #110）。
 
 旧サンドボックスとの違いで、他の節の前提を崩すもの:
@@ -841,62 +841,22 @@ run 番号と1:1では対応しなくなっているため、n の連番では�
 
 ### 7.1 ダッシュボード
 
-人間が朝に見る唯一の画面。`ops/` を更新したら**必ず**次を実行する。
+人間が朝に見る唯一の画面は Mission Control (`apps/ops-dashboard/`、
+`ops/state.json` の `dashboard.ops_dashboard_url`)。tailnet から開くと、その場で
+クラスタを読んで描く。**自分が生成して push するものは何も無い。**
 
-**T-0126（run #98）以降**、`ops/dashboard/build.py` の `fetch_prs()` は `gh` CLI に依存せず、
-`AUTOPILOT_GITHUB_TOKEN` で GitHub REST API を直接叩いて `ops/dashboard/prs.json` を自分で
-最新化してから読む。クラスタ内常駐（§5.5）ではこのトークンが使えるため、**手動でキャッシュを
-組み立てる手順は不要になった。** `python3 ops/dashboard/build.py` を実行するだけで PR 一覧も
-併せて最新化される。
+かつては `ops/dashboard/build.py` が静的 HTML を組み立てて `ops-dashboard` ブランチへ
+push していた。Mission Control が稼働してから読み手が居なくなり、build.py ごと退役した
+(ブランチは 2026-08-22 で更新が止まっている)。**「ダッシュボードを更新する」ために
+git を叩く手順はもう無い。**
 
-`AUTOPILOT_GITHUB_TOKEN` が無い実行環境（旧・クラウド定期実行サンドボックス等）では、
-`fetch_prs()` は例外を送出前提のまま `ops/dashboard/prs.json` のキャッシュにフォールバックする。
-その場合のみ、以下の手順でキャッシュを手で最新化してからビルドする。
+Artifact ツールが使えるときは `ops/state.json` の `dashboard.artifact_url` を `url` に
+渡して同じ URL へ再公開する (新しい URL を発行しないこと。人間はブックマークしている)。
+使えない・失敗した場合は journal に一行書けばよい。**ここで止まらないこと。**
 
-1. `mcp__github__list_pull_requests`（`state: open`）と（`state: closed`, `sort: updated`, `direction: desc`）
-   で取得する。**`merged` フィールドは信用しない**（closed の全件で `false` を返すことがある実測済みの不具合。
-   `merged_at` が非 null かどうかで判定する）
-2. `build.py` が期待する形へ変換して `ops/dashboard/prs.json` に書く:
-   `{"open": [{number, title, url, isDraft, createdAt, statusCheckRollup, headRefName, autoMergeRequest}, ...],
-   "merged": [{number, title, url, mergedAt, headRefName}, ...]}`（`merged` は `mergedAt` 降順で最大 60 件）。
-   open の `statusCheckRollup` は `mcp__github__pull_request_read`（`method: get_status`）の結果を
-   `[{"conclusion": "SUCCESS"|"PENDING"|"FAILURE"}]` 相当に変換すれば `ci_state()` が正しく判定する
-3. `python3 ops/validate.py` → 0 error であること。落ちたら直してから進む
-4. `python3 ops/dashboard/build.py` → `ops/dashboard/index.html` を再生成
-
-**`ops/dashboard/index.html` は Git 管理していない**（`.gitignore` 対象、T-0035）。`build.py` の
-生成物であり、`ops/*.json` + journal から決定的に再生成できるので repo に置く理由が無い。かつては
-commit していたが、全タスク PR がこのファイルに触るため相乗り運用でも衝突が絶えなかった
-（経緯: ops/CHARTER-history.md#71-ダッシュボード--indexhtml-を-commit-していた時代の衝突）。
-
-**T-0127（run #99）以降**、`AUTOPILOT_GITHUB_TOKEN` があれば `build.py` は生成した
-`index.html` を `ops-dashboard` ブランチ（`ops-health-report` と同型の専用ブランチ、main へは
-直 push しない）へ自分で push する。`python3 ops/dashboard/build.py` を実行するだけで完結し、
-別途 publish の手順を踏む必要は無い。token が無い環境（CI、手元実行）では push を静かに
-スキップし、HTML の生成自体は成功のまま終える。
-
-Artifact ツールが使えるときは、`ops/state.json` の `dashboard.artifact_url` を `url` に渡して
-同じ URL へ再公開する（新しい URL を発行しないこと。人間はブックマークしている）。これは
-`ops-dashboard` ブランチへの push とは独立した経路で、当面どちらも並行して更新する。
-Artifact が使えない・失敗した場合は journal に「publish できなかった」と
-一行だけ書けばよい。**ここで止まらないこと。**
-
-**T-0128 の `ops-dashboard`（`apps/ops-dashboard/`）は稼働している。** `ops/state.json` の
-`dashboard.ops_dashboard_url`（`https://ops-dashboard.tailae6c2.ts.net/`）がその配信先。
-構築セッションが issue #56（2026-08-06T10:03:40Z）で L7 Ingress の稼働と Service の HTTP 200 を
-報告している（T-0130, run #148/#149）。**ただし構築セッションは tailnet のピアではないため、
-この URL 自体への外部到達（MagicDNS 経由）は未実測**（同じ issue コメントで syncthing の GUI L7
-Ingress について「このワークスペースは tailnet のノードではないため判定不能」と明記されており、
-同じ制約が `ops-dashboard.tailae6c2.ts.net` にも及ぶ可能性がある。§5.5 参照）。tailnet に居る
-人間が実際にブラウザで開いて確認するまでは「Service 自体は動いている」までしか裏付けが無いと
-扱うこと。
-
-HTML を repo に置かなくなった代わりに、CI (`ops` job) が `python3 ops/dashboard/build.py` を実行して
-例外なく終わることだけを毎回検証する。壊れたまま気づかない事態を防ぐのはこれで十分で、
-生成結果そのものは commit しない。
-
-ダッシュボードの内容や見せ方に不満があれば `ops/dashboard/build.py` を直してよい。
+ダッシュボードの内容や見せ方に不満があれば `apps/ops-dashboard/app/` を直してよい。
 人間が朝に何を知りたいかが変わったら、それを反映するのは自分の仕事。
+
 
 ### 7.2 時刻表記
 
@@ -905,7 +865,7 @@ ISO8601 で持つ（ソート・API との整合のため変更しない）。**
 （issue #56, 2026-08-05 04:09:56「時間表記JSTがいい」）。
 
 - journal の見出し（`## YYYY-MM-DD HH:MM JST — run #N`）は起動時点の JST 時刻を書く
-- `ops/dashboard/build.py` の生成時刻・ガントの目盛り・ツールチップは JST で表示する
+- ダッシュボードの生成時刻・ガントの目盛り・ツールチップは JST で表示する
   （相対時刻表示 `rel_time()` はタイムゾーン非依存のため対象外）
 
 ---

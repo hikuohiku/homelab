@@ -72,7 +72,7 @@ External Secrets Operator (ESO) にとって Doppler (`homelab/prd`) は唯一�
    ```
 
 5. 経時変化は health reporter の `externalsecrets` セクション
-   (branch `ops-health-report` の `ops/health/latest.json`) にも出る。
+   (ConfigMap `autopilot/ops-health-report` の `latest.json` キー) にも出る。
    `last_sync_age_seconds` が `refresh_interval_seconds` を大きく超えて
    `Ready=True` のまま張り付いている場合は「まだエラーになっていない滞留」なので、
    このランブックの判定フローに入ってよい

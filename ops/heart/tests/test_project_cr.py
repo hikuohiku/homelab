@@ -418,8 +418,10 @@ class CrdCoversEveryRealEntry(unittest.TestCase):
     **server-side apply は未宣言フィールドを黙って落とさない。その CR を丸ごと
     拒否する**ので、スキーマの穴は「静かな欠損」ではなく「書けない」になる。
 
-    fixture は本番の ops-state:projects.json の写し。撮り直しは
-    `git show origin/ops-state:projects.json > ops/heart/tests/fixtures/projects.json`。
+    fixture は移行前の本番 doc の写し (ops-state:projects.json から撮った)。
+    正が `Project` CR に移ったので、撮り直すなら
+    `kubectl -n autopilot get projects -o json | jq '{projects: [.items[].spec.spec]}'`
+    のように CR から組む。**ブランチはもう更新されていない。**
     """
 
     def setUp(self):

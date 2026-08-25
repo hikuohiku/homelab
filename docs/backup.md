@@ -245,7 +245,7 @@ vaultwarden 方式（online backup API を叩く initContainer）は**採らな�
 - **なぜ要るか**: k3s のデータストアは kine/sqlite（`/var/lib/rancher/k3s/server/db/state.db`）で
   etcd ではないため `k3s etcd-snapshot` が使えず、既存の restic CronJob 6 本はどれも
   アプリの PVC しか見ていない。設計 [`docs/design/state-out-of-git/architecture.md`](design/state-out-of-git/architecture.md)
-  の Phase 4b で `ops-state:projects.json` を止めると、**プロジェクトの記録の唯一の実体が
+  の Phase 4b でプロジェクトの正が `Project` CR へ移ると、**記録の唯一の実体が
   クラスタになる**。これが無いまま 4b に進むと node01 の消失が記録の全損になる。
   **この CronJob が 4b の前提条件。**
 - **k3s のデータストアは丸ごと掬わない**。`state.db` を hostPath で読める Pod は実質
@@ -337,7 +337,7 @@ kubectl apply -f projects.json          # 名前が一致する CR は上書き�
 kubectl -n autopilot get projects -l lifecycle=live
 kubectl -n autopilot scale deployment/autopilot-heart --replicas=1
 
-# 旧 projects.json 形式（ops-state 互換）が要るとき
+# 旧 projects.json 形式（CR 移行前の doc 互換）が要るとき
 jq '[.items[].spec]' projects.json > projects-legacy.json
 ```
 

@@ -2,7 +2,7 @@
 
 コアは `dispatch_task` で「いま着手してほしい」を heart に**同期で**頼む。
 判定 (可否) は reconcile.admit()、実行 (Job 作成) は gate.py、
-ops-state への登録は reconcile.decide() が担う。ここはその 3 者が受け渡す
+`Project` CR への登録は reconcile.decide() が担う。ここはその 3 者が受け渡す
 レコードの形だけを持つ。
 
 なぜ id を内容から導くか:

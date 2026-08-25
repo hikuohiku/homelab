@@ -323,8 +323,8 @@ git への日次エクスポートで緩和する案は、原則 3 (機械は gi
 正面から衝突するので採らない。**バックアップはバックアップの仕組みで解く。**
 
 `ops-dashboard` ブランチは**遺物**と確定した。書き手の `ops/dashboard/build.py` は
-Mission Control (`apps/ops-dashboard/`) の稼働後に退役していて、リポジトリに存在しない
-(`ops/CHARTER.md` §7.1 の手順だけが残骸として残っている)。
+Mission Control (`apps/ops-dashboard/`) の稼働後に退役していて、リポジトリに存在しない。
+残骸だった `ops/CHARTER.md` §7.1 の手順も落とした (#652)。
 
 ### 耐久性 — Phase 0 の実測結果と Phase 0b (2026-08-24)
 
@@ -390,11 +390,16 @@ Phase 4 が本丸で、それ以外は本丸を軽くするための地ならし
 
 - **4 本のブランチ (`ops-state` / `ops-feedback` / `ops-health-report` /
   `ops-dashboard`) は消していない。** 書き込みを止めただけで、中身は戻せる状態に
-  残してある。削除は不可逆なので所有者の判断。
-- **`apps/version-watcher` がまだ `ops-health-report` ブランチに push している。**
-  機械が git に定期コミットを打つ経路として**最後に残っている 1 本**
-  (`watch.py` の `REPORT_BRANCH`)。しかも watcher は `ensure_branch` で枝を作り直すので、
-  ここを畳まずに枝を消すと翌晩に生え直る。**ブランチ削除の前提条件**。
+  残してある。削除は不可逆なので所有者の判断。押す前に実機で何を見ればよいかは
+  [`branch-deletion-checklist.md`](branch-deletion-checklist.md)。
+- ~~**`apps/version-watcher` がまだ `ops-health-report` ブランチに push している。**~~
+  **畳んだ (#652)。** 機械が git に定期コミットを打つ経路として最後に残っていた 1 本。
+  watcher は自 namespace の ConfigMap `version-watcher/version-drift` に書き、
+  ops-health-reporter が集約して健全性レポートの `version_drift` に戻す。
+  Phase 5 以降、枝の `latest.json` には読み手が居らず観測が積もるだけだったので、
+  **観測結果が読み手のところへ戻ったのが利用者から見た変化**。GitHub へは
+  `ops/inventory.json` の GET だけが残る (`ensure_branch` は消えたので、枝を消しても
+  翌晩に生え直らない)。
 - **Phase 4.5 (手動採択の入口)** — 上記。
 - **未確認**: `ops/state.json` / `ops/backlog.json` を autopilot が今も main へ push
   しているか (「何が起きているか §5」)。リポジトリ内で書いている口は見つからず、

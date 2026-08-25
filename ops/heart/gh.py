@@ -55,9 +55,8 @@ class Gh:
     def file_at_ref(self, path, ref):
         """ブランチ上のファイル 1 本を生のまま読む。無ければ None。
 
-        git の object を落とさずに 1 リクエストで済ませる。ops-state は
-        ビートごとに commit される長い履歴を持つので、読み手 (runner) が
-        起動のたびに clone / fetch すると node の負荷がそのぶん増える。
+        git の object を落とさずに 1 リクエストで済ませる。読み手 (runner) が
+        起動のたびに clone / fetch すると、その履歴のぶんだけ node の負荷が増える。
         """
         q = urllib.parse.quote
         try:

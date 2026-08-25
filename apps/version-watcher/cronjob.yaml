@@ -18,16 +18,17 @@ spec:
       # version_watch.dockerhub_latest を参照) なので合計 49 リクエスト。
       # health-reporter の 120s は 1 リクエスト数回分の想定だが、こちらは対象数に
       # 比例するので伸ばす。1 リクエストあたりの上限 15s (watch.py PER_REQUEST_TIMEOUT)
-      # × 49 = 735s < 900s (+ GitHub 書き込みのリトライ待ちの余裕)。超えたら Job 失敗
+      # × 49 = 735s < 900s (+ ConfigMap 書き込みの余裕)。超えたら Job 失敗
       # として可視化される
       activeDeadlineSeconds: 900
       template:
         spec:
-          # k8s API は一切読まない (GitHub API とのみ話す) ので rbac.yaml / ServiceAccount は
-          # 同型構成 (ops-health-reporter) から意図的に省略し、token も mount しない。
-          # PROJECT.md の「同型構成」からの逸脱は P-0126 PROGRESS 2026-08-23 セッション1 で
-          # 決済済み。権限が無いことを pod 側からも担保させる
-          automountServiceAccountToken: false
+          # 観測結果は自 namespace の ConfigMap version-drift に書く (rbac.yaml)。
+          # GitHub へは inventory.json の GET だけで、書き込みは持たない。
+          # 以前は token を一切 mount しない構成だったが、書き先が
+          # ops-health-report ブランチから ConfigMap へ移ったので SA が要る
+          serviceAccountName: version-watcher
+          automountServiceAccountToken: true
           restartPolicy: Never
           securityContext:
             runAsNonRoot: true
@@ -48,8 +49,6 @@ spec:
                       key: token
                 - name: GITHUB_REPO
                   value: hikuohiku/homelab
-                - name: REPORT_BRANCH
-                  value: ops-health-report
                 - name: BASE_BRANCH
                   value: main
                 - name: PYTHONDONTWRITEBYTECODE

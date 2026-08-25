@@ -319,7 +319,7 @@ spec:
                 capabilities:
                   drop: ["ALL"]
               # 実測なしの緩い安全弁（pvc-usage-reporter と同クラス、CHARTER §4 「縛る変更には
-              # 実測か裏付けが要る」対象）。デプロイ後に kubectl top / ops-health-report の
+              # 実測か裏付けが要る」対象）。デプロイ後に kubectl top / 健全性レポートの
               # pod_metrics で実測し、必要なら調整する（T-0078 のフォローアップとして起票）
               resources:
                 requests:
