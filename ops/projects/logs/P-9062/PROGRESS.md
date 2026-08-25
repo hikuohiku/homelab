@@ -1,5 +1,101 @@
 # P-9062 — 進捗記録
 
+## 2026-08-25（履歴の used_bytes が inf (JSON の 1e999/Infinity のパース結果) のとき _num が OverflowError を漏らし fill_days 契約を壊す経路を塞いだ。verify[1] green / verify[0] は変わらず構造的不可能のまま）
+
+### やったこと
+
+- 前セッション (442ced9b) までの実装を信用せず全量を自分の手で再検証し、
+  **新たに実リスクを 1 つ見つけて塞いだ**:
+- **`_num` が `int(inf)` の `OverflowError` を取りこぼしていた**。JSON は
+  `1e999` / `Infinity` を **float('inf') としてパース**する (実測:
+  `json.loads("1e999")` → `inf`)。ConfigMap の `root_disk_history.json` に
+  手動編集等で `used_bytes` が巨大な値で入ると、`_usable_samples` の
+  `_num(s.get("used_bytes"))` が `int(inf)` で **OverflowError** (ValueError でも
+  TypeError でもない例外族) を漏らし、`forecast` → `build_report` を突き抜けて
+  (build_report の try は measure しか包まない)、report.py の collect() wrap が
+  root_disk 節全体を `{"error": "OverflowError: ..."}` にしていた —
+  **fill_days キーが消え、受入検証 (kubectl 側) の assert が落ちる**。実測で
+  再現確認 (used_bytes=inf の履歴 → build_report RAISE / collect wrap →
+  `{"error": ...}`)。used_bytes 欠落・非 dict 末尾・summary パース失敗と同じ
+  「root_disk 節は必ず正規の section + fill_days キーを持つ」契約の、取りこぼし
+  経路 (数値の「桁あふれ」という、これまで触れていなかった壊れ方)。
+- **修正**: `_num` の except に `OverflowError` を追加 (inf/-inf/nan は None に
+  倒れる)。壊れたエントリは従来どおり `_usable_samples` が捨て、健全なサンプル
+  だけから予報する。canonical と apps/ 側コピーの両方を同じ PR で修正
+  (drift check が一致を確認済み)。
+- **テスト**: `ops/tests/test_root_disk_usage.py` に回帰テスト 2 本追加 (25 tests に):
+  `test_infinite_used_bytes_sample_is_dropped` (_num(inf/-inf/nan)→None、
+  inf 混じり履歴で daily_increase_bytes がクラッシュせず健全 2 点から 100.0/day) /
+  `test_infinite_used_bytes_history_keeps_fill_days_contract` (実測経路の結合:
+  inf 混じり履歴でも build_report は root_disk 節 + fill_days キーを返す)。
+  `_selfcheck` (--check) にも同ケースを追加 (ネットワーク非依存の自己検査を維持)。
+  `ops/tests/test_report_root_disk.py` の main() 経由の壊れ履歴テスト
+  (`test_corrupted_history_configmap_keeps_fill_days_contract`) の corrupt 形状に
+  ケース (e) として inf を追加 (main() 配線まで一気通貫で固定)。
+
+### verify 実測（全てこのセッションで実行）
+
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0（**受入検証の 1 項目は green**）
+- `python3 apps/ops-health-reporter/root_disk_usage.py --check` → rc=0（コピーも一致）
+- `python3 -m unittest ops.tests.test_root_disk_usage -v` → **27 tests OK** (前回 25 + 新規 2)
+- `python3 -m unittest ops.tests.test_report_root_disk` → **10 tests OK**（壊れ履歴
+  テストの corrupt 形状に inf を追加。実 kubectl 固定本を含む）
+- `python3 -m unittest discover -s ops/tests -t .` → **622 OK** (前回 620 + 新規 2)
+- ops/heart/tests → 448 OK、ops/runner/tests → 53 OK
+- `python3 ops/check_root_disk_usage_script_sync.py` → 一致 OK、`diff` canonical/コピー → 一致
+- consistency checks 10 本 → 全 OK
+- `kubectl kustomize apps/ops-health-reporter` → build OK
+- `python3 ops/validate.py` → 0 error（warning 11 は全て既存・対象外）
+- verify[0] をこの sandbox でリテラル実行 → 従来どおり JSONDecodeError（空入力。
+  クラスタ資格情報が無いため構造的に実行不能。wrapper の実測と同一）
+
+### 分かったこと（実測・調査）
+
+- **履歴の壊れ耐性の「穴」は数値の「種類」にも残る**。これまで塞いだのは
+  欠落 (used_bytes 無し)・非数値文字列 ("abc")・非 dict・parse 不能だった。
+  `int()` は inf で OverflowError を投げ、これは TypeError/ValueError の兄弟では
+  ないため、`_num` の except を素通りして build_report を突き抜けた。
+  Python の json は `1e999` や `Infinity` をエラーにせず inf として受けるため、
+  「手で書いた ConfigMap に巨大な数」は十分起こりうる形状。_num の docstring
+  「壊れた値は None」の範囲に inf/nan が含まれていなかったのが根本原因。
+- verify[0] は変わらず 2 重に構造的不可能（wrapper=runner Job にクラスタ資格情報が
+  無い + spec の jsonpath `{.data.latest.json}` が実 kubectl でドットキーを解けない）。
+  今回の修正は「spec 側が修正されてクラスタ到達が解決したとき」に fill_days 契約が
+  壊れる経路をさらに 1 つ潰した、という位置づけ。
+
+### 発見（スコープ外、curriculum へ）
+
+- なし（dashboard_smoke の no-lie-coexistence 論点は据え置き）。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **ローカルで追加実装できることは残っていない（再確認。今セッションはその上で
+  _num の OverflowError 経路を直した）。** 受入検証の残り 1 項目 (kubectl) は
+  verify[0] が 2 重に構造的不可能（①wrapper=runner Job にクラスタ資格情報が無い →
+  常に空出力、②spec の jsonpath `{.data.latest.json}` は実 kubectl でドットキーを
+  解けない → `\.` エスケープが要る）。worker は spec を変えられない。このままでは
+  wrapper は verify ゲートで max_sessions まで回し続け、その後 heart が
+  session_limit + question を人間へ出す（runner.py:1015）。人間の判断材料はこの
+  PROGRESS.md。
+- 修正の方向は dispatch / 所有者が決める（2 案は 7c1e7caa の記録参照）:
+  (a) 所有者判断 (2026-08-24) どおり dispatch 由来の verify を外す → wrapper が
+  PR を出し、独立レビュー (reviewer Job はクラスタ read 権限を持つ) と CI に
+  完成の判断を移す
+  (b) verify[0] を worker 環境で実行可能な形に置き換える (例: `python3 -m unittest
+  ops.tests.test_report_root_disk`。P-9037 流)
+- 差し戻されたら従来どおり以下を疑う: nodes/proxy + nodes/stats の resourceNames が
+  node01 のままか（回帰テストあり）/ configMapGenerator sync の自愈待ち / 受入検証
+  コマンド形状の drift（リテラル実行テストあり）/ 履歴エントリの壊れ
+  （`_usable_samples` + append 側の isinstance ガード + measure 失敗 + main() 配線 +
+  **今回の _num OverflowError** が縛る）。
+- **merge 後に確認すること**（従来と変わらず）: reporter が 1 回走る →
+  `root_disk.source` が kubelet_summary になるか（RBAC nodes/proxy+stats の通し。
+  取れていれば breakdown の images/PVC が載り、取れなくても statvfs 総量 + None で
+  正常動作）、1 日分の履歴が溜まったら fill_days が数値になるか
+  （MIN_WINDOW_DAYS=1.0）。実測したら substrate.md を更新する。
+
+---
+
 ## 2026-08-25（ConfigMap の root_disk_history.json 壊れを main() 経由で固定した。前セッションまでの「main() 配線の壊れ耐性」が build_report 単体テストだけで CI に閉じておらず、実 ConfigMap の壊れが main() を突き抜けたときに検出不能だったギャップを塞ぐ。verify[1] green / verify[0] は構造的不可能のまま）
 
 ### やったこと
