@@ -23,16 +23,20 @@ rules:
   - apiGroups: [""]
     resources: ["nodes/proxy"]
     # P-9062。kubelet stats/summary の `node.fs`（ルートディスク総量・imageFs・
-    # pod volume 使用量）を読むための get のみ。resourceNames で summary エンド
-    # ポイントに限定する（他の proxy 経路＝pods 一覧・metrics・log は開けない）
-    resourceNames: ["stats/summary"]
+    # pod volume 使用量）を読むための get のみ。**nodes/proxy の resourceNames は
+    # node 名と照合される**（proxy サブパスとは照合されない）。`resourceNames:
+    # ["stats/summary"]` にすると「stats/summary という名前の node」を指すことになり
+    # node01 への要求は 403 で拒否される（実測済みの罠）。node01 だけに絞る
+    # （他 node への proxy 経路＝pods 一覧・metrics・exec は開けない）
+    resourceNames: ["node01"]
     verbs: ["get"]
   - apiGroups: [""]
     resources: ["nodes/stats"]
     # kubelet 側の Webhook 認可（apiserver 経由の proxy リクエストは kubelet が
-    # nodes/stats サブリソースとして検査する）に応じる read-only の get。kubelet は
-    # resourceName に node 名を入れて検査するため resourceNames では絞れない
-    # （stats サブリソース自体が read-only なので get のみで足りる）
+    # /stats/* を nodes/stats サブリソースとして検査する）に応じる read-only の get。
+    # kubelet の SubjectAccessReview は resourceName に node 名を入れてくるため
+    # resourceNames で node01 に絞れる（proxy のサブパスとは違い、こちらは有効）
+    resourceNames: ["node01"]
     verbs: ["get"]
   - apiGroups: [""]
     resources: ["configmaps"]

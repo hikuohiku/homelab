@@ -98,6 +98,19 @@ class TestRbac(unittest.TestCase):
             ["autopilot-core", "autopilot-heart"],
         )
 
+    def test_kubelet_summary_proxy_resource_names_match_node(self):
+        # P-9062。nodes/proxy の resourceNames は **node 名** と照合される (proxy
+        # サブパスではない)。"stats/summary" を入れると「stats/summary という名前の
+        # node」を指し、node01 への要求が 403 で拒否される罠 (2026-08-25 実測)。
+        # node01 に絞ること、read-only の get のみであることを機械で縛る。
+        role = rules_of(REPORTER_RBAC, "ClusterRole", "ops-health-reporter-reader")
+        proxy = next(r for r in role["rules"] if r["resources"] == ["nodes/proxy"])
+        stats = next(r for r in role["rules"] if r["resources"] == ["nodes/stats"])
+        self.assertEqual(proxy["resourceNames"], ["node01"])
+        self.assertEqual(proxy["verbs"], ["get"])
+        self.assertEqual(stats["resourceNames"], ["node01"])
+        self.assertEqual(stats["verbs"], ["get"])
+
 
 class TestNoGitHubRoundTrip(unittest.TestCase):
     def test_reporter_does_not_touch_github(self):

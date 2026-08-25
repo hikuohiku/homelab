@@ -901,7 +901,7 @@ def main():
              "load が無い（P-9029 審査指摘）ため取得源は /proc に倒している。"
              " root_disk キーは node01 ルートディスクの内訳実測と満杯予報（P-9062）。"
              " 総使用量は kubelet stats/summary の node.fs（nodes/proxy + nodes/stats の "
-             "RBAC を summary に限定して追加）か、pod 内の statvfs 実測（overlay の "
+             "RBAC を node01 に限定して追加）か、pod 内の statvfs 実測（overlay の "
              "statfs がホストルートディスクの値を透過する）のうち取れた方。内訳のうち "
              " イメージ（imageFs.usedBytes）と local-path PVC（node.pods[].volume の "
              "fs.usedBytes 合計。kubelet summary は SC を返さないため近似）は summary が "

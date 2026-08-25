@@ -1,5 +1,68 @@
 # P-9062 — 進捗記録
 
+## 2026-08-25（追加セッション: nodes/proxy の resourceNames 罠を修正した）
+
+### やったこと
+
+- **`apps/ops-health-reporter/rbac.yaml` の罠を修正**: `nodes/proxy` の
+  `resourceNames` を `["stats/summary"]` → `["node01"]` に変更。
+  **nodes/proxy の resourceNames は node 名と照合される**（proxy サブパスとは照合
+  されない）。`["stats/summary"]` にすると「stats/summary という名前の node」を指す
+  ことになり、`GET /api/v1/nodes/node01/proxy/stats/summary` は 403 で拒否される
+  （受入検証が「root_disk が無い」で落ち続ける場合、この罠が最初の疑い）。
+  → summary 経路が通らず breakdown の images/PVC が永遠に None になる前の修正。
+  `nodes/stats` も同じ理由で `resourceNames: ["node01"]` を追加（kubelet の
+  SubjectAccessReview は resourceName に node 名を入れてくるため有効。旧コメントの
+  「resourceNames で絞れない」は誤りで、逆に node01 へ絞れる）。
+- **`ops/tests/test_health_report_path.py` に回帰テストを追加**:
+  `TestRbac.test_kubelet_summary_proxy_resource_names_match_node` —
+  nodes/proxy / nodes/stats の resourceNames が `["node01"]`・verbs が `["get"]`
+  のみであることを機械で縛る（再び `["stats/summary"]` を入れる事故を防ぐ）。
+- **`ops/memory/substrate.md`** の summary 経路の記述を実測値で更新（resourceNames
+  の罠と修正後を記載）。
+- report.py の notes の「RBAC を summary に限定して追加」→「node01 に限定して
+  追加」に文言修正（summary 限定は nodes/proxy では不可能と判明したため）。
+
+### verify 実測
+
+- `python3 -m unittest ops.tests.test_health_report_path -v` → 7 tests OK
+- `python3 -m unittest discover -s ops/tests -t .` → 604 OK（前回 603 + 回帰 1）
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0
+- `kubectl kustomize apps/ops-health-reporter` → build OK（ClusterRole に
+  nodes/proxy + nodes/stats の resourceNames `["node01"]` が載る）
+- consistency checks（root_disk_usage sync ほか）OK
+
+### 分かったこと（実測・調査）
+
+- **`nodes/proxy` の `resourceNames` は node 名と照合される。** RBAC の authorization
+  attributes では proxy サブリソースの Name 属性が node 名になる
+  （403 の message が `cannot get resource "nodes/proxy"` + details.name が node 名
+  で実証）。proxy サブパス（`stats/summary` 等）では絞れない — これは既知の非対称で、
+  KEP-2862 (KubeletFineGrainedAuthz) が `/stats/*` を nodes/stats サブリソースに
+  マップして解決する（kubelet 側の Webhook 認可は node 名で絞れる）。
+- **apiserver 経由の summary 取得には両方が要る**: apiserver 側ゲート (nodes/proxy
+  get + resourceNames node01) と kubelet 側 Webhook 認可 (nodes/stats get +
+  resourceNames node01)。片方だけだと 403。
+
+### 発見（スコープ外、curriculum へ）
+
+- なし（前回から据え置きの dashboard_smoke no-lie-coexistence 論点のみ）。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **受入検証の残り 1 項目はやはりクラスタ到達が必要。** merge 後に reporter が
+  1 回走れば green になる想定 (CronJob は 30 分毎)。「root_disk が無い」で落ち続ける
+  場合は、最初に **nodes/proxy の resourceNames が node01 になっているか**
+  （stats/summary のまま 403 → None で summary が落ちる罠）を疑う。
+- **未実測の罠**: in-cluster で `root_disk.source` が本当に kubelet_summary になるか
+  （RBAC nodes/proxy + nodes/stats の通し）は merge 後に reporter の実測で確認し、
+  substrate.md を更新する。取れていれば breakdown の images/PVC が載り、取れなくても
+  statvfs 総量 + None で正常動作。
+- fill_days は履歴が 1 日分溜まるまで None (fill_days_note に理由)。「予報が出てない」と
+  指摘されたら「1 日分の履歴が必要」を説明する。
+
+---
+
 ## 2026-08-25（追加セッション: 受入検証の残り 1 項目の契約を CI で固定した）
 
 ### やったこと

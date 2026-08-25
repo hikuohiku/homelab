@@ -194,9 +194,14 @@ autopilot namespace の Pod (heart / runner / reviewer / …) が動く環境の
   `ls /var/lib/rancher` が No such file → 内訳は None (計測不能) を正直に載せる —
   verified_at: 2026-08-25, P-9062
 - **kubelet stats/summary の node.fs / imageFs / pod volume (P-9062 の summary 経路) は
-  本 worker セッションでは実測できていない。** reporter に nodes/proxy (resourceNames
-  stats/summary) + nodes/stats (get、kubelet の Webhook 認可は resourceName に node 名を
-  入れるため resourceNames 不可) の read-only RBAC を追加したが、
-  この runner pod には SA token が無く確認できなかった。merge 後に reporter run を確認し、
-  取れていれば breakdown の images/PVC が載る。取れなくても statvfs の総量 + 内訳 None に
-  倒れる (root_disk_usage.measure の fallback) — 未実測 (2026-08-25, P-9062)
+  本 worker セッションでは実測できていない。** reporter に read-only RBAC を追加した:
+  `nodes/proxy` get + resourceNames `["node01"]`、`nodes/stats` get + resourceNames
+  `["node01"]`。**nodes/proxy の resourceNames は node 名と照合される** (proxy サブパスと
+  は照合されない)。当初 `resourceNames: ["stats/summary"]` にしていたが、これは
+  「stats/summary という名前の node」を指すことになり node01 への要求が 403 で拒否される
+  罠だったため、2026-08-25 に node01 へ修正 (rbac.yaml コメント参照)。kubelet の Webhook
+  認可 (/stats/* → nodes/stats サブリソース、SAR の resourceName は node 名) は
+  `nodes/stats` get の resourceNames `["node01"]` で応じる。この runner pod には SA token が
+  無く実クラスタでの確認はできていない。merge 後に reporter run を確認し、取れていれば
+  breakdown の images/PVC が載る。取れなくても statvfs の総量 + 内訳 None に倒れる
+  (root_disk_usage.measure の fallback) — 未実測 (2026-08-25, P-9062)
