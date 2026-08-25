@@ -494,7 +494,10 @@ env `RESTIC_BINARY`、postgres は env `DRILL_DB_HOST`）。**本番 PVC
 （`immich-library` / `immich-postgres-data`）には触れない**。復元先は使い捨ての scratch PVC のみ。
 
 実行は immich namespace の使い捨てリソースで行う（P-9047 の実測で使用した形。manifest は Git に
-commit せず `kubectl apply` で投入し、終わったら削除。`apps/` は変更しない）。
+commit せず `kubectl apply` で投入し、終わったら削除）。drill の検証リソースは `apps/` を変更
+しない。ただし P-9047 では verify が runner 文脈（SA `autopilot-runner`）から成功記録 ConfigMap
+を読むため、`apps/autopilot/rbac.yaml` に resourceNames スコープの Role + RoleBinding
+（`immich-restore-drill-report` の get のみ）を**一度だけ**追加した（レビュー差し戻し #1 で確定）。
 
 1. **scratch postgres + valkey**（Deployment + Service。initContainer で initdb → vchord を
    bootstrap。本番 `apps/immich/postgres.yaml` の init-bootstrap と同じ形）を立てる

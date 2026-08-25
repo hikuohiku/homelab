@@ -84,3 +84,53 @@
     ConfigMap に紛れ込まない。
 - 罠: driver の stdout は psql の `ALTER TABLE ...` ログで埋まる。`REPORT:` は最終行。
   server Job の UPLOAD_LOCATION は `subPath: mnt/immich-library` を忘れないこと。
+
+## 2026-08-25（レビュー差し戻し対応 #1: runner 文脈の RBAC を追加）
+
+### やったこと
+
+- **レビュー指摘 (verify[1]/verify[2] が runner 文脈で fail) の解消**。
+  原因: reviewer Job は SA `autopilot-runner` で verify を再実測するが、
+  `apps/autopilot/rbac.yaml` の `autopilot-reader` ClusterRole はコメントのとおり
+  ConfigMap を意図的に除外しており、`kubectl get configmap -n autopilot
+  immich-restore-drill-report` が Forbidden で落ちる。probe pod で実測再現した。
+- **`apps/autopilot/rbac.yaml` に Role + RoleBinding `immich-restore-drill-report-reader`
+  を追加**。`ops-health-report-reader` と同型の resourceNames スコープ
+  （`["immich-restore-drill-report"]` の get のみ）で、`autopilot-runner` に bind。
+  既存の ConfigMap 全読みを広げない分離設計を維持。
+- **spec の `touches_apps: false` を訂正**（この変更は apps/ に触れるため true 相当）。
+  PROJECT.md の「決めてあること」「やらないこと」を書き換え、逸脱は
+  `apps/autopilot/rbac.yaml` への RBAC 追加 1 件だけと明記。
+- **ConfigMap の実在を確認**: `data.photo_count=19`（数字）で在ることを確認済み。
+  作り直し (`--publish`) は不要だった。
+- **RBAC をクラスタへ適用**（ArgoCD preview）:
+  `kubectl patch application apps -n argocd` で root apps の auto-sync を外し、
+  `autopilot` Application を `project/p-9047` に向けて sync（Synced/Healthy）。
+  autopilot-runner での `kubectl get configmap` が Forbidden → `19` に変わったことを
+  probe pod で実測。
+- **verify 3 項目を reviewer と同一の文脈で再実測して全部 green**:
+  blobless clone で `project/p-9047` を取った使い捨て Job（SA `autopilot-runner`、
+  token automount）で実行 → `--check` rc=0 / `photo_count` grep rc=0 /
+  `--verify-freshness --max-age 3d` rc=0（restored_at=2026-08-25T00:39:37Z）。
+  probe 用 pod/Job/ConfigMap はすべて削除済み。
+
+### 分かったこと
+
+- **reviewer は worker と異なり必ず `autopilot-runner` SA で走る**（ops/heart/spawn.py:
+  `use_writer` は kind==runner かつ kubectl-write 宣言時のみ。reviewer は常に
+  autopilot-runner）。したがって verify が kubectl を叩く仕様では、その SA に
+  get 権限を与えないと「wrapper 実測は green なのに reviewer 実測は fail」になる。
+- **ArgoCD preview は worker 自身でも実行できる**（`kubectl patch application`
+  で済む。`just preview` は just バイナリが無い環境では手打ちで同じことをする）。
+  root apps の auto-sync を外す副作用があるので、merge 後に `preview-reset` 相当
+  （autopilot → HEAD、root apps の auto-sync 復元）を忘れないこと。
+
+### 次のセッションへ
+
+- 3 つの verify は wrapper 実測・reviewer 文脈の両方で green。
+- **ArgoCD の autopilot Application は現在 `project/p-9047` を追跡中**。
+  merge 後（または不要になったら）`kubectl patch application autopilot -n argocd
+  --type merge -p '{"spec":{"source":{"targetRevision":"HEAD"}}}'` と root apps の
+  auto-sync 復元（`apps` Application に `automated: {prune: true, selfHeal: true}`
+  を付け直す）が必要。この PROGRESS を読む側が実行すること。
+- 残タスクは無い想定。wrapper が PR を出す。
