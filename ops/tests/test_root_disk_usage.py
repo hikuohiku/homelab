@@ -149,6 +149,33 @@ class ForecastTest(unittest.TestCase):
         ]
         self.assertIsNotNone(ru.daily_increase_bytes(hist))
 
+    def test_corrupt_used_bytes_sample_is_dropped(self):
+        # used_bytes が欠落・非数値のサンプル (ConfigMap 履歴の壊れ) で予報が
+        # KeyError を漏らし root_disk 節を {"error": ...} にしてはいけない
+        # (fill_days キーの契約が壊れる — P-9062)。健全な 2 点だけから計算する
+        hist = [
+            {"ts": "2026-08-23T00:00:00Z", "used_bytes": 100},
+            {"ts": "2026-08-24T00:00:00Z"},  # used_bytes 欠落
+            {"ts": "2026-08-24T00:00:00Z", "used_bytes": "abc"},  # 非数値
+            {"ts": "2026-08-25T00:00:00Z", "used_bytes": 300},
+        ]
+        self.assertEqual(ru.daily_increase_bytes(hist), 100.0)
+
+    def test_forecast_with_corrupt_history_keeps_fill_days_contract(self):
+        # 実測経路の結合: 壊れた履歴を与えても build_report は root_disk 節を
+        # 必ず作り、fill_days キーを持つ (受入検証の契約。summary パース失敗の
+        # fallback と同じ思想)
+        hist = [
+            {"ts": "2026-08-23T00:00:00Z", "used_bytes": 100},
+            {"ts": "2026-08-24T00:00:00Z"},  # used_bytes 欠落
+            {"ts": "2026-08-25T00:00:00Z", "used_bytes": 300},
+        ]
+        section, _ = ru.build_report(
+            hist, "2026-08-25T12:00:00Z", node_name="node01", summary_doc=None
+        )
+        self.assertIn("fill_days", section)
+        self.assertEqual(section["source"], "statvfs")
+
 
 class BuildReportTest(unittest.TestCase):
     def test_section_and_history_from_injected_summary(self):

@@ -81,6 +81,25 @@ def _num(v):
         return None
 
 
+def _usable_samples(samples):
+    """履歴から予報に使えるサンプルだけを残す (壊れ耐性、P-9062)。
+
+    `_read_root_disk_history` は ConfigMap の履歴を「list である」までしか検証しない
+    ため、個別エントリが壊れていてもここで捨てる。ts が解釈できない、または
+    used_bytes が数値でないサンプルは除外 — そうしないと daily_increase_bytes が
+    KeyError 等を漏らし、collect() が root_disk 節全体を {"error": ...} にして
+    fill_days キーの契約 (受入検証) を壊す。健全なサンプルだけから予報する。
+    """
+    out = []
+    for s in (samples or []):
+        if _epoch(s) is None:
+            continue
+        if _num(s.get("used_bytes")) is None:
+            continue
+        out.append(s)
+    return out
+
+
 def sample_from_summary(summary):
     """kubelet stats/summary から root_disk 計測サンプルを作る (純関数)。
 
@@ -249,13 +268,14 @@ def daily_increase_bytes(samples):
 
     最古と最新の 2 点だけだと観測窓の両端ノイズに支配されるため全点でフィットする。
     None は「予報不能」— サンプルが 2 点未満 / 観測窓が MIN_WINDOW_DAYS 未満 /
-    増加量が非正 (ディスクが増えていない・減っている)。壊れた ts のサンプルは除く。
+    増加量が非正 (ディスクが増えていない・減っている)。壊れた ts / used_bytes の
+    サンプルは除く (_usable_samples)。
     """
-    samples = [s for s in (samples or []) if _epoch(s) is not None]
+    samples = _usable_samples(samples)
     if len(samples) < 2:
         return None
     xs = [_epoch(s) / 86400.0 for s in samples]
-    ys = [s["used_bytes"] for s in samples]
+    ys = [_num(s["used_bytes"]) for s in samples]
     span_days = xs[-1] - xs[0]
     if span_days <= 0 or span_days < MIN_WINDOW_DAYS:
         return None
@@ -280,7 +300,7 @@ def forecast(samples, free_bytes):
     note = None
     fill_days = None
     if rate is None:
-        valid = [s for s in (samples or []) if _epoch(s) is not None]
+        valid = _usable_samples(samples)
         if len(valid) < 2:
             note = "履歴が 2 点に満たない (次の report 以降の蓄積が要る)"
         else:
