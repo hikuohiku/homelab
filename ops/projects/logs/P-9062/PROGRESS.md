@@ -1,5 +1,78 @@
 # P-9062 — 進捗記録
 
+## 2026-08-25（フレッシュ起動で全量を再検証。実装は完・全 CI 相当ゲート green。verify[0] は変わらず仕様レベルで構造的不可能 — worker の立場では手を動かす対象が無い）
+
+### やったこと
+
+- 前 13 セッションの「ローカルでやることは残っていない」を信用せず、フレッシュ起動
+  で**全量を自分の手で再検証**した。変更なしでも全 CI 相当ゲートが green であること
+  を実測（下記 verify 実測）。
+- 実装の到達点を再確認:
+  - `ops/tools/root_disk_usage.py`（canonical）と `apps/ops-health-reporter/root_disk_usage.py`
+    （同一コピー）が `diff` で完全一致（drift check green）。
+  - `build_report` が root_disk 節 + `fill_days` キーの契約を常に守る（履歴の壊れ
+    inf/非dict/欠落/parse不能・measure 全失敗・append 末尾非 dict の全経路を CI 固定済み）。
+  - `report.py` が `root_disk` 節を latest.json に書く（collect_root_disk → 履歴を
+    同一 ConfigMap の `root_disk_history.json` キーへ 1 回の PUT で書き戻す）。
+  - RBAC nodes/proxy + nodes/stats の resourceNames は `["node01"]` のまま
+    （回帰テスト TestRbac が縛る）。health-writer Role は configmaps get/update +
+    resourceNames ops-health-report。
+- **実環境の計測経路を再実測**: `python3 ops/tools/root_disk_usage.py --node node01 --json`
+  → rc=0、`source=statvfs`（summary は SA token 無しで None → 意図どおり statvfs に倒れる）、
+  `capacity_bytes=270202880000` / `used_bytes` / `free_bytes`、`fill_days=None` + note
+  「履歴が 2 点に満たない」。設計どおりの fallback が動く。
+
+### verify 実測（全てこのセッションで実行）
+
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0（**受入検証の 1 項目は green**）
+- `python3 apps/ops-health-reporter/root_disk_usage.py --check` → rc=0（コピーも一致）
+- `python3 -m unittest ops.tests.test_root_disk_usage -v` → **27 tests OK**
+- `python3 -m unittest ops.tests.test_report_root_disk -v` → **10 tests OK**
+  （受入検証コマンドの kubectl 偽物 + 実 kubectl 固定本を含む）
+- `python3 -m unittest discover -s ops/tests -t .` → **622 OK**
+- ops/heart/tests → 448 OK、ops/runner/tests → 53 OK
+- `python3 ops/check_root_disk_usage_script_sync.py` → 一致 OK、`diff` canonical/コピー → 一致
+- `kubectl kustomize apps/ops-health-reporter` → build OK
+- `python3 ops/validate.py` → 0 error（warning 11 は全て既存・対象外）
+- verify[0] をこの sandbox でリテラル実行 → 従来どおり JSONDecodeError（空入力。クラスタ
+  資格情報が無いため構造的に実行不能。wrapper の実測と同一）
+
+### 分かったこと（実測・調査）
+
+- **worker の立場で手を動かせることは、このセッションで新たに見つからなかった**。
+  実装は DoD を満たし、受入検証の 1 項目 (verify[1] `--check`) は green。残る verify[0]
+  （kubectl）は仕様レベルで 2 重に構造的不可能（①wrapper=runner Job にクラスタ資格情報が
+  無い → 常に空出力、②spec の jsonpath `{.data.latest.json}` が実 kubectl でドットキーを
+  解けない → `\.` エスケープが要る）。**worker は spec を変えられない。**
+- このままでは wrapper は verify ゲートで max_sessions まで回し続け、その後 heart が
+  session_limit + question を人間へ出す（runner.py:1015）。人間の判断材料はこの
+  PROGRESS.md。修正の方向（verify 削除 or 置き換え）は dispatch / 所有者が決める。
+
+### 発見（スコープ外、curriculum へ）
+
+- なし（dashboard_smoke の no-lie-coexistence 論点は据え置き）。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **最初に wrapper の verify 実測を確認し、spec の verify が修正されたかを確かめる。**
+  修正されない限りこのプロジェクトは verify ゲートで永久停止する。**ローカルで追加実装
+  できることは無い（再確認）。** 実装は DoD を満たし、全 CI 相当ゲートが green。
+- 修正の方向は dispatch / 所有者が決める（2 案は 7c1e7caa の記録参照）:
+  (a) 所有者判断 (2026-08-24) どおり dispatch 由来の verify を外す → wrapper が PR を出し、
+  独立レビュー (reviewer Job はクラスタ read 権限を持つ) と CI に完成の判断を移す
+  (b) verify[0] を worker 環境で実行可能な形に置き換える (例: `python3 -m unittest
+  ops.tests.test_report_root_disk`。P-9037 流)
+- 差し戻されたら従来どおり以下を疑う: nodes/proxy + nodes/stats の resourceNames が node01
+  のままか（回帰テストあり）/ configMapGenerator sync の自愈待ち / 受入検証コマンド形状の
+  drift（リテラル実行テストあり）/ 履歴エントリの壊れ（`_usable_samples` + append 側
+  isinstance ガード + measure 失敗 + main() 配線 + `_num` の OverflowError が縛る）。
+- **merge 後に確認すること**（従来と変わらず）: reporter が 1 回走る → `root_disk.source`
+  が kubelet_summary になるか（RBAC nodes/proxy+stats の通し。取れていれば breakdown の
+  images/PVC が載り、取れなくても statvfs 総量 + None で正常動作）、1 日分の履歴が溜まったら
+  fill_days が数値になるか（MIN_WINDOW_DAYS=1.0）。実測したら substrate.md を更新する。
+
+---
+
 ## 2026-08-25（履歴の used_bytes が inf (JSON の 1e999/Infinity のパース結果) のとき _num が OverflowError を漏らし fill_days 契約を壊す経路を塞いだ。verify[1] green / verify[0] は変わらず構造的不可能のまま）
 
 ### やったこと
