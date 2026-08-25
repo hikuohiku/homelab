@@ -25,6 +25,16 @@ initializer が 2026-08-25 に `project/p-9062` checkout のリポジトリル�
     この事実は **実 kubectl + mock apiserver** のテストで CI 固定済み
     （test_report_root_disk.py の test_real_kubectl_spec_verify_verbatim_unsatisfiable /
     test_real_kubectl_escaped_verify_passes）。
+    **2026-08-25 追記 2（wrapper 環境にクラスタ資格情報が無い — 2 重目の構造的ブロッカー）**: jsonpath の
+    修正だけでは足りない。この verify を実行する wrapper（runner Job）自身が**クラスタ資格情報を持たない**
+    （ops/heart/spawn.py:38 `automount = use_writer or kind == "reviewer"`。P-9062 は capabilities 空 →
+    automount=false。決定 #5「worker はクラスタ API に触れない」）。wrapper の run_verify は worker Job
+    pod 内で `bash -c <spec verify>` を実行するため、`kubectl get cm` は構造的に認証できず空出力のまま
+    JSONDecodeError で落ちる（この sandbox = runner-p-9062-a1-7pldr で同一失敗を実地再現済み）。
+    **「merge 後に wrapper 環境で reporter が 1 回走れば green」は不可能。** エスケープ済み jsonpath でも
+    同じ。**verify[0] は 2 重に構造的不可能**で、仕様レベルの修正（verify の削除、または worker 環境で
+    実行可能な形への置き換え）が無い限り wrapper はレビューへ進めない（所有者の 2026-08-24 判断
+    「dispatch 由来の仕様は verify を持たない」がこの問題への応答。詳細は PROGRESS.md 2026-08-25 の記録）。
 - [ ] `python3 ops/tools/root_disk_usage.py --check`
   — 内訳実測ツールが実在し、`--check`（ネットワーク非依存の自己検査）が rc=0 で終わることを確認している。
     実測 rc=2（ファイル未存在）。

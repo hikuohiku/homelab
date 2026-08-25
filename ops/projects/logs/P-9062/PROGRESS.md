@@ -1,5 +1,89 @@
 # P-9062 — 進捗記録
 
+## 2026-08-25（wrapper 環境にクラスタ資格情報が無いことを実地で確定。verify[0] は 2 重に構造的不可能。前 9 セッションの「merge 後に green」見込みを訂正）
+
+### やったこと
+
+- **決定的な新発見: この sandbox は runner Job pod そのもので、クラスタ資格情報を持たない。**
+  `HOSTNAME=runner-p-9062-a1-7pldr` / `RUNNER_MODE=worker`。`/var/run/secrets/kubernetes.io/serviceaccount`
+  は存在しない（SA token 無し）、`~/.kube/config` も無い（cache のみ）。`kubectl get cm ...` は
+  localhost:8080 に接続拒否（既定 kubeconfig）。**wrapper の run_verify() はこの同じ pod で
+  `bash -c <spec verify>` を実行する**（runner.py run_verify → subprocess、cwd=repo_dir）。つまり
+  `kubectl get cm -n autopilot ops-health-report` は**構造的に認証できず、常に空出力**になる。
+- **裏付け**: ops/heart/spawn.py:38 `automount = use_writer or kind == "reviewer"`。P-9062 の
+  capabilities は空（`"capabilities": []`）なので runner Job は `automountServiceAccountToken: false`
+  （決定 #5: worker はクラスタ API に触れない）。ops/heart/tests/test_gate.py:126
+  `test_job_never_gets_the_write_service_account` が `assertFalse(pod["automountServiceAccountToken"])`
+  で機械的に縛っている。
+- **前 9 セッションの結論を訂正**: 「merge 後に wrapper 環境で reporter が 1 回走れば verify[0] は
+  green になる」は**不可能**。reporter が ConfigMap を正しく書いても、wrapper はそれを読む資格情報を
+  持たない。**検証の実測環境（wrapper = クラスタ非接続）と検証対象（クラスタ内 ConfigMap）が分離されて
+  いるのが構造的原因**。これは仕様レベルの問題で、worker のブランチからは何も直せない。
+- **verify[0] は 2 重に構造的不可能**:
+  1. wrapper 環境にクラスタ資格情報が無い（今回実地で確定。spawn.py / test_gate.py が CI 固定）。
+     エスケープ済み jsonpath でも無理。
+  2. spec の jsonpath `{.data.latest.json}` が実 kubectl で解けない（ドット=入れ子区切り。`\.` が要る）。
+     実 kubectl + mock apiserver のテストで CI 固定済み。
+- **verify[1] は green** のまま（`python3 ops/tools/root_disk_usage.py --check` → rc=0）。
+- 実装（report.py の root_disk 節・履歴の同一 PUT・RBAC node01 限定・statvfs fallback）は変更なし。
+  再度全量検証して全て green を実測した。
+
+### verify 実測（全てこのセッションで実行）
+
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0（**受入検証 1 項目は green**）
+- wrapper の verify[0] を**この環境（wrapper と同じ pod）でリテラル実行** → rc=1、wrapper の実測出力と
+  **完全に同一**の JSONDecodeError（空入力）を再現
+- `python3 -m unittest ops.tests.test_report_root_disk -v` → **8 tests OK**（実 kubectl 2 本を含む）
+- `python3 -m unittest discover -s ops/tests -t .` → **611 OK**、ops/heart/tests → 448 OK、
+  ops/runner/tests → 53 OK
+- `python3 ops/check_root_disk_usage_script_sync.py` → 一致 OK、`diff` canonical/コピー → 一致
+- `kubectl kustomize apps/ops-health-reporter` → build OK（nodes/proxy + nodes/stats が
+  resourceNames ["node01"] のまま）
+- `python3 ops/validate.py` → 0 error（warning 11 は全て既存・対象外）
+
+### 分かったこと（実測・調査）
+
+- **P-9037（先例）との差が確定した**: P-9037 の verify は `--check` + unittest のネットワーク非依存
+  で、wrapper 環境でも green にできた。P-9062 の verify[0] はクラスタ read が要る verify で、wrapper
+  には資格情報が無い。**「verify が wrapper 環境で実行できる」ことが受入検証の前提であり、これを満たさ
+  ない verify は spec 採択時に排除されるべき**（所有者の 2026-08-24 判断「dispatch 由来の仕様は verify
+  を持たない。verify を書くのも LLM なので迂回できる検査だったため外した」は、まさにこの問題への応答）。
+- **このプロジェクトは wrapper の verify ゲートで永久停止する**。runner は verify 全 green まで worker
+  セッションを回し続け、max_sessions_per_project に達すると heart が session_limit で stalled +
+  question（「同じところを回り続けている可能性があります。続ける価値があるか判断してください」）を
+  人間へ出す（ops/heart/reconcile.py:636）。つまり**この記録が人間の判断材料**になる。
+- 実装側は今も完成・堅牢: DoD の残要素は無い。内訳（images/PVC は summary 経由、k3s/containerd/ログ は
+  None=計測不能）・fill_days（履歴 1 日分まで None + note）・取得源（statvfs は実環境実測済み、summary
+  は RBAC 追加）・履歴の壊れ耐性は全て CI 固定済み。
+
+### 発見（スコープ外、curriculum へ）
+
+- **curriculum への教訓（強）**: verify を書くときは「wrapper（runner Job, automount=false）で実行
+  できるコマンド」にすること。クラスタ read（`kubectl get cm ...` 等）が要る verify は wrapper では
+  永遠に green にならず、プロジェクトが verify ゲートで永久停止する（P-9062 が実例）。P-9037 の
+  `--check` / unittest パターンが正。クラスタ内の状態を検証したいなら、それを wrapper の verify に
+  するのではなく DoD として実装し、CI（mock 固定）または merge 後の実測で確認する。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **最初にやること**: spec の verify が修正されたか wrapper の verify 実測で確認する。修正されない限り
+  このプロジェクトは verify ゲートで永久に停止する。**ローカルで追加実装できることは何も無い（10 回目の
+  確認）。** 実装は DoD を満たし、全 CI 相当ゲートが green。
+- **修正の方向は dispatch / 所有者が決める**。現実的な選択肢は 2 つ:
+  (a) 所有者判断どおり dispatch 由来の verify を外す → wrapper が PR を出し、独立レビュー（reviewer Job
+  はクラスタ read 権限を持つ）と CI に完成の判断を移す
+  (b) verify[0] を worker 環境で実行可能な形に置き換える（例: `python3 -m unittest
+  ops.tests.test_report_root_disk` のような、reporter の出力契約を mock で固定するテスト。P-9037 流）
+- 差し戻されたら従来どおり以下を疑う: nodes/proxy + nodes/stats の resourceNames が node01 のままか
+  （回帰テストあり）/ configMapGenerator sync の自愈待ち / 受入検証コマンド形状の drift（リテラル実行
+  テストあり）。
+- **merge 後に確認すること**（従来と変わらず）: reporter が 1 回走る → `root_disk.source` が
+  kubelet_summary になるか（RBAC nodes/proxy+stats の通し。取れていれば breakdown の images/PVC が載り、
+  取れなくても statvfs 総量 + None で正常動作）、1 日分の履歴が溜まったら fill_days が数値になるか
+  （MIN_WINDOW_DAYS=1.0）。実測したら substrate.md を更新する。
+
+---
+
 ## 2026-08-25（spec の verify[0] ブロッカーを「実 kubectl + mock apiserver」で CI に閉じた。再現手順の独立確認つき）
 
 ### やったこと
