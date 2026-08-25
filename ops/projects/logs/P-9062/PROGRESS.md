@@ -1,5 +1,76 @@
 # P-9062 — 進捗記録
 
+## 2026-08-25（追加セッション: summary 経路の JSON パース失敗も statvfs fallback に含めた）
+
+### やったこと
+
+- **`root_disk_usage.fetch_kubelet_summary` の except に `ValueError` を追加**。
+  従来は `(OSError, HTTPError, URLError)` だけを掴み、`json.load` の
+  `JSONDecodeError` / `UnicodeDecodeError` (いずれも ValueError) は**漏れて**
+  `measure()` の外へ伝播し、`collect()` が root_disk 節全体を
+  `{"error": "JSONDecodeError: ..."}` にしていた。そうなると **fill_days キーが
+  無くなり、受入検証 (kubectl 側) が「root_disk が無い/assert 失敗」で落ちる**。
+  200 だが応答が JSON でない (apiserver 前段のプロキシが HTML を返す等) と
+  発生しうる。設計上の契約は「summary が取れないなら None → statvfs へ倒す」
+  (docstring に明記) なので、パース失敗も「取れない」として None に落とし、
+  root_disk 節が必ず fill_days キーを持つことを保った。canonical と apps/ 側コピー
+  の両方を修正 (drift check が一致を確認済み)。
+- **`ops/tests/test_root_disk_usage.py` に `FetchKubeletSummaryTest` を追加** (3 テスト):
+  - ネットワーク系失敗 (OSError / HTTPError 403) → None
+  - 非 JSON 応答 (ValueError) → None (今回の修正)
+  - 実測経路の結合: summary 取得が JSON パース失敗でも `build_report` が
+    source=statvfs の section を返し fill_days キーを持つ (受入検証の契約)
+
+### verify 実測
+
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0 (**受入検証の 1 項目は green**)
+- `python3 -m unittest ops.tests.test_root_disk_usage -v` → **18 tests OK** (前回 15 + 新規 3)
+- `python3 -m unittest discover -s ops/tests -t .` → **608 OK** (前回 605 + 新規 3)
+- `python3 ops/check_root_disk_usage_script_sync.py` → 一致 OK
+- `diff ops/tools/root_disk_usage.py apps/ops-health-reporter/root_disk_usage.py` → 一致
+- `kubectl kustomize apps/ops-health-reporter` → build OK
+
+### 分かったこと (実測・調査)
+
+- **受入検証の kubectl 側が落ちるもう一つの経路を塞いだ**: 「root_disk が無い」
+  は (a) reporter がまだ新コードで走っていない (merge 待ち) 以外にも、
+  (b) summary 経路が例外を漏らして root_disk 節が `{"error": ...}` になる、でも
+  起きる。今回の修正で (b) は構造的に無くなった — root_disk 節は summary 成功か
+  statvfs のどちらでも必ず正規の section になり fill_days キーを持つ。
+- 前セッションまでの「ローカルでやることは残っていない」はそのまま正しい。
+  今回の修正はその上で見つけた**実リスクの塞ぎ**で、スコープは P-9062 の
+  fallback 設計の範囲内 (summary → statvfs) に閉じている。
+
+### 発見（スコープ外、curriculum へ）
+
+- なし (dashboard_smoke の no-lie-coexistence 論点は据え置き)。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **ローカルでやることは残っていない。** 受入検証の残り 1 項目 (kubectl) は
+  wrapper 環境で reporter が 1 回走った後、認証付きの文脈 (クラスタ到達) で green に
+  なる。sandbox では apiserver は 401 で到達できるが認証情報が無く、実行不能。
+- 差し戻されたら以下を疑う:
+  1. `nodes/proxy` / `nodes/stats` の resourceNames が node01 のままか (回帰テスト
+     TestRbac.test_kubelet_summary_proxy_resource_names_match_node が縛っている)
+  2. ArgoCD が configMapGenerator を sync するまで reporter が旧 ConfigMap で走る
+     自愈待ち (P-9037 と同じ。数回で治る)
+  3. 受入検証コマンドの形 (jsonpath・namespace/name・パイプ) が spec からずれていないか
+     (test_acceptance_kubectl_command_verbatim が縛っている)
+  4. (新規) summary 経路の例外が fallback をすり抜けていないか
+     (FetchKubeletSummaryTest が縛っている)
+- **merge 後 (wrapper 環境) に確認すること**:
+  1. reporter が 1 回走る → `kubectl get cm -n autopilot ops-health-report -o
+     jsonpath='{.data.latest.json}'` に `root_disk.source` と `fill_days` キー (初回
+     None) が載る → 受入検証 green
+  2. `root_disk.source` が `kubelet_summary` になるか (RBAC nodes/proxy+stats の通し)。
+     取れていれば breakdown の images/PVC が載り、取れなくても statvfs 総量 + None で
+     正常動作 (実測済みの fallback)。実測したら substrate.md を更新する。
+  3. 1 日分の履歴が溜まったら fill_days が数値になる (観測窓 MIN_WINDOW_DAYS=1.0)。
+     「予報が出ていない」と指摘されたら「1 日分の履歴が必要」を説明する。
+
+---
+
 ## 2026-08-25（追加セッション: nodes/proxy の resourceNames 罠を修正した）
 
 ### やったこと
