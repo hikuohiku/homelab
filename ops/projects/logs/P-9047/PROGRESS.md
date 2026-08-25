@@ -113,6 +113,10 @@
   token automount）で実行 → `--check` rc=0 / `photo_count` grep rc=0 /
   `--verify-freshness --max-age 3d` rc=0（restored_at=2026-08-25T00:39:37Z）。
   probe 用 pod/Job/ConfigMap はすべて削除済み。
+- **回帰テストを追加**: `ops/tests/test_health_report_path.py` に
+  `TestImmichDrillReportRbac`（Role の resourceNames 限定 + get のみ / RoleBinding が
+  autopilot-runner を指すこと）。「wrapper 実測は green なのに reviewer 実測は
+  Forbidden」の再発を CI で防ぐ。全部で 601 tests OK。
 
 ### 分かったこと
 

@@ -99,6 +99,37 @@ class TestRbac(unittest.TestCase):
         )
 
 
+class TestImmichDrillReportRbac(unittest.TestCase):
+    """P-9047: immich 復元 drill の成功記録 ConfigMap を runner 文脈が読めること。
+
+    この RBAC は P-9047 の verify (`kubectl get configmap -n autopilot
+    immich-restore-drill-report`) が reviewer Job (SA autopilot-runner) で実測される
+    ために必要。欠けると「wrapper 実測は green なのに reviewer 実測は Forbidden」に
+    なる (レビュー差し戻し #1 で実測)。resourceNames 限定を外すと autopilot-config の
+    分離設計に反するので、ここで get + resourceNames 1 個を固定する。
+    """
+
+    ROLE = "immich-restore-drill-report-reader"
+    BINDING = "immich-restore-drill-report-reader"
+    CONFIGMAP = "immich-restore-drill-report"
+
+    def test_role_grants_get_on_only_that_configmap(self):
+        role = rules_of(HEART_RBAC, "Role", self.ROLE)
+        self.assertEqual(role["metadata"]["namespace"], "autopilot")
+        self.assertEqual(len(role["rules"]), 1)
+        rule = role["rules"][0]
+        self.assertEqual(rule["resources"], ["configmaps"])
+        self.assertEqual(rule["resourceNames"], [self.CONFIGMAP])
+        self.assertEqual(rule["verbs"], ["get"])
+
+    def test_binding_grants_runner_sa(self):
+        binding = rules_of(HEART_RBAC, "RoleBinding", self.BINDING)
+        self.assertEqual(
+            [(s["name"], s["namespace"]) for s in binding["subjects"]],
+            [("autopilot-runner", "autopilot")],
+        )
+
+
 class TestNoGitHubRoundTrip(unittest.TestCase):
     def test_reporter_does_not_touch_github(self):
         source = REPORT.read_text()
