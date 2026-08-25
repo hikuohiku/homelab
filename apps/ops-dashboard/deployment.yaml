@@ -16,6 +16,12 @@ spec:
     metadata:
       labels:
         app: ops-dashboard
+      annotations:
+        # NATS_NKEY_SEED は env 経由 (secretKeyRef) なので、ExternalSecret が
+        # Secret を書き換えても走っている Pod には届かない。seed を差し替えたら
+        # この値も更新して Pod を作り直す (apps/nats/deployment.yaml の
+        # config-stamp と同じ役割)
+        homelab.hikuohiku.dev/restart-stamp: "2026-08-25-nats-seed"
     spec:
       serviceAccountName: ops-dashboard
       securityContext:
