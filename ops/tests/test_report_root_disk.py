@@ -270,17 +270,22 @@ def load_report_namespace():
 
 
 class FakeK8s:
-    """k8s_get の偽物。知らない path は {"items": []} (空クラスタ相当) を返す。"""
+    """k8s_get の偽物。知らない path は {"items": []} (空クラスタ相当) を返す。
 
-    def __init__(self):
+    configmap_data を渡すと、configmaps/ 系 path の応答 data にそれを注入する
+    (root_disk_history.json の壊れケースを main() 経由で通すテスト用)。
+    """
+
+    def __init__(self, configmap_data=None):
         self.calls = []
+        self.configmap_data = configmap_data
 
     def __call__(self, path):
         self.calls.append(path)
         if path.startswith("/apis/apps/v1/namespaces/autopilot/deployments/"):
             return {"status": {"replicas": 1, "readyReplicas": 1, "unavailableReplicas": 0}}
         if "configmaps/" in path:
-            return {"data": {}}
+            return {"data": self.configmap_data or {}}
         return {"items": []}
 
 
@@ -419,6 +424,50 @@ class ReportRootDiskContractTest(unittest.TestCase):
             capture_output=True,
         )
         self.assertEqual(proc.returncode, 0, proc.stderr)
+
+    def test_corrupted_history_configmap_keeps_fill_days_contract(self):
+        """ConfigMap の root_disk_history.json キーが壊れていても main() は 1 周
+        走りきり、root_disk 節が正規の section + fill_days キーを持つことを main()
+        経由で固定する (P-9062)。
+
+        `_read_root_disk_history` は (a) JSON として解釈不能、(b) samples がリストで
+        ない、(c) トップレベルが dict でない、を空履歴に巻き戻す (設計どおり。壊れた
+        履歴は再蓄積に過ぎない)。加えて (d) リスト内の個別エントリの壊れ (used_bytes
+        欠落・非 dict) は巻き戻さず build_report の _usable_samples が捨てる経路も、
+        受入検証の契約 (fill_days キー) を壊さないことを main() 実出力で確認する。
+        ConfigMap の手動編集・旧版の書き込みで十分起こりうる形状で、前セッションまで
+        は build_report 単体でのみ固定され main() の配線は未固定だった。
+        """
+        corrupt_keys = (
+            "not-json",  # (a) JSON として解釈不能
+            json.dumps({"samples": "oops"}),  # (b) samples がリストでない
+            json.dumps([1, 2, 3]),  # (c) トップレベルが list (dict でない)
+            json.dumps({  # (d) リストは健全だが個別エントリが壊れている
+                "samples": [
+                    {"ts": "2026-08-23T00:00:00Z", "used_bytes": 100},
+                    {"ts": "2026-08-24T00:00:00Z"},  # used_bytes 欠落
+                    None,  # 非 dict
+                ]
+            }),
+        )
+        for bad in corrupt_keys:
+            self.k8s = FakeK8s(
+                configmap_data={self.rep["ROOT_DISK_HISTORY_KEY"]: bad}
+            )
+            self.writer = FakeWriter()
+            self.rep["k8s_get"] = self.k8s
+            self.rep["k8s_request"] = self.writer
+            latest = self._run_main()
+            rd = latest["root_disk"]
+            self.assertIn("fill_days", rd, "壊れた履歴でも fill_days キー契約を守る")
+            self.assertNotIn("error", rd, "壊れた履歴で root_disk 節が error にならない")
+            proc = subprocess.run(
+                ["python3", "-c", SPEC_VERIFY_SNIPPET],
+                input=json.dumps(latest),
+                text=True,
+                capture_output=True,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr)
 
     def _run_verify_command(self, jsonpath_flag):
         """kubectl 偽物を PATH に差し込み、受入検証の形 (namespace/name・-o jsonpath・
