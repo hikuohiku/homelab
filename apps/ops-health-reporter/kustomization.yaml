@@ -15,6 +15,9 @@ configMapGenerator:
       # `python /scripts/report.py` で起動するため sys.path[0]=/scripts となり、
       # 追加マウント無しで解決する
       - download_budget.py
+      # report.py から `import node_saturation` される (P-9037)。canonical は
+      # ops/tools/node_saturation.py (drift は ops/check_node_saturation_script_sync.py)
+      - node_saturation.py
 
 generatorOptions:
   disableNameSuffixHash: true

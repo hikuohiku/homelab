@@ -160,3 +160,21 @@ autopilot namespace の Pod (heart / runner / reviewer / …) が動く環境の
   ops/projects/logs/P-0111/root_cause.md。
   「既知事象だから」と latest.json の断片で決めつけず、直近 backup Job の成否を見ること
   — verified_at: 2026-08-23
+
+## CPU 飽和前兆の load 取得源 (P-9037)
+
+> この節は P-9037 の worker が追記した (spec の DoD (4) が名指しで要求する例外。
+> README「書き手は consolidation の PR のみ」の破れの継続)。
+> 実測原本は本節の記録と ops/tools/node_saturation.py・apps/ops-health-reporter/report.py。
+
+- **kubelet stats/summary (`GET /api/v1/nodes/<name>/proxy/stats/summary`) には host load が無い。**
+  metrics.k8s.io と同じく usage 系しか返さない (P-9029 の審査指摘どおり)。load を取るには
+  実効的に node の `/proc/loadavg` に倒れる — verified_at: 2026-08-24 (P-9029 審査 + 本 spec の前提)
+- **pod 内から `/proc/loadavg` が読め、node01 の host load 全体を返す。** loadavg は PID
+  namespace で仮想化されないため、hostPID / hostPath の mount は要らない。node01 上の
+  runner pod から実測し、1 分平均 (1.17 等) と 4 vCPU (`grep -c processor` = 4) を確認 —
+  verified_at: 2026-08-24 (P-9037 worker の runner pod で実測)
+- **kubelet summary proxy 経路 (nodes/proxy の RBAC) は本 worker セッションでは実測していない。**
+  reporter (ops-health-reporter) には nodes/proxy を付けていない — summary に load が無いため
+  /proc/loadavg で足りる。標準ツール (ops/tools/node_saturation.py) は summary → /proc の
+  順に試す実装で、summary が load を持つようになったら優先される — 設計 (2026-08-24, P-9037)

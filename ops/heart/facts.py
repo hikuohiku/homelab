@@ -152,6 +152,58 @@ def dashboard_smoke_alert(doc):
     }
 
 
+def node_saturation_alert(doc):
+    """latest.json から CPU 飽和前兆の警報すべき状態を抽出する (P-9037)。
+
+    report が作る node_saturation.status のうち warn のときだけ
+    {status, reason, requests_m, allocatable_m, requests_ratio, load_1m, vcpus} を
+    返す。それ以外 (ok、latest.json 無し・壊れ・node_saturation キー無し、
+    reporter の観測失敗による error エントリ) は None。error (観測失敗) を
+    鳴らさないのは budget_alert() が unconfigured/no_data を沈黙させるのと
+    同じ判断 — 鳴らせる状態になったときにだけ既存経路に乗る。
+
+    reason は reporter の reasons (["requests_ratio", "load"]) を人間向け文面に
+    展開したもの。実測値 (requests_m/allocatable_m・load_1m/vcpus) も載せ、
+    briefing / dashboard が数字で見られるようにする。reasons が壊れていたら
+    None は返さず status だけで警報を成立させる (文面の欠落で警報を倒さない)。
+
+    観測のみを行い判断しない (モジュール冒頭の原則)。鳴らすかどうかの繰り返し
+    抑制は budget_alert_due() が担う (status/date の一般判定なので流用する)。
+    """
+    if not isinstance(doc, dict):
+        return None
+    sat = doc.get("node_saturation")
+    if not isinstance(sat, dict):
+        return None
+    if sat.get("status") != "warn":
+        return None
+    reasons = sat.get("reasons")
+    if not isinstance(reasons, list):
+        reasons = []
+    parts = []
+    if "requests_ratio" in reasons:
+        parts.append(
+            "CPU requests が allocatable の 90% 超 ({}m/{}m)".format(
+                sat.get("requests_m"), sat.get("allocatable_m")
+            )
+        )
+    if "load" in reasons:
+        parts.append(
+            "load が vCPU 数を超えた ({} > {})".format(
+                sat.get("load_1m"), sat.get("vcpus")
+            )
+        )
+    return {
+        "status": "warn",
+        "reason": " / ".join(parts) if parts else "CPU 飽和前兆",
+        "requests_m": sat.get("requests_m"),
+        "allocatable_m": sat.get("allocatable_m"),
+        "requests_ratio": sat.get("requests_ratio"),
+        "load_1m": sat.get("load_1m"),
+        "vcpus": sat.get("vcpus"),
+    }
+
+
 def collect_jobs(k8s, namespace):
     """heart が生んだ Job の実状態。{job_name: {"active":bool,"failed":bool,"succeeded":bool}}"""
     out = {}

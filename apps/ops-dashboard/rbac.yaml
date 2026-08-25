@@ -26,6 +26,12 @@ rules:
   - apiGroups: [""]
     resources: ["pods/log"]
     verbs: ["get"]
+  # CPU 飽和前兆 (P-9037) の warnings 表示。reporter が書く latest.json の
+  # node_saturation キーを読む (dashboard は閲覧のみ。この ConfigMap 名に絞る)
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["ops-health-report"]
+    verbs: ["get"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding

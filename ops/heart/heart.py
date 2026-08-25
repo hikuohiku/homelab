@@ -539,6 +539,9 @@ class Heart:
         # Mission Control 描画スモークの警報すべき状態 (P-0193)。fail/stale のとき
         # だけ中身があり、ok/no_data は None (成功は通知予算を消費しない)
         smoke = facts.dashboard_smoke_alert(health_doc)
+        # CPU 飽和前兆の警報すべき状態 (P-9037)。warn のときだけ中身があり、
+        # ok/観測失敗は None (P-0128 の budget 警告と同じ 2 段階)
+        saturation = facts.node_saturation_alert(health_doc)
         try:
             jobs = facts.collect_jobs(self.k8s_client(), self.cfg.namespace)
         except Exception as e:
@@ -666,6 +669,22 @@ class Heart:
             )
             smoke_queued = True
 
+        # CPU 飽和前兆の警報 (P-9037)。流儀は上の budget / smoke 警報と同じ:
+        # briefing-queue.jsonl への追記と incident 通知。同じ status の同一日内の
+        # 再通知は cursors の前回記録で落とす。budget_alert_due は status/date の
+        # 一般判定なので流用する
+        saturation_incident_text = None
+        saturation_queued = False
+        if facts.budget_alert_due(saturation, cursors.get("node_saturation_alert"), today):
+            cursors["node_saturation_alert"] = {
+                "status": saturation["status"],
+                "date": today,
+            }
+            saturation_incident_text = (
+                f"CPU 飽和前兆 (node01): {saturation['reason']}"
+            )
+            saturation_queued = True
+
         # --- 一段目: 状態遷移を副作用より先に永続化する (レビュー指摘 [8])。
         # ここで落ちても副作用は未実行なので、次のビートが同じ判断をやり直すだけ。
         # 逆順 (実行→保存) だと、保存失敗の翌ビートが「実行済みの副作用」を知らずに
@@ -695,6 +714,16 @@ class Heart:
                 },
             )
             log(f"dashboard_smoke alert: {smoke['status']} — queued to briefing")
+        if saturation_queued:
+            self.work.append_jsonl(
+                "briefing-queue.jsonl",
+                {
+                    "at": now_iso(now),
+                    "source": f"node-saturation ({saturation['status']})",
+                    "body": saturation["reason"],
+                },
+            )
+            log(f"node_saturation alert: {saturation['status']} — queued to briefing")
         # タスク依頼の受領 (P-0091)。id 重複は merge_new が落とすので、
         # カーソル巻き戻り等で同じ note を再取り込みしても積み直さない
         queue = self.work.read_jsonl(tasks.QUEUE_FILE)
@@ -718,6 +747,11 @@ class Heart:
                 log(f"[shadow] notify[incident] {smoke_incident_text[:80]}")
             else:
                 notifier.send("incident", smoke_incident_text, now)
+        if saturation_incident_text:
+            if self.cfg.shadow:
+                log(f"[shadow] notify[incident] {saturation_incident_text[:80]}")
+            else:
+                notifier.send("incident", saturation_incident_text, now)
 
         record = metrics.beat_record(
             now,
@@ -730,6 +764,7 @@ class Heart:
             usage=usage_info,
             budget_status=budget["status"] if budget else None,
             dashboard_smoke_status=smoke["status"] if smoke else None,
+            node_saturation_status=saturation["status"] if saturation else None,
             vetoes=vetoes,
             stop_all=stop_all,
             actions=[a["type"] for a in actions],
