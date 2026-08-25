@@ -1,5 +1,91 @@
 # P-9062 — 進捗記録
 
+## 2026-08-25（summary の pod volume[].fs が truthy な非 dict のとき sample_from_summary が AttributeError を漏らし計測全体を source=error に落とす経路を塞いだ。verify[1] green / verify[0] は構造的不可能のまま）
+
+### やったこと
+
+- 前セッション (8ab7cb9c) までの実装を信用せず全量を自分の手で再検証し、
+  **新たに実リスクを 1 つ見つけて塞いだ**:
+- **`sample_from_summary` の pod volume 合計のループで、`vol["fs"]` が truthy な
+  非 dict (list / 文字列等) だと `(vol.get("fs") or {}).get("usedBytes")` が
+  AttributeError を漏らしていた**。`or {}` は falsy (None・空 dict) しか置き換え
+  ず、truthy な非 dict には効かない。例外は measure → build_report を突き抜けず
+  build_report の try が掴むため root_disk 節は `source=error` に倒れるが、
+  **node.fs (総量) と images / 健全な volume の内訳が全部読めるのに計測全体が
+  計測不能扱いになる** — 「1 項目の壊れで計測全体を止めない」設計思想 (ed22bfba
+  の _num docstring) に反する。実測で再現確認 (fs=["x"] の volume 入り summary →
+  sample_from_summary RAISE / build_report source=error)。
+- **修正**: ループ内で `fs = vol.get("fs")` を取り、`isinstance(fs, dict)` で
+  ない場合は**その volume の寄与を数えずに次へ進む** (壊れた fs を None 扱いに
+  するのは _num と同じ思想。取れるものだけ載せる)。node.fs の総量は当然そのまま。
+  canonical と apps/ 側コピーの両方を同じ PR で修正 (drift check が一致を確認済み)。
+- **テスト**: `_selfcheck` (--check) に fs 非 dict の volume が混じるケースを追加、
+  `ops/tests/test_root_disk_usage.py` に回帰テスト 2 本追加 (29 tests に):
+  `test_volume_fs_truthy_non_dict_is_skipped_not_crash` (sample_from_summary が
+  クラッシュせず source=kubelet_summary、健全分の pvc 合計だけ載せる) /
+  `test_volume_fs_truthy_non_dict_in_build_report_keeps_source` (実測経路の結合:
+  build_report が source=kubelet_summary の正規 section + fill_days キーを返す)。
+
+### verify 実測（全てこのセッションで実行）
+
+- `python3 ops/tools/root_disk_usage.py --check` → rc=0（**受入検証の 1 項目は green**）
+- `python3 apps/ops-health-reporter/root_disk_usage.py --check` → rc=0（コピーも一致）
+- `python3 -m unittest ops.tests.test_root_disk_usage -v` → **29 tests OK** (前回 27 + 新規 2)
+- `python3 -m unittest ops.tests.test_report_root_disk` → **10 tests OK**（受入検証コマンドの
+  kubectl 偽物 + 実 kubectl 固定本を含む。skip 無しで全部実行）
+- `python3 -m unittest discover -s ops/tests -t .` → **624 OK** (前回 622 + 新規 2)
+- ops/heart/tests → 448 OK、ops/runner/tests → 53 OK
+- `python3 ops/check_root_disk_usage_script_sync.py` → 一致 OK、`diff` canonical/コピー → 一致
+- `kubectl kustomize apps/ops-health-reporter` → build OK（nodes/proxy + nodes/stats が
+  resourceNames ["node01"] のままを実測）
+- `python3 ops/validate.py` → 0 error（warning 11 は全て既存・対象外）
+- `python3 -m py_compile` 対象 3 ファイル → OK
+- verify[0] をこの sandbox でリテラル実行 → 従来どおり JSONDecodeError（空入力。クラスタ
+  資格情報が無いため構造的に実行不能。wrapper の実測と同一）
+
+### 分かったこと（実測・調査）
+
+- **summary の内訳パースにも「truthy な非 dict」という、これまで触れていなかった
+  壊れ方が残っていた**。これまで塞いだのは履歴側 (used_bytes 欠落/非数値/inf/非 dict
+  末尾/parse 不能) と summary のパース失敗 (ValueError→statvfs fallback) で、
+  summary **内部の構造** (fs が dict でない) は `_num` と `isinstance` ガードが
+  拾えていなかった。`(v or {}).get(...)` の `or {}` は falsy 専用で、truthy な
+  非 dict (list・文字列) に効かないのは Python の常套罠。
+- 今回は例外が build_report の try で掴まれて source=error になるため **fill_days
+  キーの契約 (受入検証) は壊れていなかった**。しかし「node.fs が読めるのに summary
+  経路全体が計測不能になる」のは設計思想違反で、merge 後に RBAC が通って summary
+  が取れ始めたときに内訳が無駄に落ちる経路を塞いだ、という位置づけ。
+- verify[0] は変わらず 2 重に構造的不可能（wrapper=runner Job にクラスタ資格情報が
+  無い + spec の jsonpath `{.data.latest.json}` が実 kubectl でドットキーを解けない）。
+  worker は spec を変えられない。
+
+### 発見（スコープ外、curriculum へ）
+
+- なし（dashboard_smoke の no-lie-coexistence 論点は据え置き）。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **最初に wrapper の verify 実測を確認し、spec の verify が修正されたかを確かめる。**
+  修正されない限りこのプロジェクトは verify ゲートで永久停止する。今セッションは
+  「ローカルで追加実装できることは残っていない」の上で、summary 内訳の fs 非 dict
+  経路をさらに 1 つ塞いだ。
+- 修正の方向は dispatch / 所有者が決める（2 案は 7c1e7caa の記録参照）:
+  (a) 所有者判断 (2026-08-24) どおり dispatch 由来の verify を外す → wrapper が PR を出し、
+  独立レビュー (reviewer Job はクラスタ read 権限を持つ) と CI に完成の判断を移す
+  (b) verify[0] を worker 環境で実行可能な形に置き換える (例: `python3 -m unittest
+  ops.tests.test_report_root_disk`。P-9037 流)
+- 差し戻されたら従来どおり以下を疑う: nodes/proxy + nodes/stats の resourceNames が node01
+  のままか（回帰テストあり）/ configMapGenerator sync の自愈待ち / 受入検証コマンド形状の
+  drift（リテラル実行テストあり）/ 履歴エントリの壊れ（`_usable_samples` + append 側
+  isinstance ガード + measure 失敗 + main() 配線 + `_num` の OverflowError が縛る）/
+  **summary 内訳の fs 非 dict (今回の isinstance ガードが縛る)**。
+- **merge 後に確認すること**（従来と変わらず）: reporter が 1 回走る → `root_disk.source`
+  が kubelet_summary になるか（RBAC nodes/proxy+stats の通し。取れていれば breakdown の
+  images/PVC が載り、取れなくても statvfs 総量 + None で正常動作）、1 日分の履歴が溜まったら
+  fill_days が数値になるか（MIN_WINDOW_DAYS=1.0）。実測したら substrate.md を更新する。
+
+---
+
 ## 2026-08-25（フレッシュ起動で全量を再検証。実装は完・全 CI 相当ゲート green。verify[0] は変わらず仕様レベルで構造的不可能 — worker の立場では手を動かす対象が無い）
 
 ### やったこと
