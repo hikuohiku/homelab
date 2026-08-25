@@ -47,6 +47,9 @@ QUOTA_WAIT_MAX_HOURS = 24
 # 自己観測 (critic) の間隔。指標 (状態別滞留・アイドル率) は日次の粒度で足り、
 # それより短くしても同じ 24h の窓を読み直すだけになる (P-0045)
 CRITIC_INTERVAL_HOURS = 24
+# curriculum を rules.json で止めているときに「壊れたのではなく止めている」と分かる
+# 一行を出す間隔。毎ビート (60s) 出すとログが埋まるので間引く
+CURRICULUM_DISABLED_LOG_INTERVAL_HOURS = 6
 # 「まだ一度も記録していない」と「None を記録した」を区別する番人
 _UNSET = object()
 
@@ -893,17 +896,44 @@ def decide(doc, facts, rules, now):
     gap_ok = last_curriculum is None or (now - parse_iso(last_curriculum)) >= min_gap
     if doc.get("last_curriculum_dry") is False:
         gap_ok = True
+    # 立案だけを止める栓 (rules.json curriculum.enabled)。既定は True — 鍵の無い
+    # 古い rules.json は従来どおり立案する。**gap_ok の上書きより後**に見るので、
+    # 実りの直後の eager 立案も止まる。止めるのは「次を起こさない」ことだけで、
+    # 走行中の Job は殺さず、last_curriculum_at も進めない (再開時に
+    # min_interval_hours の判定が狂わないように)
+    curriculum_enabled = rules["curriculum"].get("enabled", True)
+    curriculum_muted = False
     if curriculum_idle and gap_ok and not stop_all:
-        doc["last_curriculum_at"] = now_iso(now)
-        actions.append(
-            _action("spawn_curriculum", adopt_limit=free_slots)
-        )
+        if curriculum_enabled:
+            doc["last_curriculum_at"] = now_iso(now)
+            actions.append(
+                _action("spawn_curriculum", adopt_limit=free_slots)
+            )
+        else:
+            # 黙って何も起きないと「壊れた」と見分けがつかない。立案する条件が
+            # 揃ったビートでだけ、間引いて 1 行残す
+            last_log = doc.get("last_curriculum_disabled_log_at")
+            curriculum_muted = last_log is None or (
+                now - parse_iso(last_log)
+            ) >= timedelta(hours=CURRICULUM_DISABLED_LOG_INTERVAL_HOURS)
 
     # --- 活動の記録 (critic の due 判定の材料) ---
     # ここまでに積んだ action だけを「活動」と数える。この行より後に積む critic 自身の
     # action (consume_critic / notify_critic / spawn_critic) は数えない (_critic_due 参照)
     if actions:
         doc["last_activity_at"] = now_iso(now)
+
+    # 停止中の一行は「活動」に数えない (数えると止めた器が critic を毎日起こす)。
+    # そのため last_activity_at を刻んだ **後** に積む
+    if curriculum_muted:
+        doc["last_curriculum_disabled_log_at"] = now_iso(now)
+        actions.append(
+            _action(
+                "log",
+                text="curriculum は rules.json で停止中 (curriculum.enabled=false)。"
+                     "立案を起こしません (戻すには enabled を true に)",
+            )
+        )
 
     # --- critic: 前回の所見の消費と、日次の自己観測 (P-0045) ---
     # 器が自分の詰まり (状態別の滞留・アイドル率) と利用者面の不満を、人間より先に
