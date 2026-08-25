@@ -186,3 +186,60 @@
   「1 日分の履歴が必要」を説明する。
 - merge 後、最初の reporter run で `root_disk: {"error": ...}` になっていても、ArgoCD が
   configMapGenerator を sync するまで数回で自愈する (P-9037 と同じ)。
+
+---
+
+## 2026-08-25（最終ローカル全量再検証。コード変更なし）
+
+### やったこと
+
+- 最終コミット (a1fde443) 以降の状態を**改めて全量再検証**した。ローカルで回せる
+  CI 相当ゲートは全て green を実測し、受入検証の残り 1 項目 (kubectl) はクラスタ
+  到達のみが残ることを確認。**sandbox で追加実装できることは何も残っていない。**
+- 実測したゲート (全て rc=0):
+  - `python3 ops/tools/root_disk_usage.py --check` → **受入検証の 1 項目は green**
+  - `python3 -m unittest discover -s ops/tests -t .` → 604 OK
+  - `python3 -m unittest discover -s ops/heart/tests -t .` → 448 OK
+  - `python3 -m unittest discover -s ops/runner/tests -t .` → 53 OK
+  - `diff ops/tools/root_disk_usage.py apps/ops-health-reporter/root_disk_usage.py` → 一致
+  - consistency checks 10 本 (check_version_sync / pvc_usage / download_ledger /
+    dashboard_smoke / node_saturation / **root_disk_usage** / health_reporter_target /
+    doc_commands / feedback / credential_map) → 全 ok
+  - `python3 ops/validate.py` → 0 error (warning 11 は全て既存・対象外)
+  - `kubectl kustomize apps/ops-health-reporter` → build OK。**ClusterRole に
+    nodes/proxy get + nodes/stats get、両方 resourceNames ["node01"]**、ConfigMap に
+    root_disk_usage.py + ROOT_DISK_HISTORY_KEY が載ることを実測。
+  - `python3 -m py_compile` 全対象 → OK
+- ruff F821 は sandbox に無いため未実行 (CI が gate)。AST 手検査で未定義名なしを確認
+  (loop 変数・引数は false positive)。
+
+### 分かったこと (実測)
+
+- **kubectl は sandbox からクラスタに到達できない** (localhost:8080 拒否) — 受入検証の
+  残り 1 項目はここでは実行不能という wrapper の実測どおり。実装側の契約は
+  test_report_root_disk.py が「受入検証の python 断片を main() の実出力にそのまま流す」
+  形で CI 固定済みなので、wrapper 環境で reporter が 1 回走れば green になる。
+- 仕様本文 (dod) の残要素の埋まり: 内訳実測 (images/PVC は summary 経由、k3s/containerd/
+  ログ は None=計測不能) ✓ / fill_days 予報 ✓ / 取得源は statvfs 検証済み + summary は
+  RBAC 追加 ✓。**「やったつもり」で終わっていないことはこの再検証で確認できた。**
+
+### 発見（スコープ外、curriculum へ）
+
+- なし (dashboard_smoke の no-lie-coexistence 論点は据え置き)。
+
+### 次のセッションへ（レビューで差し戻されたら）
+
+- **ローカルでやることは残っていない。** 差し戻されたら以下を疑う:
+  1. `nodes/proxy` / `nodes/stats` の resourceNames が node01 のままか (回帰テスト
+     TestRbac.test_kubelet_summary_proxy_resource_names_match_node が縛っている)
+  2. ArgoCD が configMapGenerator を sync するまで reporter が旧 ConfigMap で走る
+     自愈待ち (P-9037 と同じ。数回で治る)
+- **merge 後 (wrapper 環境) に確認すること**:
+  1. reporter が 1 回走る → `kubectl get cm -n autopilot ops-health-report -o
+     jsonpath='{.data.latest.json}'` に `root_disk.source` と `fill_days` キー (初回
+     None) が載る → 受入検証 green
+  2. `root_disk.source` が `kubelet_summary` になるか (RBAC nodes/proxy+stats の通し)。
+     取れていれば breakdown の images/PVC が載り、取れなくても statvfs 総量 + None で
+     正常動作。実測したら substrate.md を更新する。
+  3. 1 日分の履歴が溜まったら fill_days が数値になる (観測窓 MIN_WINDOW_DAYS=1.0)。
+     「予報が出ていない」と指摘されたら「1 日分の履歴が必要」を説明する。
