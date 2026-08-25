@@ -218,6 +218,37 @@ subjects:
     name: autopilot-core
     namespace: autopilot
 ---
+# P-9047: immich 復元 drill の成功記録 ConfigMap の読み手 (worker/reviewer)。
+# このプロジェクトの verify が `kubectl get configmap -n autopilot
+# immich-restore-drill-report` を実測するため、プロジェクト Job の既定 SA
+# (autopilot-runner。worker は kubectl-write 宣言時のみ autopilot-writer に差し替え、
+# reviewer は常に autopilot-runner) に get を渡す。上と同じく全 namespace の
+# ConfigMap 読み取りは必要な範囲より広いので、resourceNames で 1 個に限定する
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: immich-restore-drill-report-reader
+  namespace: autopilot
+rules:
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["immich-restore-drill-report"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: immich-restore-drill-report-reader
+  namespace: autopilot
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: immich-restore-drill-report-reader
+subjects:
+  - kind: ServiceAccount
+    name: autopilot-runner
+    namespace: autopilot
+---
 # heart の生存を示す Lease (設計 state-out-of-git Phase 7)。ビートが最後まで通った
 # ときだけ renewTime が進むので、これは liveness probe ではなく **ビートの鮮度**を
 # 表す面になる。「プロセスは生きているのにループが回っていない」(P-0027) がここに出る。

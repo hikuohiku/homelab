@@ -55,20 +55,25 @@ initializer が 2026-08-25 に `project/p-9047` checkout のリポジトリル�
 ### 決めてあること
 
 - **実行は worker の使い捨て Job 経由**。復元先は scratch namespace (本番の
-  `immich-library` / `immich-postgres-data` には不触)。apps/ の manifest は変えない。
+  `immich-library` / `immich-postgres-data` には不触)。immich の manifest は変えない。
 - **`ops/tools/immich_restore_drill.py` に手順を固定**: snapshot 直近性確認 → restic restore →
   最新 .sql.gz を gunzip → scratch postgres (vectorchord) へ `psql` → postgres 起動 + vchord 生存確認 →
   assets 行数を本番実測と照合 → immich-server を scratch 起動し /api が 200 を返す確認 →
   ConfigMap `immich-restore-drill-report` (autopilot ns) に成功記録 (復元日時・snapshot id・
   写真数・所要時間) を書く。
-- **capabilities**: `kubectl-write` のみ。touches_apps: false。
+- **capabilities**: `kubectl-write` のみ。
+- **touches_apps は true に訂正** (2026-08-25、レビュー指摘で確定)。verify が runner 文脈
+  (SA `autopilot-runner`) から `kubectl get configmap -n autopilot immich-restore-drill-report`
+  を実測するため、`apps/autopilot/rbac.yaml` に resourceNames スコープの Role + RoleBinding
+  (ConfigMap `immich-restore-drill-report` の get のみ) を追加する。採択時 spec の
+  `touches_apps: false` はこの 1 点だけ逸脱し、他は従来どおり。
 
 ## やらないこと
 
 - **本番 PVC への書き込み・復元先の本番化**。復元は scratch namespace に限定。本番への
   切替 (リストア運用) は本プロジェクトの外。
-- **apps/ 配下の manifest 変更** (`touches_apps: false`)。immich の backup/retention CronJob・
-  ExternalSecret・Deployment には触れない。
+- **apps/ 配下の manifest 変更は、`apps/autopilot/rbac.yaml` への RBAC 追加 1 件のみ**。
+  immich の backup/retention CronJob・ExternalSecret・Deployment には触れない。
 - **retention (forget --prune) や削除権限つき鍵 `immich-restic-credentials` の使用**。
   B2 上の snapshot の削除・プルーニングは行わない。
 - **Doppler の credential 発行・変更・ローテーション**。物理作業を伴う人間専有 (CHARTER §4)。
