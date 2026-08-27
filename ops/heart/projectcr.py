@@ -250,3 +250,40 @@ def proposal_digest(items):
         })
     rows.sort(key=lambda r: r["id"], reverse=True)
     return rows
+
+
+# --- 件数の床 (設計 state-out-of-git「CR が 0 件」の穴) ---
+
+# 直前に正常に読めた件数に対する許容下限。終端 CR は消さない設計なので件数は
+# 本来単調にしか増えない。1 割の余地は「id を間違えて作った CR を人が数個消す」
+# 運用を通すため (apps/autopilot-projects-backup/export_projects.py と同じ判断・
+# 同じ値。片方だけ動かすと「バックアップは落ちるがビートは通る」がまた生まれる)。
+CENSUS_MIN_RATIO = 0.9
+
+
+def census_problem(count, floor):
+    """CR の件数が「壊れた」に見えるかを判定する (純関数)。理由の文字列か None。
+
+    「読めない」は例外になるので検知できる。**「読めたが 0 件」は 200 で返る** —
+    CRD の消失・RBAC 事故・namespace の取り違えのどれでも API は空リストを返し、
+    呼び出し側は「やることが無い」として静かに通ってしまう。112 件が 0 件に
+    なったのは「終わった」ではなく「壊れた」なので、そこを件数で捕まえる。
+
+    floor が None = 床がまだ無いビート (新規デプロイ・PVC の作り直し) は
+    **必ず通す**。ここで落とすと器が二度と起動しない。
+    """
+    if floor is None:
+        return None
+    if count == 0 and floor > 0:
+        return (
+            f"Project CR が 0 件 (直前は {floor} 件)。CRD の消失・RBAC 事故・"
+            "namespace の取り違えのどれでも API は 200 と空リストを返す。"
+            "記憶が飛んだ状態なので回さない"
+        )
+    if count < floor * CENSUS_MIN_RATIO:
+        return (
+            f"Project CR が {count} 件。直前の {floor} 件から "
+            f"{1 - CENSUS_MIN_RATIO:.0%} 以上減っている。終端 CR を消さない設計では"
+            "件数は減らないはずなので、取得の失敗を疑う"
+        )
+    return None

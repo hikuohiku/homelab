@@ -170,6 +170,18 @@ class StateFiles:
     def save_trust(self, doc):
         self._save_json("trust.json", doc)
 
+    # --- cr-census.json (直前に正常に読めた Project CR の件数) ---
+    def load_census(self):
+        """床。件数が不明 (初回・PVC の作り直し) なら cr_count は None。
+
+        不明を 0 にしない — 0 にすると「初回のビートが必ず落ちる」か
+        「急減を見逃す」のどちらかになる (export_projects.previous_count と同じ)。
+        """
+        return self._load_json("cr-census.json", {"version": 1, "cr_count": None})
+
+    def save_census(self, doc):
+        self._save_json("cr-census.json", doc)
+
     # --- cursors.json (フィードバック取り込みの位置) ---
     def load_cursors(self):
         return self._load_json(
