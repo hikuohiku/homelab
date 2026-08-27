@@ -1,0 +1,51 @@
+{
+  "project": "P-0118",
+  "updated_at": "2026-08-23T02:05:00Z",
+  "_comment": "verify 3 本それぞれの根拠と、実輸送 (DoD 本体) の現状を 1 目で辿れるようにした。feedback_note_url は人間の実送信を待っている間は null — 次の worker セッションが ops-feedback ブランチを再確認して埋めること。48h (2026-08-25T01:20Z) を過ぎても届かなければ next_action の調査に進む",
+  "verify": [
+    {
+      "cmd": "python3 -m unittest ops.tests.test_telegram_veto",
+      "status": "green",
+      "evidence": "9 tests OK (2026-08-23 再実測、リポジトリルート)。telegram 形 note ({id, source:\"telegram\", received, body} / trim 無し) を collect_feedback 経由で通し、4 系統 (止めて->stop_all / 再開->resume_all / kind:task-request -> task_requests / 雑談 -> review_needed) を fixture 固定。rules.json の stop_keywords・resume_keywords 全量が telegram DM の典型形で分類を決めることを TestRulesKeywordsDriveTelegramVerdicts が証明。レビュー指摘で恒真だった source 非依存テストを TestClassificationIgnoresSource として書き直した (同一本文を telegram note / source 違いの note / issue コメントの 3 経路で通し、分類種別が期待値と 3 者一致することを検査)"
+    },
+    {
+      "cmd": "python3 ops/drills/telegram_veto_drill.py --check",
+      "status": "green",
+      "output": "[ok] expect=stop_all      got=stop_all      body='止めて'\n[ok] expect=stop_all      got=stop_all      body='お疲れさま。\\n一旦止めてください'\n[ok] expect=stop_all      got=stop_all      body='stop everything'\n[ok] expect=resume_all    got=resume_all    body='再開'\n[ok] expect=resume_all    got=resume_all    body='再開してください'\n[ok] expect=review_needed got=review_needed body='この間の障害のあと自動で止めてしまう問題がないか見直しているうちに、経緯を...'\n[ok] expect=review_needed got=review_needed body='今日はいい天気ですね'\n7/7 cases ok",
+      "evidence": "--input モードの dry-run 実測例: 「止めてください」->stop_all / 「再開お願いします」->resume_all / 「vaultwarden を最新化してほしい」->review_needed (テキストレベルでは kind 分流は決まらないのが仕様)。副作用ゼロ (triage.classify の純関数呼び出しのみ)"
+    },
+    {
+      "cmd": "test -s ops/projects/logs/P-0118/evidence.json",
+      "status": "green",
+      "evidence": "このファイル自体"
+    }
+  ],
+  "transport": {
+    "state": "pending-human",
+    "checked_at": "2026-08-23T02:05:00Z",
+    "inbox_state": {
+      "branch": "ops-feedback",
+      "notes_total": 2,
+      "notes_from_telegram": 0,
+      "detail": [
+        {"path": "ops/feedback/inbox/F-20260810T081759Z-e389cc.json", "source": "ops-dashboard", "received": "2026-08-10T08:17:59Z"},
+        {"path": "ops/feedback/inbox/F-20260810T081948Z-266ad8.json", "source": "ops-dashboard", "received": "2026-08-10T08:19:48Z"}
+      ]
+    },
+    "question_notification": {
+      "channel": "issue #56 comment (CHARTER §5.5: post_issue_comment.py 経由。サンドボックスに DISCORD_WEBHOOK_URL / doppler が無く notify.py の Discord 直送は不可だったため、autopilot->人間の正規経路である issue #56 を使用)",
+      "url": "https://github.com/hikuohiku/homelab/issues/56#issuecomment-5383567514",
+      "posted_at": "2026-08-23T01:20:00Z",
+      "request_summary": "allowlist 登録済みアカウントから Telegram bot へ短文 1 通の送信依頼。48 時間以内に届かなければ bridge ログと TELEGRAM_BOT_TOKEN / TELEGRAM_ALLOWED_USER_ID 登録状態の調査に進む旨も記載"
+    },
+    "feedback_note_url": null,
+    "bridge_liveness": {
+      "checked_at": "2026-08-23T02:05:00Z",
+      "source": "ops-health-report ブランチ ops/health/latest.json (generated_at 2026-08-23T02:00:23Z)。worker からクラスタへは直接触れないため、この書き戻しブランチが唯一の間接観測点",
+      "argocd_app": "openclaw: Synced / Healthy",
+      "pod": "openclaw-6f75b7d78-2drqz (autopilot ns) の gateway / feedback-bridge 両コンテナが pod_metrics に計上 (feedback-bridge cpu 292419n / mem 17.5Mi = ポーリングループ稼働中)。pod_issues に openclaw 関連なし、restarts 0",
+      "interpretation": "bridge プロセス自体は生きている。未着の第一仮説「人間がまだ送信していない」が妥当で、48h 待つ判断を実測で後押し。ただし readiness は startupz (channel 障害でも Ready を外さない設計、apps/openclaw/deployment.yaml コメント参照) なので Telegram チャネル自体の生死までは証明しない"
+    },
+    "next_action": "worker #3 再確認 (2026-08-23T02:05Z): inbox 依然 dashboard 由来 2 件のみ・telegram note 0 件。issue スレッド (#56) も API 実測で依頼投稿 (5383567514, 01:23:30Z) 以降の人間返信なし。bridge 側は ops-health-report 実測で稼働中 (上記 bridge_liveness)。**48h = 2026-08-25T01:20Z を過ぎて未着の場合、レビュー指摘 (b) の `kubectl -n autopilot logs deploy/openclaw -c feedback-bridge` は worker セッションから実施できないことに注意** — apps/autopilot/rbac.yaml:83-84 の設計どおり runner には SA token が mount されず、kubeconfig も無い (2026-08-23 実測: localhost:8080 接続拒否)。worker に可能な観測は (1) ops-health-report ブランチで bridge 稼働を再確認、(2) issue スレッド確認、のみ。48h 超過かつ bridge 稼働中なら、残る仮説 (送信されていない / TELEGRAM_BOT_TOKEN or ALLOWED_USER_ID 不備 / channel 断) の切り分けにログが要るため、issue #56 経由で人間へ「kubectl logs の実行」または「送信済みかどうかの確認」を依頼するのが正しい次手。bridge が落ちていることが latest.json で判明したら apps/openclaw 側の修正 (Git→ArgoCD 経路、touches_apps=true でスコープ内) を検討。届いた場合は source:\"telegram\" の note を探して blob URL・本文・triage 分類結果を transport セクションに記入し state を更新すること (人間が「止めて」系を送っても全停止を実地に踏ませない — inbox 上の JSON だけで証跡成立、spec 明記)"
+  }
+}
