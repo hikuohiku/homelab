@@ -69,6 +69,47 @@ def extract_heartbeat_pattern(source: str) -> str:
     return eval(m.group(1))  # noqa: S307 — 対象はリポジトリ内の文字列リテラルのみ
 
 
+def parse_container_names(doc: str) -> list[str]:
+    """spec.template.spec.containers[].name を列挙する。
+
+    parse_deployments の素朴なスキャンはリスト要素 (`- name: heart`) を拾えない。
+    複数コンテナ Pod への pods/log は container= を省くと 400 になるので、
+    report.py が名指しする名前が実在するかはここで別に見る。拾うのは
+    containers ブロック直下の要素だけ (env / volumeMounts の name を混ぜない)。
+    initContainers はログ取得の対象ではないので `containers:` にしか反応しない。
+    """
+    names: list[str] = []
+    block_indent = None
+    item_indent = None
+    for raw in doc.splitlines():
+        m = re.match(r"^( *)containers:\s*$", raw)
+        if m:
+            block_indent, item_indent = len(m.group(1)), None
+            continue
+        if block_indent is None or not raw.strip():
+            continue
+        indent = len(raw) - len(raw.lstrip())
+        if indent <= block_indent:
+            block_indent = None  # containers ブロックを抜けた
+            continue
+        m = re.match(r"^( *)- *name:\s*(\S+)\s*$", raw)
+        if not m:
+            continue
+        if item_indent is None:
+            item_indent = len(m.group(1))
+        if len(m.group(1)) == item_indent:
+            names.append(m.group(2))
+    return names
+
+
+def extract_log_path(source: str) -> str:
+    """report.py が心拍ログを取る URL のテンプレート文字列。"""
+    m = re.search(r'"(/api/v1/namespaces/[^"]*/log\?[^"]*)"', source)
+    if not m:
+        raise ValueError(f"{REPORT_REL}: pods/log の URL テンプレートを抽出できない")
+    return m.group(1)
+
+
 def parse_deployments(directory: Path) -> list[dict]:
     """kind: Deployment の doc から name / selector の app ラベル / replicas を抜く。
 
@@ -102,6 +143,7 @@ def parse_deployments(directory: Path) -> list[dict]:
                     "app_label": fields.get("spec.selector.matchLabels.app"),
                     # replicas 未指定は k8s 既定の 1
                     "replicas": int(replicas) if replicas is not None else 1,
+                    "containers": parse_container_names(doc),
                 }
             )
     return out
@@ -155,6 +197,8 @@ def main() -> int:
         deployment = extract_report_constant(report_src, "AUTOPILOT_DEPLOYMENT")
         app_label = extract_report_constant(report_src, "AUTOPILOT_APP_LABEL")
         pattern = extract_heartbeat_pattern(report_src)
+        container = extract_report_constant(report_src, "AUTOPILOT_HEART_CONTAINER")
+        log_path = extract_log_path(report_src)
         deployments = parse_deployments(ROOT / AUTOPILOT_MANIFEST_DIR)
         heart_lines = extract_heart_log_lines()
     except Exception as e:  # noqa: BLE001 — 抽出に失敗したら成功扱いにしない
@@ -189,6 +233,23 @@ def main() -> int:
         )
         return 1
 
+    if "container=" not in log_path:
+        _fail(
+            f"{REPORT_REL} の pods/log URL に container= がありません: {log_path}"
+        )
+        _fail(
+            "  heart Pod は複数コンテナなので、省くと k8s API が 400 を返し"
+            " heartbeat が丸ごと観測できなくなります (2026-08-23〜08-27 の実害)"
+        )
+        return 1
+
+    if container not in target["containers"]:
+        _fail(
+            f"{REPORT_REL} の AUTOPILOT_HEART_CONTAINER={container!r} が"
+            f" {target['file']} のコンテナ名 {target['containers']} にありません"
+        )
+        return 1
+
     if target["app_label"] != app_label:
         _fail(
             f"{REPORT_REL} の AUTOPILOT_APP_LABEL={app_label!r} が"
@@ -214,6 +275,10 @@ def main() -> int:
         f"ok: {REPORT_REL} は稼働中の Deployment {target['name']}"
         f" (app={target['app_label']}, replicas={target['replicas']}, {target['file']})"
         " を観測しています"
+    )
+    print(
+        f"ok: 心拍ログは container={container} を名指しして取ります"
+        f" (コンテナ: {', '.join(target['containers'])})"
     )
     print(f"ok: HEARTBEAT_RE は {HEART_REL} の心拍行 {len(heart_lines)} 種を拾えます")
     for line in heart_lines:
