@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: discord-dialogue-data-bot
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/hikuohiku/homelab.git
+    targetRevision: HEAD
+    path: apps/discord-dialogue-data-bot
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: discord-dialogue-data-bot
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

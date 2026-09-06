@@ -1,0 +1,12 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Discord の VC を話者別に録音し、Soniox で文字起こし・Gemini で議事録を作って
+# Discord へ返す bot。ソースと image は別リポジトリ (voicist/discord-dialouge-data-bot)
+# にあり、あちらの .github/workflows/build-image.yml が ghcr.io へ焼く。
+# ここに持つのは k8s 上の器だけ
+resources:
+  - pvc.yaml
+  - registry-external-secret.yaml
+  - external-secret.yaml
+  - deployment.yaml

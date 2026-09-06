@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: discord-dialogue-data
+  namespace: discord-dialogue-data-bot
+  annotations:
+    # データ消失防止: ArgoCD prune / app 削除時も PVC を残す (syncthing-data と同型)。
+    # 収集原本は仕様上どこからも自動削除されず、失うと録り直しがきかない
+    argocd.argoproj.io/sync-options: Prune=false
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      # local-path は実ディスクを予約しない (docs/node01-storage.md)。実際の歯止めは
+      # PVC の要求容量ではなく Deployment の MIN_FREE_MIB (bot が node の空き容量を
+      # statfs で見て、下回ったら原本を消さずに録音を止める) の側にある。
+      # 8 人 3 時間の会話 1 回で、原本 + 話者別 FLAC が 10 GiB 規模まで育ちうる
+      storage: 100Gi
