@@ -99,6 +99,14 @@ DECLARED_DOPPLER_KEYS = frozenset(
         "B2_ACCOUNT_KEY_APPEND_ONLY",
         "RESTIC_B2_BUCKET",
         "RESTIC_PASSWORD",
+        # discord-dialogue-data-bot (apps/discord-dialogue-data-bot)。キー名は上流
+        # (voicist/discord-dialouge-data-bot の .env.example) の環境変数名に揃えてある。
+        # GHCR_VOICIST_PULL_TOKEN は private パッケージを pull するためだけの
+        # read:packages PAT で、image を引く以外の用途を持たない
+        "DISCORD_BOT_TOKEN",
+        "GEMINI_API_KEY",
+        "GHCR_VOICIST_PULL_TOKEN",
+        "SONIOX_API_KEY",
         # アプリ固有
         "CODER_DB_PASSWORD",
         "CODER_DB_URL",
@@ -128,6 +136,8 @@ DECLARED_SECRET_TARGETS = frozenset(
         "coder-restic-backup-credentials",
         "coder-restic-credentials",
         "dex-google-oauth",
+        "discord-dialogue-data-bot-credentials",
+        "ghcr-voicist-pull",
         "github-health-reporter-token",
         "immich-postgres-credentials",
         "immich-restic-backup-credentials",

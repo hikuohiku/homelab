@@ -257,7 +257,7 @@ class TestRealRepo(unittest.TestCase):
 
     def test_key_count_matches_declared_doppler_keys(self):
         # check_credential_map.py の DECLARED_DOPPLER_KEYS と同じ実体から来ているはず
-        self.assertEqual(len(self.report["keys"]), 26)
+        self.assertEqual(len(self.report["keys"]), 30)
         self.assertEqual(len(self.report["allowlist"]), 10)
 
     def test_allowlist_keys_are_recoverable(self):

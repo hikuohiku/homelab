@@ -162,6 +162,23 @@ RECOVERY_PATHS: dict[str, str] = {
         " postgres 側の ALTER USER と ExternalSecret 更新をセットで行う。"
         " 既存値は Doppler の IMMICH_DB_PASSWORD にしか無い"
     ),
+    "DISCORD_BOT_TOKEN": (
+        "Discord Developer Portal → 該当アプリケーション → Bot → Reset Token で"
+        " 再発行し、Doppler の DISCORD_BOT_TOKEN を更新する"
+        " (discord-dialogue-data-bot 専用の Bot。DISCORD_WEBHOOK_URL とは別物)"
+    ),
+    "SONIOX_API_KEY": (
+        "Soniox コンソール → API keys で再発行し、Doppler の SONIOX_API_KEY を更新する"
+    ),
+    "GEMINI_API_KEY": (
+        "Google AI Studio → API keys で再発行し、Doppler の GEMINI_API_KEY を更新する"
+    ),
+    "GHCR_VOICIST_PULL_TOKEN": (
+        "GitHub → Settings → Developer settings → Personal access tokens (classic) で"
+        " read:packages だけを付けて再発行し、Doppler の GHCR_VOICIST_PULL_TOKEN を"
+        " 更新する。private パッケージ ghcr.io/voicist/discord-dialouge-data-bot を"
+        " pull するためだけの鍵"
+    ),
     "TAILSCALE_CLIENT_ID": (
         "Tailscale Admin Console → Settings → OAuth Clients で再発行"
         " (devices:core:read スコープ) し、Doppler の TAILSCALE_CLIENT_ID を更新する"

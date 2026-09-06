@@ -1,0 +1,102 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: discord-dialogue-data-bot
+  namespace: discord-dialogue-data-bot
+  labels:
+    app: discord-dialogue-data-bot
+spec:
+  replicas: 1
+  # state.sqlite と録音中のセッションを単一 PVC 上に持ち、プロセス自身も
+  # ロックを取る (30 秒の stale 判定後に再取得)。rolling 中の二重起動を避けて Recreate
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: discord-dialogue-data-bot
+  template:
+    metadata:
+      labels:
+        app: discord-dialogue-data-bot
+    spec:
+      imagePullSecrets:
+        - name: ghcr-voicist-pull
+      initContainers:
+        # local-path の PVC は root:root で作成されるため、非 root 実行に備えて所有権を調整
+        # (vaultwarden と同型)。中身は uid 1000 が作るので、-R を付けず最上位だけを移す。
+        # 収集原本は数十 GiB まで育ちうるので、再帰 chown を毎回の起動に入れない
+        - name: init-permissions
+          image: busybox:1.38.0
+          terminationMessagePolicy: FallbackToLogsOnError
+          command: ["sh", "-c", "chown 1000:1000 /data"]
+          securityContext:
+            runAsUser: 0
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      containers:
+        - name: bot
+          # voicist/discord-dialouge-data-bot の main (workflow run 34044386904) が
+          # 焼いた digest。上流を更新したら build-image.yml の notice に出る digest を
+          # 貼り替える (mutable な tag では pin しない)
+          image: ghcr.io/voicist/discord-dialouge-data-bot@sha256:6ab10eb755d7fd19533adff533e8b8b715fb72e7870f64b663f6712deb2f5f12
+          terminationMessagePolicy: FallbackToLogsOnError
+          env:
+            - name: DISCORD_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: discord-dialogue-data-bot-credentials
+                  key: DISCORD_BOT_TOKEN
+            - name: SONIOX_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: discord-dialogue-data-bot-credentials
+                  key: SONIOX_API_KEY
+            - name: GEMINI_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: discord-dialogue-data-bot-credentials
+                  key: GEMINI_API_KEY
+            - name: DATA_DIR
+              value: /data
+            # bot は dataDir の filesystem の空きを statfs で見て、これを下回ると
+            # 原本を消さずに録音を止める (/dialogue resume で再開)。local-path は
+            # node01 の root fs (256 GiB, docs/node01-storage.md) を他の PVC と共有する
+            # ため、この値は録音データが node ごと詰まらせないための唯一の歯止めになる。
+            # 既定の 1 GiB では他アプリが先に死ぬので 20 GiB 残す
+            - name: MIN_FREE_MIB
+              value: "20480"
+            - name: TZ
+              value: Asia/Tokyo
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            # 一時ファイルはすべて dataDir 配下に作られる (exporter の FLAC 出力先、
+            # cli bundle の tar) が、ffmpeg / node が /tmp を触っても
+            # readOnlyRootFilesystem に当たらないようにしておく
+            - name: tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            # memory の limits は付けない（substrate の規則: 実測の裏付けなしに付けない。
+            # 超過が回復不能な OOMKill になる。CPU limits は throttle で回復するため設定する）。
+            # 会話終了後の FLAC 書き出しが 8 話者ぶん走るのでピークは高い
+            limits:
+              cpu: 2000m
+          securityContext:
+            # image の USER node (uid 1000)
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: discord-dialogue-data
+        - name: tmp
+          emptyDir: {}
