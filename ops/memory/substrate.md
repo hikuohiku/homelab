@@ -144,6 +144,16 @@ autopilot namespace の Pod (heart / runner / reviewer / …) が動く環境の
   (退役済み `autopilot` を指したままだった drift が P-0011 の発端) — verified_at: 2026-08-08
 - report.py のログ取得は `sinceSeconds=7200`。ビート周期 (`HEART_BEAT_SECONDS`, 既定 120s) を
   大きく変えるならここも見直す — verified_at: 2026-08-08
+- **複数コンテナ Pod の pods/log には `container=` が必須**。省くと k8s API は 400 を返す
+  (`a container name must be specified for pod ...`)。heart Pod は bus-sidecar が入った
+  2026-08-23 から 2 コンテナで、report.py が container= 無しのままだったため
+  latest.json の `autopilot.heartbeat` は 4 日間 400 で埋まっていた。名前は
+  `AUTOPILOT_HEART_CONTAINER` 定数で持ち、`ops/check_health_reporter_target.py` が
+  実 manifest のコンテナ名との一致を CI で検査する。**heart 側にコンテナを足す変更は
+  計器を壊しうる** — verified_at: 2026-08-27
+- 観測できなかったこと自体を鳴らす経路: `facts.heartbeat_observation_alert()` が
+  `autopilot.heartbeat.error` を拾い、briefing + incident へ 1 日 1 回流す。
+  計器の沈黙が誰にも届かなかったのが上の 4 日間の理由 — verified_at: 2026-08-27
 - 健全性レポートは ConfigMap `autopilot/ops-health-report` の `latest.json` キー。
   最新 1 点のみ (上書き) で履歴は持たない。GitHub の同名ブランチ経由は Phase 5 で廃止
   (書き手も読み手もクラスタ内) — verified_at: 2026-08-25

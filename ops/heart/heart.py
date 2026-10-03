@@ -545,6 +545,9 @@ class Heart:
         # CPU 飽和前兆の警報すべき状態 (P-9037)。warn のときだけ中身があり、
         # ok/観測失敗は None (P-0128 の budget 警告と同じ 2 段階)
         saturation = facts.node_saturation_alert(health_doc)
+        # 心拍の観測経路そのものが壊れている状態。heartbeat.error があるときだけ
+        # 中身があり、観測できていれば None (ビートの遅れはコアの Lease 監視の担当)
+        heartbeat_fault = facts.heartbeat_observation_alert(health_doc)
         # 書き置きのバス inbox が読めるか (設計 state-out-of-git Phase 6)。
         # ops-feedback を畳んだので、ここが読めないと所有者の「止めて」を
         # 落としたまま走り続ける。読めるときは None
@@ -674,6 +677,23 @@ class Heart:
                 f"Mission Control の描画断言が {smoke['status']} です: {smoke['reason']}"
             )
             smoke_queued = True
+        # 心拍を観測できていない警報。流儀は上と同じ (briefing + incident、
+        # 同 status 同日は cursors で落とす)。計器の故障は毎ビート鳴らすと
+        # 通知が壊れた側になるので 1 日 1 回に抑える
+        heartbeat_incident_text = None
+        heartbeat_queued = False
+        if facts.budget_alert_due(
+            heartbeat_fault, cursors.get("heartbeat_observation_alert"), today
+        ):
+            cursors["heartbeat_observation_alert"] = {
+                "status": heartbeat_fault["status"],
+                "date": today,
+            }
+            heartbeat_incident_text = (
+                "健全性レポートが heart の心拍を観測できていません: "
+                f"{heartbeat_fault['reason']}"
+            )
+            heartbeat_queued = True
         bus_incident_text = None
         bus_queued = False
         if facts.budget_alert_due(bus_fault, cursors.get("feedback_bus_alert"), today):
@@ -739,6 +759,19 @@ class Heart:
                 },
             )
             log(f"node_saturation alert: {saturation['status']} — queued to briefing")
+        if heartbeat_queued:
+            self.work.append_jsonl(
+                "briefing-queue.jsonl",
+                {
+                    "at": now_iso(now),
+                    "source": f"heartbeat-observation ({heartbeat_fault['status']})",
+                    "body": heartbeat_fault["reason"],
+                },
+            )
+            log(
+                "heartbeat observation alert: "
+                f"{heartbeat_fault['reason']} — queued to briefing"
+            )
         if bus_queued:
             self.work.append_jsonl(
                 "briefing-queue.jsonl",
@@ -777,6 +810,11 @@ class Heart:
                 log(f"[shadow] notify[incident] {saturation_incident_text[:80]}")
             else:
                 notifier.send("incident", saturation_incident_text, now)
+        if heartbeat_incident_text:
+            if self.cfg.shadow:
+                log(f"[shadow] notify[incident] {heartbeat_incident_text[:80]}")
+            else:
+                notifier.send("incident", heartbeat_incident_text, now)
         if bus_incident_text:
             if self.cfg.shadow:
                 log(f"[shadow] notify[incident] {bus_incident_text[:80]}")
@@ -795,6 +833,9 @@ class Heart:
             budget_status=budget["status"] if budget else None,
             dashboard_smoke_status=smoke["status"] if smoke else None,
             node_saturation_status=saturation["status"] if saturation else None,
+            heartbeat_observation_status=(
+                heartbeat_fault["status"] if heartbeat_fault else None
+            ),
             vetoes=vetoes,
             stop_all=stop_all,
             actions=[a["type"] for a in actions],

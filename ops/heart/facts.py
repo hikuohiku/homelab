@@ -152,6 +152,41 @@ def dashboard_smoke_alert(doc):
     }
 
 
+def heartbeat_observation_alert(doc):
+    """latest.json の autopilot セクションが心拍を観測できていない状態を抽出する。
+
+    heart の生死を見る目は 2 つある — コアの Lease 監視 (silence.go) と、この
+    健全性レポート。後者は観測に失敗しても autopilot.heartbeat.error に文字列が
+    入るだけで誰も鳴らさず、bus-sidecar 追加で pods/log が 400 になった 4 日間を
+    誰も気づかなかった。計器が壊れたことは計器の値と同じくらい報せる価値がある。
+
+    返すのは heartbeat.error があるときだけ {status, reason}。error が無ければ
+    (解析結果が空でも) None — ビートが遅いこと自体は Lease 監視の担当で、ここで
+    二重に鳴らさない。doc 無し・観測不能 (load_health が None) も None にするのは
+    budget_alert() が no_data を沈黙させるのと同じ判断。
+
+    観測のみを行い判断しない (モジュール冒頭の原則)。繰り返し抑制は
+    budget_alert_due() が担う (status/date の一般判定なので流用する)。
+    """
+    if not isinstance(doc, dict):
+        return None
+    ap = doc.get("autopilot")
+    if not isinstance(ap, dict):
+        return None
+    hb = ap.get("heartbeat")
+    if not isinstance(hb, dict):
+        return None
+    error = hb.get("error")
+    if not isinstance(error, str) or not error.strip():
+        return None
+    return {
+        # 状態は 1 種類しかない (観測できたか否か)。それでも status を持つのは
+        # budget_alert_due() の status/date 抑制に乗せるため
+        "status": "error",
+        "reason": error.strip()[:200],
+    }
+
+
 def node_saturation_alert(doc):
     """latest.json から CPU 飽和前兆の警報すべき状態を抽出する (P-9037)。
 

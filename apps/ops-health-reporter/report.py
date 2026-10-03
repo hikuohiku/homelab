@@ -703,6 +703,12 @@ AUTOPILOT_NAMESPACE = "autopilot"
 # 直書きすると機械抽出できなくなる
 AUTOPILOT_DEPLOYMENT = "autopilot-heart"
 AUTOPILOT_APP_LABEL = "autopilot-heart"
+# 心拍ログを持つコンテナ。Pod は heart と bus-sidecar の 2 コンテナで、複数コンテナの
+# Pod への pods/log は container= を省くと k8s API が 400 を返す（NATS の bus-sidecar が
+# 入った 2026-08-23 から heartbeat が毎回 400 で落ちていた）。名前は
+# apps/autopilot/heart-deployment.yaml が正で、ops/check_health_reporter_target.py が
+# CI で一致を検査する
+AUTOPILOT_HEART_CONTAINER = "heart"
 
 
 def collect_autopilot_health():
@@ -736,11 +742,22 @@ def collect_autopilot_health():
         for item in items:
             meta = item.get("metadata", {})
             pstatus = item.get("status", {})
-            cs = (pstatus.get("containerStatuses") or [{}])[0]
+            statuses = pstatus.get("containerStatuses") or []
+            # containerStatuses は名前順で返るため [0] は bus-sidecar を指しうる。
+            # 見たいのは心臓の再起動回数なので heart を名指しする
+            cs = next(
+                (
+                    c
+                    for c in statuses
+                    if c.get("name") == AUTOPILOT_HEART_CONTAINER
+                ),
+                statuses[0] if statuses else {},
+            )
             pod_list.append(
                 {
                     "name": meta.get("name"),
                     "phase": pstatus.get("phase"),
+                    "container": cs.get("name"),
                     "restartCount": cs.get("restartCount"),
                 }
             )
@@ -762,8 +779,8 @@ def collect_autopilot_health():
             # apps/autopilot/heart-deployment.yaml で上書き可）なので 7200s は
             # 数十周分にあたる。ビートを大きく変えたらここも見直すこと
             raw = k8s_get_text(
-                "/api/v1/namespaces/{}/pods/{}/log?sinceSeconds=7200".format(
-                    AUTOPILOT_NAMESPACE, pod_name
+                "/api/v1/namespaces/{}/pods/{}/log?container={}&sinceSeconds=7200".format(
+                    AUTOPILOT_NAMESPACE, pod_name, AUTOPILOT_HEART_CONTAINER
                 )
             )
             result["heartbeat"] = parse_heartbeat(raw)
